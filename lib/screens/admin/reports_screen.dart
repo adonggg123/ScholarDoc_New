@@ -22,6 +22,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final ReportService _reportService = ReportService();
   late Stream<QuerySnapshot> _studentsStream;
   late Stream<QuerySnapshot> _reportsHistoryStream;
+  final ScrollController _horizontalScrollController = ScrollController();
+  final Set<String> _selectedStudentIds = {};
   
   String _throughputTimeframe = 'This Year';
   bool _isGeneratingPdf = false;
@@ -32,6 +34,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     _studentsStream = _authService.getStudentsStream();
     _reportsHistoryStream = _reportService.getReportsStream();
+  }
+
+  @override
+  void dispose() {
+    _horizontalScrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -64,9 +72,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               const SizedBox(height: 48), // Increased from 32
               SizedBox(height: 32),
-              Text('Generated Reports', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Student Master List', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               SizedBox(height: 16),
-              _buildReportList(context),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _buildExportExcelButton(context),
+              ),
+              SizedBox(height: 16),
+              _buildStudentsTable(context),
             ],
           ),
         );
@@ -98,21 +111,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  Widget _buildExportExcelButton(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: _isGeneratingExcel ? null : _handleExportExcel,
+      icon: _isGeneratingExcel 
+        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+        : Icon(LucideIcons.fileSpreadsheet),
+      label: Text(_isGeneratingExcel ? 'Excel...' : (_selectedStudentIds.isNotEmpty ? 'Export Selected' : 'Export Excel')),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.success,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   Widget _buildExportButtons(BuildContext context) {
     return Row(
       children: [
-        ElevatedButton.icon(
-          onPressed: _isGeneratingExcel ? null : _handleExportExcel,
-          icon: _isGeneratingExcel 
-            ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Icon(LucideIcons.fileSpreadsheet),
-          label: Text(_isGeneratingExcel ? 'Excel...' : 'Export Excel'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.success,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        SizedBox(width: 12),
         ElevatedButton.icon(
           onPressed: _isGeneratingPdf ? null : _handleExportPdf,
           icon: _isGeneratingPdf 
@@ -180,7 +195,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     setState(() => _isGeneratingExcel = true);
     try {
       final studentSnap = await FirebaseFirestore.instance.collection('students').get();
-      List<Map<String, dynamic>> studentsList = studentSnap.docs.map((doc) => doc.data()).toList();
+      List<Map<String, dynamic>> studentsList = studentSnap.docs
+          .where((doc) => _selectedStudentIds.isEmpty || _selectedStudentIds.contains(doc.id))
+          .map((doc) => doc.data()).toList();
       
       final title = 'Students_Data';
       
@@ -500,9 +517,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildReportList(BuildContext context) {
+  Widget _buildStudentsTable(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: _reportsHistoryStream,
+      stream: _studentsStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
@@ -511,59 +528,155 @@ class _ReportsScreenState extends State<ReportsScreen> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(LucideIcons.fileSearch, size: 48, color: context.textSec.withValues(alpha: 0.3)),
+                  Icon(LucideIcons.users, size: 48, color: context.textSec.withValues(alpha: 0.3)),
                   SizedBox(height: 16),
-                  Text('No reports generated yet.', style: TextStyle(color: context.textSec)),
-                  SizedBox(height: 8),
-                  Text('Click "Export PDF" to create your first institutional report.', 
-                    style: TextStyle(fontSize: 12, color: context.textSec.withValues(alpha: 0.6))),
+                  Text('No student records found.', style: TextStyle(color: context.textSec)),
                 ],
               ),
             ),
           );
         }
 
-        final reports = snapshot.data!.docs;
+        final students = snapshot.data!.docs;
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: reports.length,
-          separatorBuilder: (context, index) => SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final doc = reports[index];
-            final data = doc.data() as Map<String, dynamic>;
-            final String title = data['title'] ?? 'Unknown Report';
-            final Timestamp? ts = data['createdAt'];
-            final String dateStr = ts != null 
-                ? 'Generated: ${DateFormat('MMM dd, yyyy').format(ts.toDate())}' 
-                : 'Pending Generation';
-            
-            return Container(
-              decoration: context.glassDecoration,
-              child: ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  child: Icon(LucideIcons.fileText, color: AppTheme.primaryColor, size: 20),
-                ),
-                title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text(dateStr, style: TextStyle(fontSize: 12, color: context.textSec)),
-                trailing: IconButton(
-                  icon: Icon(LucideIcons.download, size: 20, color: context.textSec),
-                  onPressed: () {
-                    // In a real app with cloud storage, this would download the file.
-                    // For now, we show a success message since the file was just generated locally.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('File history retrieved. Re-export to get a fresh copy.')),
-                    );
+        return Container(
+          decoration: context.glassDecoration,
+          width: double.infinity,
+          child: Scrollbar(
+            controller: _horizontalScrollController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            thickness: 8,
+            radius: const Radius.circular(8),
+            child: SingleChildScrollView(
+              controller: _horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 16),
+              child: DataTable(
+              headingTextStyle: TextStyle(fontWeight: FontWeight.bold, color: context.textPri),
+              dataTextStyle: TextStyle(color: context.textPri, fontSize: 13),
+              columnSpacing: 24,
+              showCheckboxColumn: true,
+              onSelectAll: (selected) {
+                setState(() {
+                  if (selected == true) {
+                    _selectedStudentIds.addAll(students.map((d) => d.id));
+                  } else {
+                    _selectedStudentIds.clear();
+                  }
+                });
+              },
+              columns: const [
+                DataColumn(label: Text('Student ID')),
+                DataColumn(label: Text('Full Name')),
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Gender')),
+                DataColumn(label: Text('Course')),
+                DataColumn(label: Text('Yr & Sec')),
+                DataColumn(label: Text('Scholarship')),
+                DataColumn(label: Text('Contact')),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text("Father's Name")),
+                DataColumn(label: Text("Father's Age")),
+                DataColumn(label: Text("Father's Occupation")),
+                DataColumn(label: Text("Mother's Name")),
+                DataColumn(label: Text("Mother's Age")),
+                DataColumn(label: Text("Mother's Occupation")),
+                DataColumn(label: Text('Yearly Income')),
+                DataColumn(label: Text('Religion')),
+                DataColumn(label: Text('Tribe')),
+              ],
+              rows: students.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final family = data['familyDetails'] as Map<String, dynamic>? ?? {};
+                
+                return DataRow(
+                  selected: _selectedStudentIds.contains(doc.id),
+                  onSelectChanged: (selected) {
+                    setState(() {
+                      if (selected == true) {
+                        _selectedStudentIds.add(doc.id);
+                      } else {
+                        _selectedStudentIds.remove(doc.id);
+                      }
+                    });
                   },
-                ),
-              ),
-            );
-          },
-        );
-      }
+                  cells: [
+                    DataCell(Text(data['studentId']?.toString() ?? 'N/A')),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                            backgroundImage: (data['profilePictureUrl'] != null && data['profilePictureUrl'].toString().isNotEmpty)
+                              ? NetworkImage(data['profilePictureUrl'])
+                              : null,
+                            child: (data['profilePictureUrl'] == null || data['profilePictureUrl'].toString().isEmpty)
+                              ? Icon(LucideIcons.user, size: 14, color: AppTheme.primaryColor)
+                              : null,
+                          ),
+                          SizedBox(width: 8),
+                          Text(data['fullName']?.toString() ?? 'N/A', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      )
+                    ),
+                    DataCell(Text(data['email']?.toString() ?? 'N/A')),
+                    DataCell(Text(data['gender']?.toString() ?? 'N/A')),
+                    DataCell(Text(data['courseDisplay']?.toString() ?? data['course']?.toString() ?? 'N/A')),
+                    DataCell(Text('${data['year']?.toString().split(' ')[0] ?? ''} - ${data['section']?.toString() ?? ''}')),
+                    DataCell(Text(data['scholarshipName']?.toString() ?? 'N/A')),
+                    DataCell(Text(data['contactNumber']?.toString() ?? 'N/A')),
+                    DataCell(_buildStatusBadge(data['status']?.toString() ?? 'Pending')),
+                    DataCell(Text(family['fatherName']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['fatherAge']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['fatherOccupation']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['motherName']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['motherAge']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['motherOccupation']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['yearlyIncome']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['religion']?.toString() ?? 'N/A')),
+                    DataCell(Text(family['tribe']?.toString() ?? 'N/A')),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      );
+    }
+  );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color;
+    switch (status) {
+      case 'Approved':
+      case 'Verified':
+        color = AppTheme.success;
+        break;
+      case 'Rejected':
+      case 'Missing':
+        color = AppTheme.error;
+        break;
+      case 'Pending':
+      default:
+        color = AppTheme.warning;
+        break;
+    }
+    
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
     );
   }
 }

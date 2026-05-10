@@ -164,7 +164,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Image.asset(
-            'assets/app_logo.png',
+            'assets/app_logo2.png',
             width: 60,
             height: 60,
             fit: BoxFit.contain,

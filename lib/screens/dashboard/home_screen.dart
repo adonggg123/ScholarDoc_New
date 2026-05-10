@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 150.0,
+            expandedHeight: 180.0,
             pinned: true,
             elevation: 0,
             shadowColor: Colors.transparent,
@@ -143,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     height: 45,
                                     child: ClipOval(
                                       child: Image.asset(
-                                        'assets/app_logo.png',
+                                        'assets/app_logo2.png',
                                         fit: BoxFit.contain,
                                       ),
                                     ),
@@ -323,7 +323,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       TextButton(
                         onPressed: () {},
                         style: TextButton.styleFrom(
-                          foregroundColor: context.textSec.withValues(alpha: 0.5),
+                          foregroundColor: context.textSec.withValues(
+                            alpha: 0.5,
+                          ),
                           textStyle: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 10,
@@ -381,9 +383,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatusCard(BuildContext context) {
-    final String scholarshipName = _profileData?['scholarshipName'] ?? 'No Scholarship Assigned';
+    final String scholarshipName =
+        _profileData?['scholarshipName'] ?? 'No Scholarship Assigned';
     final String status = _profileData?['status'] ?? 'Pending';
-    final String submittedDate = (_profileData?['submittedAt'] as Timestamp?)?.toDate().toString().split(' ')[0] ?? 'N/A';
+    final String submittedDate =
+        (_profileData?['submittedAt'] as Timestamp?)?.toDate().toString().split(
+          ' ',
+        )[0] ??
+        'N/A';
 
     Color statusColor = AppTheme.warning;
     IconData statusIcon = LucideIcons.hourglass;
@@ -401,7 +408,10 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withValues(alpha: 0.2), width: 1.5),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: statusColor.withValues(alpha: 0.05),
@@ -417,7 +427,9 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.03),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18.5)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18.5),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -462,7 +474,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor,
                     borderRadius: BorderRadius.circular(12),
@@ -497,7 +512,11 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(24),
             child: Row(
               children: [
-                Icon(LucideIcons.calendarCheck, size: 16, color: context.textSec.withValues(alpha: 0.5)),
+                Icon(
+                  LucideIcons.calendarCheck,
+                  size: 16,
+                  color: context.textSec.withValues(alpha: 0.5),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Last record sync: $submittedDate',
@@ -508,7 +527,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const Spacer(),
-                Icon(LucideIcons.chevronRight, size: 18, color: context.textSec.withValues(alpha: 0.3)),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: context.textSec.withValues(alpha: 0.3),
+                ),
               ],
             ),
           ),
@@ -564,11 +587,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildProgressTracker() {
     bool hasProfile = _profileData != null;
-    bool hasSA = (_profileData?['saNumber'] != null && _profileData!['saNumber'].toString().isNotEmpty);
+    bool hasSA =
+        (_profileData?['saNumber'] != null &&
+        _profileData!['saNumber'].toString().isNotEmpty);
     bool hasID = _profileData?['idFrontUrl'] != null;
 
     String scholarshipType = _profileData?['scholarshipName'] ?? 'Unassigned';
-    bool requiresIdOnly = scholarshipType == 'TES' || scholarshipType == 'STUFAP';
+    bool requiresIdOnly =
+        scholarshipType == 'TES' || scholarshipType == 'STUFAP';
     bool hasBilling = _profileData?['billingUrl'] != null;
 
     List<Map<String, dynamic>> steps = [
@@ -588,7 +614,10 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: themeColor.withValues(alpha: 0.1), width: 1.5),
+        border: Border.all(
+          color: themeColor.withValues(alpha: 0.1),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: themeColor.withValues(alpha: 0.03),
@@ -607,7 +636,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(1),
-                  color: isDone ? themeColor : themeColor.withValues(alpha: 0.1),
+                  color: isDone
+                      ? themeColor
+                      : themeColor.withValues(alpha: 0.1),
                 ),
               ),
             );
@@ -623,21 +654,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     shape: BoxShape.circle,
                     color: done ? themeColor : Colors.white,
                     border: Border.all(
-                      color: done ? themeColor : themeColor.withValues(alpha: 0.2),
+                      color: done
+                          ? themeColor
+                          : themeColor.withValues(alpha: 0.2),
                       width: 2,
                     ),
-                    boxShadow: done ? [
-                      BoxShadow(
-                        color: themeColor.withValues(alpha: 0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      )
-                    ] : [],
+                    boxShadow: done
+                        ? [
+                            BoxShadow(
+                              color: themeColor.withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : [],
                   ),
                   child: Icon(
                     done ? LucideIcons.check : LucideIcons.circle,
                     size: 14,
-                    color: done ? Colors.white : themeColor.withValues(alpha: 0.3),
+                    color: done
+                        ? Colors.white
+                        : themeColor.withValues(alpha: 0.3),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -646,7 +683,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: done ? FontWeight.w800 : FontWeight.w600,
-                    color: done ? AppTheme.primaryColor : themeColor.withValues(alpha: 0.4),
+                    color: done
+                        ? AppTheme.primaryColor
+                        : themeColor.withValues(alpha: 0.4),
                   ),
                 ),
               ],
@@ -764,7 +803,10 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withValues(alpha: 0.25), width: 2),
+              border: Border.all(
+                color: color.withValues(alpha: 0.25),
+                width: 2,
+              ),
             ),
             child: Column(
               children: [
@@ -804,7 +846,10 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: typeColor.withValues(alpha: 0.15), width: 1.5),
+        border: Border.all(
+          color: typeColor.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: typeColor.withValues(alpha: 0.03),
@@ -826,7 +871,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 5,
                   decoration: BoxDecoration(
                     color: typeColor,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(16),
+                    ),
                   ),
                 ),
                 Expanded(
@@ -838,7 +885,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: typeColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
@@ -854,7 +904,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const Spacer(),
-                            Icon(LucideIcons.arrowUpRight, size: 14, color: context.textSec.withValues(alpha: 0.3)),
+                            Icon(
+                              LucideIcons.arrowUpRight,
+                              size: 14,
+                              color: context.textSec.withValues(alpha: 0.3),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 12),

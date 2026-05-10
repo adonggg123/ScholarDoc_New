@@ -262,7 +262,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         Image.asset(
-          'assets/app_logo.png',
+          'assets/app_logo2.png',
           height: 100,
           width: 100,
           fit: BoxFit.contain,
@@ -302,7 +302,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white.withValues(alpha: 0.6) : AppTheme.secondaryColor,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.6)
+                    : AppTheme.secondaryColor,
                 letterSpacing: 2.0,
               ),
             ),

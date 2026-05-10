@@ -113,7 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Image.asset('assets/app_logo.png', width: 85, height: 85),
+                    Image.asset('assets/app_logo2.png', width: 85, height: 85),
                     const SizedBox(width: 0),
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(

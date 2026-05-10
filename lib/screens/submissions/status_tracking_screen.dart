@@ -119,7 +119,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                       slivers: [
                         // --- Header ---
                         SliverAppBar(
-                          expandedHeight: 150,
+                          expandedHeight: 180,
                           pinned: true,
                           backgroundColor: AppTheme.primaryColor,
                           elevation: 0,
@@ -226,6 +226,8 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                           fontSize: 18,
                                           fontWeight: FontWeight.w700,
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
