@@ -21,12 +21,12 @@ extension ThemeColorsExt on BuildContext {
   Color get bgC => Theme.of(this).scaffoldBackgroundColor;
   Color get textPri => Theme.of(this).colorScheme.onSurface;
   Color get textSec => Theme.of(this).colorScheme.onSurfaceVariant;
-  Color get glassBorder => isDark ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.2);
+  Color get glassBorder => isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2);
   Color get crispBorder => isDark ? const Color(0xFF334155) : Colors.grey.shade200;
 
   BoxDecoration get glassDecoration {
     return BoxDecoration(
-      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.7),
+      color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.7),
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: glassBorder),
     );
@@ -38,7 +38,7 @@ extension ThemeColorsExt on BuildContext {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: crispBorder, width: 1.5),
       boxShadow: [
-        BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), offset: const Offset(0, 2), blurRadius: 4),
+        BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.03), offset: const Offset(0, 2), blurRadius: 4),
       ],
     );
   }

@@ -337,6 +337,85 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  // Data Migration: Set default values for new registration fields
+  Future<int> migrateRegistrationFields() async {
+    int updatedCount = 0;
+    try {
+      final students = await _firestore.collection('students').get();
+      
+      for (var doc in students.docs) {
+        final data = doc.data();
+        bool needsUpdate = false;
+        Map<String, dynamic> updates = {};
+
+        // 1. Gender heuristic
+        if (data['gender'] == null || data['gender'].toString().isEmpty || data['gender'] == 'N/A') {
+          String fullName = (data['fullName'] ?? '').toString().trim().toLowerCase();
+          String firstName = fullName.split(' ').first;
+          String gender = 'Male'; // Default
+          
+          // Heuristic: common female name patterns
+          final femaleEndings = ['a', 'e', 'i', 'y', 'ah', 'ie', 'elle', 'ina'];
+          if (femaleEndings.any((ending) => firstName.endsWith(ending)) || 
+              firstName.contains('mary') || 
+              firstName.contains('maria') ||
+              firstName.contains('princess') ||
+              firstName.contains('angel')) {
+            gender = 'Female';
+          }
+          
+          updates['gender'] = gender;
+          needsUpdate = true;
+        }
+
+        // 2. Scholar Year Level
+        if (data['scholarYearLevel'] == null || data['scholarYearLevel'] == 'N/A') {
+          updates['scholarYearLevel'] = data['year'] ?? '1st Year';
+          needsUpdate = true;
+        }
+
+        // 3. Payouts Received
+        if (data['payoutsReceived'] == null) {
+          int p = 0;
+          String yl = updates['scholarYearLevel'] ?? data['scholarYearLevel'] ?? '1st Year';
+          if (yl.contains('2nd')) p = 1;
+          else if (yl.contains('3rd')) p = 2;
+          else if (yl.contains('4th') || yl.contains('5th')) p = 3;
+          updates['payoutsReceived'] = p;
+          needsUpdate = true;
+        }
+
+        // 4. Parents Edu Status
+        Map<String, dynamic> family = Map<String, dynamic>.from(data['familyDetails'] ?? {});
+        bool familyNeedsUpdate = false;
+        
+        if (family['fatherEduStatus'] == null || family['fatherEduStatus'] == 'N/A') {
+          family['fatherEduStatus'] = 'Non-graduate';
+          familyNeedsUpdate = true;
+        }
+        
+        if (family['motherEduStatus'] == null || family['motherEduStatus'] == 'N/A') {
+          family['motherEduStatus'] = 'Non-graduate';
+          familyNeedsUpdate = true;
+        }
+        
+        if (familyNeedsUpdate) {
+          updates['familyDetails'] = family;
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await doc.reference.update(updates);
+          updatedCount++;
+        }
+      }
+      return updatedCount;
+    } catch (e) {
+      debugPrint('Migration Error: $e');
+      rethrow;
+    }
+  }
+
   // Repair Tool: Find students with STUFAH and update to STUFAP
   Future<int> fixStudentScholarshipTypo() async {
     int updatedCount = 0;

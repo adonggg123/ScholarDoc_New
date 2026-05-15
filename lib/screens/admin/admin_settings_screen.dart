@@ -19,6 +19,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _autoAssign = true;
   bool _requireMfa = false;
   bool _fixingTypo = false;
+  bool _migratingData = false;
 
   void _runSpellingRepair() async {
     setState(() => _fixingTypo = true);
@@ -42,6 +43,30 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _fixingTypo = false);
+    }
+  }
+
+  void _runDataMigration() async {
+    setState(() => _migratingData = true);
+    try {
+      final count = await AuthService().migrateRegistrationFields();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Migration Complete: Updated $count student records with default values.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Migration Failed: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _migratingData = false);
     }
   }
 
@@ -287,6 +312,50 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : Icon(LucideIcons.wrench, size: 16),
                 label: Text(_fixingTypo ? 'Processing...' : 'Run spelling repair'),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.databaseBackup, size: 18, color: AppTheme.primaryColor),
+                  SizedBox(width: 12),
+                  Text(
+                    'Data Migration: New Registration Fields',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryColor),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Populates missing fields (Gender, Scholar Year, Payouts, Parent Edu) for existing students. Gender is guessed based on name.',
+                style: TextStyle(fontSize: 12, color: context.textSec),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _migratingData ? null : _runDataMigration,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  minimumSize: Size(double.infinity, 45),
+                ),
+                icon: _migratingData 
+                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Icon(LucideIcons.playCircle, size: 16),
+                label: Text(_migratingData ? 'Migrating...' : 'Run data migration'),
               ),
             ],
           ),

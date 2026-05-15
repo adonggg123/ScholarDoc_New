@@ -135,6 +135,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
+                Divider(),
                 _buildNavItem(0, 'Dashboard', LucideIcons.layoutDashboard),
                 _buildNavItem(1, 'Student Records', LucideIcons.users),
                 _buildNavItem(2, 'Scholarships', LucideIcons.graduationCap),
@@ -149,7 +150,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 SizedBox(height: 8),
                 _buildLogoutItem(),
                 SizedBox(height: 24),
-              ],
+              ],  
             ),
           ),
         ),
@@ -159,14 +160,14 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   Widget _buildSidebarHeader() {
     return Padding(
-      padding: EdgeInsets.only(top: 25, bottom: 15, left: 0, right: 27),
+      padding: EdgeInsets.only(top: 15, bottom: 5, left: 0, right: 27),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Image.asset(
             'assets/app_logo2.png',
-            width: 60,
-            height: 60,
+            width: 58,
+            height: 58,
             fit: BoxFit.contain,
           ),
           const SizedBox(width: 0),

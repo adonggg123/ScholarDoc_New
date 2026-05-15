@@ -4,9 +4,13 @@ import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'screens/admin/admin_login_screen.dart';
 import 'firebase_options.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Configure fonts for web
+  GoogleFonts.config.allowRuntimeFetching = true;
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,

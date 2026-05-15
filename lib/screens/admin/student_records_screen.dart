@@ -86,8 +86,12 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     final nameCtrl = TextEditingController();
     final idCtrl = TextEditingController();
     final saCtrl = TextEditingController();
+    final payoutsReceivedCtrl = TextEditingController(text: '0');
     String selectedCourse = _courseAddOptions.first;
     String selectedYear = _yearOptions.first;
+    String selectedScholarYearLevel = _yearOptions.first;
+    String selectedFatherEdu = 'Non-graduate';
+    String selectedMotherEdu = 'Non-graduate';
     String selectedGender = 'Male';
     bool isLoading = false;
 
@@ -196,6 +200,67 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                           icon: LucideIcons.creditCard,
                           validator: null,
                         ),
+                        SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _dialogDropdown(
+                                label: 'Year Became Scholar',
+                                value: selectedScholarYearLevel,
+                                items: _yearOptions,
+                                onChanged: (val) => setDialogState(() {
+                                  selectedScholarYearLevel = val!;
+                                  int payouts = 0;
+                                  if (val.contains('2nd')) payouts = 1;
+                                  else if (val.contains('3rd')) payouts = 2;
+                                  else if (val.contains('4th') || val.contains('5th')) payouts = 3;
+                                  payoutsReceivedCtrl.text = payouts.toString();
+                                }),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: _dialogField(
+                                controller: payoutsReceivedCtrl,
+                                label: 'Payouts Received',
+                                hint: 'e.g. 0',
+                                icon: LucideIcons.wallet,
+                                validator: (v) {
+                                  if (v != null && v.isNotEmpty) {
+                                    if (int.tryParse(v) == null) {
+                                      return 'Invalid number';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _dialogDropdown(
+                                label: "Father's Education",
+                                value: selectedFatherEdu,
+                                items: const ['Graduate', 'Non-graduate'],
+                                onChanged: (val) => setDialogState(
+                                    () => selectedFatherEdu = val!),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: _dialogDropdown(
+                                label: "Mother's Education",
+                                value: selectedMotherEdu,
+                                items: const ['Graduate', 'Non-graduate'],
+                                onChanged: (val) => setDialogState(
+                                    () => selectedMotherEdu = val!),
+                              ),
+                            ),
+                          ],
+                        ),
                         SizedBox(height: 8),
                         Container(
                           padding: EdgeInsets.symmetric(
@@ -260,8 +325,14 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                   'year': selectedYear,
                                   'gender': selectedGender,
                                   'status': 'Pending',
+                                  'scholarYearLevel': selectedScholarYearLevel,
+                                  'payoutsReceived': int.tryParse(
+                                          payoutsReceivedCtrl.text.trim()) ??
+                                      0,
                                   'familyDetails': {
                                     'saNumber': saCtrl.text.trim(),
+                                    'fatherEduStatus': selectedFatherEdu,
+                                    'motherEduStatus': selectedMotherEdu,
                                   },
                                   'createdAt': FieldValue.serverTimestamp(),
                                 });
@@ -333,6 +404,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
       nameCtrl.dispose();
       idCtrl.dispose();
       saCtrl.dispose();
+      payoutsReceivedCtrl.dispose();
     });
   }
 
@@ -1147,6 +1219,28 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                   ),
                   DataColumn(
                     label: Text(
+                      'Scholarship',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: context.textPri,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Scholar Year',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: context.textPri,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
                       'Status',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -1199,6 +1293,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                     name,
                     studentId,
                     '$course - $year',
+                    data['scholarshipName'] ?? 'N/A',
+                    data['scholarYearLevel'] ?? 'N/A',
                     status,
                     saNumber,
                     isEven: index % 2 == 0,
@@ -1219,6 +1315,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     String name,
     String studentId,
     String courseYear,
+    String scholarship,
+    String scholarYear,
     String status,
     String saNumber, {
     bool isEven = false,
@@ -1309,6 +1407,18 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
         DataCell(
           Text(
             courseYear,
+            style: TextStyle(fontSize: 13, color: context.textSec),
+          ),
+        ),
+        DataCell(
+          Text(
+            scholarship,
+            style: TextStyle(fontSize: 13, color: context.textSec),
+          ),
+        ),
+        DataCell(
+          Text(
+            scholarYear,
             style: TextStyle(fontSize: 13, color: context.textSec),
           ),
         ),
@@ -1659,6 +1769,16 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                           'Registration Date',
                           registeredOn,
                         ),
+                        _buildProfileInfoCard(
+                          LucideIcons.calendarDays,
+                          'Scholar Year',
+                          data['scholarYearLevel'] ?? 'N/A',
+                        ),
+                        _buildProfileInfoCard(
+                          LucideIcons.wallet,
+                          'Payouts Received',
+                          data['payoutsReceived']?.toString() ?? '0',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 48),
@@ -1745,6 +1865,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                             family['fatherName']?.toString(),
                             family['fatherAge']?.toString(),
                             family['fatherOccupation']?.toString(),
+                            edu: family['fatherEduStatus']?.toString(),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -1754,6 +1875,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                             family['motherName']?.toString(),
                             family['motherAge']?.toString(),
                             family['motherOccupation']?.toString(),
+                            edu: family['motherEduStatus']?.toString(),
                           ),
                         ),
                       ],
@@ -1926,8 +2048,9 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     String role,
     String? name,
     String? age,
-    String? occupation,
-  ) {
+    String? occupation, {
+    String? edu,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -2024,6 +2147,23 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
               ),
             ],
           ),
+          if (edu != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(LucideIcons.graduationCap, size: 14, color: context.textSec),
+                const SizedBox(width: 6),
+                Text(
+                  edu,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.textSec,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

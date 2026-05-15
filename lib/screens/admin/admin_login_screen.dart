@@ -263,8 +263,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       children: [
         Image.asset(
           'assets/app_logo2.png',
-          height: 100,
-          width: 100,
+          height: 90,
+          width: 90,
           fit: BoxFit.contain,
         ),
         const SizedBox(width: 0),
