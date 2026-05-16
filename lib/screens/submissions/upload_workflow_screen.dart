@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../../services/ml_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/storage_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
   const UploadWorkflowScreen({super.key});
@@ -21,8 +22,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   int _currentStep = 0;
 
   bool _isUploading = false;
-
-  final MLService _mlService = MLService();
   final AuthService _authService = AuthService();
   final AuditService _auditService = AuditService();
   final StorageService _storageService = StorageService();
@@ -93,6 +92,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     super.dispose();
   }
 
+  // ATM Scanning removed in favor of manual entry
+
   Future<void> _handleUpload() async {
     try {
       // 1. Pick PDF File
@@ -103,7 +104,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       );
 
       if (result == null || result.files.single.bytes == null) return;
-
+      
       final bytes = result.files.single.bytes!;
       String originalName = result.files.single.name;
 
@@ -235,7 +236,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Verification: Passed',
+                      'File ready for submission',
                       style: TextStyle(color: AppTheme.success, fontSize: 12),
                     ),
                   ],
@@ -243,6 +244,40 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  if (_submissionPdfUrl != null) {
+                    final uri = Uri.parse(_submissionPdfUrl!);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not open document.')),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(LucideIcons.externalLink),
+                label: const Text(
+                  'Preview Document',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: context.surfaceC,
+                  foregroundColor: AppTheme.primaryColor,
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -363,6 +398,16 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 currentStep: _currentStep,
                 elevation: 0,
                 onStepContinue: () async {
+                  if (_currentStep == 1 && _submissionPdfUrl == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please upload and review your document before continuing.'),
+                        backgroundColor: AppTheme.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
                   if (_currentStep < 2) {
                     setState(() {
                       _currentStep += 1;
@@ -516,7 +561,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Please ensure your PDF contains all required documents (ID and 3 Signatures). A blurred or incomplete PDF may lead to rejection by the administrator.',
+                'Please ensure your PDF contains all required documents (ID Front, ID Back, and 3 Signatures). Note: All ID images must be clear, well-lit, and easily readable. A blurred or incomplete PDF may lead to rejection.',
                 style: TextStyle(
                   color: AppTheme.warning,
                   fontSize: 12,
@@ -569,7 +614,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 CircularProgressIndicator(),
                 SizedBox(height: 12),
                 Text(
-                  'Analyzing document using ML...',
+                  'Uploading document...',
                   style: TextStyle(color: AppTheme.primaryColor),
                 ),
               ],
@@ -620,16 +665,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _saController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'SA Number',
-                  hintText: 'xxxx-xxxx-xxxx',
-                  prefixIcon: Icon(LucideIcons.creditCard),
+                  hintText: 'Enter your 10-digit SA number',
+                  prefixIcon: const Icon(LucideIcons.creditCard),
                 ),
                 keyboardType: TextInputType.number,
               ),
+              const SizedBox(height: 16),
               const SizedBox(height: 8),
               Text(
-                'Ensure your SA number is active for disbursement.',
+                'Please enter your official scholarship account number carefully.',
                 style: TextStyle(fontSize: 11, color: context.textSec),
               ),
             ],
@@ -731,7 +777,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                               color: isCompleted
                                   ? AppTheme.success
                                   : context.textSec,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -816,33 +861,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                         ],
                       ),
                     ),
-                ],
-                if (isDuplicate) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.error.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(LucideIcons.copy, size: 14, color: AppTheme.error),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Warning: Duplicate detection triggered.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.error,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ],
             ),

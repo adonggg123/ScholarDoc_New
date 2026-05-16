@@ -12,6 +12,7 @@ class StorageService {
     required Uint8List bytes,
   }) async {
     try {
+      _storage.setMaxUploadRetryTime(const Duration(seconds: 15));
       final Reference ref = _storage.ref().child(path);
       
       // Specify content type if possible
@@ -19,10 +20,36 @@ class StorageService {
         contentType: path.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
       );
 
-      final UploadTask uploadTask = ref.putData(bytes, metadata);
+      TaskSnapshot? snapshot;
+      int maxRetries = 3;
       
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
+      for (int i = 0; i < maxRetries; i++) {
+        try {
+          final UploadTask uploadTask = ref.putData(bytes, metadata);
+          snapshot = await uploadTask;
+          break; // Upload succeeded
+        } catch (e) {
+          if (i == maxRetries - 1) rethrow; // If last attempt fails, throw
+          await Future.delayed(const Duration(seconds: 2)); // Wait before retrying
+        }
+      }
+
+      if (snapshot == null) {
+        throw Exception("Upload failed after multiple attempts.");
+      }
+      
+      String downloadUrl = '';
+      try {
+        downloadUrl = await snapshot.ref.getDownloadURL();
+      } catch (e) {
+        if (e.toString().contains('object-not-found')) {
+          // Retry after a short delay to allow Firebase Storage to finalize
+          await Future.delayed(const Duration(milliseconds: 800));
+          downloadUrl = await snapshot.ref.getDownloadURL();
+        } else {
+          rethrow;
+        }
+      }
       
       return downloadUrl;
     } on FirebaseException catch (e) {

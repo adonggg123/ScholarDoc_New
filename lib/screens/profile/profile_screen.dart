@@ -4,7 +4,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import '../../services/ml_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/cloudinary_service.dart';
@@ -28,7 +27,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _emailController = TextEditingController();
 
   final AuthService _authService = AuthService();
-  final MLService _mlService = MLService();
   final AuditService _auditService = AuditService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
@@ -309,10 +307,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your SA Number';
-                            }
-                            final mlCheck = _mlService.detectSASuspiciousPattern(value);
-                            if (mlCheck['isSuspicious']) {
-                              return mlCheck['message'] as String;
                             }
                             return null;
                           },

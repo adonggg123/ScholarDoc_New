@@ -3,7 +3,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import '../../services/ml_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/notification_service.dart';
@@ -61,42 +60,15 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
           );
         }
 
-        // --- AUTOMATED PRIORITIZATION LOGIC ---
-        final mlService = MLService();
-        // Calculate Priority Score
-        final List<Map<String, dynamic>> scoredDocs = docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final String saNumber =
-              data['saNumber'] ?? data['familyDetails']?['saNumber'] ?? '';
-
-          int priorityScore = 0;
-          bool isSuspicious = false;
-
-          // Artificial Intelligence Rule
-          if (saNumber.isNotEmpty) {
-            final aiCheck = mlService.detectSASuspiciousPattern(saNumber);
-            isSuspicious = aiCheck['isSuspicious'];
-            if (isSuspicious) {
-              priorityScore += 100; // Force suspicious apps to top
-            }
-          }
-
-          return {
-            'doc': doc,
-            'score': priorityScore,
-            'isSuspicious': isSuspicious,
-          };
-        }).toList();
-
-        // Sort dynamically: Highest score first. If equal score, original descending date (default array ordering)
-        scoredDocs.sort(
-          (a, b) => (b['score'] as int).compareTo(a['score'] as int),
-        );
-
-        // Create the final sorted docs list
-        docs = scoredDocs
-            .map((s) => s['doc'] as QueryDocumentSnapshot)
-            .toList();
+        // Sort by original date (descending)
+        docs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aDate = aData['createdAt'] as Timestamp?;
+          final bDate = bData['createdAt'] as Timestamp?;
+          if (aDate == null || bDate == null) return 0;
+          return bDate.compareTo(aDate);
+        });
 
         // Safely determine the active index without modifying state during build
         final int activeIndex = (_selectedStudentIndex >= docs.length)
@@ -127,7 +99,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                   ),
                   const SizedBox(height: 4), // Increased from 2
                   Text(
-                    'Verify accuracy of submitted accounts. AI prioritizes high-risk documents.',
+                    'Verify accuracy of submitted accounts.',
                     style: TextStyle(
                       fontSize: 13,
                       color: context.textSec,
@@ -136,7 +108,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                   ),
                   const SizedBox(height: 24), // Restored from 16
                   if (isMobile) ...[
-                    _buildVerificationTable(context, scoredDocs, isMobile),
+                    _buildVerificationTable(context, docs, isMobile),
                     const SizedBox(height: 24), // Restored from 16
                     _buildVerificationPanel(context, selectedData, isMobile),
                   ] else
@@ -147,7 +119,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                           flex: 3,
                           child: _buildVerificationTable(
                             context,
-                            scoredDocs,
+                            docs,
                             isMobile,
                           ),
                         ),
@@ -174,7 +146,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
   Widget _buildVerificationTable(
     BuildContext context,
-    List<Map<String, dynamic>> scoredDocs,
+    List<QueryDocumentSnapshot> docs,
     bool isMobile,
   ) {
     return Container(
@@ -196,12 +168,11 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: scoredDocs.length,
+        itemCount: docs.length,
         separatorBuilder: (context, index) =>
             Divider(color: context.surfaceC.withValues(alpha: 0.1), height: 1),
         itemBuilder: (context, index) {
-          final doc = scoredDocs[index]['doc'] as QueryDocumentSnapshot;
-          final bool isSuspicious = scoredDocs[index]['isSuspicious'];
+          final doc = docs[index];
 
           final data = doc.data() as Map<String, dynamic>;
           final String name = data['fullName'] ?? 'N/A';
@@ -237,9 +208,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: isSuspicious
-                                  ? AppTheme.warning
-                                  : const Color(0xFFFBC02D),
+                              color: const Color(0xFFFBC02D),
                               width: 2,
                             ),
                             boxShadow: [
@@ -258,17 +227,11 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                       }
                       return CircleAvatar(
                         radius: 16,
-                        backgroundColor: isSuspicious
-                            ? AppTheme.warning.withValues(alpha: 0.1)
-                            : AppTheme.primaryColor.withValues(alpha: 0.05),
+                        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.05),
                         child: Icon(
-                          isSuspicious
-                              ? LucideIcons.alertTriangle
-                              : LucideIcons.user,
+                          LucideIcons.user,
                           size: 16,
-                          color: isSuspicious
-                              ? AppTheme.warning
-                              : AppTheme.primaryColor,
+                          color: AppTheme.primaryColor,
                         ),
                       );
                     }(),
@@ -291,35 +254,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                                   ),
                                 ),
                               ),
-                              if (isSuspicious) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.warning.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: AppTheme.warning.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'PRIORITY',
-                                    style: TextStyle(
-                                      color: AppTheme.warning,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                           const SizedBox(height: 2),
@@ -356,7 +290,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
     Map<String, dynamic> data,
     bool isMobile,
   ) {
-    final ml = MLService();
     final String saNumber =
         data['saNumber'] ??
         data['familyDetails']?['saNumber'] ??
@@ -368,8 +301,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
     final String? submissionPdfUrl = data['submissionPdfUrl'];
     final String? submissionPdfName = data['submissionPdfName'];
-
-    final aiCheck = ml.detectSASuspiciousPattern(saNumber);
 
     return Container(
       decoration: context.crispDecoration.copyWith(
@@ -472,8 +403,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
             _dataField(context, 'Student ID', studentId),
             SizedBox(height: 10),
             _dataField(context, 'Submitted SA Number', saNumber),
-            SizedBox(height: 6),
-            _buildAIBadge(context, aiCheck),
             const SizedBox(height: 12),
             _dataField(context, 'Bank Branch', 'Main University Branch'),
             const SizedBox(height: 10),
@@ -715,44 +644,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
         );
       }
     }
-  }
-
-  Widget _buildAIBadge(BuildContext context, Map<String, dynamic> aiCheck) {
-    final bool isSuspicious = aiCheck['isSuspicious'];
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: (isSuspicious ? AppTheme.warning : AppTheme.success).withValues(
-          alpha: 0.1,
-        ),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: (isSuspicious ? AppTheme.warning : AppTheme.success)
-              .withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            LucideIcons.bot,
-            size: 12,
-            color: isSuspicious ? AppTheme.warning : AppTheme.success,
-          ),
-          SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              'AI Score: ${aiCheck['confidence']}% - ${aiCheck['message']}',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isSuspicious ? AppTheme.warning : AppTheme.success,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildDuplicateBadge(BuildContext context) {

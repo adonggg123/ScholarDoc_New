@@ -3,7 +3,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import '../../services/ml_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/report_service.dart';
@@ -42,8 +41,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
 
         return SingleChildScrollView(
           padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 16 : 48, 
-            vertical: isMobile ? 12 : 32
+            horizontal: isMobile ? 16 : 48,
+            vertical: isMobile ? 12 : 32,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,14 +66,14 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 ),
               const SizedBox(height: 48), // Increased from 32
               if (isMobile) ...[
-                _buildHighRiskStudents(context),
+                _buildPendingVerifications(context),
                 const SizedBox(height: 32),
                 _buildRecentActivity(context),
               ] else
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 1, child: _buildHighRiskStudents(context)),
+                    Expanded(flex: 1, child: _buildPendingVerifications(context)),
                     const SizedBox(width: 32),
                     Expanded(flex: 1, child: _buildRecentActivity(context)),
                   ],
@@ -250,10 +249,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
               ),
             ),
             const SizedBox(width: 24),
-            Expanded(
-              flex: 3,
-              child: _buildCalendarWidget(context),
-            ),
+            Expanded(flex: 3, child: _buildCalendarWidget(context)),
             const Spacer(flex: 1),
           ],
         );
@@ -344,10 +340,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
     DateTime firstDayOfMonth = DateTime(now.year, now.month, 1);
     int daysInMonth = DateTime(now.year, now.month + 1, 0).day;
     int firstWeekday = firstDayOfMonth.weekday; // 1=Monday, 7=Sunday
-    
+
     // Adjust for Sunday as first day of week
     int emptyDays = firstWeekday == 7 ? 0 : firstWeekday;
-    
+
     List<String> weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     return Container(
@@ -378,24 +374,32 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   color: context.textPri,
                 ),
               ),
-              Icon(LucideIcons.calendarDays, size: 20, color: AppTheme.primaryColor),
+              Icon(
+                LucideIcons.calendarDays,
+                size: 20,
+                color: AppTheme.primaryColor,
+              ),
             ],
           ),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: weekdays.map((day) => Expanded(
-              child: Center(
-                child: Text(
-                  day,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: context.textPri.withValues(alpha: 0.8),
+            children: weekdays
+                .map(
+                  (day) => Expanded(
+                    child: Center(
+                      child: Text(
+                        day,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: context.textPri.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            )).toList(),
+                )
+                .toList(),
           ),
           const SizedBox(height: 16),
           GridView.builder(
@@ -415,34 +419,28 @@ class _DashboardOverviewState extends State<DashboardOverview> {
 
               return Container(
                 decoration: BoxDecoration(
-                  color: isToday ? AppTheme.primaryColor : context.surfaceC,
+                  color: isToday ? AppTheme.primaryColor : Colors.white,
                   borderRadius: BorderRadius.circular(10),
-                  border: isToday 
-                      ? null 
-                      : Border.all(color: context.crispBorder, width: 1),
-                  boxShadow: isToday 
+                  border: isToday
+                      ? null
+                      : Border.all(color: Colors.grey.shade200, width: 1),
+                  boxShadow: isToday
                       ? [
                           BoxShadow(
                             color: AppTheme.primaryColor.withValues(alpha: 0.4),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
-                          )
+                          ),
                         ]
                       : null,
                 ),
                 alignment: Alignment.center,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Padding(
-                    padding: const EdgeInsets.all(2.0),
-                    child: Text(
-                      day.toString(),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
-                        color: isToday ? Colors.white : context.textPri,
-                      ),
-                    ),
+                child: Text(
+                  day.toString(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
+                    color: isToday ? Colors.white : context.textPri,
                   ),
                 ),
               );
@@ -878,9 +876,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
     );
   }
 
-  Widget _buildHighRiskStudents(BuildContext context) {
-    final MLService ml = MLService();
-
+  Widget _buildPendingVerifications(BuildContext context) {
     return Container(
       decoration: context.glassDecoration.copyWith(
         boxShadow: AppTheme.softShadow,
@@ -892,17 +888,17 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.brainCircuit, color: AppTheme.error, size: 18),
+                Icon(LucideIcons.fileCheck, color: AppTheme.primaryColor, size: 18),
                 SizedBox(width: 8),
                 Text(
-                  'AI Risk Prediction',
+                  'Pending Verification',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 4),
             Text(
-              'Students likely to submit late or incorrectly',
+              'Students waiting for document review',
               style: TextStyle(fontSize: 12, color: context.textSec),
             ),
             SizedBox(height: 16),
@@ -914,101 +910,81 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
                       child: Text(
-                        'No student data available.',
+                        'No pending data available.',
                         style: TextStyle(color: context.textSec, fontSize: 13),
                       ),
                     ),
                   );
                 }
 
-                // Process real students
-                final List<Map<String, dynamic>> students = snapshot.data!.docs
-                    .map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return {
-                        'name': data['fullName'] ?? 'N/A',
-                        'id': data['studentId'] ?? 'N/A',
-                        'profilePictureUrl': data['profilePictureUrl'] ?? '',
-                        'pastLateSubmissions':
-                            0, // In a real app, this would be a field
-                        'familyDetails': data['familyDetails'],
-                      };
-                    })
-                    .toList();
+                // Filter for pending students
+                final pendingStudents = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return data['status'] == 'Pending';
+                }).take(4).toList();
 
-                // Auto-sort by highest risk first
-                students.sort(
-                  (a, b) => ml
-                      .predictSubmissionRisk(b)
-                      .compareTo(ml.predictSubmissionRisk(a)),
-                );
-
-                // Take top 4
-                final topRiskStudents = students.take(4).toList();
+                if (pendingStudents.isEmpty) {
+                  return Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        'All documents verified.',
+                        style: TextStyle(color: AppTheme.success, fontSize: 13),
+                      ),
+                    ),
+                  );
+                }
 
                 return ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: topRiskStudents.length,
+                  itemCount: pendingStudents.length,
                   separatorBuilder: (context, index) => Divider(),
                   itemBuilder: (context, index) {
-                    final student = topRiskStudents[index];
-                    final risk = ml.predictSubmissionRisk(student);
-                    final color = risk > 80
-                        ? AppTheme.error
-                        : (risk > 50 ? AppTheme.warning : AppTheme.success);
+                    final data = pendingStudents[index].data() as Map<String, dynamic>;
+                    final String name = data['fullName'] ?? 'N/A';
+                    final String id = data['studentId'] ?? 'N/A';
+                    final String photoUrl = data['profilePictureUrl'] ?? '';
 
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: () {
-                        final String photoUrl =
-                            student['profilePictureUrl'] as String? ?? '';
-                        if (photoUrl.isNotEmpty) {
-                          return CircleAvatar(
-                            backgroundColor: color.withValues(alpha: 0.1),
-                            backgroundImage: NetworkImage(photoUrl),
-                          );
-                        }
-                        return CircleAvatar(
-                          backgroundColor: color.withValues(alpha: 0.1),
-                          child: Icon(
-                            LucideIcons.alertTriangle,
-                            size: 18,
-                            color: color,
-                          ),
-                        );
-                      }(),
+                      leading: photoUrl.isNotEmpty
+                          ? CircleAvatar(
+                              backgroundImage: NetworkImage(photoUrl),
+                            )
+                          : CircleAvatar(
+                              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              child: Icon(
+                                LucideIcons.user,
+                                size: 18,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
                       title: Text(
-                        student['name'] as String,
+                        name,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
                       ),
                       subtitle: Text(
-                        'ID: ${student['id']}',
+                        'ID: $id',
                         style: TextStyle(fontSize: 11),
                       ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${risk.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              color: color,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'PENDING',
+                          style: TextStyle(
+                            color: AppTheme.warning,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
                           ),
-                          Text(
-                            'Risk Score',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: context.textSec,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   },

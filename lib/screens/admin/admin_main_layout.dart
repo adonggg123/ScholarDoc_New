@@ -11,6 +11,7 @@ import 'announcement_management_screen.dart';
 import 'audit_log_screen.dart';
 import 'reports_screen.dart';
 import 'admin_settings_screen.dart';
+import 'id_validation_screen.dart';
 
 class AdminMainLayout extends StatefulWidget {
   const AdminMainLayout({super.key});
@@ -34,7 +35,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
     const AuditLogScreen(),
     const ReportsScreen(),
     const AdminSettingsScreen(),
+    const IdValidationScreen(),
   ];
+
+  bool _isValidationExpanded = false;
 
   void _refreshSystem() async {
     setState(() => _isSyncing = true);
@@ -139,17 +143,26 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 _buildNavItem(0, 'Dashboard', LucideIcons.layoutDashboard),
                 _buildNavItem(1, 'Student Records', LucideIcons.users),
                 _buildNavItem(2, 'Scholarships', LucideIcons.graduationCap),
-                _buildNavItem(3, 'SA Verification', LucideIcons.landmark),
+                _buildExpandableNavItem(
+                  label: 'Validation',
+                  icon: LucideIcons.shieldCheck,
+                  isExpanded: _isValidationExpanded,
+                  onExpand: (val) => setState(() => _isValidationExpanded = val),
+                  children: [
+                    _buildSubNavItem(3, 'SA Verification', LucideIcons.landmark),
+                    _buildSubNavItem(8, 'ID Validation', LucideIcons.badgeCheck),
+                  ],
+                ),
                 _buildNavItem(4, 'Announcements', LucideIcons.megaphone),
                 _buildNavItem(5, 'Activity Logs', LucideIcons.history),
                 _buildNavItem(6, 'Reports', LucideIcons.barChart4),
-                SizedBox(height: 24),
-                Divider(),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 24),
                 _buildNavItem(7, 'Settings', LucideIcons.settings),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 _buildLogoutItem(),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
               ],  
             ),
           ),
@@ -266,6 +279,133 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandableNavItem({
+    required String label,
+    required IconData icon,
+    required bool isExpanded,
+    required Function(bool) onExpand,
+    required List<Widget> children,
+  }) {
+    // Determine if any child is selected to highlight the parent
+    bool hasSelectedChild = _selectedIndex == 3 || _selectedIndex == 8;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        children: [
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: InkWell(
+              onTap: () => onExpand(!isExpanded),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: hasSelectedChild && !isExpanded
+                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: hasSelectedChild
+                            ? AppTheme.primaryColor
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: hasSelectedChild ? Colors.white : context.textSec,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: hasSelectedChild ? context.textPri : context.textSec,
+                          fontWeight: hasSelectedChild ? FontWeight.w600 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                      size: 14,
+                      color: context.textSec.withValues(alpha: 0.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (isExpanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 16),
+              child: Column(children: children),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubNavItem(int index, String label, IconData icon) {
+    bool isSelected = _selectedIndex == index;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _selectedIndex = index;
+            });
+            if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+              Navigator.pop(context);
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppTheme.primaryColor.withValues(alpha: 0.05)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected ? AppTheme.primaryColor : context.textSec,
+                  size: 14,
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isSelected ? AppTheme.primaryColor : context.textSec,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),

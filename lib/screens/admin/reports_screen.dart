@@ -9,6 +9,7 @@ import '../../services/report_service.dart';
 import '../../utils/pdf_generator.dart';
 import '../../utils/excel_generator.dart';
 import 'package:intl/intl.dart';
+import 'billing_autofill_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -173,6 +174,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildExportButtons(BuildContext context) {
     return Row(
       children: [
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const BillingAutofillScreen(),
+              ),
+            );
+          },
+          icon: const Icon(LucideIcons.filePlus),
+          label: const Text('Auto-fill Billing'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.secondaryColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
         ElevatedButton.icon(
           onPressed: _isGeneratingPdf ? null : _handleExportPdf,
           icon: _isGeneratingPdf

@@ -434,4 +434,39 @@ class AuthService {
     }
     return updatedCount;
   }
+
+
+  // Batch update/create students from CSV
+  Future<void> batchUpdateStudents(List<Map<String, dynamic>> studentsData) async {
+    if (studentsData.isEmpty) return;
+
+    final WriteBatch batch = _firestore.batch();
+    
+    for (final data in studentsData) {
+      final uid = data['uid'];
+      if (uid != null && uid.toString().isNotEmpty) {
+        // Update existing
+        final docRef = _firestore.collection('students').doc(uid);
+        // Remove internal flags before saving
+        data.remove('isUpdated');
+        batch.update(docRef, data);
+      } else {
+        // Create new
+        final docRef = _firestore.collection('students').doc();
+        data['uid'] = docRef.id;
+        data['createdAt'] = FieldValue.serverTimestamp();
+        data['status'] = data['status'] ?? 'Pending';
+        data.remove('isUpdated');
+        batch.set(docRef, data);
+      }
+    }
+
+    await batch.commit();
+
+    await _auditService.logActivity(
+      action: 'Auto-filled / Updated  student records via CSV Import',
+      userName: 'Admin',
+      role: 'Admin',
+    );
+  }
 }
