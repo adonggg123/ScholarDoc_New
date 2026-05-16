@@ -155,6 +155,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         if (isMobile) {
           return Column(
             children: [
+              _buildCalendarWidget(context),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   _buildStatCard(
@@ -164,7 +166,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                     LucideIcons.fileText,
                     AppTheme.primaryColor,
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 16),
                   _buildStatCard(
                     context,
                     'Pending',
@@ -174,7 +176,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   ),
                 ],
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   _buildStatCard(
@@ -184,7 +186,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                     LucideIcons.checkCircle2,
                     AppTheme.success,
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 16),
                   _buildStatCard(
                     context,
                     'Rejected',
@@ -199,38 +201,60 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         }
 
         return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStatCard(
-              context,
-              'Total Students',
-              total.toString(),
-              LucideIcons.fileText,
-              AppTheme.primaryColor,
+            Expanded(
+              flex: 5,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      _buildStatCard(
+                        context,
+                        'Total Students',
+                        total.toString(),
+                        LucideIcons.fileText,
+                        AppTheme.primaryColor,
+                      ),
+                      const SizedBox(width: 16),
+                      _buildStatCard(
+                        context,
+                        'Pending Review',
+                        pending.toString(),
+                        LucideIcons.clock,
+                        AppTheme.warning,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildStatCard(
+                        context,
+                        'Approved',
+                        approved.toString(),
+                        LucideIcons.checkCircle2,
+                        AppTheme.success,
+                      ),
+                      const SizedBox(width: 16),
+                      _buildStatCard(
+                        context,
+                        'Rejected',
+                        rejected.toString(),
+                        LucideIcons.alertCircle,
+                        AppTheme.error,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            SizedBox(width: 16),
-            _buildStatCard(
-              context,
-              'Pending Review',
-              pending.toString(),
-              LucideIcons.clock,
-              AppTheme.warning,
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 3,
+              child: _buildCalendarWidget(context),
             ),
-            SizedBox(width: 16),
-            _buildStatCard(
-              context,
-              'Approved',
-              approved.toString(),
-              LucideIcons.checkCircle2,
-              AppTheme.success,
-            ),
-            SizedBox(width: 16),
-            _buildStatCard(
-              context,
-              'Rejected',
-              rejected.toString(),
-              LucideIcons.alertCircle,
-              AppTheme.error,
-            ),
+            const Spacer(flex: 1),
           ],
         );
       },
@@ -256,7 +280,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -289,7 +313,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
                   height: 1.1,
@@ -304,13 +328,127 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 style: TextStyle(
                   color: context.textSec,
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarWidget(BuildContext context) {
+    DateTime now = DateTime.now();
+    DateTime firstDayOfMonth = DateTime(now.year, now.month, 1);
+    int daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    int firstWeekday = firstDayOfMonth.weekday; // 1=Monday, 7=Sunday
+    
+    // Adjust for Sunday as first day of week
+    int emptyDays = firstWeekday == 7 ? 0 : firstWeekday;
+    
+    List<String> weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.surfaceC,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                DateFormat('MMMM yyyy').format(now),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: context.textPri,
+                ),
+              ),
+              Icon(LucideIcons.calendarDays, size: 20, color: AppTheme.primaryColor),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: weekdays.map((day) => Expanded(
+              child: Center(
+                child: Text(
+                  day,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: context.textPri.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+            )).toList(),
+          ),
+          const SizedBox(height: 16),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1,
+            ),
+            itemCount: emptyDays + daysInMonth,
+            itemBuilder: (context, index) {
+              if (index < emptyDays) return const SizedBox();
+              int day = index - emptyDays + 1;
+              bool isToday = day == now.day;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: isToday ? AppTheme.primaryColor : context.surfaceC,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isToday 
+                      ? null 
+                      : Border.all(color: context.crispBorder, width: 1),
+                  boxShadow: isToday 
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: Text(
+                      day.toString(),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
+                        color: isToday ? Colors.white : context.textPri,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

@@ -211,9 +211,13 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 onChanged: (val) => setDialogState(() {
                                   selectedScholarYearLevel = val!;
                                   int payouts = 0;
-                                  if (val.contains('2nd')) payouts = 1;
-                                  else if (val.contains('3rd')) payouts = 2;
-                                  else if (val.contains('4th') || val.contains('5th')) payouts = 3;
+                                  if (val.contains('2nd'))
+                                    payouts = 1;
+                                  else if (val.contains('3rd'))
+                                    payouts = 2;
+                                  else if (val.contains('4th') ||
+                                      val.contains('5th'))
+                                    payouts = 3;
                                   payoutsReceivedCtrl.text = payouts.toString();
                                 }),
                               ),
@@ -246,7 +250,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 value: selectedFatherEdu,
                                 items: const ['Graduate', 'Non-graduate'],
                                 onChanged: (val) => setDialogState(
-                                    () => selectedFatherEdu = val!),
+                                  () => selectedFatherEdu = val!,
+                                ),
                               ),
                             ),
                             SizedBox(width: 12),
@@ -256,7 +261,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 value: selectedMotherEdu,
                                 items: const ['Graduate', 'Non-graduate'],
                                 onChanged: (val) => setDialogState(
-                                    () => selectedMotherEdu = val!),
+                                  () => selectedMotherEdu = val!,
+                                ),
                               ),
                             ),
                           ],
@@ -326,8 +332,10 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                   'gender': selectedGender,
                                   'status': 'Pending',
                                   'scholarYearLevel': selectedScholarYearLevel,
-                                  'payoutsReceived': int.tryParse(
-                                          payoutsReceivedCtrl.text.trim()) ??
+                                  'payoutsReceived':
+                                      int.tryParse(
+                                        payoutsReceivedCtrl.text.trim(),
+                                      ) ??
                                       0,
                                   'familyDetails': {
                                     'saNumber': saCtrl.text.trim(),
@@ -1282,7 +1290,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                   final String course = data['course'] ?? 'N/A';
                   final String year = data['year'] ?? 'N/A';
                   final String status = data['status'] ?? 'Pending';
-                  final String saNumber = data['saNumber'] ??
+                  final String saNumber =
+                      data['saNumber'] ??
                       data['familyDetails']?['saNumber'] ??
                       'Not Provided';
 
@@ -1495,12 +1504,15 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
   ) async {
     try {
       // Update with all administrative fields often required by security rules
-      await FirebaseFirestore.instance.collection('students').doc(docId).update({
-        'status': newStatus,
-        'adminRemarks': 'Updated via Student Records',
-        'requiresResubmission': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await FirebaseFirestore.instance
+          .collection('students')
+          .doc(docId)
+          .update({
+            'status': newStatus,
+            'adminRemarks': 'Updated via Student Records',
+            'requiresResubmission': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       await _auditService.logActivity(
         action: 'Changed student status to $newStatus',
@@ -1909,7 +1921,10 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                         'verified',
                       )
                     else
-                      _buildDocumentItem('No documents uploaded yet', 'pending'),
+                      _buildDocumentItem(
+                        'No documents uploaded yet',
+                        'pending',
+                      ),
                     const SizedBox(height: 48),
 
                     // Compliance Action
@@ -2151,7 +2166,11 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(LucideIcons.graduationCap, size: 14, color: context.textSec),
+                Icon(
+                  LucideIcons.graduationCap,
+                  size: 14,
+                  color: context.textSec,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   edu,
