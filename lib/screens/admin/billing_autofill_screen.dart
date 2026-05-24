@@ -1,4 +1,6 @@
+import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../services/billing_service.dart';
@@ -6,7 +8,8 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 
 class BillingAutofillScreen extends StatefulWidget {
-  const BillingAutofillScreen({super.key});
+  final List<Map<String, dynamic>>? selectedStudents;
+  const BillingAutofillScreen({super.key, this.selectedStudents});
 
   @override
   State<BillingAutofillScreen> createState() => _BillingAutofillScreenState();
@@ -20,6 +23,8 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
   Map<String, dynamic>? _stats;
   bool _isLoading = false;
   bool _isProcessing = false;
+  bool _isAnnex5 = false;
+  Annex5FillResult? _annex5Result;
 
   Future<void> _pickFile() async {
     try {
@@ -34,6 +39,8 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
           _uploadedFile = result.files.first;
           _processedData = null;
           _stats = null;
+          _isAnnex5 = false;
+          _annex5Result = null;
         });
         _analyzeFile();
       }
@@ -44,41 +51,127 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
 
   Future<void> _analyzeFile() async {
     if (_uploadedFile == null) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isAnnex5 = false;
+      _annex5Result = null;
+    });
     try {
+      final bytes = _uploadedFile!.bytes;
+      if (bytes != null && (_uploadedFile!.extension == 'xlsx' || _uploadedFile!.extension == 'xls')) {
+        final excel = Excel.decodeBytes(bytes);
+        if (excel.tables.containsKey('Annex 5-TES New Form 2')) {
+          setState(() {
+            _isAnnex5 = true;
+            _isLoading = false;
+          });
+          _showSuccess('Detected official Annex 5 TES Billing Form template!');
+          return;
+        }
+      }
+
       final data = await _billingService.parseFile(_uploadedFile!);
       setState(() {
         _processedData = data;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _isAnnex5 = false;
+      });
       _showError('Analysis failed: $e');
     }
   }
 
   Future<void> _processAutoFill() async {
-    if (_processedData == null) return;
     setState(() => _isProcessing = true);
     try {
-      final result = await _billingService.processBillingData(_processedData!);
-      setState(() {
-        _processedData = List<Map<String, dynamic>>.from(result['processedData']);
-        _stats = result['stats'];
-        _isProcessing = false;
-      });
-      _showSuccess('Auto-fill generation completed. File is ready for download/export.');
+      if (_isAnnex5) {
+        if (_uploadedFile?.bytes == null) {
+          throw Exception('File data is not loaded.');
+        }
+        final result = await _billingService.fillAnnex5Template(_uploadedFile!.bytes!, customStudents: widget.selectedStudents);
+        setState(() {
+          _annex5Result = result;
+          _stats = {
+            'total': result.totalCount,
+            'matched': result.continuingCount + result.newCount,
+            'continuing': result.continuingCount,
+            'new': result.newCount,
+            'unmatched': 0,
+            'duplicates': 0,
+          };
+          _isProcessing = false;
+        });
+        _showSuccess('Auto-fill completed successfully for Annex 5 template!');
+      } else {
+        if (_processedData == null) return;
+        final result = await _billingService.processBillingData(_processedData!);
+        setState(() {
+          _processedData = List<Map<String, dynamic>>.from(result['processedData']);
+          _stats = result['stats'];
+          _isProcessing = false;
+        });
+        _showSuccess('Auto-fill generation completed. File is ready for download/export.');
+      }
     } catch (e) {
       setState(() => _isProcessing = false);
       _showError('Processing failed: $e');
     }
   }
 
-  Future<void> _downloadResult({bool asCsv = false}) async {
-    if (_processedData == null || _uploadedFile == null) return;
+  Future<void> _generateDirectAnnex5() async {
+    setState(() => _isProcessing = true);
     try {
-      await _billingService.exportFile(_processedData!, _uploadedFile!.name, asCsv: asCsv);
-      _showSuccess('File downloaded successfully!');
+      final data = await DefaultAssetBundle.of(context).load('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+      final bytes = data.buffer.asUint8List();
+      
+      final result = await _billingService.fillAnnex5Template(bytes, customStudents: widget.selectedStudents);
+      
+      setState(() {
+        _isAnnex5 = true;
+        _annex5Result = result;
+        _stats = {
+          'total': result.totalCount,
+          'matched': result.continuingCount + result.newCount,
+          'continuing': result.continuingCount,
+          'new': result.newCount,
+          'unmatched': 0,
+          'duplicates': 0,
+        };
+        _isProcessing = false;
+      });
+      
+      final String fileName = 'Annex_5_TES_Billing_Form_Filled.xlsx';
+      await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: result.bytes,
+      );
+      
+      _showSuccess('Successfully populated and downloaded official Annex 5 Billing Form!');
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      _showError('Direct generation failed: $e');
+    }
+  }
+
+  Future<void> _downloadResult({bool asCsv = false}) async {
+    try {
+      if (_isAnnex5) {
+        if (_annex5Result == null) return;
+        final String originalName = _uploadedFile?.name ?? 'Annex_5_TES_Billing_Form.xlsx';
+        final String fileName = 'AutoFilled_${originalName.replaceAll(RegExp(r'\..+$'), '')}.xlsx';
+        await FileSaver.instance.saveFile(
+          name: fileName,
+          bytes: _annex5Result!.bytes,
+        );
+        _showSuccess('File downloaded successfully!');
+      } else {
+        if (_processedData == null || _uploadedFile == null) return;
+        await _billingService.exportFile(_processedData!, _uploadedFile!.name, asCsv: asCsv);
+        _showSuccess('File downloaded successfully!');
+      }
     } catch (e) {
       _showError('Download failed: $e');
     }
@@ -121,9 +214,11 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
           children: [
             _buildHeader(context),
             const SizedBox(height: 32),
-            if (_uploadedFile == null)
-              _buildUploadArea(context)
-            else ...[
+            if (_uploadedFile == null) ...[
+              _buildUploadArea(context),
+              const SizedBox(height: 32),
+              _buildDirectGeneratorSection(context),
+            ] else ...[
               _buildFileSummary(context),
               const SizedBox(height: 24),
               if (_stats != null) _buildStatsPanel(context),
@@ -151,7 +246,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Upload a template file to automatically populate scholar information from the database.',
+          'Upload a template file or generate directly using the official standard billing template.',
           style: TextStyle(color: context.textSec),
         ),
       ],
@@ -163,7 +258,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
       onTap: _pickFile,
       child: Container(
         width: double.infinity,
-        height: 300,
+        height: 260,
         decoration: context.glassDecoration.copyWith(
           border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2), width: 2),
         ),
@@ -203,6 +298,110 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
     );
   }
 
+  Widget _buildDirectGeneratorSection(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: context.crispDecoration.copyWith(
+        border: Border.all(color: Colors.amber.withOpacity(0.2), width: 1.5),
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryColor.withOpacity(0.02),
+            Colors.amber.withOpacity(0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  LucideIcons.fileSpreadsheet,
+                  color: Colors.amber,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Direct Annex 5 Government Form Generator',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Official CHED Tertiary Education Subsidy (TES) Billing Template',
+                      style: TextStyle(
+                        color: context.textSec,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Generate the complete Annex 5 Billing Excel workbook in one click. The system will load the default government template, automatically query the Firestore database, segment scholars, parse their details, and trigger an instant download with all formatting preserved.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _generateDirectAnnex5,
+                icon: _isProcessing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.sparkles),
+                label: Text(_isProcessing ? 'Generating...' : 'Auto-Fill Annex 5 Form'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              if (_isProcessing)
+                Text(
+                  'Querying database and compiling sheets...',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: context.textSec,
+                    fontSize: 13,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFileSummary(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -230,7 +429,9 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  '${(_uploadedFile!.size / 1024).toStringAsFixed(1)} KB • ${_processedData?.length ?? 0} Records detected',
+                  _isAnnex5
+                      ? 'Detected Official Annex 5 TES Billing Form Template'
+                      : '${(_uploadedFile!.size / 1024).toStringAsFixed(1)} KB • ${_processedData?.length ?? 0} Records detected',
                   style: TextStyle(color: context.textSec, fontSize: 13),
                 ),
               ],
@@ -242,6 +443,8 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
               _uploadedFile = null;
               _processedData = null;
               _stats = null;
+              _isAnnex5 = false;
+              _annex5Result = null;
             }),
           ),
         ],
@@ -251,6 +454,17 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
 
   Widget _buildStatsPanel(BuildContext context) {
     final s = _stats!;
+    if (_isAnnex5) {
+      return Row(
+        children: [
+          _buildStatCard('Total TES Scholars', s['total'].toString(), LucideIcons.users, Colors.blue),
+          const SizedBox(width: 16),
+          _buildStatCard('Continuing (Form 2)', s['continuing'].toString(), LucideIcons.arrowUpRight, AppTheme.success),
+          const SizedBox(width: 16),
+          _buildStatCard('New Grantees (Form 3)', s['new'].toString(), LucideIcons.sparkles, AppTheme.warning),
+        ],
+      );
+    }
     return Row(
       children: [
         _buildStatCard('Total Records', s['total'].toString(), LucideIcons.layers, Colors.blue),
@@ -302,28 +516,92 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
             onPressed: () => _downloadResult(asCsv: false),
             icon: const Icon(LucideIcons.download),
             label: const Text('Download Excel'),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            ),
           ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: () => _downloadResult(asCsv: true),
-            icon: const Icon(LucideIcons.fileOutput),
-            label: const Text('Export CSV'),
-          ),
+          if (!_isAnnex5) ...[
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () => _downloadResult(asCsv: true),
+              icon: const Icon(LucideIcons.fileOutput),
+              label: const Text('Export CSV'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+            ),
+          ],
         ],
         const Spacer(),
         if (_isLoading)
           const CircularProgressIndicator(strokeWidth: 2)
         else
           Text(
-            _processedData == null ? 'Analyze file first' : 'Previewing Data',
+            _isAnnex5
+                ? (_annex5Result == null ? 'Ready for auto-fill' : 'Government Form Generated')
+                : (_processedData == null ? 'Analyze file first' : 'Previewing Data'),
             style: TextStyle(color: context.textSec, fontStyle: FontStyle.italic),
           ),
       ],
     );
   }
 
+  Widget _buildChecklistItem(String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(LucideIcons.check, color: AppTheme.success, size: 16),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+      ],
+    );
+  }
+
   Widget _buildPreviewTable(BuildContext context) {
+    if (_isAnnex5) {
+      if (_annex5Result == null) return const SizedBox.shrink();
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: context.crispDecoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.checkCircle, color: AppTheme.success, size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Annex 5 Billing Form Auto-Fill Complete',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'The official CHED billing Excel workbook has been dynamically compiled and populated. The following operations were completed successfully:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            _buildChecklistItem('Continuing TES scholars were successfully inserted into Annex 5-TES New Form 2 (Row 42 onwards).'),
+            const SizedBox(height: 8),
+            _buildChecklistItem('New TES scholars were successfully inserted into Annex 5-TES New Form 3 (Row 34 onwards).'),
+            const SizedBox(height: 8),
+            _buildChecklistItem('Student names were parsed and split into Last Name, Given Name, and Middle Initial.'),
+            const SizedBox(height: 8),
+            _buildChecklistItem('Total and formula cell ranges were preserved for official CHED verification.'),
+          ],
+        ),
+      );
+    }
+
     if (_processedData == null) return const SizedBox.shrink();
 
     final List<String> headers = _processedData!.first.keys.where((k) => k != 'matchStatus').toList();

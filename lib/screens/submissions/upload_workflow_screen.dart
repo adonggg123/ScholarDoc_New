@@ -8,7 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/storage_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
@@ -26,11 +26,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   final AuditService _auditService = AuditService();
   final StorageService _storageService = StorageService();
   final TextEditingController _saController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
 
   String? _submissionPdfUrl;
   String? _pdfFeedback;
   String? _pdfFileName;
-  String _scholarshipType = '';
+
 
   @override
   void initState() {
@@ -46,7 +47,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         final data = doc.data() as Map<String, dynamic>;
         setState(() {
           _saController.text = data['saNumber'] ?? '';
-          _scholarshipType = data['scholarshipName'] ?? '';
         });
       }
     }
@@ -398,15 +398,20 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 currentStep: _currentStep,
                 elevation: 0,
                 onStepContinue: () async {
-                  if (_currentStep == 1 && _submissionPdfUrl == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please upload and review your document before continuing.'),
-                        backgroundColor: AppTheme.error,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
+                  if (_currentStep == 1) {
+                    if (!_formKey.currentState!.validate()) {
+                      return;
+                    }
+                    if (_submissionPdfUrl == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please upload and review your document before continuing.'),
+                          backgroundColor: AppTheme.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
                   }
                   if (_currentStep < 2) {
                     setState(() {
@@ -601,97 +606,113 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   }
 
   Widget _buildStep2() {
-    bool requiresIdOnly =
-        _scholarshipType == 'TES' || _scholarshipType == 'STUFAP';
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          if (_isUploading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text(
+                    'Uploading document...',
+                    style: TextStyle(color: AppTheme.primaryColor),
+                  ),
+                ],
+              ),
+            ),
 
-    return Column(
-      children: [
-        if (_isUploading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
+          // Draft Actions
+          Row(
+            key: const ValueKey('draft_actions'),
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: _saveDraftOffline,
+                icon: const Icon(LucideIcons.save, size: 16),
+                label: const Text('Save Draft Offline'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+
+          // SA Number Field
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: context.surfaceC,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: AppTheme.softShadow,
+              border: Border.all(color: context.crispBorder),
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      LucideIcons.landmark,
+                      size: 18,
+                      color: AppTheme.primaryColor,
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Banking Details',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _saController,
+                  decoration: InputDecoration(
+                    labelText: 'SA Number',
+                    hintText: 'Enter your 10 to 12-digit SA number',
+                    prefixIcon: const Icon(LucideIcons.creditCard),
+                    counterText: "",
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  maxLength: 12,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'SA Number is required';
+                    }
+                    final trimmed = value.trim();
+                    if (trimmed.length < 10 || trimmed.length > 12) {
+                      return 'SA Number must be between 10 and 12 digits';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 Text(
-                  'Uploading document...',
-                  style: TextStyle(color: AppTheme.primaryColor),
+                  'Please enter your official scholarship account number carefully.',
+                  style: TextStyle(fontSize: 11, color: context.textSec),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 24),
 
-        // Draft Actions
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            TextButton.icon(
-              onPressed: _saveDraftOffline,
-              icon: const Icon(LucideIcons.save, size: 16),
-              label: const Text('Save Draft Offline'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.primaryColor,
-              ),
-            ),
-          ],
-        ),
-
-        // SA Number Field
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: context.surfaceC,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: AppTheme.softShadow,
-            border: Border.all(color: context.crispBorder),
+          _buildUploadCard(
+            'ID & Signatures (Single PDF)',
+            LucideIcons.fileText,
+            onTap: () => _handleUpload(),
+            feedback: _pdfFeedback,
+            subtitle: 'Include ID (Front/Back) + 3 Signatures (Max 10MB)',
+            fileName: _pdfFileName,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    LucideIcons.landmark,
-                    size: 18,
-                    color: AppTheme.primaryColor,
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Banking Details',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _saController,
-                decoration: InputDecoration(
-                  labelText: 'SA Number',
-                  hintText: 'Enter your 10-digit SA number',
-                  prefixIcon: const Icon(LucideIcons.creditCard),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              const SizedBox(height: 8),
-              Text(
-                'Please enter your official scholarship account number carefully.',
-                style: TextStyle(fontSize: 11, color: context.textSec),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        _buildUploadCard(
-          'ID & Signatures (Single PDF)',
-          LucideIcons.fileText,
-          onTap: () => _handleUpload(),
-          feedback: _pdfFeedback,
-          subtitle: 'Include ID (Front/Back) + 3 Signatures (Max 10MB)',
-          fileName: _pdfFileName,
-        ),
-      ],
+        ],
+      ),
     );
   }
 

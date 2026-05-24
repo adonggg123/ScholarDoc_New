@@ -73,7 +73,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 1, child: _buildPendingVerifications(context)),
+                    Expanded(
+                      flex: 1,
+                      child: _buildPendingVerifications(context),
+                    ),
                     const SizedBox(width: 32),
                     Expanded(flex: 1, child: _buildRecentActivity(context)),
                   ],
@@ -142,9 +145,9 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           for (var doc in docs) {
             final data = doc.data() as Map<String, dynamic>;
             final status = data['status'] ?? 'Pending';
-            if (status == 'Pending')
+            if (status == 'Pending') {
               pending++;
-            else if (status == 'Approved')
+            } else if (status == 'Approved')
               approved++;
             else if (status == 'Rejected')
               rejected++;
@@ -646,9 +649,9 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           for (var doc in docs) {
             final data = doc.data() as Map<String, dynamic>;
             final status = data['status'] ?? 'Pending';
-            if (status == 'Pending')
+            if (status == 'Pending') {
               pending++;
-            else if (status == 'Approved')
+            } else if (status == 'Approved')
               approved++;
             else if (status == 'Rejected')
               rejected++;
@@ -888,7 +891,11 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.fileCheck, color: AppTheme.primaryColor, size: 18),
+                Icon(
+                  LucideIcons.fileCheck,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Pending Verification',
@@ -918,10 +925,13 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 }
 
                 // Filter for pending students
-                final pendingStudents = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  return data['status'] == 'Pending';
-                }).take(4).toList();
+                final pendingStudents = snapshot.data!.docs
+                    .where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return data['status'] == 'Pending';
+                    })
+                    .take(4)
+                    .toList();
 
                 if (pendingStudents.isEmpty) {
                   return Padding(
@@ -941,7 +951,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   itemCount: pendingStudents.length,
                   separatorBuilder: (context, index) => Divider(),
                   itemBuilder: (context, index) {
-                    final data = pendingStudents[index].data() as Map<String, dynamic>;
+                    final data =
+                        pendingStudents[index].data() as Map<String, dynamic>;
                     final String name = data['fullName'] ?? 'N/A';
                     final String id = data['studentId'] ?? 'N/A';
                     final String photoUrl = data['profilePictureUrl'] ?? '';
@@ -953,7 +964,9 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                               backgroundImage: NetworkImage(photoUrl),
                             )
                           : CircleAvatar(
-                              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              backgroundColor: AppTheme.primaryColor.withValues(
+                                alpha: 0.1,
+                              ),
                               child: Icon(
                                 LucideIcons.user,
                                 size: 18,
@@ -967,12 +980,12 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                           fontSize: 13,
                         ),
                       ),
-                      subtitle: Text(
-                        'ID: $id',
-                        style: TextStyle(fontSize: 11),
-                      ),
+                      subtitle: Text('ID: $id', style: TextStyle(fontSize: 11)),
                       trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.warning.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),

@@ -175,13 +175,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Row(
       children: [
         ElevatedButton.icon(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const BillingAutofillScreen(),
+          onPressed: () async {
+            // Show loading dialog
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => const Center(
+                child: CircularProgressIndicator(),
               ),
             );
+            
+            try {
+              final studentsList = await _getFilteredOrSelectedStudents();
+              if (context.mounted) {
+                Navigator.pop(context); // Close loading dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BillingAutofillScreen(
+                      selectedStudents: studentsList,
+                    ),
+                  ),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                Navigator.pop(context); // Close loading dialog
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error loading students: $e'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+            }
           },
           icon: const Icon(LucideIcons.filePlus),
           label: const Text('Auto-fill Billing'),
@@ -323,6 +350,62 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } finally {
       if (mounted) setState(() => _isGeneratingExcel = false);
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _getFilteredOrSelectedStudents() async {
+    final studentSnap = await FirebaseFirestore.instance.collection('students').get();
+    
+    // First, check if there are selected student IDs
+    if (_selectedStudentIds.isNotEmpty) {
+      return studentSnap.docs
+          .where((doc) => _selectedStudentIds.contains(doc.id))
+          .map((doc) {
+            final data = doc.data();
+            data['uid'] = doc.id;
+            return data;
+          })
+          .toList();
+    }
+
+    // If none are selected, apply the masterlist active filters to all students
+    return studentSnap.docs.where((doc) {
+      final data = doc.data();
+      final family = data['familyDetails'] as Map<String, dynamic>? ?? {};
+
+      // Search Query
+      final name = data['fullName']?.toString().toLowerCase() ?? '';
+      final id = data['studentId']?.toString().toLowerCase() ?? '';
+      final query = _searchController.text.toLowerCase();
+      final matchesSearch = query.isEmpty || name.contains(query) || id.contains(query);
+
+      // Scholarship Filter
+      final matchesScholarship = _filterScholarship == 'All Scholarships' || data['scholarshipName'] == _filterScholarship;
+
+      // Gender Filter
+      final matchesGender = _filterGender == 'All Genders' || data['gender'] == _filterGender;
+
+      // Scholar Year Filter
+      final matchesYear = _filterScholarYear == 'All Year Levels' || data['scholarYearLevel'] == _filterScholarYear;
+
+      // Father Edu Filter
+      final fatherEdu = family['fatherEduStatus'] ?? 'Non-graduate';
+      final matchesFather = _filterFatherEdu == 'All (Father)' || fatherEdu == _filterFatherEdu;
+
+      // Mother Edu Filter
+      final motherEdu = family['motherEduStatus'] ?? 'Non-graduate';
+      final matchesMother = _filterMotherEdu == 'All (Mother)' || motherEdu == _filterMotherEdu;
+
+      return matchesSearch &&
+          matchesScholarship &&
+          matchesGender &&
+          matchesYear &&
+          matchesFather &&
+          matchesMother;
+    }).map((doc) {
+      final data = doc.data();
+      data['uid'] = doc.id;
+      return data;
+    }).toList();
   }
 
   Widget _buildSystemPerformance(BuildContext context) {
@@ -737,13 +820,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   ) {
     final double percentage = (value / total) * 100;
     // Don't show labels for 0% sections to avoid clutter
-    if (percentage == 0)
+    if (percentage == 0) {
       return PieChartSectionData(
         value: 0.1,
         color: color.withValues(alpha: 0.05),
         radius: 30,
         title: '',
       );
+    }
 
     return PieChartSectionData(
       color: color,
@@ -820,7 +904,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     color: context.surfaceC,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: context.isDark ? Colors.white10 : Colors.grey.shade200,
+                      color: context.isDark
+                          ? Colors.white10
+                          : Colors.grey.shade200,
                     ),
                   ),
                   child: TextField(
@@ -828,10 +914,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     onChanged: (v) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: 'Search by Name or Student ID...',
-                      hintStyle: TextStyle(fontSize: 14, color: context.textSec),
-                      prefixIcon: Icon(LucideIcons.search, size: 18, color: AppTheme.primaryColor),
+                      hintStyle: TextStyle(
+                        fontSize: 14,
+                        color: context.textSec,
+                      ),
+                      prefixIcon: Icon(
+                        LucideIcons.search,
+                        size: 18,
+                        color: AppTheme.primaryColor,
+                      ),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 15,
+                      ),
                     ),
                   ),
                 ),
@@ -850,7 +946,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _buildModernFilter(
                   label: 'Scholarship',
                   value: _filterScholarship,
-                  items: ['All Scholarships', 'STUFAP', 'CHED', 'Local Gov', 'Private'],
+                  items: [
+                    'All Scholarships',
+                    'STUFAP',
+                    'CHED',
+                    'Local Gov',
+                    'Private',
+                  ],
                   icon: LucideIcons.graduationCap,
                   onChanged: (v) => setState(() => _filterScholarship = v!),
                 ),
@@ -912,9 +1014,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
         decoration: BoxDecoration(
           color: AppTheme.primaryColor.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.1)),
+          border: Border.all(
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+          ),
         ),
-        child: Icon(LucideIcons.rotateCcw, size: 18, color: AppTheme.primaryColor),
+        child: Icon(
+          LucideIcons.rotateCcw,
+          size: 18,
+          color: AppTheme.primaryColor,
+        ),
       ),
     );
   }
@@ -927,15 +1035,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
     required ValueChanged<String?> onChanged,
   }) {
     bool isDefault = value.startsWith('All');
-    
+
     return Container(
       decoration: BoxDecoration(
-        color: isDefault ? context.surfaceC : AppTheme.primaryColor.withValues(alpha: 0.05),
+        color: isDefault
+            ? context.surfaceC
+            : AppTheme.primaryColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDefault 
-            ? (context.isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade200)
-            : AppTheme.primaryColor.withValues(alpha: 0.2),
+          color: isDefault
+              ? (context.isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.grey.shade200)
+              : AppTheme.primaryColor.withValues(alpha: 0.2),
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -943,7 +1055,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
           value: value,
           icon: Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Icon(LucideIcons.chevronDown, size: 14, color: isDefault ? context.textSec : AppTheme.primaryColor),
+            child: Icon(
+              LucideIcons.chevronDown,
+              size: 14,
+              color: isDefault ? context.textSec : AppTheme.primaryColor,
+            ),
           ),
           style: TextStyle(
             color: isDefault ? context.textPri : AppTheme.primaryColor,
@@ -970,8 +1086,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
   }
-
-
 
   Widget _buildStudentsTable(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(

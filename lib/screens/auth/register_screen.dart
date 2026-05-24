@@ -45,7 +45,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedGender;
   Scholarship? _selectedScholarship;
   String? _selectedScholarYearLevel;
-  final TextEditingController _payoutsController = TextEditingController(text: '0');
+  final TextEditingController _payoutsController = TextEditingController(
+    text: '0',
+  );
   List<Scholarship> _scholarships = [];
   String? _selectedFatherEdu;
   String? _selectedMotherEdu;
@@ -62,15 +64,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       _scholarshipSubscription = _scholarshipService
           .getActiveScholarships()
-          .listen((list) {
-        if (mounted) {
-          setState(() {
-            _scholarships = list;
-          });
-        }
-      }, onError: (error) {
-        debugPrint('RegisterScreen: Error loading scholarships: $error');
-      });
+          .listen(
+            (list) {
+              if (mounted) {
+                setState(() {
+                  _scholarships = list;
+                });
+              }
+            },
+            onError: (error) {
+              debugPrint('RegisterScreen: Error loading scholarships: $error');
+            },
+          );
     } catch (e) {
       debugPrint('RegisterScreen: Failed to initialize scholarship stream: $e');
     }
@@ -143,7 +148,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       blendMode: BlendMode.srcIn,
                       child: Text(
                         'ScholarDoc',
-                        style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        style:
+                            Theme.of(context).textTheme.headlineLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
                             ) ??
@@ -159,9 +165,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Register your student credentials to start managing your documents.',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: context.textSec,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: context.textSec),
                 ),
                 const SizedBox(height: 32),
 
@@ -177,8 +183,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         prefixIcon: Icon(Icons.person_outline),
                         hintText: 'e.g. Juan De La Cruz',
                       ),
-                      validator: (value) =>
-                          (value == null || value.isEmpty) ? 'Enter your full name' : null,
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Enter your full name'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -191,7 +198,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               labelText: 'Student ID',
                               prefixIcon: Icon(Icons.badge_outlined),
                             ),
-                            validator: (value) => (value == null || value.isEmpty)
+                            validator: (value) =>
+                                (value == null || value.isEmpty)
                                 ? 'Enter student ID'
                                 : null,
                           ),
@@ -200,12 +208,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
-                            value: _selectedGender,
+                            initialValue: _selectedGender,
                             decoration: const InputDecoration(
                               labelText: 'Gender',
                             ),
-                            items: _genders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                            onChanged: (val) => setState(() => _selectedGender = val),
+                            items: _genders
+                                .map(
+                                  (g) => DropdownMenuItem(
+                                    value: g,
+                                    child: Text(g),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) =>
+                                setState(() => _selectedGender = val),
                             validator: (val) => val == null ? 'Select' : null,
                           ),
                         ),
@@ -220,7 +236,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Enter Gmail';
+                        if (value == null || value.isEmpty)
+                          return 'Enter Gmail';
                         if (!value.toLowerCase().endsWith('@gmail.com')) {
                           return 'Must be a valid Gmail';
                         }
@@ -236,8 +253,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         hintText: 'e.g. 09123456789',
                       ),
                       keyboardType: TextInputType.phone,
-                      validator: (value) =>
-                          (value == null || value.isEmpty) ? 'Enter contact number' : null,
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Enter contact number'
+                          : null,
                     ),
                   ],
                 ),
@@ -249,12 +267,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   icon: Icons.school_outlined,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _selectedCourse,
+                      initialValue: _selectedCourse,
                       decoration: const InputDecoration(
                         labelText: 'Course',
                         prefixIcon: Icon(Icons.school_outlined),
                       ),
-                      items: _courses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      items: _courses
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
+                          .toList(),
                       onChanged: (val) => setState(() {
                         _selectedCourse = val;
                         _selectedMajor = null;
@@ -265,13 +287,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         key: const ValueKey('btled_major'),
-                        value: _selectedMajor,
+                        initialValue: _selectedMajor,
                         decoration: const InputDecoration(
                           labelText: 'BTLED Major',
                           prefixIcon: Icon(Icons.menu_book_outlined),
                         ),
-                        items: _btledMajors.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                        onChanged: (val) => setState(() => _selectedMajor = val),
+                        items: _btledMajors
+                            .map(
+                              (m) => DropdownMenuItem(value: m, child: Text(m)),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedMajor = val),
                         validator: (val) => val == null ? 'Select major' : null,
                       ),
                     ],
@@ -280,9 +307,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedYear,
-                            decoration: const InputDecoration(labelText: 'Year'),
-                            items: _years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                            initialValue: _selectedYear,
+                            decoration: const InputDecoration(
+                              labelText: 'Year',
+                            ),
+                            items: _years
+                                .map(
+                                  (y) => DropdownMenuItem(
+                                    value: y,
+                                    child: Text(y),
+                                  ),
+                                )
+                                .toList(),
                             onChanged: (val) => setState(() {
                               _selectedYear = val;
                               _selectedSection = null;
@@ -293,13 +329,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedSection,
+                            initialValue: _selectedSection,
                             key: ValueKey(_selectedYear),
-                            decoration: const InputDecoration(labelText: 'Section'),
+                            decoration: const InputDecoration(
+                              labelText: 'Section',
+                            ),
                             items: _getSectionsForYear(_selectedYear)
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(s),
+                                  ),
+                                )
                                 .toList(),
-                            onChanged: (val) => setState(() => _selectedSection = val),
+                            onChanged: (val) =>
+                                setState(() => _selectedSection = val),
                             validator: (val) => val == null ? 'Select' : null,
                           ),
                         ),
@@ -309,35 +353,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const Divider(),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<Scholarship>(
-                      value: _selectedScholarship,
+                      initialValue: _selectedScholarship,
                       decoration: const InputDecoration(
                         labelText: 'Scholarship Program',
                         prefixIcon: Icon(Icons.stars_outlined),
                       ),
-                      items: _scholarships.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
-                      onChanged: (val) => setState(() => _selectedScholarship = val),
-                      validator: (val) => val == null ? 'Select scholarship' : null,
+                      items: _scholarships
+                          .map(
+                            (s) =>
+                                DropdownMenuItem(value: s, child: Text(s.name)),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedScholarship = val),
+                      validator: (val) =>
+                          val == null ? 'Select scholarship' : null,
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _selectedScholarYearLevel,
+                      initialValue: _selectedScholarYearLevel,
                       decoration: const InputDecoration(
                         labelText: 'Year level when you became a scholar',
                         prefixIcon: Icon(Icons.event_available_outlined),
                         hintText: 'Select year',
                       ),
-                      items: _years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                      items: _years
+                          .map(
+                            (y) => DropdownMenuItem(value: y, child: Text(y)),
+                          )
+                          .toList(),
                       onChanged: (val) => setState(() {
                         _selectedScholarYearLevel = val;
                         if (val != null) {
                           int payouts = 0;
-                          if (val.contains('2nd')) payouts = 1;
-                          else if (val.contains('3rd')) payouts = 2;
-                          else if (val.contains('4th') || val.contains('5th')) payouts = 3;
+                          if (val.contains('2nd')) {
+                            payouts = 1;
+                          } else if (val.contains('3rd'))
+                            payouts = 2;
+                          else if (val.contains('4th') || val.contains('5th'))
+                            payouts = 3;
                           _payoutsController.text = payouts.toString();
                         }
                       }),
-                      validator: (val) => val == null ? 'Please select a year' : null,
+                      validator: (val) =>
+                          val == null ? 'Please select a year' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -349,7 +408,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Please enter a number';
+                        if (value == null || value.isEmpty)
+                          return 'Please enter a number';
                         final n = int.tryParse(value);
                         if (n == null || n < 0) return 'Enter a valid number';
                         return null;
@@ -361,16 +421,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: BoxDecoration(
                         color: AppTheme.primaryColor.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.1)),
+                        border: Border.all(
+                          color: AppTheme.primaryColor.withOpacity(0.1),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 16, color: AppTheme.primaryColor),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: AppTheme.primaryColor,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Student ID is your default password.',
-                              style: TextStyle(fontSize: 11, color: context.textSec),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.textSec,
+                              ),
                             ),
                           ),
                         ],
@@ -401,7 +470,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             controller: _fatherAgeController,
                             decoration: const InputDecoration(labelText: 'Age'),
                             keyboardType: TextInputType.number,
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -409,22 +479,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           flex: 2,
                           child: TextFormField(
                             controller: _fatherOccController,
-                            decoration: const InputDecoration(labelText: 'Occupation'),
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Occupation',
+                            ),
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _selectedFatherEdu,
+                      initialValue: _selectedFatherEdu,
                       decoration: const InputDecoration(
                         labelText: "Father's Educational Status",
                         prefixIcon: Icon(Icons.school_outlined),
                       ),
-                      items: _eduStatusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) => setState(() => _selectedFatherEdu = val),
-                      validator: (val) => val == null ? 'Please select status' : null,
+                      items: _eduStatusOptions
+                          .map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedFatherEdu = val),
+                      validator: (val) =>
+                          val == null ? 'Please select status' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -443,7 +522,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             controller: _motherAgeController,
                             decoration: const InputDecoration(labelText: 'Age'),
                             keyboardType: TextInputType.number,
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -451,22 +531,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           flex: 2,
                           child: TextFormField(
                             controller: _motherOccController,
-                            decoration: const InputDecoration(labelText: 'Occupation'),
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Occupation',
+                            ),
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _selectedMotherEdu,
+                      initialValue: _selectedMotherEdu,
                       decoration: const InputDecoration(
                         labelText: "Mother's Educational Status",
                         prefixIcon: Icon(Icons.school_outlined),
                       ),
-                      items: _eduStatusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) => setState(() => _selectedMotherEdu = val),
-                      validator: (val) => val == null ? 'Please select status' : null,
+                      items: _eduStatusOptions
+                          .map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedMotherEdu = val),
+                      validator: (val) =>
+                          val == null ? 'Please select status' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -484,16 +573,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Expanded(
                           child: TextFormField(
                             controller: _religionController,
-                            decoration: const InputDecoration(labelText: 'Religion'),
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Religion',
+                            ),
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextFormField(
                             controller: _tribeController,
-                            decoration: const InputDecoration(labelText: 'Tribe'),
-                            validator: (value) => value!.isEmpty ? "Required" : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Tribe',
+                            ),
+                            validator: (value) =>
+                                value!.isEmpty ? "Required" : null,
                           ),
                         ),
                       ],
@@ -504,75 +599,97 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 // Submit Button
                 ElevatedButton(
-                  onPressed: _isLoading ? null : () async {
-                    if (_formKey.currentState!.validate()) {
-                      setState(() => _isLoading = true);
-                      try {
-                        Map<String, dynamic> studentData = {
-                          'fullName': _nameController.text.trim(),
-                          'studentId': _studentIdController.text.trim(),
-                          'email': _emailController.text.trim(),
-                          'course': _selectedCourse,
-                          'gender': _selectedGender,
-                          'major': _selectedCourse == 'BTLED' ? _selectedMajor : null,
-                          'courseDisplay': _selectedCourse == 'BTLED'
-                              ? 'BTLED (major in $_selectedMajor)'
-                              : _selectedCourse,
-                          'year': _selectedYear,
-                          'section': _selectedSection,
-                          'scholarshipId': _selectedScholarship?.id,
-                          'scholarshipName': _selectedScholarship?.name,
-                          'scholarYearLevel': _selectedScholarYearLevel,
-                          'payoutsReceived': int.tryParse(_payoutsController.text.trim()) ?? 0,
-                          'contactNumber': _contactController.text.trim(),
-                          'role': 'student',
-                          'status': 'Pending',
-                          'documents': {},
-                          'familyDetails': {
-                            'fatherName': _fatherNameController.text.trim(),
-                            'fatherAge': _fatherAgeController.text.trim(),
-                            'fatherOccupation': _fatherOccController.text.trim(),
-                            'fatherEduStatus': _selectedFatherEdu,
-                            'motherName': _motherNameController.text.trim(),
-                            'motherAge': _motherAgeController.text.trim(),
-                            'motherOccupation': _motherOccController.text.trim(),
-                            'motherEduStatus': _selectedMotherEdu,
-                            'yearlyIncome': _incomeController.text.trim(),
-                            'religion': _religionController.text.trim(),
-                            'tribe': _tribeController.text.trim(),
-                          },
-                        };
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          if (_formKey.currentState!.validate()) {
+                            setState(() => _isLoading = true);
+                            try {
+                              Map<String, dynamic> studentData = {
+                                'fullName': _nameController.text.trim(),
+                                'studentId': _studentIdController.text.trim(),
+                                'email': _emailController.text.trim(),
+                                'course': _selectedCourse,
+                                'gender': _selectedGender,
+                                'major': _selectedCourse == 'BTLED'
+                                    ? _selectedMajor
+                                    : null,
+                                'courseDisplay': _selectedCourse == 'BTLED'
+                                    ? 'BTLED (major in $_selectedMajor)'
+                                    : _selectedCourse,
+                                'year': _selectedYear,
+                                'section': _selectedSection,
+                                'scholarshipId': _selectedScholarship?.id,
+                                'scholarshipName': _selectedScholarship?.name,
+                                'scholarYearLevel': _selectedScholarYearLevel,
+                                'payoutsReceived':
+                                    int.tryParse(
+                                      _payoutsController.text.trim(),
+                                    ) ??
+                                    0,
+                                'contactNumber': _contactController.text.trim(),
+                                'role': 'student',
+                                'status': 'Pending',
+                                'documents': {},
+                                'familyDetails': {
+                                  'fatherName': _fatherNameController.text
+                                      .trim(),
+                                  'fatherAge': _fatherAgeController.text.trim(),
+                                  'fatherOccupation': _fatherOccController.text
+                                      .trim(),
+                                  'fatherEduStatus': _selectedFatherEdu,
+                                  'motherName': _motherNameController.text
+                                      .trim(),
+                                  'motherAge': _motherAgeController.text.trim(),
+                                  'motherOccupation': _motherOccController.text
+                                      .trim(),
+                                  'motherEduStatus': _selectedMotherEdu,
+                                  'yearlyIncome': _incomeController.text.trim(),
+                                  'religion': _religionController.text.trim(),
+                                  'tribe': _tribeController.text.trim(),
+                                },
+                              };
 
-                        await _authService.registerStudent(
-                          gmail: _emailController.text.trim(),
-                          studentId: _studentIdController.text.trim(),
-                          studentData: studentData,
-                        );
+                              await _authService.registerStudent(
+                                gmail: _emailController.text.trim(),
+                                studentId: _studentIdController.text.trim(),
+                                studentData: studentData,
+                              );
 
-                        if (!context.mounted) return;
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => const MainLayout()),
-                          (route) => false,
-                        );
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(e.toString().replaceAll(RegExp(r'\[.*\]'), '').trim()),
-                            backgroundColor: AppTheme.error,
-                          ),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _isLoading = false);
-                      }
-                    }
-                  },
+                              if (!context.mounted) return;
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const MainLayout(),
+                                ),
+                                (route) => false,
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    e
+                                        .toString()
+                                        .replaceAll(RegExp(r'\[.*\]'), '')
+                                        .trim(),
+                                  ),
+                                  backgroundColor: AppTheme.error,
+                                ),
+                              );
+                            } finally {
+                              if (mounted) setState(() => _isLoading = false);
+                            }
+                          }
+                        },
                   child: _isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('Create Account'),
                 ),
@@ -590,7 +707,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       onPressed: () {
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const LoginScreen(),
+                          ),
                         );
                       },
                       style: TextButton.styleFrom(

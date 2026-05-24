@@ -113,6 +113,20 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!-- Firebase JS SDK module importmap — pins the exact version firebase_core_web expects -->
+  <script type="importmap">
+    {
+      "imports": {
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js",
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js",
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js",
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-pipelines.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore-pipelines.js",
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js",
+        "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js": "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js"
+      }
+    }
+  </script>
+
   <script src="flutter_bootstrap.js" async=""></script>
 
 

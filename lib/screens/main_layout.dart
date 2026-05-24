@@ -28,10 +28,6 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     ProfileScreen(),
   ];
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   static const List<_NavItem> _items = [
     _NavItem(icon: LucideIcons.home, label: 'Home'),

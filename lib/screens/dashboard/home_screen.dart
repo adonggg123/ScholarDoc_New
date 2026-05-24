@@ -138,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               opacity: expandRatio < 0.3 ? 0.0 : expandRatio,
                               child: Row(
                                 children: [
-                                  Container(
+                                  SizedBox(
                                     width: 45,
                                     height: 45,
                                     child: ClipOval(
@@ -344,14 +344,15 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                if (_isLoading)
+                if (_isLoading) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
                       child: CircularProgressIndicator(),
                     ),
                   );
-                if (_announcements.isEmpty)
+                }
+                if (_announcements.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
@@ -361,6 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   );
+                }
 
                 final a = _announcements[index];
                 return Padding(

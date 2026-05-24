@@ -211,9 +211,9 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 onChanged: (val) => setDialogState(() {
                                   selectedScholarYearLevel = val!;
                                   int payouts = 0;
-                                  if (val.contains('2nd'))
+                                  if (val.contains('2nd')) {
                                     payouts = 1;
-                                  else if (val.contains('3rd'))
+                                  } else if (val.contains('3rd'))
                                     payouts = 2;
                                   else if (val.contains('4th') ||
                                       val.contains('5th'))
