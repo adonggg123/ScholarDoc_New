@@ -63,6 +63,72 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.dispose();
   }
 
+  Widget _buildPremiumButton({
+    required VoidCallback? onTap,
+    required Widget icon,
+    required String label,
+    required List<Color> gradientColors,
+    bool isLoading = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: onTap == null
+            ? null
+            : LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        color: onTap == null ? Colors.grey.withValues(alpha: 0.12) : null,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: onTap == null
+            ? null
+            : [
+                BoxShadow(
+                  color: gradientColors.first.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isLoading ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : icon,
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -77,6 +143,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context, isMobile),
+              if (isMobile) ...[
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildExportButtons(context, true),
+                ),
+              ],
               const SizedBox(height: 48), // Increased from 32
               if (isMobile) ...[
                 _buildSystemPerformance(context),
@@ -94,20 +167,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ),
                   ],
                 ),
-              const SizedBox(height: 0), // Increased from 32
-              SizedBox(height: 32),
-              Text(
+              const SizedBox(height: 32),
+              const Text(
                 'Student Master List',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerLeft,
                 child: _buildExportExcelButton(context),
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               _buildFilterBar(context),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               _buildStudentsTable(context),
             ],
           ),
@@ -117,65 +189,141 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildHeader(BuildContext context, bool isMobile) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Analytics & Reports',
-                style: isMobile
-                    ? Theme.of(context).textTheme.titleLarge
-                    : Theme.of(context).textTheme.headlineMedium,
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Deep-dive institutional metrics and printable exports.',
-                style: TextStyle(color: context.textSec),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
-        ),
-        if (!isMobile) _buildExportButtons(context),
-      ],
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Background Image
+          Positioned.fill(
+            child: Image.asset(
+              'assets/campus_bg.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+          // Gradient Overlay
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primaryColor.withValues(alpha: 0.9),
+                    AppTheme.secondaryColor.withValues(alpha: 0.9),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ),
+          
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 20 : 32,
+              vertical: isMobile ? 24 : 28,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              LucideIcons.barChart4,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'INSTITUTIONAL METRICS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Analytics & Reports',
+                        style: TextStyle(
+                          fontSize: isMobile ? 22 : 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Deep-dive institutional metrics and formal printable exports.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: isMobile ? 12 : 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isMobile) ...[
+                  const SizedBox(width: 24),
+                  _buildExportButtons(context, false),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildExportExcelButton(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: _isGeneratingExcel ? null : _handleExportExcel,
-      icon: _isGeneratingExcel
-          ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Icon(LucideIcons.fileSpreadsheet),
-      label: Text(
-        _isGeneratingExcel
-            ? 'Excel...'
-            : (_selectedStudentIds.isNotEmpty
-                  ? 'Export Selected'
-                  : 'Export Excel'),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.success,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    final hasSelection = _selectedStudentIds.isNotEmpty;
+    return _buildPremiumButton(
+      onTap: _isGeneratingExcel ? null : _handleExportExcel,
+      isLoading: _isGeneratingExcel,
+      icon: const Icon(LucideIcons.fileSpreadsheet, size: 16, color: Colors.white),
+      label: _isGeneratingExcel
+          ? 'Exporting Excel...'
+          : (hasSelection
+              ? 'Export Selected (${_selectedStudentIds.length})'
+              : 'Export Excel Masterlist'),
+      gradientColors: const [
+        Color(0xFF2E7D32),
+        Color(0xFF4CAF50),
+      ],
     );
   }
 
-  Widget _buildExportButtons(BuildContext context) {
-    return Row(
+  Widget _buildExportButtons(BuildContext context, bool isMobile) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: [
-        ElevatedButton.icon(
-          onPressed: () async {
+        _buildPremiumButton(
+          onTap: () async {
             // Show loading dialog
             showDialog(
               context: context,
@@ -189,11 +337,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
               final studentsList = await _getFilteredOrSelectedStudents();
               if (context.mounted) {
                 Navigator.pop(context); // Close loading dialog
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BillingAutofillScreen(
-                      selectedStudents: studentsList,
+                showDialog(
+                  context: context,
+                  barrierDismissible: true,
+                  builder: (context) => Dialog(
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: BillingAutofillScreen(
+                        selectedStudents: studentsList,
+                      ),
                     ),
                   ),
                 );
@@ -210,35 +365,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
               }
             }
           },
-          icon: const Icon(LucideIcons.filePlus),
-          label: const Text('Auto-fill Billing'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.secondaryColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+          icon: const Icon(LucideIcons.filePlus, size: 16, color: Colors.white),
+          label: 'Auto-fill Billing',
+          gradientColors: const [
+            AppTheme.secondaryColor,
+            Color(0xFFFF8F00),
+          ],
         ),
-        const SizedBox(width: 12),
-        ElevatedButton.icon(
-          onPressed: _isGeneratingPdf ? null : _handleExportPdf,
-          icon: _isGeneratingPdf
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Icon(LucideIcons.printer),
-          label: Text(_isGeneratingPdf ? 'PDF...' : 'Export PDF'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primaryColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        _buildPremiumButton(
+          onTap: _isGeneratingPdf ? null : _handleExportPdf,
+          isLoading: _isGeneratingPdf,
+          icon: const Icon(LucideIcons.printer, size: 16, color: Colors.white),
+          label: 'Export PDF Report',
+          gradientColors: const [
+            AppTheme.primaryColor,
+            Color(0xFF1E88E5),
+          ],
         ),
       ],
     );

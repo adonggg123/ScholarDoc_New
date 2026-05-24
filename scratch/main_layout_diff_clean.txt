@@ -1,0 +1,595 @@
+diff --git a/lib/screens/admin/admin_main_layout.dart b/lib/screens/admin/admin_main_layout.dart
+index b26e665..0cc8215 100644
+--- a/lib/screens/admin/admin_main_layout.dart
++++ b/lib/screens/admin/admin_main_layout.dart
+@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
+ import 'package:lucide_icons/lucide_icons.dart';
+ import '../../theme/app_theme.dart';
+ import '../../theme/theme_provider.dart';
++import 'package:intl/intl.dart';
+ import 'dashboard_overview.dart';
+ import 'student_records_screen.dart';
+ import 'sa_verification_screen.dart';
+@@ -25,6 +26,31 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+   Key _syncKey = UniqueKey();
+   bool _isSyncing = false;
+   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
++  final ThemeProvider _themeProvider = ThemeProvider();
++
++  static const List<String> _screenTitles = [
++    'Dashboard Overview',
++    'Student Records',
++    'Scholarships',
++    'SA Verification',
++    'Announcements',
++    'Activity Logs',
++    'Reports & Analytics',
++    'Settings',
++    'ID Validation',
++  ];
++
++  static const List<IconData> _screenIcons = [
++    LucideIcons.layoutDashboard,
++    LucideIcons.users,
++    LucideIcons.graduationCap,
++    LucideIcons.landmark,
++    LucideIcons.megaphone,
++    LucideIcons.history,
++    LucideIcons.barChart4,
++    LucideIcons.settings,
++    LucideIcons.badgeCheck,
++  ];
+ 
+   final List<Widget> _screens = [
+     const DashboardOverview(),
+@@ -88,7 +114,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+                     child: BackdropFilter(
+                       filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                       child: Container(
+-                        width: 210,
++                        width: 250,
+                         decoration: BoxDecoration(
+                           color: context.surfaceC.withValues(alpha: 0.7),
+                           border: Border(
+@@ -125,21 +151,25 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+       },
+     );
+   }
+-
++ 
+   Widget _buildDrawer() {
+-    return Drawer(child: _buildSidebarContent());
++    return Drawer(
++      width: 260,
++      child: _buildSidebarContent(),
++    );
+   }
+-
++ 
+   Widget _buildSidebarContent() {
+     return Column(
+       children: [
+         _buildSidebarHeader(),
+         Expanded(
+           child: SingleChildScrollView(
+-            padding: EdgeInsets.symmetric(horizontal: 16),
++            padding: const EdgeInsets.symmetric(horizontal: 16),
+             child: Column(
+               children: [
+-                Divider(),
++                const Divider(),
++                const SizedBox(height: 12),
+                 _buildNavItem(0, 'Dashboard', LucideIcons.layoutDashboard),
+                 _buildNavItem(1, 'Student Records', LucideIcons.users),
+                 _buildNavItem(2, 'Scholarships', LucideIcons.graduationCap),
+@@ -170,43 +200,43 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+       ],
+     );
+   }
+-
++ 
+   Widget _buildSidebarHeader() {
+     return Padding(
+-      padding: EdgeInsets.only(top: 15, bottom: 5, left: 0, right: 27),
++      padding: const EdgeInsets.only(top: 24, bottom: 16, left: 16, right: 16),
+       child: Row(
+         mainAxisAlignment: MainAxisAlignment.center,
+         children: [
+           Image.asset(
+             'assets/app_logo2.png',
+-            width: 58,
+-            height: 58,
++            width: 48,
++            height: 48,
+             fit: BoxFit.contain,
+           ),
+-          const SizedBox(width: 0),
++          const SizedBox(width: 12),
+           Column(
+             mainAxisSize: MainAxisSize.min,
+             crossAxisAlignment: CrossAxisAlignment.start,
+             children: [
+               ShaderMask(
+                 shaderCallback: (bounds) => const LinearGradient(
+-                  colors: [AppTheme.primaryColor, Color(0xFFFBC02D)],
++                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                 ).createShader(bounds),
+                 blendMode: BlendMode.srcIn,
+                 child: const Text(
+                   'ScholarDoc',
+                   style: TextStyle(
+                     fontWeight: FontWeight.w800,
+-                    fontSize: 17,
++                    fontSize: 18,
+                     letterSpacing: 0.5,
+                   ),
+                 ),
+               ),
+               Text(
+-                'Admin Panel',
++                'SYSTEM ADMIN',
+                 style: TextStyle(
+                   fontSize: 10,
+-                  fontWeight: FontWeight.w700,
++                  fontWeight: FontWeight.w800,
+                   color: context.textSec,
+                   letterSpacing: 1.5,
+                 ),
+@@ -217,11 +247,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+       ),
+     );
+   }
+-
++ 
+   Widget _buildNavItem(int index, String label, IconData icon) {
+     bool isSelected = _selectedIndex == index;
+     return Padding(
+-      padding: EdgeInsets.only(bottom: 8),
++      padding: const EdgeInsets.only(bottom: 6),
+       child: MouseRegion(
+         cursor: SystemMouseCursors.click,
+         child: InkWell(
+@@ -236,16 +266,16 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+           borderRadius: BorderRadius.circular(12),
+           child: AnimatedContainer(
+             duration: const Duration(milliseconds: 200),
+-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
++            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+             decoration: BoxDecoration(
+               color: isSelected
+-                  ? AppTheme.primaryColor.withValues(alpha: 0.1)
++                  ? AppTheme.primaryColor.withValues(alpha: 0.08)
+                   : Colors.transparent,
+               borderRadius: BorderRadius.circular(12),
+               boxShadow: isSelected
+                   ? [
+                       BoxShadow(
+-                        color: AppTheme.primaryColor.withValues(alpha: 0.05),
++                        color: AppTheme.primaryColor.withValues(alpha: 0.04),
+                         blurRadius: 10,
+                         offset: const Offset(0, 4),
+                       ),
+@@ -254,9 +284,20 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+             ),
+             child: Row(
+               children: [
++                // Active indicator line
+                 AnimatedContainer(
+                   duration: const Duration(milliseconds: 200),
+-                  padding: EdgeInsets.all(8),
++                  width: 3,
++                  height: 16,
++                  decoration: BoxDecoration(
++                    color: isSelected ? AppTheme.accentColor : Colors.transparent,
++                    borderRadius: BorderRadius.circular(2),
++                  ),
++                ),
++                SizedBox(width: isSelected ? 8 : 11),
++                AnimatedContainer(
++                  duration: const Duration(milliseconds: 200),
++                  padding: const EdgeInsets.all(8),
+                   decoration: BoxDecoration(
+                     color: isSelected
+                         ? AppTheme.primaryColor
+@@ -269,7 +310,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+                     size: 18,
+                   ),
+                 ),
+-                SizedBox(width: 12),
++                const SizedBox(width: 12),
+                 Flexible(
+                   child: Text(
+                     label,
+@@ -290,7 +331,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+       ),
+     );
+   }
+-
++ 
+   Widget _buildExpandableNavItem({
+     required String label,
+     required IconData icon,
+@@ -298,11 +339,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+     required Function(bool) onExpand,
+     required List<Widget> children,
+   }) {
+-    // Determine if any child is selected to highlight the parent
+     bool hasSelectedChild = _selectedIndex == 3 || _selectedIndex == 8;
+-
++ 
+     return Padding(
+-      padding: const EdgeInsets.only(bottom: 8),
++      padding: const EdgeInsets.only(bottom: 6),
+       child: Column(
+         children: [
+           MouseRegion(
+@@ -315,12 +355,22 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                 decoration: BoxDecoration(
+                   color: hasSelectedChild && !isExpanded
+-                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
++                      ? AppTheme.primaryColor.withValues(alpha: 0.08)
+                       : Colors.transparent,
+                   borderRadius: BorderRadius.circular(12),
+                 ),
+                 child: Row(
+                   children: [
++                    AnimatedContainer(
++                      duration: const Duration(milliseconds: 200),
++                      width: 3,
++                      height: 16,
++                      decoration: BoxDecoration(
++                        color: hasSelectedChild && !isExpanded ? AppTheme.accentColor : Colors.transparent,
++                        borderRadius: BorderRadius.circular(2),
++                      ),
++                    ),
++                    SizedBox(width: hasSelectedChild && !isExpanded ? 8 : 11),
+                     Container(
+                       padding: const EdgeInsets.all(8),
+                       decoration: BoxDecoration(
+@@ -365,7 +415,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+       ),
+     );
+   }
+-
++ 
+   Widget _buildSubNavItem(int index, String label, IconData icon) {
+     bool isSelected = _selectedIndex == index;
+     return Padding(
+@@ -393,6 +443,16 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+             ),
+             child: Row(
+               children: [
++                AnimatedContainer(
++                  duration: const Duration(milliseconds: 200),
++                  width: 3,
++                  height: 12,
++                  decoration: BoxDecoration(
++                    color: isSelected ? AppTheme.accentColor : Colors.transparent,
++                    borderRadius: BorderRadius.circular(2),
++                  ),
++                ),
++                SizedBox(width: isSelected ? 6 : 9),
+                 Icon(
+                   icon,
+                   color: isSelected ? AppTheme.primaryColor : context.textSec,
+@@ -419,83 +479,134 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+   }
+ 
+   Widget _buildLogoutItem() {
+-    return InkWell(
+-      onTap: () {
+-        Navigator.pop(context);
+-      },
+-      borderRadius: BorderRadius.circular(12),
+-      child: Container(
+-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+-        child: Row(
+-          children: [
+-            Icon(LucideIcons.logOut, color: AppTheme.error, size: 20),
+-            SizedBox(width: 16),
+-            Flexible(
+-              child: Text(
+-                'Logout',
+-                style: TextStyle(
+-                  color: AppTheme.error,
+-                  fontWeight: FontWeight.w500,
++    return MouseRegion(
++      cursor: SystemMouseCursors.click,
++      child: InkWell(
++        onTap: () => Navigator.pop(context),
++        borderRadius: BorderRadius.circular(12),
++        child: Container(
++          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
++          decoration: BoxDecoration(
++            color: AppTheme.error.withValues(alpha: 0.06),
++            borderRadius: BorderRadius.circular(12),
++          ),
++          child: Row(
++            children: [
++              Container(
++                padding: const EdgeInsets.all(8),
++                decoration: BoxDecoration(
++                  color: AppTheme.error.withValues(alpha: 0.1),
++                  borderRadius: BorderRadius.circular(8),
+                 ),
+-                overflow: TextOverflow.ellipsis,
++                child: const Icon(LucideIcons.logOut, color: AppTheme.error, size: 16),
+               ),
+-            ),
+-          ],
++              const SizedBox(width: 12),
++              const Flexible(
++                child: Text(
++                  'Logout',
++                  style: TextStyle(
++                    color: AppTheme.error,
++                    fontWeight: FontWeight.w600,
++                    fontSize: 13,
++                  ),
++                  overflow: TextOverflow.ellipsis,
++                ),
++              ),
++            ],
++          ),
+         ),
+       ),
+     );
+   }
+ 
+   Widget _buildTopBar(bool isMobile) {
++    final String title = _selectedIndex < _screenTitles.length
++        ? _screenTitles[_selectedIndex]
++        : 'Dashboard Overview';
++    final IconData titleIcon = _selectedIndex < _screenIcons.length
++        ? _screenIcons[_selectedIndex]
++        : LucideIcons.layoutDashboard;
++    final String dateStr = DateFormat('EEE, MMM d').format(DateTime.now());
++
+     return ClipRect(
+       child: BackdropFilter(
+         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+         child: Container(
+-          constraints: const BoxConstraints(minHeight: 56),
++          constraints: const BoxConstraints(minHeight: 62),
+           decoration: BoxDecoration(
+-            color: context.surfaceC.withValues(alpha: 0.8),
++            color: context.surfaceC.withValues(alpha: 0.85),
+             border: Border(
+               bottom: BorderSide(
+-                color: context.surfaceC.withValues(alpha: 0.2),
++                color: context.crispBorder,
++                width: 1,
+               ),
+             ),
+             boxShadow: AppTheme.softShadow,
+           ),
+-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
++          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+           child: Row(
+             children: [
+               if (isMobile)
+                 IconButton(
+-                  icon: Icon(LucideIcons.menu, size: 20),
++                  icon: const Icon(LucideIcons.menu, size: 20),
+                   onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                 ),
+-              SizedBox(width: 8),
++              // Dynamic page title with icon
+               Expanded(
+                 child: Row(
+                   children: [
+-                    const Text(
+-                      'Admin Dashboard',
+-                      style: TextStyle(
+-                        fontSize: 18,
+-                        fontWeight: FontWeight.bold,
++                    Container(
++                      padding: const EdgeInsets.all(7),
++                      decoration: BoxDecoration(
++                        color: AppTheme.primaryColor.withValues(alpha: 0.08),
++                        borderRadius: BorderRadius.circular(8),
+                       ),
+-                      overflow: TextOverflow.ellipsis,
++                      child: Icon(titleIcon, size: 16, color: AppTheme.primaryColor),
++                    ),
++                    const SizedBox(width: 12),
++                    Column(
++                      crossAxisAlignment: CrossAxisAlignment.start,
++                      mainAxisSize: MainAxisSize.min,
++                      children: [
++                        AnimatedSwitcher(
++                          duration: const Duration(milliseconds: 200),
++                          child: Text(
++                            title,
++                            key: ValueKey(title),
++                            style: const TextStyle(
++                              fontSize: 15,
++                              fontWeight: FontWeight.w700,
++                              letterSpacing: -0.2,
++                            ),
++                            overflow: TextOverflow.ellipsis,
++                          ),
++                        ),
++                        if (!isMobile)
++                          Text(
++                            dateStr,
++                            style: TextStyle(
++                              fontSize: 11,
++                              color: context.textSec,
++                              fontWeight: FontWeight.w500,
++                            ),
++                          ),
++                      ],
+                     ),
+                     if (_isSyncing) ...[
+-                      SizedBox(width: 12),
+-                      SizedBox(
+-                        width: 14,
+-                        height: 14,
++                      const SizedBox(width: 16),
++                      const SizedBox(
++                        width: 13,
++                        height: 13,
+                         child: CircularProgressIndicator(
+                           strokeWidth: 2,
+                           color: AppTheme.primaryColor,
+                         ),
+                       ),
+-                      SizedBox(width: 8),
++                      const SizedBox(width: 6),
+                       Text(
+                         'Syncing...',
+                         style: TextStyle(
+-                          fontSize: 12,
++                          fontSize: 11,
+                           color: context.textSec,
+                           fontWeight: FontWeight.w500,
+                         ),
+@@ -504,57 +615,113 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
+                   ],
+                 ),
+               ),
+-              SizedBox(width: 8),
++              // Dark mode toggle
++              ValueListenableBuilder<ThemeMode>(
++                valueListenable: _themeProvider.themeNotifier,
++                builder: (_, mode, __) {
++                  final isDark = mode == ThemeMode.dark;
++                  return Tooltip(
++                    message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
++                    child: InkWell(
++                      onTap: _themeProvider.toggleTheme,
++                      borderRadius: BorderRadius.circular(10),
++                      child: Container(
++                        padding: const EdgeInsets.all(8),
++                        decoration: BoxDecoration(
++                          color: context.isDark
++                              ? Colors.white.withValues(alpha: 0.06)
++                              : Colors.grey.withValues(alpha: 0.08),
++                          borderRadius: BorderRadius.circular(10),
++                        ),
++                        child: Icon(
++                          isDark ? LucideIcons.sun : LucideIcons.moon,
++                          size: 17,
++                          color: context.textSec,
++                        ),
++                      ),
++                    ),
++                  );
++                },
++              ),
++              const SizedBox(width: 4),
+               // Sync Button
+               Tooltip(
+                 message: 'Sync with Database',
+-                child: IconButton(
+-                  onPressed: _isSyncing ? null : _refreshSystem,
+-                  icon: Icon(
+-                    LucideIcons.refreshCw,
+-                    size: 18,
+-                    color: _isSyncing ? context.textSec : AppTheme.primaryColor,
++                child: InkWell(
++                  onTap: _isSyncing ? null : _refreshSystem,
++                  borderRadius: BorderRadius.circular(10),
++                  child: Container(
++                    padding: const EdgeInsets.all(8),
++                    decoration: BoxDecoration(
++                      color: Colors.transparent,
++                      borderRadius: BorderRadius.circular(10),
++                    ),
++                    child: Icon(
++                      LucideIcons.refreshCw,
++                      size: 17,
++                      color: _isSyncing ? context.textSec : AppTheme.primaryColor,
++                    ),
+                   ),
+                 ),
+               ),
+-              SizedBox(width: 4),
++              const SizedBox(width: 4),
+               // Notifications
+-              IconButton(
+-                onPressed: () {},
+-                icon: Icon(LucideIcons.bell, size: 20),
++              InkWell(
++                onTap: () {},
++                borderRadius: BorderRadius.circular(10),
++                child: Container(
++                  padding: const EdgeInsets.all(8),
++                  decoration: BoxDecoration(
++                    borderRadius: BorderRadius.circular(10),
++                  ),
++                  child: Icon(LucideIcons.bell, size: 17, color: context.textSec),
++                ),
+               ),
+               if (!isMobile) ...[
+-                SizedBox(width: 8),
+-                // Admin Profile
++                const SizedBox(width: 8),
++                // Admin Profile Chip
+                 Container(
+-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
++                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                   decoration: BoxDecoration(
+-                    border: Border.all(
+-                      color: Colors.grey.withValues(alpha: 0.2),
+-                    ),
+-                    borderRadius: BorderRadius.circular(20),
++                    color: context.isDark
++                        ? Colors.white.withValues(alpha: 0.06)
++                        : Colors.grey.withValues(alpha: 0.06),
++                    border: Border.all(color: context.crispBorder),
++                    borderRadius: BorderRadius.circular(24),
+                   ),
+                   child: Row(
+                     mainAxisSize: MainAxisSize.min,
+                     children: [
+-                      CircleAvatar(
+-                        radius: 14,
+-                        backgroundColor: AppTheme.secondaryColor,
+-                        child: Icon(
+-                          Icons.person,
+-                          size: 16,
+-                          color: context.surfaceC,
++                      Container(
++                        width: 30,
++                        height: 30,
++                        decoration: const BoxDecoration(
++                          shape: BoxShape.circle,
++                          gradient: LinearGradient(
++                            colors: [AppTheme.primaryColor, Color(0xFF1A5276)],
++                            begin: Alignment.topLeft,
++                            end: Alignment.bottomRight,
++                          ),
+                         ),
++                        child: const Icon(Icons.person_rounded, size: 16, color: Colors.white),
+                       ),
+-                      SizedBox(width: 8),
+-                      Flexible(
+-                        child: Text(
+-                          'Admin User',
+-                          style: TextStyle(fontWeight: FontWeight.w500),
+-                          overflow: TextOverflow.ellipsis,
+-                        ),
++                      const SizedBox(width: 8),
++                      Column(
++                        crossAxisAlignment: CrossAxisAlignment.start,
++                        mainAxisSize: MainAxisSize.min,
++                        children: [
++                          const Text(
++                            'Admin',
++                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
++                          ),
++                          Text(
++                            'System Admin',
++                            style: TextStyle(fontSize: 10, color: context.textSec),
++                          ),
++                        ],
+                       ),
+-                      Icon(Icons.arrow_drop_down),
++                      const SizedBox(width: 4),
++                      Icon(LucideIcons.chevronsUpDown, size: 13, color: context.textSec),
+                     ],
+                   ),
+                 ),

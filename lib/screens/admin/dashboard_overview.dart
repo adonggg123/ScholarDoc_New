@@ -39,48 +39,98 @@ class _DashboardOverviewState extends State<DashboardOverview> {
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 900;
 
+        if (isMobile) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context, true),
+                const SizedBox(height: 24),
+                _buildCalendarWidget(context),
+                const SizedBox(height: 24),
+                _buildStatsSection(context, true),
+                const SizedBox(height: 24),
+                _buildSubmissionTrend(context),
+                const SizedBox(height: 24),
+                _buildStatusDistribution(context),
+                const SizedBox(height: 24),
+                _buildPendingVerifications(context),
+                const SizedBox(height: 24),
+                _buildRecentActivity(context),
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
+        }
+
         return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 16 : 48,
-            vertical: isMobile ? 12 : 32,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context, isMobile),
-              const SizedBox(height: 48), // Increased from 32
-              _buildStatsGrid(context, isMobile),
-              const SizedBox(height: 36), // Increased from 24
-              if (isMobile) ...[
-                _buildSubmissionTrend(context),
-                const SizedBox(height: 32),
-                _buildStatusDistribution(context),
-              ] else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 2, child: _buildSubmissionTrend(context)),
-                    const SizedBox(width: 32),
-                    Expanded(flex: 1, child: _buildStatusDistribution(context)),
-                  ],
-                ),
-              const SizedBox(height: 48), // Increased from 32
-              if (isMobile) ...[
-                _buildPendingVerifications(context),
-                const SizedBox(height: 32),
-                _buildRecentActivity(context),
-              ] else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: _buildPendingVerifications(context),
+              // Row 1: Welcome Card (flex 5) & Calendar (flex 3)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: _buildHeader(context, false),
+                  ),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    flex: 3,
+                    child: _buildCalendarWidget(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              // Row 2: Submission Trends (flex 2) & Stat Cards (flex 1) | Status Distribution (flex 3)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _buildSubmissionTrend(context),
+                        ),
+                        const SizedBox(width: 32),
+                        Expanded(
+                          flex: 1,
+                          child: _buildStatsSection(context, false),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 32),
-                    Expanded(flex: 1, child: _buildRecentActivity(context)),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    flex: 3,
+                    child: _buildStatusDistribution(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              // Row 3: Pending Verifications (flex 1) & Recent Activity (flex 1) — full width
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: _buildPendingVerifications(context),
+                  ),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    flex: 1,
+                    child: _buildRecentActivity(context),
+                  ),
+                ],
+              ),
               const SizedBox(height: 48),
             ],
           ),
@@ -90,47 +140,168 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   }
 
   Widget _buildHeader(BuildContext context, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Dashboard Overview',
-                    style:
-                        (isMobile
-                                ? Theme.of(context).textTheme.titleLarge
-                                : Theme.of(context).textTheme.headlineSmall)
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24,
-                              color: context.textPri,
+    final DateTime now = DateTime.now();
+    final int hour = now.hour;
+    final String greeting = hour < 12
+        ? 'Good Morning'
+        : hour < 17
+            ? 'Good Afternoon'
+            : 'Good Evening';
+    final IconData greetingIcon = hour < 12
+        ? LucideIcons.sunrise
+        : hour < 17
+            ? LucideIcons.sun
+            : LucideIcons.moonStar;
+    final String dateStr = DateFormat('EEEE, MMMM d, yyyy').format(now);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Background Image
+          Positioned.fill(
+            child: Image.asset(
+              'assets/campus_bg.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+          // Gradient Overlay
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primaryColor.withValues(alpha: 0.88),
+                    AppTheme.secondaryColor.withValues(alpha: 0.88),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ),
+          // Content
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 20 : 32,
+              vertical: isMobile ? 24 : 28,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Greeting chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(greetingIcon,
+                                size: 13, color: Colors.white.withValues(alpha: 0.9)),
+                            const SizedBox(width: 6),
+                            Text(
+                              greeting,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'ScholarDoc Admin',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 22 : 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Managing student scholarships and system records.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: isMobile ? 12 : 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Date pill
+                      Row(
+                        children: [
+                          Icon(LucideIcons.calendarDays,
+                              size: 13,
+                              color: Colors.white.withValues(alpha: 0.7)),
+                          const SizedBox(width: 6),
+                          Text(
+                            dateStr,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Real-time system analytics and monitor.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: context.textSec,
-                      fontWeight: FontWeight.w500,
+                ),
+                if (!isMobile) ...[
+                  const SizedBox(width: 24),
+                  // Decorative icon badge
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      LucideIcons.layoutDashboard,
+                      size: 36,
+                      color: Colors.white,
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildStatsGrid(BuildContext context, bool isMobile) {
+
+  Widget _buildStatsSection(BuildContext context, bool isMobile) {
     return StreamBuilder<QuerySnapshot>(
       stream: _studentsStream,
       builder: (context, snapshot) {
@@ -154,106 +325,48 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           }
         }
 
-        if (isMobile) {
-          return Column(
-            children: [
-              _buildCalendarWidget(context),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  _buildStatCard(
-                    context,
-                    'Total',
-                    total.toString(),
-                    LucideIcons.fileText,
-                    AppTheme.primaryColor,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStatCard(
-                    context,
-                    'Pending',
-                    pending.toString(),
-                    LucideIcons.clock,
-                    AppTheme.warning,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  _buildStatCard(
-                    context,
-                    'Approved',
-                    approved.toString(),
-                    LucideIcons.checkCircle2,
-                    AppTheme.success,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStatCard(
-                    context,
-                    'Rejected',
-                    rejected.toString(),
-                    LucideIcons.alertCircle,
-                    AppTheme.error,
-                  ),
-                ],
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              flex: 5,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      _buildStatCard(
-                        context,
-                        'Total Students',
-                        total.toString(),
-                        LucideIcons.fileText,
-                        AppTheme.primaryColor,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        context,
-                        'Pending Review',
-                        pending.toString(),
-                        LucideIcons.clock,
-                        AppTheme.warning,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _buildStatCard(
-                        context,
-                        'Approved',
-                        approved.toString(),
-                        LucideIcons.checkCircle2,
-                        AppTheme.success,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        context,
-                        'Rejected',
-                        rejected.toString(),
-                        LucideIcons.alertCircle,
-                        AppTheme.error,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            Row(
+              children: [
+                _buildStatCard(
+                  context,
+                  'Total Students',
+                  total.toString(),
+                  LucideIcons.fileText,
+                  AppTheme.primaryColor,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  context,
+                  'Pending Review',
+                  pending.toString(),
+                  LucideIcons.clock,
+                  AppTheme.warning,
+                ),
+              ],
             ),
-            const SizedBox(width: 24),
-            Expanded(flex: 3, child: _buildCalendarWidget(context)),
-            const Spacer(flex: 1),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatCard(
+                  context,
+                  'Approved',
+                  approved.toString(),
+                  LucideIcons.checkCircle2,
+                  AppTheme.success,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  context,
+                  'Rejected',
+                  rejected.toString(),
+                  LucideIcons.alertCircle,
+                  AppTheme.error,
+                ),
+              ],
+            ),
           ],
         );
       },
@@ -339,15 +452,18 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   }
 
   Widget _buildCalendarWidget(BuildContext context) {
-    DateTime now = DateTime.now();
-    DateTime firstDayOfMonth = DateTime(now.year, now.month, 1);
-    int daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    int firstWeekday = firstDayOfMonth.weekday; // 1=Monday, 7=Sunday
+    final DateTime now = DateTime.now();
 
-    // Adjust for Sunday as first day of week
-    int emptyDays = firstWeekday == 7 ? 0 : firstWeekday;
+    // Find the Sunday that starts the current week
+    final int todayWeekday = now.weekday % 7; // Sun=0, Mon=1, … Sat=6
+    final DateTime weekStart = now.subtract(Duration(days: todayWeekday));
 
-    List<String> weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    final List<String> dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final List<DateTime> weekDays = List.generate(7, (i) => weekStart.add(Duration(days: i)));
+
+    final String monthLabel = DateFormat('MMMM yyyy').format(now);
+    final String weekRange =
+        '${DateFormat('MMM d').format(weekStart)} – ${DateFormat('MMM d').format(weekStart.add(const Duration(days: 6)))}';
 
     return Container(
       decoration: BoxDecoration(
@@ -355,99 +471,188 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ── Header ──────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                DateFormat('MMMM yyyy').format(now),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: context.textPri,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    monthLabel,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPri,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Week of $weekRange',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: context.textSec,
+                    ),
+                  ),
+                ],
               ),
-              Icon(
-                LucideIcons.calendarDays,
-                size: 20,
-                color: AppTheme.primaryColor,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  LucideIcons.calendarDays,
+                  size: 18,
+                  color: AppTheme.primaryColor,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // ── Week Row ─────────────────────────────────────────────────
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: weekdays
-                .map(
-                  (day) => Expanded(
-                    child: Center(
+            children: List.generate(7, (i) {
+              final DateTime day = weekDays[i];
+              final bool isToday = day.year == now.year &&
+                  day.month == now.month &&
+                  day.day == now.day;
+              final bool isWeekend = i == 0 || i == 6;
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    // Day label
+                    Text(
+                      dayLabels[i],
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: isToday
+                            ? AppTheme.primaryColor
+                            : isWeekend
+                                ? context.textSec.withValues(alpha: 0.5)
+                                : context.textSec,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Date bubble
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: isToday
+                            ? const LinearGradient(
+                                colors: [
+                                  AppTheme.primaryColor,
+                                  AppTheme.secondaryColor,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
+                        color: isToday ? null : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: isToday
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
+                        border: isToday
+                            ? null
+                            : Border.all(
+                                color: context.textSec.withValues(
+                                    alpha: isWeekend ? 0.08 : 0.12),
+                                width: 1,
+                              ),
+                      ),
+                      alignment: Alignment.center,
                       child: Text(
-                        day,
+                        day.day.toString(),
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: context.textPri.withValues(alpha: 0.8),
+                          fontWeight:
+                              isToday ? FontWeight.w700 : FontWeight.w500,
+                          color: isToday
+                              ? Colors.white
+                              : isWeekend
+                                  ? context.textSec.withValues(alpha: 0.4)
+                                  : context.textPri,
                         ),
                       ),
                     ),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1,
-            ),
-            itemCount: emptyDays + daysInMonth,
-            itemBuilder: (context, index) {
-              if (index < emptyDays) return const SizedBox();
-              int day = index - emptyDays + 1;
-              bool isToday = day == now.day;
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: isToday ? AppTheme.primaryColor : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: isToday
-                      ? null
-                      : Border.all(color: Colors.grey.shade200, width: 1),
-                  boxShadow: isToday
-                      ? [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  day.toString(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
-                    color: isToday ? Colors.white : context.textPri,
-                  ),
+                    const SizedBox(height: 6),
+                    // Today dot indicator
+                    AnimatedOpacity(
+                      opacity: isToday ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        width: 4,
+                        height: 4,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               );
-            },
+            }),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Today label ──────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Today — ${DateFormat('EEEE, MMMM d').format(now)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

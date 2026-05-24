@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../services/auth_service.dart';
+import 'admin_login_screen.dart';
 import 'dashboard_overview.dart';
 import 'student_records_screen.dart';
 import 'sa_verification_screen.dart';
@@ -160,8 +162,6 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 const Divider(),
                 const SizedBox(height: 24),
                 _buildNavItem(7, 'Settings', LucideIcons.settings),
-                const SizedBox(height: 8),
-                _buildLogoutItem(),
                 const SizedBox(height: 24),
               ],  
             ),
@@ -418,144 +418,339 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
     );
   }
 
-  Widget _buildLogoutItem() {
-    return InkWell(
-      onTap: () {
-        Navigator.pop(context);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(LucideIcons.logOut, color: AppTheme.error, size: 20),
-            SizedBox(width: 16),
-            Flexible(
-              child: Text(
-                'Logout',
-                style: TextStyle(
-                  color: AppTheme.error,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  String _getPageTitle() {
+    switch (_selectedIndex) {
+      case 0: return 'Dashboard';
+      case 1: return 'Student Records';
+      case 2: return 'Scholarships';
+      case 3: return 'SA Verification';
+      case 4: return 'Announcements';
+      case 5: return 'Activity Logs';
+      case 6: return 'Reports';
+      case 7: return 'Settings';
+      case 8: return 'ID Validation';
+      default: return 'Dashboard';
+    }
+  }
+
+  IconData _getPageIcon() {
+    switch (_selectedIndex) {
+      case 0: return LucideIcons.layoutDashboard;
+      case 1: return LucideIcons.users;
+      case 2: return LucideIcons.graduationCap;
+      case 3: return LucideIcons.landmark;
+      case 4: return LucideIcons.megaphone;
+      case 5: return LucideIcons.history;
+      case 6: return LucideIcons.barChart4;
+      case 7: return LucideIcons.settings;
+      case 8: return LucideIcons.badgeCheck;
+      default: return LucideIcons.layoutDashboard;
+    }
   }
 
   Widget _buildTopBar(bool isMobile) {
     return ClipRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: const BoxConstraints(minHeight: 60),
           decoration: BoxDecoration(
-            color: context.surfaceC.withValues(alpha: 0.8),
+            color: context.surfaceC.withValues(alpha: 0.85),
             border: Border(
               bottom: BorderSide(
-                color: context.surfaceC.withValues(alpha: 0.2),
+                color: context.isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06),
               ),
             ),
-            boxShadow: AppTheme.softShadow,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Row(
             children: [
               if (isMobile)
-                IconButton(
-                  icon: Icon(LucideIcons.menu, size: 20),
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                _buildTopBarIconButton(
+                  icon: LucideIcons.menu,
+                  onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                  tooltip: 'Menu',
                 ),
-              SizedBox(width: 8),
+              if (isMobile) const SizedBox(width: 12),
+
+              // Page context indicator
               Expanded(
                 child: Row(
                   children: [
-                    const Text(
-                      'Admin Dashboard',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      overflow: TextOverflow.ellipsis,
+                      child: Icon(
+                        _getPageIcon(),
+                        size: 16,
+                        color: Colors.white,
+                      ),
                     ),
-                    if (_isSyncing) ...[
-                      SizedBox(width: 12),
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.primaryColor,
-                        ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _getPageTitle(),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: context.textPri,
+                              letterSpacing: -0.3,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_isSyncing)
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Syncing...',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Syncing...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.textSec,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
-              SizedBox(width: 8),
+
+              const SizedBox(width: 8),
+
               // Sync Button
-              Tooltip(
-                message: 'Sync with Database',
-                child: IconButton(
-                  onPressed: _isSyncing ? null : _refreshSystem,
-                  icon: Icon(
-                    LucideIcons.refreshCw,
-                    size: 18,
-                    color: _isSyncing ? context.textSec : AppTheme.primaryColor,
-                  ),
-                ),
+              _buildTopBarIconButton(
+                icon: LucideIcons.refreshCw,
+                onTap: _isSyncing ? null : _refreshSystem,
+                tooltip: 'Sync with Database',
+                isActive: _isSyncing,
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 6),
+
               // Notifications
-              IconButton(
-                onPressed: () {},
-                icon: Icon(LucideIcons.bell, size: 20),
-              ),
-              if (!isMobile) ...[
-                SizedBox(width: 8),
-                // Admin Profile
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.grey.withValues(alpha: 0.2),
-                    ),
-                    borderRadius: BorderRadius.circular(20),
+              Stack(
+                children: [
+                  _buildTopBarIconButton(
+                    icon: LucideIcons.bell,
+                    onTap: () {},
+                    tooltip: 'Notifications',
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundColor: AppTheme.secondaryColor,
-                        child: Icon(
-                          Icons.person,
-                          size: 16,
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppTheme.error,
+                        shape: BoxShape.circle,
+                        border: Border.all(
                           color: context.surfaceC,
+                          width: 1.5,
                         ),
                       ),
-                      SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Admin User',
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                          overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+
+              if (!isMobile) ...[
+                const SizedBox(width: 12),
+                // Divider
+                Container(
+                  height: 28,
+                  width: 1,
+                  color: context.textSec.withValues(alpha: 0.12),
+                ),
+                const SizedBox(width: 12),
+                // Admin Profile Pill (clickable dropdown)
+                PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'logout') {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          title: const Row(
+                            children: [
+                              Icon(LucideIcons.logOut, color: AppTheme.error, size: 22),
+                              SizedBox(width: 12),
+                              Text('Confirm Logout'),
+                            ],
+                          ),
+                          content: const Text(
+                            'Are you sure you want to log out of the Admin Panel?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.error,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: const Text('Logout'),
+                            ),
+                          ],
                         ),
+                      );
+                      if (confirmed == true && mounted) {
+                        await AuthService().logout();
+                        if (mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const AdminLoginScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      }
+                    }
+                  },
+                  offset: const Offset(0, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 6,
+                  itemBuilder: (_) => [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Signed in as',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: context.textSec,
+                            ),
+                          ),
+                          const Text(
+                            'Administrator',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Divider(height: 1),
+                        ],
                       ),
-                      Icon(Icons.arrow_drop_down),
-                    ],
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.logOut, color: AppTheme.error, size: 16),
+                          SizedBox(width: 10),
+                          Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: context.isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.grey.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: context.textSec.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const CircleAvatar(
+                            radius: 13,
+                            backgroundColor: Colors.white,
+                            child: Icon(
+                              LucideIcons.user,
+                              size: 14,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Admin',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: context.textPri,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          LucideIcons.chevronDown,
+                          size: 14,
+                          color: context.textSec,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -564,5 +759,41 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
         ),
       ),
     );
+  }
+
+  Widget _buildTopBarIconButton({
+    required IconData icon,
+    VoidCallback? onTap,
+    String? tooltip,
+    bool isActive = false,
+  }) {
+    final button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? AppTheme.primaryColor.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            size: 18,
+            color: isActive
+                ? AppTheme.primaryColor
+                : context.textSec,
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: button);
+    }
+    return button;
   }
 }

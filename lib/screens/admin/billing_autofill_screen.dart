@@ -193,42 +193,123 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
   Widget build(BuildContext context) {
     final bool isMobile = MediaQuery.of(context).size.width < 900;
 
-    return Scaffold(
-      backgroundColor: context.bgC,
-      appBar: AppBar(
-        title: const Text('Auto-Fill Billing Generator'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft),
-          onPressed: () => Navigator.pop(context),
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 800),
+      decoration: BoxDecoration(
+        color: context.bgC,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: context.isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 40,
+            offset: const Offset(0, 24),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 16 : 48,
-          vertical: 24,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 32),
-            if (_uploadedFile == null) ...[
-              _buildUploadArea(context),
-              const SizedBox(height: 32),
-              _buildDirectGeneratorSection(context),
-            ] else ...[
-              _buildFileSummary(context),
-              const SizedBox(height: 24),
-              if (_stats != null) _buildStatsPanel(context),
-              const SizedBox(height: 32),
-              _buildActionToolbar(context),
-              const SizedBox(height: 24),
-              _buildPreviewTable(context),
-            ],
-          ],
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Premium Header Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    LucideIcons.sparkles,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Auto-Fill Billing Generator',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'CHED Annex 5 TES Billing Template Automation',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(LucideIcons.x, color: Colors.white),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.15),
+                    hoverColor: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Scrollable Body
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 16 : 32,
+                vertical: 24,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_uploadedFile == null) ...[
+                    _buildDirectGeneratorSection(context),
+                  ] else ...[
+                    _buildFileSummary(context),
+                    const SizedBox(height: 24),
+                    if (_stats != null) _buildStatsPanel(context),
+                    const SizedBox(height: 32),
+                    _buildActionToolbar(context),
+                    const SizedBox(height: 24),
+                    _buildPreviewTable(context),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -246,7 +327,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Upload a template file or generate directly using the official standard billing template.',
+          'Generate the official CHED Annex 5 TES Billing Form using student records from the master list.',
           style: TextStyle(color: context.textSec),
         ),
       ],
