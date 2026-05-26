@@ -92,19 +92,36 @@ class _ScholarshipManagementScreenState
                       }
 
                       final scholarships = snapshot.data!;
-                      return GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 360,
-                          childAspectRatio: 1.4,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: scholarships.length,
-                        itemBuilder: (context, index) {
-                          final s = scholarships[index];
-                          return _buildScholarshipCard(s);
-                        },
+                      
+                      if (isMobile) {
+                        return ListView.separated(
+                          itemCount: scholarships.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final s = scholarships[index];
+                            return _buildMobileScholarshipCard(s);
+                          },
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildTableHeader(context),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: scholarships.length,
+                              itemBuilder: (context, index) {
+                                final s = scholarships[index];
+                                return _buildTableRow(
+                                  context,
+                                  s,
+                                  index == scholarships.length - 1,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -117,31 +134,168 @@ class _ScholarshipManagementScreenState
     );
   }
 
-  Widget _buildScholarshipCard(Scholarship s) {
+  Widget _buildTableHeader(BuildContext context) {
     return Container(
-      decoration: context.crispDecoration.copyWith(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        color: context.isDark ? const Color(0xFF1E293B) : Colors.grey.shade50,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
         border: Border.all(
-          color: context.isDark
-              ? const Color(0xFF334155)
-              : Colors.grey.shade300,
+          color: context.isDark ? const Color(0xFF334155) : Colors.grey.shade200,
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDark ? 0.3 : 0.05),
-            offset: const Offset(0, 4),
-            blurRadius: 12,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              'PROGRAM',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: context.textSec,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'STATUS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: context.textSec,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              'REQUIRED DOCUMENTS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: context.textSec,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'ACTIONS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                  color: context.textSec,
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildTableRow(BuildContext context, Scholarship s, bool isLast) {
+    final Color tintColor = s.isActive ? AppTheme.primaryColor : Colors.grey;
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: context.isDark ? const Color(0xFF1E293B) : Colors.white,
+        border: Border(
+          left: BorderSide(
+            color: context.isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+            width: 1.5,
+          ),
+          right: BorderSide(
+            color: context.isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+            width: 1.5,
+          ),
+          bottom: BorderSide(
+            color: context.isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+            width: 1.5,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
+          // Program Column
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                // Tinted badge for acronym
+                Container(
+                  width: 72,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: tintColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: tintColor.withValues(alpha: 0.2),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    s.name,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: tintColor,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        s.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPri,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        s.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSec,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Status Column
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 4,
@@ -162,9 +316,139 @@ class _ScholarshipManagementScreenState
                   s.isActive ? 'ACTIVE' : 'INACTIVE',
                   style: TextStyle(
                     color: s.isActive ? AppTheme.success : AppTheme.error,
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
+          // Required Documents Column
+          Expanded(
+            flex: 5,
+            child: s.requiredDocuments.isEmpty
+                ? Text(
+                    'No documents required',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: context.textSec.withValues(alpha: 0.7),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: s.requiredDocuments.map((docName) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.isDark
+                              ? const Color(0xFF334155).withValues(alpha: 0.4)
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: context.isDark
+                                ? const Color(0xFF475569).withValues(alpha: 0.5)
+                                : Colors.grey.shade200,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.fileText,
+                              size: 11,
+                              color: context.textSec,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              docName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: context.textPri.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          
+          // Actions Column
+          Expanded(
+            flex: 2,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    LucideIcons.edit2,
+                    size: 16,
+                    color: context.textSec,
+                  ),
+                  tooltip: 'Edit program',
+                  onPressed: () => _showScholarshipDialog(scholarship: s),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(
+                    LucideIcons.trash2,
+                    size: 16,
+                    color: AppTheme.error,
+                  ),
+                  tooltip: 'Delete program',
+                  onPressed: () => _confirmDelete(s),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileScholarshipCard(Scholarship s) {
+    final Color tintColor = s.isActive ? AppTheme.primaryColor : Colors.grey;
+    return Container(
+      decoration: context.crispDecoration.copyWith(
+        border: Border.all(
+          color: context.isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 64,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: tintColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: tintColor.withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  s.name,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: tintColor,
                   ),
                 ),
               ),
@@ -190,48 +474,74 @@ class _ScholarshipManagementScreenState
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             s.name,
             style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
               color: context.textPri,
-              letterSpacing: -0.2,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             s.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: context.textSec, height: 1.3),
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(8),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textSec,
             ),
-            child: Row(
-              children: [
-                Icon(
-                  LucideIcons.fileText,
-                  size: 14,
-                  color: AppTheme.primaryColor.withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${s.requiredDocuments.length} Required Documents',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: context.textPri.withValues(alpha: 0.8),
+                decoration: BoxDecoration(
+                  color: s.isActive
+                      ? AppTheme.success.withValues(alpha: 0.08)
+                      : AppTheme.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: s.isActive
+                        ? AppTheme.success.withValues(alpha: 0.2)
+                        : AppTheme.error.withValues(alpha: 0.2),
                   ),
                 ),
-              ],
-            ),
+                child: Text(
+                  s.isActive ? 'ACTIVE' : 'INACTIVE',
+                  style: TextStyle(
+                    color: s.isActive ? AppTheme.success : AppTheme.error,
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(
+                    LucideIcons.fileText,
+                    size: 12,
+                    color: context.textSec,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${s.requiredDocuments.length} Requirements',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: context.textSec,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

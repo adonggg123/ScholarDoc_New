@@ -228,7 +228,7 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
             const SizedBox(height: 12),
             if (idFrontUrl != null) _documentTile('Front ID Image', 'ID_Front.jpg', idFrontUrl, LucideIcons.image),
             if (idBackUrl != null) _documentTile('Back ID Image', 'ID_Back.jpg', idBackUrl, LucideIcons.image),
-            if (pdfUrl != null) _documentTile('Full PDF Submission', data['submissionPdfName'] ?? 'Submission.pdf', pdfUrl, LucideIcons.fileText),
+            if (pdfUrl != null) _documentTile('ID Front & Back + Signatures (PDF)', data['submissionPdfName'] ?? 'Submission.pdf', pdfUrl, LucideIcons.fileText),
             if (idFrontUrl == null && idBackUrl == null && pdfUrl == null)
               const Text('No documents uploaded', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 24),
@@ -251,7 +251,7 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
                   child: ElevatedButton(
                     onPressed: () => _updateStatus(context, data['uid'], 'Verified'),
                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success, foregroundColor: Colors.white),
-                    child: const Text('Verify ID'),
+                    child: const Text('Accepted'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -306,12 +306,21 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
                 ],
               ),
             ),
-            IconButton(
+            TextButton(
               onPressed: () async {
                 final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) await launchUrl(uri);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
               },
-              icon: const Icon(LucideIcons.externalLink, size: 16, color: AppTheme.primaryColor),
+              child: const Text(
+                'View',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
             ),
           ],
         ),

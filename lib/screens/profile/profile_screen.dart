@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _contactController = TextEditingController();
   final _sectionController = TextEditingController();
   final _emailController = TextEditingController();
+  final _birthdateController = TextEditingController();
 
   final AuthService _authService = AuthService();
   final AuditService _auditService = AuditService();
@@ -55,6 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           _contactController.text = data['contactNumber'] ?? '';
           _sectionController.text = data['section'] ?? '';
           _saController.text = data['saNumber'] ?? '';
+          _birthdateController.text = data['birthdate'] ?? '01/01/2000';
           _profilePictureUrl = data['profilePictureUrl'] as String?;
           _isProfileLoading = false;
         });
@@ -69,6 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     _contactController.dispose();
     _sectionController.dispose();
     _emailController.dispose();
+    _birthdateController.dispose();
     super.dispose();
   }
 
@@ -227,6 +230,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _buildEditableField('Full Name', _nameController, LucideIcons.user),
                         const SizedBox(height: 16),
                         _buildReadOnlyField('Gender', _profileData?['gender'] ?? 'Not Specified', LucideIcons.user),
+                        const SizedBox(height: 16),
+                        _buildBirthdateField(context),
                         const SizedBox(height: 16),
                         _buildEditableField('Contact Number', _contactController, LucideIcons.phone),
                         const SizedBox(height: 16),
@@ -710,6 +715,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             'contactNumber': _contactController.text.trim(),
             'section': _sectionController.text.trim(),
             'saNumber': _saController.text.trim(),
+            'birthdate': _birthdateController.text.trim(),
           });
           await _auditService.logActivity(
             action: 'Updated Profile (SA number)',
@@ -751,5 +757,90 @@ class _ProfileScreenState extends State<ProfileScreen>
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       (route) => false,
     );
+  }
+
+  Widget _buildBirthdateField(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Birthdate (mm/dd/yyyy)',
+            style: TextStyle(
+                fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _birthdateController,
+          readOnly: true,
+          onTap: () => _selectBirthdate(context),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(LucideIcons.cake, size: 16, color: AppTheme.primaryColor),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryColor, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.error),
+            ),
+          ),
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Birthdate cannot be empty' : null,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _selectBirthdate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _birthdateController.text.isNotEmpty
+          ? _parseDate(_birthdateController.text)
+          : DateTime(2005),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.primaryColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _birthdateController.text = "${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}";
+      });
+    }
+  }
+
+  DateTime _parseDate(String dateStr) {
+    try {
+      final parts = dateStr.split('/');
+      if (parts.length == 3) {
+        final month = int.parse(parts[0]);
+        final day = int.parse(parts[1]);
+        final year = int.parse(parts[2]);
+        return DateTime(year, month, day);
+      }
+    } catch (_) {}
+    return DateTime(2005);
   }
 }

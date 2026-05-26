@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
@@ -23,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _studentIdController = TextEditingController();
+  final TextEditingController _birthdateController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
 
@@ -97,12 +99,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return ['A', 'B', 'C', 'D', 'E', 'F'].map((s) => '$yearPrefix$s').toList();
   }
 
+  Future<void> _selectBirthdate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2005),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.primaryColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _birthdateController.text = DateFormat('MM/dd/yyyy').format(picked);
+      });
+    }
+  }
+
   bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _studentIdController.dispose();
+    _birthdateController.dispose();
     _emailController.dispose();
     _contactController.dispose();
     _payoutsController.dispose();
@@ -140,7 +169,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Image.asset('assets/app_logo2.png', width: 85, height: 85),
+                    Image.asset('assets/app_logo2.png', width: 60, height: 60),
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
                         colors: [AppTheme.primaryColor, Color(0xFFFBC02D)],
@@ -150,7 +179,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         'ScholarDoc',
                         style:
                             Theme.of(context).textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ) ??
                             const TextStyle(
@@ -226,6 +255,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _birthdateController,
+                      readOnly: true,
+                      onTap: () => _selectBirthdate(context),
+                      decoration: const InputDecoration(
+                        labelText: 'Birthdate (mm/dd/yyyy)',
+                        prefixIcon: Icon(Icons.cake_outlined),
+                        hintText: 'Select your birthdate',
+                      ),
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Select your birthdate'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -608,6 +651,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               Map<String, dynamic> studentData = {
                                 'fullName': _nameController.text.trim(),
                                 'studentId': _studentIdController.text.trim(),
+                                'birthdate': _birthdateController.text.trim(),
                                 'email': _emailController.text.trim(),
                                 'course': _selectedCourse,
                                 'gender': _selectedGender,

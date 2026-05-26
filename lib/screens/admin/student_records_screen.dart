@@ -85,6 +85,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController();
     final idCtrl = TextEditingController();
+    final birthdateCtrl = TextEditingController();
     final saCtrl = TextEditingController();
     final payoutsReceivedCtrl = TextEditingController(text: '0');
     String selectedCourse = _courseAddOptions.first;
@@ -145,7 +146,6 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                               ? 'Full name is required'
                               : null,
                         ),
-                        SizedBox(height: 16),
                         _dialogField(
                           controller: idCtrl,
                           label: 'Student ID',
@@ -153,6 +153,30 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                           icon: LucideIcons.hash,
                           validator: (v) => (v == null || v.trim().isEmpty)
                               ? 'Student ID is required'
+                              : null,
+                        ),
+                        SizedBox(height: 16),
+                        _dialogField(
+                          controller: birthdateCtrl,
+                          label: 'Birthdate (mm/dd/yyyy)',
+                          hint: 'Select birthdate',
+                          icon: LucideIcons.cake,
+                          readOnly: true,
+                          onTap: () async {
+                            final DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime(2005),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                birthdateCtrl.text = "${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}";
+                              });
+                            }
+                          },
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Birthdate is required'
                               : null,
                         ),
                         SizedBox(height: 16),
@@ -327,6 +351,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 .add({
                                   'fullName': nameCtrl.text.trim(),
                                   'studentId': idCtrl.text.trim(),
+                                  'birthdate': birthdateCtrl.text.trim(),
                                   'course': selectedCourse,
                                   'year': selectedYear,
                                   'gender': selectedGender,
@@ -411,6 +436,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     ).whenComplete(() {
       nameCtrl.dispose();
       idCtrl.dispose();
+      birthdateCtrl.dispose();
       saCtrl.dispose();
       payoutsReceivedCtrl.dispose();
     });
@@ -422,6 +448,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     required String hint,
     required IconData icon,
     String? Function(String?)? validator,
+    bool readOnly = false,
+    VoidCallback? onTap,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,6 +462,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
         TextFormField(
           controller: controller,
           validator: validator,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
@@ -1271,6 +1301,17 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                   ),
                   DataColumn(
                     label: Text(
+                      'Birthdate',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: context.textPri,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
                       'Actions',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -1290,6 +1331,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                   final String course = data['course'] ?? 'N/A';
                   final String year = data['year'] ?? 'N/A';
                   final String status = data['status'] ?? 'Pending';
+                  final String birthdate = data['birthdate'] ?? '01/01/2000';
                   final String saNumber =
                       data['saNumber'] ??
                       data['familyDetails']?['saNumber'] ??
@@ -1306,6 +1348,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                     data['scholarYearLevel'] ?? 'N/A',
                     status,
                     saNumber,
+                    birthdate,
                     isEven: index % 2 == 0,
                   );
                 }).toList(),
@@ -1327,7 +1370,8 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     String scholarship,
     String scholarYear,
     String status,
-    String saNumber, {
+    String saNumber,
+    String birthdate, {
     bool isEven = false,
   }) {
     Color statusColor = AppTheme.warning;
@@ -1476,6 +1520,15 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
           ),
         ),
         DataCell(
+          Text(
+            birthdate,
+            style: TextStyle(
+              fontSize: 13,
+              color: context.textSec,
+            ),
+          ),
+        ),
+        DataCell(
           Row(
             children: [
               _buildActionIcon(LucideIcons.eye, AppTheme.primaryColor, () {
@@ -1587,6 +1640,9 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     final String registeredOn = createdAt != null
         ? DateFormat('MMMM dd, yyyy').format(createdAt.toDate())
         : 'N/A';
+
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isCompact = screenWidth < 700;
 
     // Log the profile view
     await _auditService.logActivity(
@@ -1739,12 +1795,12 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                     ),
                     const SizedBox(height: 20),
                     GridView.count(
-                      crossAxisCount: 2,
+                      crossAxisCount: isCompact ? 1 : 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
-                      childAspectRatio: 3.5,
+                      childAspectRatio: isCompact ? 4.0 : 3.0,
                       children: [
                         _buildProfileInfoCard(
                           LucideIcons.bookOpen,
@@ -1775,6 +1831,11 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                           LucideIcons.users,
                           'Gender',
                           data['gender'] ?? 'Not Specified',
+                        ),
+                        _buildProfileInfoCard(
+                          LucideIcons.cake,
+                          'Birthdate',
+                          data['birthdate'] ?? '01/01/2000',
                         ),
                         _buildProfileInfoCard(
                           LucideIcons.clock,
@@ -1817,12 +1878,12 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                     ),
                     const SizedBox(height: 20),
                     GridView.count(
-                      crossAxisCount: 2,
+                      crossAxisCount: isCompact ? 1 : 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
-                      childAspectRatio: 3.5,
+                      childAspectRatio: isCompact ? 4.0 : 3.0,
                       children: [
                         _buildProfileInfoCard(
                           LucideIcons.creditCard,

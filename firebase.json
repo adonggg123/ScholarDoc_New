@@ -1,1 +1,42 @@
-{"hosting":{"public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]},"flutter":{"platforms":{"android":{"default":{"projectId":"scholardoc-40e03","appId":"1:583511512301:android:8b768cedf256c9c8dd28e4","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"scholardoc-40e03","configurations":{"android":"1:583511512301:android:8b768cedf256c9c8dd28e4","ios":"1:583511512301:ios:23db6bd502fc4d92dd28e4","macos":"1:583511512301:ios:23db6bd502fc4d92dd28e4","web":"1:583511512301:web:864abfadf26d9f98dd28e4","windows":"1:583511512301:web:b915ae1c2e9c5ebadd28e4"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "scholardoc-40e03",
+          "appId": "1:583511512301:android:8b768cedf256c9c8dd28e4",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "scholardoc-40e03",
+          "configurations": {
+            "android": "1:583511512301:android:8b768cedf256c9c8dd28e4",
+            "ios": "1:583511512301:ios:23db6bd502fc4d92dd28e4",
+            "macos": "1:583511512301:ios:23db6bd502fc4d92dd28e4",
+            "web": "1:583511512301:web:864abfadf26d9f98dd28e4",
+            "windows": "1:583511512301:web:b915ae1c2e9c5ebadd28e4"
+          }
+        }
+      }
+    }
+  }
+}

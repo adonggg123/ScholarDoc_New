@@ -81,13 +81,13 @@ class ExcelGenerator {
 
     // 1. Add Title Row
     sheetObject.merge(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), 
-                     CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: 0));
+                     CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: 0));
     final cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
     cell.value = TextCellValue('ScholarDoc Student Records - ${DateFormat('yyyy-MM-dd').format(DateTime.now())}');
     cell.cellStyle = headerStyle;
 
     // 2. Add Header Row
-    final List<String> headers = ['Student ID', 'Full Name', 'Course', 'Year', 'Status', 'Date Registered'];
+    final List<String> headers = ['Student ID', 'Full Name', 'Birthdate', 'Course', 'Year', 'Status', 'Date Registered'];
     for (int i = 0; i < headers.length; i++) {
       final cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 1));
       cell.value = TextCellValue(headers[i]);
@@ -106,10 +106,11 @@ class ExcelGenerator {
 
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row + 2)).value = TextCellValue(s['studentId']?.toString() ?? 'N/A');
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row + 2)).value = TextCellValue(s['fullName'] ?? 'N/A');
-      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row + 2)).value = TextCellValue(s['course'] ?? 'N/A');
-      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row + 2)).value = TextCellValue(s['year']?.toString() ?? 'N/A');
-      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row + 2)).value = TextCellValue(s['status'] ?? 'Pending');
-      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row + 2)).value = TextCellValue(dateStr);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row + 2)).value = TextCellValue(s['birthdate']?.toString() ?? '01/01/2000');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row + 2)).value = TextCellValue(s['course'] ?? 'N/A');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row + 2)).value = TextCellValue(s['year']?.toString() ?? 'N/A');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row + 2)).value = TextCellValue(s['status'] ?? 'Pending');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row + 2)).value = TextCellValue(dateStr);
     }
 
     // 4. Save and Download

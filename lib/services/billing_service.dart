@@ -135,15 +135,38 @@ class BillingService {
         matchedCount++;
         resultRow['matchStatus'] = 'matched';
         
-        // Auto-fill missing fields
+        // Auto-fill missing fields (supports common header variations)
         _fillIfEmpty(resultRow, match, 'Student ID', ['studentId']);
         _fillIfEmpty(resultRow, match, 'Full Name', ['fullName']);
         _fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarshipName', 'scholarshipType']);
+        
         _fillIfEmpty(resultRow, match, 'Course/Program', ['course', 'program']);
+        _fillIfEmpty(resultRow, match, 'Degree/Program', ['course', 'program']);
+        
         _fillIfEmpty(resultRow, match, 'Year Level', ['year', 'scholarYearLevel', 'yearLevel']);
+        _fillIfEmpty(resultRow, match, 'Year', ['year', 'scholarYearLevel', 'yearLevel']);
+        
         _fillIfEmpty(resultRow, match, 'Semester', ['semester']);
         _fillIfEmpty(resultRow, match, 'Academic Year', ['academicYear', 'ay']);
         _fillIfEmpty(resultRow, match, 'SA Number', ['saNumber']);
+        
+        _fillIfEmpty(resultRow, match, 'Sex at Birth (M/F)', ['gender', 'sex']);
+        _fillIfEmpty(resultRow, match, 'Sex', ['gender', 'sex']);
+        _fillIfEmpty(resultRow, match, 'Gender', ['gender', 'sex']);
+        
+        _fillIfEmpty(resultRow, match, 'Birthdate (mm/dd/yyyy)', ['birthdate', 'birthday']);
+        _fillIfEmpty(resultRow, match, 'Birthdate', ['birthdate', 'birthday']);
+        _fillIfEmpty(resultRow, match, 'Birth Date', ['birthdate', 'birthday']);
+        _fillIfEmpty(resultRow, match, 'Birthday', ['birthdate', 'birthday']);
+        
+        _fillIfEmpty(resultRow, match, 'E-mail address', ['email']);
+        _fillIfEmpty(resultRow, match, 'Email', ['email']);
+        _fillIfEmpty(resultRow, match, 'Email Address', ['email']);
+        
+        _fillIfEmpty(resultRow, match, 'Phone Number', ['contactNumber', 'phone']);
+        _fillIfEmpty(resultRow, match, 'Phone', ['contactNumber', 'phone']);
+        _fillIfEmpty(resultRow, match, 'Contact Number', ['contactNumber', 'phone']);
+        
         _fillIfEmpty(resultRow, match, 'Status', ['status']);
       } else {
         unmatchedCount++;
@@ -239,7 +262,8 @@ class BillingService {
   void _fillIfEmpty(Map<String, dynamic> resultRow, Map<String, dynamic> match, String targetKey, List<String> sourceKeys) {
     // 1. Check if targetKey already exists and has value
     final existingValue = _getValue(resultRow, [targetKey]);
-    if (existingValue.toString().isNotEmpty && existingValue != 'N/A') return;
+    final String cleanVal = existingValue.toString().trim().toUpperCase();
+    if (cleanVal.isNotEmpty && cleanVal != 'N/A') return;
 
     // 2. Try to find a source key that matches the targetKey concept
     for (var skey in sourceKeys) {
@@ -507,7 +531,10 @@ class BillingService {
           : rawYear;
       final sa     = (s['saNumber'] ?? s['familyDetails']?['saNumber'] ?? '').toString();
       final course = (s['course'] ?? '').toString();
-      final bdate  = (s['birthdate'] ?? s['birthday'] ?? '').toString();
+      String bdate = (s['birthdate'] ?? s['birthday'] ?? '').toString().trim();
+      if (bdate.isEmpty || bdate.toUpperCase() == 'N/A') {
+        bdate = '01/01/2000';
+      }
       final studId = (s['studentId'] ?? '').toString();
 
       // Get or create the row (existing blank rows already have proper styles).
@@ -538,7 +565,7 @@ class BillingService {
       str(5,  name['givenName'] ?? '');
       str(6,  name['middleInitial'] ?? '');
       str(7,  gender);
-      str(8,  bdate.isNotEmpty ? bdate : 'N/A');
+      str(8,  bdate);
       str(9,  course);
       str(10, year);
 

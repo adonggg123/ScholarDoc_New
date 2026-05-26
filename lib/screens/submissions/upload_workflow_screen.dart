@@ -452,7 +452,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       }
 
                       if (!mounted) return;
-                      Navigator.pop(context);
+                      
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Documents submitted successfully!'),
@@ -460,6 +460,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
+
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      } else {
+                        setState(() {
+                          _currentStep = 0;
+                          _submissionPdfUrl = null;
+                          _pdfFeedback = null;
+                          _pdfFileName = null;
+                        });
+                      }
                     } catch (e) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -480,7 +491,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       _currentStep -= 1;
                     });
                   } else {
-                    Navigator.pop(context);
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    }
                   }
                 },
                 steps: [

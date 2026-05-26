@@ -98,9 +98,7 @@ class ScholarshipService {
             isActive: true,
             requiredDocuments: [
               'SA Number',
-              'ID (Front)',
-              'ID (Back)',
-              'Combined PDF Submission',
+              'ID Front & Back + Signatures (PDF)',
             ],
           ),
           Scholarship(
@@ -108,7 +106,10 @@ class ScholarshipService {
             name: 'TDP',
             description: 'Tulong Dunong Program',
             isActive: true,
-            requiredDocuments: ['Application Form', 'Grades', 'ID Card'],
+            requiredDocuments: [
+              'SA Number',
+              'ID Front & Back + Signatures (PDF)',
+            ],
           ),
           Scholarship(
             id: '',
@@ -116,9 +117,8 @@ class ScholarshipService {
             description: 'DBP Rise Scholarship Program',
             isActive: true,
             requiredDocuments: [
-              'Application Form',
-              'Income Tax Return',
-              'Recommendation',
+              'SA Number',
+              'ID Front & Back + Signatures (PDF)',
             ],
           ),
           Scholarship(
@@ -127,9 +127,8 @@ class ScholarshipService {
             description: 'SANTEH Aquaculture S&T Foundation',
             isActive: true,
             requiredDocuments: [
-              'Application Form',
-              'Certificate of Residency',
-              'ID Card',
+              'SA Number',
+              'ID Front & Back + Signatures (PDF)',
             ],
           ),
           Scholarship(
@@ -138,10 +137,8 @@ class ScholarshipService {
             description: 'Student Financial Assistance Program',
             isActive: true,
             requiredDocuments: [
-              'ID (Front)',
-              'ID (Back)',
-              'Combined PDF Submission',
-              'Grades',
+              'SA Number',
+              'ID Front & Back + Signatures (PDF)',
             ],
           ),
         ];
@@ -153,6 +150,26 @@ class ScholarshipService {
     } catch (e) {
       print('ScholarshipService: Permission denied or error during init: $e');
     }
+  }
+
+  // Update all existing scholarships' requirements in Firestore
+  Future<int> resetAllScholarshipRequirements() async {
+    int updatedCount = 0;
+    try {
+      final snapshot = await _firestore.collection('scholarships').get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.update({
+          'requiredDocuments': [
+            'SA Number',
+            'ID Front & Back + Signatures (PDF)',
+          ],
+        });
+        updatedCount++;
+      }
+    } catch (e) {
+      print('ScholarshipService: Error resetting requirements: $e');
+    }
+    return updatedCount;
   }
 
   // Repair Tool: Fix the STUFAH -> STUFAP typo in the scholarships collection

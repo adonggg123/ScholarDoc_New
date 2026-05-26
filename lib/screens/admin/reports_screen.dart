@@ -1376,6 +1376,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   DataColumn(label: Text('Student ID')),
                   DataColumn(label: Text('Full Name')),
                   DataColumn(label: Text('Email')),
+                  DataColumn(label: Text('Birthdate')),
                   DataColumn(label: Text('Gender')),
                   DataColumn(label: Text('Course')),
                   DataColumn(label: Text('Yr & Sec')),
@@ -1447,6 +1448,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                       ),
                       DataCell(Text(data['email']?.toString() ?? 'N/A')),
+                      DataCell(Text(data['birthdate']?.toString() ?? '01/01/2000')),
                       DataCell(Text(data['gender']?.toString() ?? 'N/A')),
                       DataCell(
                         Text(

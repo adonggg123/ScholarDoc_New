@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
 import '../../services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -309,7 +310,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           LucideIcons.history,
                           AppTheme.secondaryColor,
                           () {
-                            // Navigate to history
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SubmissionHistoryScreen(),
+                              ),
+                            );
                           },
                         ),
                       ),

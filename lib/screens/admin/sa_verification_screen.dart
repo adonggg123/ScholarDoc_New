@@ -44,6 +44,13 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
         List<QueryDocumentSnapshot> docs = snapshot.data?.docs.toList() ?? [];
 
+        // Filter for students who have submitted SA number
+        docs = docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final sa = data['saNumber'] ?? data['familyDetails']?['saNumber'];
+          return sa != null && sa.toString().trim().isNotEmpty && sa.toString().trim() != 'N/A';
+        }).toList();
+
         if (docs.isEmpty) {
           return Center(
             child: Column(
@@ -52,7 +59,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
                 Icon(LucideIcons.userX, size: 48, color: Colors.grey),
                 const SizedBox(height: 16),
                 const Text(
-                  'No registered students found.',
+                  'No SA verification submissions found.',
                   style: TextStyle(color: Colors.grey),
                 ),
               ],
@@ -293,14 +300,11 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
     final String saNumber =
         data['saNumber'] ??
         data['familyDetails']?['saNumber'] ??
-        '1234-5678-9012';
+        'Not Submitted';
     final String name = data['fullName'] ?? 'N/A';
     final String studentId = data['studentId'] ?? 'N/A';
     final String course = data['course'] ?? 'N/A';
     final String year = data['year'] ?? 'N/A';
-
-    final String? submissionPdfUrl = data['submissionPdfUrl'];
-    final String? submissionPdfName = data['submissionPdfName'];
 
     return Container(
       decoration: context.crispDecoration.copyWith(
@@ -404,38 +408,9 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
             SizedBox(height: 10),
             _dataField(context, 'Submitted SA Number', saNumber),
             const SizedBox(height: 12),
-            _dataField(context, 'Bank Branch', 'Main University Branch'),
+            _dataField(context, 'Bank Branch', 'Land Bank'),
             const SizedBox(height: 10),
             _buildDuplicateBadge(context),
-            const SizedBox(height: 16),
-
-            // NEW: Submitted Documents Section
-            Text(
-              'Documents Provided',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: context.textPri,
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (submissionPdfUrl == null)
-              Text(
-                'No documents uploaded.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.textSec,
-                  fontStyle: FontStyle.italic,
-                ),
-              )
-            else
-              _buildDocumentLink(
-                context,
-                'Combined Submission',
-                submissionPdfName ?? 'Full_Submission.pdf',
-                submissionPdfUrl,
-              ),
-
             const SizedBox(height: 16),
             Text(
               'Admin Remarks',
@@ -665,69 +640,6 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
               fontSize: 10,
               fontWeight: FontWeight.bold,
               color: AppTheme.success,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDocumentLink(
-    BuildContext context,
-    String label,
-    String fileName,
-    String url,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: context.surfaceC.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.crispBorder),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            fileName.toLowerCase().endsWith('.pdf')
-                ? LucideIcons.fileText
-                : LucideIcons.image,
-            size: 16,
-            color: AppTheme.primaryColor,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  fileName,
-                  style: TextStyle(fontSize: 10, color: context.textSec),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              final uri = Uri.parse(url);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            child: const Text(
-              'View',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryColor,
-              ),
             ),
           ),
         ],
