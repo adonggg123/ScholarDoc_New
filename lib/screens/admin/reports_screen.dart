@@ -195,7 +195,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.25),
+            color: const Color(0xFF0A1E3F).withValues(alpha: 0.25),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -217,8 +217,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.primaryColor.withValues(alpha: 0.9),
-                    AppTheme.secondaryColor.withValues(alpha: 0.9),
+                    const Color(0xFF0A1E3F).withValues(alpha: 0.95), // Deep Navy Blue
+                    const Color(0xFF1E355A).withValues(alpha: 0.95), // Classic Navy Blue
+                    const Color(0xFF7A6B43).withValues(alpha: 0.92), // Warm Bronze/Gold transition
+                    const Color(0xFFD4AF37).withValues(alpha: 0.90), // Vibrant Yellow Gold
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,

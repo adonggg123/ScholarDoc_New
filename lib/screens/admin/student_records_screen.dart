@@ -1654,468 +1654,393 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
 
     if (!mounted) return;
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        builder: (_, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: context.bgC,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 30,
-                spreadRadius: 5,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (context) {
+        final Color statusColor = status == 'Approved'
+            ? AppTheme.success
+            : status == 'Rejected'
+                ? AppTheme.error
+                : AppTheme.warning;
+
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width * (isCompact ? 0.95 : 0.55),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
+                maxWidth: 720,
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Premium Handle bar
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 16),
-                width: 48,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              decoration: BoxDecoration(
+                color: context.bgC,
+                borderRadius: BorderRadius.circular(3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 40,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 16),
+                  ),
+                  BoxShadow(
+                    color: statusColor.withValues(alpha: 0.08),
+                    blurRadius: 80,
+                    spreadRadius: -10,
+                  ),
+                ],
               ),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 32),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header Section
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppTheme.primaryColor.withValues(
-                                alpha: 0.2,
-                              ),
-                              width: 2,
-                            ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 42,
-                            backgroundColor: AppTheme.primaryColor.withValues(
-                              alpha: 0.08,
-                            ),
-                            backgroundImage:
-                                (data['profilePictureUrl'] != null &&
-                                    (data['profilePictureUrl'] as String)
-                                        .isNotEmpty)
-                                ? NetworkImage(
-                                    data['profilePictureUrl'] as String,
-                                  )
-                                : null,
-                            child:
-                                (data['profilePictureUrl'] == null ||
-                                    (data['profilePictureUrl'] as String)
-                                        .isEmpty)
-                                ? const Icon(
-                                    LucideIcons.user,
-                                    size: 42,
-                                    color: AppTheme.primaryColor,
-                                  )
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w900,
-                                  color: context.textPri,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Icon(
-                                    LucideIcons.badge,
-                                    size: 14,
-                                    color: context.textSec,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    studentId,
-                                    style: TextStyle(
-                                      color: context.textSec,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  _buildStatusBadge(status),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Section 1: Academics & Contact
-                    Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.graduationCap,
-                          size: 18,
-                          color: AppTheme.primaryColor,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Academic & Contact',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: context.textPri,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    GridView.count(
-                      crossAxisCount: isCompact ? 1 : 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: isCompact ? 4.0 : 3.0,
-                      children: [
-                        _buildProfileInfoCard(
-                          LucideIcons.bookOpen,
-                          'Program / Course',
-                          courseDisplay,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.calendarDays,
-                          'Year & Section',
-                          '$year - Sec $section',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.award,
-                          'Scholarship',
-                          scholarshipName,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.mail,
-                          'Email Address',
-                          email,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.phone,
-                          'Contact Number',
-                          contactNumber,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.users,
-                          'Gender',
-                          data['gender'] ?? 'Not Specified',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.cake,
-                          'Birthdate',
-                          data['birthdate'] ?? '01/01/2000',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.clock,
-                          'Registration Date',
-                          registeredOn,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.calendarDays,
-                          'Scholar Year',
-                          data['scholarYearLevel'] ?? 'N/A',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.wallet,
-                          'Payouts Received',
-                          data['payoutsReceived']?.toString() ?? '0',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Section 2: Financial & Background
-                    Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.wallet,
-                          size: 18,
-                          color: AppTheme.primaryColor,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Financial & Background',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: context.textPri,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    GridView.count(
-                      crossAxisCount: isCompact ? 1 : 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: isCompact ? 4.0 : 3.0,
-                      children: [
-                        _buildProfileInfoCard(
-                          LucideIcons.creditCard,
-                          'SA Number (TES)',
-                          saNumber,
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.banknote,
-                          'Total Yearly Income',
-                          'PHP ${family['yearlyIncome'] ?? 'N/A'}',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.church,
-                          'Religion',
-                          family['religion'] ?? 'N/A',
-                        ),
-                        _buildProfileInfoCard(
-                          LucideIcons.users,
-                          'Tribe / Ethnicity',
-                          family['tribe'] ?? 'N/A',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Section 3: Family Info
-                    Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.heartPulse,
-                          size: 18,
-                          color: AppTheme.primaryColor,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Family Documentation',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: context.textPri,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFamilyCard(
-                            'Father',
-                            family['fatherName']?.toString(),
-                            family['fatherAge']?.toString(),
-                            family['fatherOccupation']?.toString(),
-                            edu: family['fatherEduStatus']?.toString(),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildFamilyCard(
-                            'Mother',
-                            family['motherName']?.toString(),
-                            family['motherAge']?.toString(),
-                            family['motherOccupation']?.toString(),
-                            edu: family['motherEduStatus']?.toString(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Verification Documents (Mocked for UI flow)
-                    Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.folderCheck,
-                          size: 18,
-                          color: AppTheme.primaryColor,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Verification Assets',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: context.textPri,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    if (data['submissionPdfUrl'] != null)
-                      _buildDocumentItem(
-                        'ID & Signatures Combined PDF',
-                        'verified',
-                      )
-                    else
-                      _buildDocumentItem(
-                        'No documents uploaded yet',
-                        'pending',
-                      ),
-                    const SizedBox(height: 48),
-
-                    // Compliance Action
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withValues(
-                              alpha: 0.02,
-                            ),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    // ─── Premium Header: Campus BG + Navy-Gold Gradient ───
+                    SizedBox(
+                      width: double.infinity,
+                      child: Stack(
                         children: [
-                          const Text(
-                            'Administrative Actions',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.2,
+                          // Campus background image
+                          Positioned.fill(
+                            child: Image.asset(
+                              'assets/campus_bg.jpg',
+                              fit: BoxFit.cover,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Use these controls to finalize document verification for this student.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: context.textSec,
-                              fontWeight: FontWeight.w500,
+                          // Navy-to-Gold gradient overlay (same as dashboard banner)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color(0xFF0A1E3F).withValues(alpha: 0.95),
+                                    const Color(0xFF1E355A).withValues(alpha: 0.95),
+                                    const Color(0xFF7A6B43).withValues(alpha: 0.92),
+                                    const Color(0xFFD4AF37).withValues(alpha: 0.90),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _updateStudentStatus(
-                                      docId,
-                                      name,
-                                      studentId,
-                                      'Approved',
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    LucideIcons.checkCircle2,
-                                    size: 18,
+                          // Content
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(32, 28, 24, 28),
+                            child: Row(
+                              children: [
+                                // Avatar with status ring
+                                Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.5),
+                                      width: 2.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.25),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  label: const Text(
-                                    'Approve Data',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.success,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 18,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _updateStudentStatus(
-                                      docId,
-                                      name,
-                                      studentId,
-                                      'Rejected',
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    LucideIcons.xCircle,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
-                                    'Flag for Revision',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.error,
-                                    side: const BorderSide(
-                                      color: AppTheme.error,
-                                      width: 1.5,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 18,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
+                                  child: CircleAvatar(
+                                    radius: 34,
+                                    backgroundColor: Colors.white.withValues(alpha: 0.15),
+                                    backgroundImage:
+                                        (data['profilePictureUrl'] != null &&
+                                            (data['profilePictureUrl'] as String).isNotEmpty)
+                                        ? NetworkImage(data['profilePictureUrl'] as String)
+                                        : null,
+                                    child:
+                                        (data['profilePictureUrl'] == null ||
+                                            (data['profilePictureUrl'] as String).isEmpty)
+                                        ? const Icon(LucideIcons.user, size: 34, color: Colors.white)
+                                        : null,
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 20),
+                                // Name, ID, Status
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Icon(LucideIcons.badge, size: 13, color: Colors.white.withValues(alpha: 0.7)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            studentId,
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(alpha: 0.85),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(3),
+                                              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 7,
+                                                  height: 7,
+                                                  decoration: BoxDecoration(
+                                                    color: statusColor,
+                                                    shape: BoxShape.circle,
+                                                    boxShadow: [
+                                                      BoxShadow(color: statusColor.withValues(alpha: 0.6), blurRadius: 4),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  status,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Close button
+                                IconButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: Icon(LucideIcons.x, color: Colors.white.withValues(alpha: 0.8), size: 20),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(3))),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 60),
+
+                    // ─── Scrollable Content ───
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(32, 28, 32, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Section 1: Academic & Contact
+                            _buildSectionTitle(context, LucideIcons.graduationCap, 'Academic & Contact'),
+                            const SizedBox(height: 12),
+                            GridView.count(
+                              crossAxisCount: isCompact ? 1 : 3,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: isCompact ? 4.0 : 2.5,
+                              children: [
+                                _buildProfileInfoCard(LucideIcons.bookOpen, 'Program / Course', courseDisplay),
+                                _buildProfileInfoCard(LucideIcons.calendarDays, 'Year & Section', '$year - Sec $section'),
+                                _buildProfileInfoCard(LucideIcons.award, 'Scholarship', scholarshipName),
+                                _buildProfileInfoCard(LucideIcons.mail, 'Email Address', email),
+                                _buildProfileInfoCard(LucideIcons.phone, 'Contact Number', contactNumber),
+                                _buildProfileInfoCard(LucideIcons.users, 'Gender', data['gender'] ?? 'Not Specified'),
+                                _buildProfileInfoCard(LucideIcons.cake, 'Birthdate', data['birthdate'] ?? '01/01/2000'),
+                                _buildProfileInfoCard(LucideIcons.clock, 'Registration Date', registeredOn),
+                                _buildProfileInfoCard(LucideIcons.calendarDays, 'Scholar Year', data['scholarYearLevel'] ?? 'N/A'),
+                                _buildProfileInfoCard(LucideIcons.wallet, 'Payouts Received', data['payoutsReceived']?.toString() ?? '0'),
+                              ],
+                            ),
+
+                            _buildSectionDivider(),
+
+                            // Section 2: Financial & Background
+                            _buildSectionTitle(context, LucideIcons.wallet, 'Financial & Background'),
+                            const SizedBox(height: 12),
+                            GridView.count(
+                              crossAxisCount: isCompact ? 1 : 3,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: isCompact ? 4.0 : 2.5,
+                              children: [
+                                _buildProfileInfoCard(LucideIcons.creditCard, 'SA Number (TES)', saNumber),
+                                _buildProfileInfoCard(LucideIcons.banknote, 'Total Yearly Income', 'PHP ${family['yearlyIncome'] ?? 'N/A'}'),
+                                _buildProfileInfoCard(LucideIcons.church, 'Religion', family['religion'] ?? 'N/A'),
+                                _buildProfileInfoCard(LucideIcons.users, 'Tribe / Ethnicity', family['tribe'] ?? 'N/A'),
+                              ],
+                            ),
+
+                            _buildSectionDivider(),
+
+                            // Section 3: Family Documentation
+                            _buildSectionTitle(context, LucideIcons.heartPulse, 'Family Documentation'),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildFamilyCard(
+                                    'Father',
+                                    family['fatherName']?.toString(),
+                                    family['fatherAge']?.toString(),
+                                    family['fatherOccupation']?.toString(),
+                                    edu: family['fatherEduStatus']?.toString(),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildFamilyCard(
+                                    'Mother',
+                                    family['motherName']?.toString(),
+                                    family['motherAge']?.toString(),
+                                    family['motherOccupation']?.toString(),
+                                    edu: family['motherEduStatus']?.toString(),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            _buildSectionDivider(),
+
+                            // Section 4: Verification Assets
+                            _buildSectionTitle(context, LucideIcons.folderCheck, 'Verification Assets'),
+                            const SizedBox(height: 12),
+                            if (data['submissionPdfUrl'] != null)
+                              _buildDocumentItem('ID & Signatures Combined PDF', 'verified')
+                            else
+                              _buildDocumentItem('No documents uploaded yet', 'pending'),
+
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ─── Bottom Action Bar ───
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                      decoration: BoxDecoration(
+                        color: context.bgC,
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.grey.withValues(alpha: 0.15),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _updateStudentStatus(docId, name, studentId, 'Approved');
+                              },
+                              icon: const Icon(LucideIcons.checkCircle2, size: 18),
+                              label: const Text(
+                                'Approve Data',
+                                style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.success,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(3))),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _updateStudentStatus(docId, name, studentId, 'Rejected');
+                              },
+                              icon: const Icon(LucideIcons.xCircle, size: 18),
+                              label: const Text(
+                                'Flag for Revision',
+                                style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.error,
+                                side: const BorderSide(color: AppTheme.error, width: 1.5),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(3))),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Helper: Section Title ───
+  Widget _buildSectionTitle(BuildContext context, IconData icon, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Icon(icon, size: 14, color: Colors.white),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: context.textPri,
+            letterSpacing: 0.3,
           ),
         ),
+      ],
+    );
+  }
+
+  // ─── Helper: Section Divider ───
+  Widget _buildSectionDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Divider(
+        color: Colors.grey.withValues(alpha: 0.12),
+        thickness: 1,
       ),
     );
   }
@@ -2128,15 +2053,15 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     String? edu,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.surfaceC,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
         border: Border.all(
@@ -2151,70 +2076,70 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: AppTheme.secondaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.secondaryColor,
+                  borderRadius: BorderRadius.circular(3),
                 ),
                 child: Icon(
                   role == 'Father'
                       ? LucideIcons.briefcase
                       : LucideIcons.briefcase,
-                  size: 12,
-                  color: AppTheme.secondaryColor,
+                  size: 10,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Text(
                 role,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: context.textSec,
-                  fontSize: 13,
+                  fontSize: 11,
                   letterSpacing: 0.5,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Text(
             name ?? 'N/A',
             style: TextStyle(
               fontWeight: FontWeight.w900,
-              fontSize: 18,
+              fontSize: 15,
               color: context.textPri,
               letterSpacing: -0.3,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Divider(
             color: context.isDark ? Colors.grey.shade800 : Colors.grey.shade200,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Icon(LucideIcons.calendar, size: 14, color: context.textSec),
+              Icon(LucideIcons.calendar, size: 12, color: context.textSec),
               const SizedBox(width: 6),
               Text(
                 '${age ?? 'N/A'} yrs',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   color: context.textSec,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             children: [
-              Icon(LucideIcons.briefcase, size: 14, color: context.textSec),
+              Icon(LucideIcons.briefcase, size: 12, color: context.textSec),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   occupation ?? 'N/A',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     color: context.textSec,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2224,21 +2149,24 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
             ],
           ),
           if (edu != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Icon(
                   LucideIcons.graduationCap,
-                  size: 14,
+                  size: 12,
                   color: context.textSec,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  edu,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: context.textSec,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    edu,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.textSec,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -2249,52 +2177,17 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color color = AppTheme.warning;
-    if (status == 'Approved') color = AppTheme.success;
-    if (status == 'Rejected') color = AppTheme.error;
-    if (status == 'Under Review') color = AppTheme.secondaryColor;
-
+  Widget _buildProfileInfoCard(IconData icon, String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            status,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileInfoCard(IconData icon, String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
         color: context.surfaceC,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
         border: Border.all(
@@ -2307,33 +2200,34 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+              color: AppTheme.primaryColor,
+              borderRadius: BorderRadius.circular(3),
             ),
-            child: Icon(icon, size: 18, color: AppTheme.primaryColor),
+            child: Icon(icon, size: 16, color: Colors.white),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: context.textSec,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w900,
                     color: context.textPri,
                   ),
@@ -2350,10 +2244,10 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
   Widget _buildDocumentItem(String title, String status) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.surfaceC,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(3),
         border: Border.all(
           color: context.isDark
               ? const Color(0xFF334155)
@@ -2361,32 +2255,32 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
+              color: AppTheme.primaryColor,
+              borderRadius: BorderRadius.circular(3),
             ),
             child: const Icon(
               LucideIcons.fileText,
-              color: AppTheme.primaryColor,
-              size: 18,
+              color: Colors.white,
+              size: 16,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               title,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: context.textPri,
               ),
@@ -2394,7 +2288,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
           ),
           if (status == 'verified')
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: AppTheme.success.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
@@ -2402,21 +2296,21 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
               child: const Icon(
                 LucideIcons.check,
                 color: AppTheme.success,
-                size: 14,
+                size: 12,
               ),
             )
           else
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.warning,
+                borderRadius: BorderRadius.circular(3),
               ),
               child: const Text(
                 'Processing',
                 style: TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.warning,
+                  fontSize: 10,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),

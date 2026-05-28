@@ -69,48 +69,36 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Row 1: Welcome Card (flex 5) & Calendar (flex 3)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: _buildHeader(context, false),
-                  ),
-                  const SizedBox(width: 32),
-                  Expanded(
-                    flex: 3,
-                    child: _buildCalendarWidget(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
+              // Row 1: Welcome Card (full width)
+              _buildHeader(context, false),
+              const SizedBox(height: 16),
 
-              // Row 2: Submission Trends (flex 2) & Stat Cards (flex 1) | Status Distribution (flex 3)
+              // Row 2: Stats cards above Submission Trends (flex 5) | Calendar + Status Distribution (flex 3)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     flex: 5,
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 2,
-                          child: _buildSubmissionTrend(context),
-                        ),
-                        const SizedBox(width: 32),
-                        Expanded(
-                          flex: 1,
-                          child: _buildStatsSection(context, false),
-                        ),
+                        _buildStatsSection(context, false),
+                        const SizedBox(height: 12),
+                        _buildSubmissionTrend(context),
                       ],
                     ),
                   ),
                   const SizedBox(width: 32),
                   Expanded(
                     flex: 3,
-                    child: _buildStatusDistribution(context),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildCalendarWidget(context),
+                        const SizedBox(height: 24),
+                        _buildStatusDistribution(context),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -160,7 +148,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            color: const Color(0xFF0A1E3F).withValues(alpha: 0.35),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -182,8 +170,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.primaryColor.withValues(alpha: 0.88),
-                    AppTheme.secondaryColor.withValues(alpha: 0.88),
+                    const Color(0xFF0A1E3F).withValues(alpha: 0.95), // Deep Navy Blue
+                    const Color(0xFF1E355A).withValues(alpha: 0.95), // Classic Navy Blue
+                    const Color(0xFF7A6B43).withValues(alpha: 0.92), // Warm Bronze/Gold transition
+                    const Color(0xFFD4AF37).withValues(alpha: 0.90), // Vibrant Yellow Gold
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -325,50 +315,38 @@ class _DashboardOverviewState extends State<DashboardOverview> {
           }
         }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                _buildStatCard(
-                  context,
-                  'Total Students',
-                  total.toString(),
-                  LucideIcons.fileText,
-                  AppTheme.primaryColor,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  context,
-                  'Pending Review',
-                  pending.toString(),
-                  LucideIcons.clock,
-                  AppTheme.warning,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _buildStatCard(
-                  context,
-                  'Approved',
-                  approved.toString(),
-                  LucideIcons.checkCircle2,
-                  AppTheme.success,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  context,
-                  'Rejected',
-                  rejected.toString(),
-                  LucideIcons.alertCircle,
-                  AppTheme.error,
-                ),
-              ],
-            ),
-          ],
-        );
+        return isMobile
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      _buildStatCard(context, 'Total Students', total.toString(), LucideIcons.fileText, AppTheme.primaryColor),
+                      const SizedBox(width: 16),
+                      _buildStatCard(context, 'Pending Review', pending.toString(), LucideIcons.clock, AppTheme.warning),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildStatCard(context, 'Approved', approved.toString(), LucideIcons.checkCircle2, AppTheme.success),
+                      const SizedBox(width: 16),
+                      _buildStatCard(context, 'Rejected', rejected.toString(), LucideIcons.alertCircle, AppTheme.error),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  _buildStatCard(context, 'Total Students', total.toString(), LucideIcons.fileText, AppTheme.primaryColor),
+                  const SizedBox(width: 16),
+                  _buildStatCard(context, 'Pending Review', pending.toString(), LucideIcons.clock, AppTheme.warning),
+                  const SizedBox(width: 16),
+                  _buildStatCard(context, 'Approved', approved.toString(), LucideIcons.checkCircle2, AppTheme.success),
+                  const SizedBox(width: 16),
+                  _buildStatCard(context, 'Rejected', rejected.toString(), LucideIcons.alertCircle, AppTheme.error),
+                ],
+              );
       },
     );
   }
@@ -561,8 +539,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                         gradient: isToday
                             ? const LinearGradient(
                                 colors: [
-                                  AppTheme.primaryColor,
-                                  AppTheme.secondaryColor,
+                                  Color(0xFF0A1E3F), // Deep Navy Blue
+                                  Color(0xFF1E355A), // Classic Navy Blue
+                                  Color(0xFF7A6B43), // Warm Bronze/Gold transition
+                                  Color(0xFFD4AF37), // Vibrant Yellow Gold
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -573,7 +553,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                         boxShadow: isToday
                             ? [
                                 BoxShadow(
-                                  color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                                  color: const Color(0xFF0A1E3F).withValues(alpha: 0.35),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
