@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _profileData;
   List<Announcement> _announcements = [];
   bool _isLoading = true;
+  final Set<String> _expandedAnnouncementIds = {};
 
   @override
   void initState() {
@@ -849,6 +850,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (a.type == 'Deadline') typeColor = AppTheme.error;
     if (a.type == 'Update') typeColor = AppTheme.success;
 
+    final bool isExpanded = _expandedAnnouncementIds.contains(a.id);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -869,7 +872,15 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedAnnouncementIds.remove(a.id);
+              } else {
+                _expandedAnnouncementIds.add(a.id);
+              }
+            });
+          },
           borderRadius: BorderRadius.circular(16),
           child: IntrinsicHeight(
             child: Row(
@@ -913,9 +924,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const Spacer(),
                             Icon(
-                              LucideIcons.arrowUpRight,
-                              size: 14,
-                              color: context.textSec.withValues(alpha: 0.3),
+                              isExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                              size: 16,
+                              color: context.textSec.withValues(alpha: 0.5),
                             ),
                           ],
                         ),
@@ -937,8 +948,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontSize: 13,
                             height: 1.5,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: isExpanded ? null : 2,
+                          overflow: isExpanded ? TextOverflow.clip : TextOverflow.ellipsis,
                         ),
                       ],
                     ),

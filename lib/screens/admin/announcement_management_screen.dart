@@ -244,8 +244,6 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
     }
 
     final String formattedDate = DateFormat.yMMMMd().format(a.createdAt);
-    // Expand truncation length since we have a much wider table now!
-    final String contentPreview = a.content.length > 80 ? a.content.substring(0, 77) + '...' : a.content;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -301,7 +299,7 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Text(
-                contentPreview,
+                a.content,
                 style: TextStyle(color: context.textSec),
               ),
             ),
@@ -352,6 +350,11 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  tooltip: 'Edit announcement',
+                  icon: const Icon(LucideIcons.edit2, size: 16, color: AppTheme.primaryColor),
+                  onPressed: () => _showDialog(announcement: a),
+                ),
                 IconButton(
                   tooltip: a.isActive ? 'Archive announcement' : 'Unarchive announcement',
                   icon: Icon(a.isActive ? LucideIcons.archive : LucideIcons.inbox,
@@ -440,10 +443,10 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
     );
   }
 
-  void _showDialog() {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    String selectedType = 'General';
+  void _showDialog({Announcement? announcement}) {
+    final titleController = TextEditingController(text: announcement?.title);
+    final contentController = TextEditingController(text: announcement?.content);
+    String selectedType = announcement?.type ?? 'General';
 
     showDialog(
       context: context,
@@ -468,7 +471,7 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
               ),
               const SizedBox(width: 14),
               Text(
-                'Post Announcement',
+                announcement == null ? 'Post Announcement' : 'Edit Announcement',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
@@ -598,30 +601,38 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
             ),
             ElevatedButton(
               onPressed: () async {
-            if (titleController.text.trim().isEmpty || contentController.text.trim().isEmpty) {
-              ScaffoldMessenger.of(dialogContext).showSnackBar(
-                const SnackBar(
-                  content: Text('Please enter both title and message body.'),
-                  backgroundColor: AppTheme.error,
-                ),
-              );
-              return;
-            }
-            await _service.postAnnouncement(Announcement(
-              id: '',
-              title: titleController.text.trim(),
-              content: contentController.text.trim(),
-              type: selectedType,
-              createdAt: DateTime.now(),
-              isActive: true,
-            ));
-            if (mounted) Navigator.pop(dialogContext);
-          },
+                if (titleController.text.trim().isEmpty || contentController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter both title and message body.'),
+                      backgroundColor: AppTheme.error,
+                    ),
+                  );
+                  return;
+                }
+                if (announcement == null) {
+                  await _service.postAnnouncement(Announcement(
+                    id: '',
+                    title: titleController.text.trim(),
+                    content: contentController.text.trim(),
+                    type: selectedType,
+                    createdAt: DateTime.now(),
+                    isActive: true,
+                  ));
+                } else {
+                  await _service.updateAnnouncement(announcement.id, {
+                    'title': titleController.text.trim(),
+                    'content': contentController.text.trim(),
+                    'type': selectedType,
+                  });
+                }
+                if (mounted) Navigator.pop(dialogContext);
+              },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              child: const Text('Post Update'),
+              child: Text(announcement == null ? 'Post Update' : 'Save Changes'),
             ),
           ],
         ),
