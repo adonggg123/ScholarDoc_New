@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Announcement {
   final String id;
@@ -17,14 +17,15 @@ class Announcement {
     required this.isActive,
   });
 
-  factory Announcement.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map<String, dynamic>;
+  factory Announcement.fromMap(Map<String, dynamic> data) {
     return Announcement(
-      id: doc.id,
+      id: data['id']?.toString() ?? '',
       title: data['title'] ?? '',
       content: data['content'] ?? '',
       type: data['type'] ?? 'General',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      createdAt: data['createdAt'] != null 
+          ? DateTime.parse(data['createdAt'].toString()) 
+          : DateTime.now(),
       isActive: data['isActive'] ?? true,
     );
   }
@@ -34,56 +35,50 @@ class Announcement {
       'title': title,
       'content': content,
       'type': type,
-      'createdAt': Timestamp.fromDate(createdAt),
+      // 'createdAt' is typically set by the DB
       'isActive': isActive,
     };
   }
 }
 
 class AnnouncementService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   Stream<List<Announcement>> getActiveAnnouncements() {
-    // Note: Removed .orderBy() from Firestore query to avoid needing a composite index.
-    // Instead, we sort the data client-side.
-    return _firestore
-        .collection('announcements')
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) {
-      final docs = snapshot.docs.map((doc) => Announcement.fromFirestore(doc)).toList();
-      docs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return docs;
-    });
+    return _supabase
+        .from('announcements')
+        .stream(primaryKey: ['id'])
+        .eq('isActive', true)
+        .order('createdAt', ascending: false)
+        .map((data) => data.map((doc) => Announcement.fromMap(doc)).toList());
   }
 
   // Get all announcements
   Stream<List<Announcement>> getAllAnnouncements() {
-    return _firestore
-        .collection('announcements')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Announcement.fromFirestore(doc)).toList());
+    return _supabase
+        .from('announcements')
+        .stream(primaryKey: ['id'])
+        .order('createdAt', ascending: false)
+        .map((data) => data.map((doc) => Announcement.fromMap(doc)).toList());
   }
 
   // Add an announcement
   Future<void> postAnnouncement(Announcement announcement) async {
-    await _firestore.collection('announcements').add(announcement.toMap());
+    await _supabase.from('announcements').insert(announcement.toMap());
   }
 
   // Update an announcement
   Future<void> updateAnnouncement(String id, Map<String, dynamic> updates) async {
-    await _firestore.collection('announcements').doc(id).update(updates);
+    await _supabase.from('announcements').update(updates).eq('id', id);
   }
 
   // Archive an announcement
   Future<void> archiveAnnouncement(String id) async {
-    await _firestore.collection('announcements').doc(id).update({'isActive': false});
+    await _supabase.from('announcements').update({'isActive': false}).eq('id', id);
   }
 
   // Delete an announcement
   Future<void> deleteAnnouncement(String id) async {
-    await _firestore.collection('announcements').doc(id).delete();
+    await _supabase.from('announcements').delete().eq('id', id);
   }
 }

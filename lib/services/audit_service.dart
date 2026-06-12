@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'dart:io'; // For Platform checking (only safe to use when not on Web)
 
 class AuditService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Logs a secure system audit event into Firestore
+  /// Logs a secure system audit event into Supabase
   /// [action] Summary of what happened (e.g., 'Approved SA Number')
   /// [userName] Name of the person performing the action
   /// [role] 'Admin' or 'Student'
@@ -37,13 +37,13 @@ class AuditService {
         }
       }
 
-      await _firestore.collection('audit_logs').add({
+      await _supabase.from('audit_logs').insert({
         'action': action,
-        'adminName': userName,
+        'userName': userName,
         'role': role,
         'studentId': studentId ?? 'N/A',
         'ipAddress': platformInfo,
-        'timestamp': FieldValue.serverTimestamp(),
+        // timestamp is handled by the DB
       });
     } catch (e) {
       debugPrint('Failed to log audit activity: $e');
@@ -51,11 +51,11 @@ class AuditService {
   }
 
   /// Stream of latest system audit logs
-  Stream<QuerySnapshot> getAuditLogsStream({int limit = 10}) {
-    return _firestore
-        .collection('audit_logs')
-        .orderBy('timestamp', descending: true)
-        .limit(limit)
-        .snapshots();
+  Stream<List<Map<String, dynamic>>> getAuditLogsStream({int limit = 10}) {
+    return _supabase
+        .from('audit_logs')
+        .stream(primaryKey: ['id'])
+        .order('timestamp', ascending: false)
+        .limit(limit);
   }
 }

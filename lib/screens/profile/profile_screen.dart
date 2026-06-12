@@ -44,11 +44,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadProfile() async {
-    final uid = _authService.currentUser?.uid;
+    final uid = _authService.currentUser?.id;
     if (uid != null) {
       final doc = await _authService.getStudentProfile(uid);
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
+      if (doc != null) {
+        final data = doc;
         setState(() {
           _profileData = data;
           _nameController.text = data['fullName'] ?? '';
@@ -655,7 +655,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
 
       // Save URL to Firestore
-      final uid = _authService.currentUser?.uid;
+      final uid = _authService.currentUser?.id;
       if (uid != null) {
         await _authService.updateStudentProfile(uid, {
           'profilePictureUrl': url,
@@ -707,7 +707,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _handleSave() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isSaving = true);
-      final uid = _authService.currentUser?.uid;
+      final uid = _authService.currentUser?.id;
       if (uid != null) {
         try {
           await _authService.updateStudentProfile(uid, {

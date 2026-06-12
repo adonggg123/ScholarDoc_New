@@ -5,7 +5,7 @@ import '../../theme/theme_provider.dart';
 import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
 import '../../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 import '../../services/announcement_service.dart';
 
@@ -32,12 +32,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    final uid = _authService.currentUser?.uid;
+    final uid = _authService.currentUser?.id;
     if (uid != null) {
       final doc = await _authService.getStudentProfile(uid);
-      if (doc.exists && mounted) {
+      if (doc != null && mounted) {
         setState(() {
-          _profileData = doc.data() as Map<String, dynamic>;
+          _profileData = doc;
         });
       }
     }
@@ -389,10 +389,15 @@ class _HomeScreenState extends State<HomeScreen> {
         _profileData?['scholarshipName'] ?? 'No Scholarship Assigned';
     final String status = _profileData?['status'] ?? 'Pending';
     final String submittedDate =
-        (_profileData?['submittedAt'] as Timestamp?)?.toDate().toString().split(
-          ' ',
-        )[0] ??
-        'N/A';
+        (() {
+          final ts = _profileData?['submittedAt'];
+          if (ts != null) {
+            try {
+              return DateTime.parse(ts.toString()).toString().split(' ')[0];
+            } catch (_) {}
+          }
+          return 'N/A';
+        })();
 
     Color statusColor = const Color(
       0xFFF59E0B,

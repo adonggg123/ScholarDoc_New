@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -209,8 +209,11 @@ class PdfGenerator {
                 ...logs.map((log) {
                   final ts = log['timestamp'];
                   String dateStr = 'N/A';
-                  if (ts is Timestamp) {
-                    dateStr = DateFormat('MM/dd HH:mm').format(ts.toDate());
+                  if (ts != null) {
+                    try {
+                      final parsed = DateTime.parse(ts.toString());
+                      dateStr = DateFormat('MM/dd HH:mm').format(parsed);
+                    } catch (_) {}
                   }
                   
                   return pw.TableRow(

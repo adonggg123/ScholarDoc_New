@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -17,14 +17,14 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
-  late Stream<QuerySnapshot> _notificationStream;
+  late Stream<List<Map<String, dynamic>>> _notificationStream;
 
   @override
   void initState() {
     super.initState();
     final user = _authService.currentUser;
     if (user != null) {
-      _notificationStream = _notificationService.getNotificationsStream(user.uid);
+      _notificationStream = _notificationService.getNotificationsStream(user.id);
     }
   }
 
@@ -79,16 +79,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 ),
               ),
               if (user != null)
-                StreamBuilder<QuerySnapshot>(
+                StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _notificationStream,
                   builder: (context, snapshot) {
                     final hasUnread = snapshot.hasData && 
-                        snapshot.data!.docs.any((doc) => !(doc.data() as Map<String, dynamic>)['isRead']);
+                        snapshot.data!.any((doc) => !(doc['isRead'] ?? true));
                     
                     if (!hasUnread) return const SizedBox.shrink();
 
                     return InkWell(
-                      onTap: () => _notificationService.markAllAsRead(user.uid),
+                      onTap: () => _notificationService.markAllAsRead(user.id),
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -138,7 +138,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           _buildHeader(context),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _notificationStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -146,17 +146,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 }
 
                 if (snapshot.hasError) {
-                  debugPrint('NotificationScreen: Firestore Error -> ${snapshot.error}');
+                  debugPrint('NotificationScreen: Supabase Error -> ${snapshot.error}');
                   return const Center(child: Text('Error loading notifications'));
                 }
 
-                List<QueryDocumentSnapshot> docs = snapshot.data?.docs.toList() ?? [];
+                List<Map<String, dynamic>> docs = snapshot.data?.toList() ?? [];
 
                 docs.sort((a, b) {
-                  final Timestamp? tA = (a.data() as Map<String, dynamic>)['timestamp'];
-                  final Timestamp? tB = (b.data() as Map<String, dynamic>)['timestamp'];
-                  if (tA == null) return 1;
-                  if (tB == null) return -1;
+                  final tA = a['timestamp']?.toString() ?? '';
+                  final tB = b['timestamp']?.toString() ?? '';
                   return tB.compareTo(tA);
                 });
 
@@ -178,12 +176,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   itemCount: docs.length,
                   separatorBuilder: (context, index) => const SizedBox(height: 16),
                   itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    final data = doc.data() as Map<String, dynamic>;
+                    final data = docs[index];
 
                     return _buildNotificationItem(
                       context,
-                      doc.id,
+                      data['id']?.toString() ?? '',
                       data['title'] ?? 'Notification',
                       data['message'] ?? '',
                       data['timestamp'],
@@ -228,16 +225,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     String timeStr = 'Some time ago';
-    if (timestamp is Timestamp) {
-      final dateTime = timestamp.toDate();
-      timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
+    if (timestamp != null) {
+      try {
+        final dateTime = DateTime.parse(timestamp.toString());
+        timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
       
-      final diff = DateTime.now().difference(dateTime);
-      if (diff.inMinutes < 60) {
-        timeStr = '${diff.inMinutes}m ago';
-      } else if (diff.inHours < 24) {
-        timeStr = '${diff.inHours}h ago';
-      }
+        final diff = DateTime.now().difference(dateTime);
+        if (diff.inMinutes < 60) {
+          timeStr = '${diff.inMinutes}m ago';
+        } else if (diff.inHours < 24) {
+          timeStr = '${diff.inHours}h ago';
+        }
+      } catch (_) {}
     }
 
     return InkWell(

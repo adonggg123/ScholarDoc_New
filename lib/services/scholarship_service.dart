@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Scholarship {
   final String id;
@@ -15,10 +15,9 @@ class Scholarship {
     required this.requiredDocuments,
   });
 
-  factory Scholarship.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map<String, dynamic>;
+  factory Scholarship.fromMap(Map<String, dynamic> data) {
     return Scholarship(
-      id: doc.id,
+      id: data['id']?.toString() ?? '',
       name: data['name'] ?? '',
       description: data['description'] ?? '',
       isActive: data['isActive'] ?? true,
@@ -37,33 +36,31 @@ class Scholarship {
 }
 
 class ScholarshipService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   // Get active scholarships
   Stream<List<Scholarship>> getActiveScholarships() {
-    return _firestore
-        .collection('scholarships')
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Scholarship.fromFirestore(doc)).toList());
+    return _supabase
+        .from('scholarships')
+        .stream(primaryKey: ['id'])
+        .eq('isActive', true)
+        .map((data) => data.map((map) => Scholarship.fromMap(map)).toList());
   }
 
   // Get all scholarships
   Stream<List<Scholarship>> getAllScholarships() {
-    return _firestore
-        .collection('scholarships')
-        .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Scholarship.fromFirestore(doc)).toList());
+    return _supabase
+        .from('scholarships')
+        .stream(primaryKey: ['id'])
+        .map((data) => data.map((map) => Scholarship.fromMap(map)).toList());
   }
 
   // Get a single scholarship by ID
   Future<Scholarship?> getScholarshipById(String id) async {
     try {
-      final doc = await _firestore.collection('scholarships').doc(id).get();
-      if (doc.exists) {
-        return Scholarship.fromFirestore(doc);
+      final data = await _supabase.from('scholarships').select().eq('id', id);
+      if (data.isNotEmpty) {
+        return Scholarship.fromMap(data.first);
       }
     } catch (e) {
       print('Error fetching scholarship by ID: $e');
@@ -73,23 +70,23 @@ class ScholarshipService {
 
   // Add a scholarship
   Future<void> addScholarship(Scholarship scholarship) async {
-    await _firestore.collection('scholarships').add(scholarship.toMap());
+    await _supabase.from('scholarships').insert(scholarship.toMap());
   }
 
   // Update a scholarship
   Future<void> updateScholarship(String id, Map<String, dynamic> updates) async {
-    await _firestore.collection('scholarships').doc(id).update(updates);
+    await _supabase.from('scholarships').update(updates).eq('id', id);
   }
 
   // Delete a scholarship
   Future<void> deleteScholarship(String id) async {
-    await _firestore.collection('scholarships').doc(id).delete();
+    await _supabase.from('scholarships').delete().eq('id', id);
   }
 
   Future<void> initializeDefaults() async {
     try {
-      final snapshot = await _firestore.collection('scholarships').get();
-      if (snapshot.docs.isEmpty) {
+      final data = await _supabase.from('scholarships').select().limit(1);
+      if (data.isEmpty) {
         final defaults = [
           Scholarship(
             id: '',
@@ -148,22 +145,22 @@ class ScholarshipService {
         }
       }
     } catch (e) {
-      print('ScholarshipService: Permission denied or error during init: $e');
+      print('ScholarshipService: error during init: $e');
     }
   }
 
-  // Update all existing scholarships' requirements in Firestore
+  // Update all existing scholarships' requirements
   Future<int> resetAllScholarshipRequirements() async {
     int updatedCount = 0;
     try {
-      final snapshot = await _firestore.collection('scholarships').get();
-      for (var doc in snapshot.docs) {
-        await doc.reference.update({
+      final data = await _supabase.from('scholarships').select();
+      for (var doc in data) {
+        await _supabase.from('scholarships').update({
           'requiredDocuments': [
             'SA Number',
             'ID Front & Back + Signatures (PDF)',
           ],
-        });
+        }).eq('id', doc['id']);
         updatedCount++;
       }
     } catch (e) {
@@ -176,13 +173,13 @@ class ScholarshipService {
   Future<int> fixScholarshipTypo() async {
     int updatedCount = 0;
     try {
-      final snapshot = await _firestore
-          .collection('scholarships')
-          .where('name', isEqualTo: 'STUFAH')
-          .get();
+      final data = await _supabase
+          .from('scholarships')
+          .select()
+          .eq('name', 'STUFAH');
       
-      for (var doc in snapshot.docs) {
-        await doc.reference.update({'name': 'STUFAP'});
+      for (var doc in data) {
+        await _supabase.from('scholarships').update({'name': 'STUFAP'}).eq('id', doc['id']);
         updatedCount++;
       }
     } catch (e) {

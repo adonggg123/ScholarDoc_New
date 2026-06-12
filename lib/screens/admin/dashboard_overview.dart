@@ -6,7 +6,7 @@ import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/report_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
 class DashboardOverview extends StatefulWidget {
@@ -21,8 +21,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   final AuditService _auditService = AuditService();
   final ReportService _reportService = ReportService();
 
-  late Stream<QuerySnapshot> _studentsStream;
-  late Stream<QuerySnapshot> _auditLogsStream;
+  late Stream<List<Map<String, dynamic>>> _studentsStream;
+  late Stream<List<Map<String, dynamic>>> _auditLogsStream;
   late Stream<List<double>> _submissionTrendStream;
 
   @override
@@ -292,7 +292,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
 
 
   Widget _buildStatsSection(BuildContext context, bool isMobile) {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _studentsStream,
       builder: (context, snapshot) {
         int total = 0;
@@ -301,10 +301,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         int rejected = 0;
 
         if (snapshot.hasData) {
-          final docs = snapshot.data!.docs;
+          final docs = snapshot.data!;
           total = docs.length;
           for (var doc in docs) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc;
             final status = data['status'] ?? 'Pending';
             if (status == 'Pending') {
               pending++;
@@ -820,7 +820,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   }
 
   Widget _buildStatusDistribution(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _studentsStream,
       builder: (context, snapshot) {
         double pending = 0;
@@ -829,10 +829,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         double total = 0;
 
         if (snapshot.hasData) {
-          final docs = snapshot.data!.docs;
+          final docs = snapshot.data!;
           total = docs.length.toDouble();
           for (var doc in docs) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc;
             final status = data['status'] ?? 'Pending';
             if (status == 'Pending') {
               pending++;
@@ -976,10 +976,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 12),
-            StreamBuilder<QuerySnapshot>(
+            StreamBuilder<List<Map<String, dynamic>>>(
               stream: _auditLogsStream,
               builder: (context, snapshot) {
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
@@ -991,7 +991,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   );
                 }
 
-                final docs = snapshot.data!.docs;
+                final docs = snapshot.data!;
 
                 return ListView.separated(
                   shrinkWrap: true,
@@ -999,14 +999,15 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   itemCount: docs.length,
                   separatorBuilder: (context, index) => Divider(),
                   itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
+                    final data = docs[index];
                     final String adminName = data['adminName'] ?? 'System';
                     final String action =
                         data['action'] ?? 'Performed an action';
                     final String role = data['role'] ?? 'System';
-                    final Timestamp? ts = data['timestamp'];
+                    final String? tsStr = data['timestamp']?.toString() ?? data['createdAt']?.toString();
+                    final DateTime? ts = tsStr != null ? DateTime.tryParse(tsStr) : null;
                     final String timeStr = ts != null
-                        ? DateFormat('hh:mm a').format(ts.toDate())
+                        ? DateFormat('hh:mm a').format(ts.toLocal())
                         : 'Just now';
 
                     return ListTile(
@@ -1094,10 +1095,10 @@ class _DashboardOverviewState extends State<DashboardOverview> {
               style: TextStyle(fontSize: 12, color: context.textSec),
             ),
             SizedBox(height: 16),
-            StreamBuilder<QuerySnapshot>(
+            StreamBuilder<List<Map<String, dynamic>>>(
               stream: _studentsStream,
               builder: (context, snapshot) {
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
@@ -1110,9 +1111,9 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 }
 
                 // Filter for pending students
-                final pendingStudents = snapshot.data!.docs
+                final pendingStudents = snapshot.data!
                     .where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
+                      final data = doc;
                       return data['status'] == 'Pending';
                     })
                     .take(4)
@@ -1136,8 +1137,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                   itemCount: pendingStudents.length,
                   separatorBuilder: (context, index) => Divider(),
                   itemBuilder: (context, index) {
-                    final data =
-                        pendingStudents[index].data() as Map<String, dynamic>;
+                    final data = pendingStudents[index];
                     final String name = data['fullName'] ?? 'N/A';
                     final String id = data['studentId'] ?? 'N/A';
                     final String photoUrl = data['profilePictureUrl'] ?? '';

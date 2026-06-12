@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/scholarship_service.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -28,7 +27,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   Future<void> _clearSubmission(String uid, String name) async {
     setState(() => _clearingSubmission = true);
     try {
-      await FirebaseFirestore.instance.collection('students').doc(uid).update({
+      await Supabase.instance.client.from('students').update({
         'saNumber': null,
         'submissionPdfUrl': null,
         'submissionPdfName': null,
@@ -36,7 +35,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         'submittedAt': null,
         'status': 'Missing',
         'requiresResubmission': true,
-      });
+      }).eq('uid', uid);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -59,25 +58,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     }
   }
 
-  Future<void> _autoDeduplicate(List<QueryDocumentSnapshot> docs, String? krishaSa, String? krishaPdf) async {
+  Future<void> _autoDeduplicate(List<Map<String, dynamic>> docs, String? krishaSa, String? krishaPdf) async {
     setState(() => _deduplicating = true);
     int count = 0;
     try {
-      final batch = FirebaseFirestore.instance.batch();
-      for (var doc in docs) {
-        final data = doc.data() as Map<String, dynamic>;
+      for (var data in docs) {
         final String name = data['fullName'] ?? 'N/A';
         final String? sa = (data['saNumber'] ?? data['familyDetails']?['saNumber'])?.toString().trim();
         final String? pdf = data['submissionPdfUrl']?.toString().trim();
+        final String? uid = data['uid']?.toString();
         
         bool isKrisha = name.toLowerCase().contains('krisha');
-        if (!isKrisha) {
+        if (!isKrisha && uid != null) {
           bool isDuplicate = false;
           if (krishaSa != null && krishaSa.isNotEmpty && sa == krishaSa) isDuplicate = true;
           if (krishaPdf != null && krishaPdf.isNotEmpty && pdf == krishaPdf) isDuplicate = true;
 
           if (isDuplicate) {
-            batch.update(doc.reference, {
+            await Supabase.instance.client.from('students').update({
               'saNumber': null,
               'submissionPdfUrl': null,
               'submissionPdfName': null,
@@ -85,14 +83,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               'submittedAt': null,
               'status': 'Missing',
               'requiresResubmission': true,
-            });
+            }).eq('uid', uid);
             count++;
           }
         }
       }
 
       if (count > 0) {
-        await batch.commit();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -369,7 +367,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Widget _buildDiagnosticSettings() {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -387,11 +385,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ),
           child: Column(
             children: [
-              _buildDiagRow('Auth UID', user?.uid ?? 'Not Logged In'),
+              _buildDiagRow('Auth UID', user?.id ?? 'Not Logged In'),
               Divider(height: 20),
               _buildDiagRow('Auth Email', user?.email ?? 'N/A'),
               Divider(height: 20),
-              _buildDiagRow('Provider', user?.providerData.firstOrNull?.providerId ?? 'firebase'),
+              _buildDiagRow('Provider', 'supabase'),
             ],
           ),
         ),
@@ -512,7 +510,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               ),
               SizedBox(height: 8),
               Text(
-                'Overwrites the required documents list for all existing scholarship programs in Firestore to unified ["SA Number", "ID Front & Back + Signatures (PDF)"].',
+                'Overwrites the required documents list for all existing scholarship programs in Supabase to unified ["SA Number", "ID Front & Back + Signatures (PDF)"].',
                 style: TextStyle(fontSize: 12, color: context.textSec),
               ),
               SizedBox(height: 16),
@@ -536,7 +534,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _buildSubmissionsDiagnostics(),
         SizedBox(height: 16),
         Text(
-          'Use the UID above to verify your Firestore Security Rules in the Firebase Console.',
+          'Use the UID above to verify your Supabase Row Level Security policies in the Supabase Dashboard.',
           style: TextStyle(fontSize: 11, color: context.textSec, fontStyle: FontStyle.italic),
         ),
       ],
@@ -544,8 +542,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Widget _buildSubmissionsDiagnostics() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('students').snapshots(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Supabase.instance.client.from('students').stream(primaryKey: ['uid']),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -559,10 +557,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           return Text('Error loading submissions: ${snapshot.error}');
         }
         
-        final docs = snapshot.data?.docs ?? [];
+        final docs = snapshot.data ?? [];
         // Filter students who have saNumber or submissionPdfUrl
-        final submittedDocs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+        final submittedDocs = docs.where((data) {
           final sa = data['saNumber'] ?? data['familyDetails']?['saNumber'];
           final hasSa = sa != null && sa.toString().trim().isNotEmpty && sa.toString().trim() != 'N/A';
           final hasPdf = data['submissionPdfUrl'] != null && data['submissionPdfUrl'].toString().isNotEmpty;
@@ -587,8 +584,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         // Find Krisha's submissions to identify duplicates
         String? krishaSa;
         String? krishaPdf;
-        for (var doc in submittedDocs) {
-          final data = doc.data() as Map<String, dynamic>;
+        for (var data in submittedDocs) {
           final name = (data['fullName'] ?? '').toString().toLowerCase();
           if (name.contains('krisha')) {
             krishaSa = (data['saNumber'] ?? data['familyDetails']?['saNumber'])?.toString().trim();
@@ -600,8 +596,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         // Check if there are duplicates of Krisha's submission
         bool hasDuplicates = false;
         if (krishaSa != null || krishaPdf != null) {
-          for (var doc in submittedDocs) {
-            final data = doc.data() as Map<String, dynamic>;
+          for (var data in submittedDocs) {
             final String name = data['fullName'] ?? '';
             if (!name.toLowerCase().contains('krisha')) {
               final String? sa = (data['saNumber'] ?? data['familyDetails']?['saNumber'])?.toString().trim();
@@ -654,7 +649,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ),
                       icon: _deduplicating 
                         ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Icon(LucideIcons.sparkles, size: 12),
+                        : Icon(LucideIcons.sparkles, size: 12),
                       label: Text(_deduplicating ? 'Cleaning...' : 'Auto-Deduplicate'),
                     ),
                 ],
@@ -666,9 +661,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 itemCount: submittedDocs.length,
                 separatorBuilder: (context, index) => const Divider(height: 16),
                 itemBuilder: (context, index) {
-                  final doc = submittedDocs[index];
-                  final data = doc.data() as Map<String, dynamic>;
-                  final uid = doc.id;
+                  final data = submittedDocs[index];
+                  final uid = data['uid']?.toString() ?? '';
                   final String name = data['fullName'] ?? 'N/A';
                   final String email = data['email'] ?? 'N/A';
                   final String? sa = (data['saNumber'] ?? data['familyDetails']?['saNumber'])?.toString().trim();
@@ -753,7 +747,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
-                                icon: const Icon(LucideIcons.trash2, size: 12),
+                                icon: Icon(LucideIcons.trash2, size: 12),
                                 label: const Text('Reset Submission'),
                               ),
                           ],

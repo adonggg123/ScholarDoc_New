@@ -2,17 +2,17 @@ import 'package:csv/csv.dart';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 
 class BillingService {
-  final FirebaseFirestore? firestoreOverride;
-  FirebaseFirestore get _firestore => firestoreOverride ?? FirebaseFirestore.instance;
+  final SupabaseClient? supabaseOverride;
+  SupabaseClient get _supabase => supabaseOverride ?? Supabase.instance.client;
 
-  BillingService({this.firestoreOverride});
+  BillingService({this.supabaseOverride});
 
   /// Parses an uploaded file (CSV or Excel) and returns a list of rows as Maps.
   Future<List<Map<String, dynamic>>> parseFile(PlatformFile file) async {
@@ -77,12 +77,7 @@ class BillingService {
     // Get all students for efficient matching (if dataset is small enough)
     // For 400+ scholars, we can fetch all or do individual queries.
     // Fetching all is usually faster than 400 separate Firestore calls if students < 2000.
-    final QuerySnapshot masterSnap = await _firestore.collection('students').get();
-    final List<Map<String, dynamic>> masterList = masterSnap.docs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      data['uid'] = doc.id;
-      return data;
-    }).toList();
+    final List<Map<String, dynamic>> masterList = await _supabase.from('students').select();
 
     for (var row in uploadedData) {
       final String studentId = _getValue(row, ['Student ID', 'ID Number', 'Student No', 'ID']).toString().trim();
@@ -599,12 +594,8 @@ class BillingService {
     if (customStudents != null) {
       rawStudents.addAll(customStudents);
     } else {
-      final QuerySnapshot snap = await _firestore.collection('students').get();
-      for (final doc in snap.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['uid'] = doc.id;
-        rawStudents.add(data);
-      }
+      final List<Map<String, dynamic>> dataList = await _supabase.from('students').select();
+      rawStudents.addAll(dataList);
     }
 
     // Keep only TES scholars, sorted alphabetically

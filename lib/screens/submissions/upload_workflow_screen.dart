@@ -4,7 +4,7 @@ import '../../theme/theme_provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../services/storage_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,11 +40,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   }
 
   Future<void> _loadSA() async {
-    final uid = _authService.currentUser?.uid;
+    final uid = _authService.currentUser?.id;
     if (uid != null) {
       final doc = await _authService.getStudentProfile(uid);
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
+      if (doc != null) {
+        final data = doc;
         setState(() {
           _saController.text = data['saNumber'] ?? '';
         });
@@ -113,7 +113,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         _pdfFeedback = null;
       });
 
-      final uid = _authService.currentUser?.uid;
+      final uid = _authService.currentUser?.id;
       if (uid == null) throw Exception("User not authenticated");
 
       // 2. Skip ML Verification for PDF
@@ -423,21 +423,21 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       final user = _authService.currentUser;
                       if (user != null) {
                         final doc = await _authService.getStudentProfile(
-                          user.uid,
+                          user.id,
                         );
-                        final data = doc.data() as Map<String, dynamic>?;
+                        final data = doc;
                         final String studentId =
                             data?['studentId'] ?? 'Unknown ID';
                         final String fullName = data?['fullName'] ?? 'Student';
 
-                        await _authService.updateStudentProfile(user.uid, {
+                        await _authService.updateStudentProfile(user.id, {
                           'status': 'Pending',
                           'saNumber': _saController.text.trim(),
                           'submissionPdfUrl': _submissionPdfUrl,
                           'submissionPdfName': _pdfFileName,
                           'pdfVerified': true,
-                          'createdAt': FieldValue.serverTimestamp(),
-                          'submittedAt': FieldValue.serverTimestamp(),
+                          'createdAt': DateTime.now().toIso8601String(),
+                          'submittedAt': DateTime.now().toIso8601String(),
                           'requiresResubmission': false,
                           'adminRemarks': null,
                         });

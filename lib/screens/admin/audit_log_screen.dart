@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
 class AuditLogScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   String _searchQuery = '';
   String _roleFilter = 'All'; // 'All', 'Admin', 'Student'
   DateTime? _selectedDate;
-  late Stream<QuerySnapshot> _auditStream;
+  late Stream<List<Map<String, dynamic>>> _auditStream;
 
   @override
   void initState() {
@@ -40,7 +40,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 900;
 
-        return StreamBuilder<QuerySnapshot>(
+        return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _auditStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -68,31 +68,33 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             }
 
             // Filter Documents
-            List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
+            List<Map<String, dynamic>> docs = snapshot.data ?? [];
 
             // Apply Date Filter
             final now = DateTime.now();
             if (_selectedDate == null) {
               // Default: 24h filter
-              docs = docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              docs = docs.where((data) {
                 final timestamp = data['timestamp'];
-                if (timestamp is Timestamp) {
-                  final dateTime = timestamp.toDate();
-                  return now.difference(dateTime).inHours < 24;
+                if (timestamp != null) {
+                  try {
+                    final dateTime = DateTime.parse(timestamp.toString());
+                    return now.difference(dateTime).inHours < 24;
+                  } catch (_) {}
                 }
                 return true; // Keep old/missing timestamps for now
               }).toList();
             } else {
               // Explicit Date Filter: matching the same calendar day
-              docs = docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              docs = docs.where((data) {
                 final timestamp = data['timestamp'];
-                if (timestamp is Timestamp) {
-                  final dateTime = timestamp.toDate();
-                  return dateTime.year == _selectedDate!.year &&
-                      dateTime.month == _selectedDate!.month &&
-                      dateTime.day == _selectedDate!.day;
+                if (timestamp != null) {
+                  try {
+                    final dateTime = DateTime.parse(timestamp.toString());
+                    return dateTime.year == _selectedDate!.year &&
+                        dateTime.month == _selectedDate!.month &&
+                        dateTime.day == _selectedDate!.day;
+                  } catch (_) {}
                 }
                 return false;
               }).toList();
@@ -100,8 +102,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
 
             // Apply Role Filter
             if (_roleFilter != 'All') {
-              docs = docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              docs = docs.where((data) {
                 final String role = data['role'] ?? 'Admin';
                 return role == _roleFilter;
               }).toList();
@@ -110,8 +111,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             // Apply Search Filter
             if (_searchQuery.isNotEmpty) {
               final query = _searchQuery.toLowerCase();
-              docs = docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              docs = docs.where((data) {
                 final String action = (data['action'] ?? '').toLowerCase();
                 final String name = (data['adminName'] ?? '').toLowerCase();
                 final String studentId = (data['studentId'] ?? '')
@@ -199,8 +199,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                           height: 1,
                         ),
                         itemBuilder: (context, index) {
-                          final data =
-                              docs[index].data() as Map<String, dynamic>;
+                          final data = docs[index];
                           return _buildLogItem(context, data, isMobile);
                         },
                       ),
@@ -214,7 +213,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     );
   }
 
-  Widget _buildExportActions(List<QueryDocumentSnapshot> docs) {
+  Widget _buildExportActions(List<Map<String, dynamic>> docs) {
     return Row(
       children: [
         // Refresh
@@ -437,17 +436,19 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
         : LucideIcons.graduationCap;
 
     String timeStr = 'Just now';
-    if (timestamp is Timestamp) {
-      final dateTime = timestamp.toDate();
-      timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
-      final diff = DateTime.now().difference(dateTime);
-      if (diff.inMinutes < 1) {
-        timeStr = 'Just now';
-      } else if (diff.inMinutes < 60) {
-        timeStr = '${diff.inMinutes}m ago';
-      } else if (diff.inHours < 24) {
-        timeStr = '${diff.inHours}h ago';
-      }
+    if (timestamp != null) {
+      try {
+        final dateTime = DateTime.parse(timestamp.toString());
+        timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
+        final diff = DateTime.now().difference(dateTime);
+        if (diff.inMinutes < 1) {
+          timeStr = 'Just now';
+        } else if (diff.inMinutes < 60) {
+          timeStr = '${diff.inMinutes}m ago';
+        } else if (diff.inHours < 24) {
+          timeStr = '${diff.inHours}h ago';
+        }
+      } catch (_) {}
     }
 
     return Padding(
@@ -460,17 +461,15 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
         leading: isMobile
             ? null
             : (role == 'Student' && studentId != 'N/A')
-            ? FutureBuilder<QuerySnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('students')
-                    .where('studentId', isEqualTo: studentId)
-                    .limit(1)
-                    .get(),
+            ? FutureBuilder<List<Map<String, dynamic>>>(
+                future: Supabase.instance.client
+                    .from('students')
+                    .select()
+                    .eq('studentId', studentId)
+                    .limit(1),
                 builder: (context, snapshot) {
-                  if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                    final studentData =
-                        snapshot.data!.docs.first.data()
-                            as Map<String, dynamic>;
+                  if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                    final studentData = snapshot.data!.first;
                     final String? photoUrl =
                         studentData['profilePictureUrl'] as String?;
                     if (photoUrl != null && photoUrl.isNotEmpty) {

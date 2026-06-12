@@ -4,7 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:intl/intl.dart';
 
 class SubmissionHistoryScreen extends StatefulWidget {
@@ -16,7 +16,7 @@ class SubmissionHistoryScreen extends StatefulWidget {
 
 class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   final AuthService _authService = AuthService();
-  late Stream<QuerySnapshot> _auditStream;
+  late Stream<List<Map<String, dynamic>>> _auditStream;
 
   @override
   void initState() {
@@ -35,7 +35,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
     return Scaffold(
       appBar: AppBar(title: const Text('Submission History')),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _auditStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -45,9 +45,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             return const Center(child: Text('Error loading logs'));
           }
           // Filter logs for this student and submission related actions
-          List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
-          docs = docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+          List<Map<String, dynamic>> docs = snapshot.data ?? [];
+          docs = docs.where((data) {
             final String studentId = data['studentId'] ?? '';
             final String action = (data['action'] ?? '').toString().toLowerCase();
             // Basic filter heuristics for submission related activity
@@ -55,7 +54,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 action.contains('submit') ||
                 action.contains('document') ||
                 action.contains('submission');
-            return studentId == currentUser.uid && isSubmission;
+            return studentId == currentUser.id && isSubmission;
           }).toList();
           if (docs.isEmpty) {
             return const Center(child: Text('No submission activity yet.'));
@@ -65,18 +64,20 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             itemCount: docs.length,
             separatorBuilder: (_, __) => Divider(color: context.surfaceC.withValues(alpha: 0.1)),
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
+              final data = docs[index];
               final String action = data['action'] ?? '';
               final String device = data['ipAddress'] ?? 'Unknown';
               final dynamic ts = data['timestamp'];
               String timeLabel = '';
-              if (ts is Timestamp) {
-                final date = ts.toDate();
-                final diff = DateTime.now().difference(date);
-                if (diff.inMinutes < 1) timeLabel = 'Just now';
-                else if (diff.inMinutes < 60) timeLabel = '${diff.inMinutes}m ago';
-                else if (diff.inHours < 24) timeLabel = '${diff.inHours}h ago';
-                else timeLabel = DateFormat('MMM d, y – h:mm a').format(date);
+              if (ts != null) {
+                try {
+                  final date = DateTime.parse(ts.toString());
+                  final diff = DateTime.now().difference(date);
+                  if (diff.inMinutes < 1) timeLabel = 'Just now';
+                  else if (diff.inMinutes < 60) timeLabel = '${diff.inMinutes}m ago';
+                  else if (diff.inHours < 24) timeLabel = '${diff.inHours}h ago';
+                  else timeLabel = DateFormat('MMM d, y – h:mm a').format(date);
+                } catch (_) {}
               }
               return ListTile(
                 leading: const Icon(LucideIcons.uploadCloud, size: 20, color: AppTheme.primaryColor),

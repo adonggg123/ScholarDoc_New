@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:intl/intl.dart';
 
 class StudentActivityLogScreen extends StatefulWidget {
@@ -19,7 +19,7 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   DateTime? _selectedDate;
-  late Stream<QuerySnapshot> _auditStream;
+  late Stream<List<Map<String, dynamic>>> _auditStream;
 
   @override
   void initState() {
@@ -50,7 +50,7 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
         builder: (context, constraints) {
           bool isMobile = constraints.maxWidth < 900;
 
-          return StreamBuilder<QuerySnapshot>(
+          return StreamBuilder<List<Map<String, dynamic>>>(
             stream: _auditStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -62,11 +62,10 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
               }
 
               // Filter Documents specifically for this Student
-              List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
+              List<Map<String, dynamic>> docs = snapshot.data ?? [];
 
               // 1. Hard Filter: strictly tie to their User ID / Student ID
-              docs = docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              docs = docs.where((data) {
                 final String logStudentId = data['studentId'] ?? '';
                 final String logUserName =
                     data['adminName'] ?? ''; // Which could be their email/name
@@ -87,25 +86,27 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
               final now = DateTime.now();
               if (_selectedDate == null) {
                 // Default: 24h filter
-                docs = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
+                docs = docs.where((data) {
                   final timestamp = data['timestamp'];
-                  if (timestamp is Timestamp) {
-                    final dateTime = timestamp.toDate();
-                    return now.difference(dateTime).inHours < 24;
+                  if (timestamp != null) {
+                    try {
+                      final dateTime = DateTime.parse(timestamp.toString());
+                      return now.difference(dateTime).inHours < 24;
+                    } catch (_) {}
                   }
                   return true;
                 }).toList();
               } else {
                 // Explicit Date Filter: matching the same calendar day
-                docs = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
+                docs = docs.where((data) {
                   final timestamp = data['timestamp'];
-                  if (timestamp is Timestamp) {
-                    final dateTime = timestamp.toDate();
-                    return dateTime.year == _selectedDate!.year &&
-                        dateTime.month == _selectedDate!.month &&
-                        dateTime.day == _selectedDate!.day;
+                  if (timestamp != null) {
+                    try {
+                      final dateTime = DateTime.parse(timestamp.toString());
+                      return dateTime.year == _selectedDate!.year &&
+                          dateTime.month == _selectedDate!.month &&
+                          dateTime.day == _selectedDate!.day;
+                    } catch (_) {}
                   }
                   return false;
                 }).toList();
@@ -114,8 +115,7 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
               // 2. Search Filter
               if (_searchQuery.isNotEmpty) {
                 final query = _searchQuery.toLowerCase();
-                docs = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
+                docs = docs.where((data) {
                   final String action = (data['action'] ?? '').toLowerCase();
                   return action.contains(query);
                 }).toList();
@@ -174,8 +174,7 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
                             height: 1,
                           ),
                           itemBuilder: (context, index) {
-                            final data =
-                                docs[index].data() as Map<String, dynamic>;
+                            final data = docs[index];
                             return _buildLogItem(context, data, isMobile);
                           },
                         ),
@@ -327,18 +326,20 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
     final dynamic timestamp = data['timestamp'];
 
     String timeStr = 'Just now';
-    if (timestamp is Timestamp) {
-      final dateTime = timestamp.toDate();
-      timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
+    if (timestamp != null) {
+      try {
+        final dateTime = DateTime.parse(timestamp.toString());
+        timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
 
-      final diff = DateTime.now().difference(dateTime);
-      if (diff.inMinutes < 1) {
-        timeStr = 'Just now';
-      } else if (diff.inMinutes < 60) {
-        timeStr = '${diff.inMinutes}m ago';
-      } else if (diff.inHours < 24) {
-        timeStr = '${diff.inHours}h ago';
-      }
+        final diff = DateTime.now().difference(dateTime);
+        if (diff.inMinutes < 1) {
+          timeStr = 'Just now';
+        } else if (diff.inMinutes < 60) {
+          timeStr = '${diff.inMinutes}m ago';
+        } else if (diff.inHours < 24) {
+          timeStr = '${diff.inHours}h ago';
+        }
+      } catch (_) {}
     }
 
     return ListTile(

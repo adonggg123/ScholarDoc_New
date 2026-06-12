@@ -6,7 +6,7 @@ import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/notification_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SaVerificationScreen extends StatefulWidget {
   const SaVerificationScreen({super.key});
@@ -21,7 +21,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
   final AuditService _auditService = AuditService();
   final NotificationService _notificationService = NotificationService();
   final TextEditingController _remarksController = TextEditingController();
-  late Stream<QuerySnapshot> _studentsStream;
+  late Stream<List<Map<String, dynamic>>> _studentsStream;
 
   @override
   void initState() {
@@ -31,7 +31,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _studentsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -42,16 +42,15 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
           return const Center(child: Text('Error loading data'));
         }
 
-        List<QueryDocumentSnapshot> docs = snapshot.data?.docs.toList() ?? [];
+        List<Map<String, dynamic>> allDocs = snapshot.data?.toList() ?? [];
 
         // Filter for students who have submitted SA number
-        docs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+        allDocs = allDocs.where((data) {
           final sa = data['saNumber'] ?? data['familyDetails']?['saNumber'];
           return sa != null && sa.toString().trim().isNotEmpty && sa.toString().trim() != 'N/A';
         }).toList();
 
-        if (docs.isEmpty) {
+        if (allDocs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -68,21 +67,19 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
         }
 
         // Sort by original date (descending)
-        docs.sort((a, b) {
-          final aData = a.data() as Map<String, dynamic>;
-          final bData = b.data() as Map<String, dynamic>;
-          final aDate = aData['createdAt'] as Timestamp?;
-          final bDate = bData['createdAt'] as Timestamp?;
-          if (aDate == null || bDate == null) return 0;
+        allDocs.sort((a, b) {
+          final aDate = a['createdAt']?.toString() ?? '';
+          final bDate = b['createdAt']?.toString() ?? '';
           return bDate.compareTo(aDate);
         });
+        final docs = allDocs;
 
         // Safely determine the active index without modifying state during build
         final int activeIndex = (_selectedStudentIndex >= docs.length)
             ? 0
             : _selectedStudentIndex;
         final selectedDoc = docs[activeIndex];
-        final selectedData = selectedDoc.data() as Map<String, dynamic>;
+        final selectedData = selectedDoc;
 
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -153,7 +150,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
   Widget _buildVerificationTable(
     BuildContext context,
-    List<QueryDocumentSnapshot> docs,
+    List<Map<String, dynamic>> docs,
     bool isMobile,
   ) {
     return Container(
@@ -179,9 +176,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
         separatorBuilder: (context, index) =>
             Divider(color: context.surfaceC.withValues(alpha: 0.1), height: 1),
         itemBuilder: (context, index) {
-          final doc = docs[index];
-
-          final data = doc.data() as Map<String, dynamic>;
+          final data = docs[index];
           final String name = data['fullName'] ?? 'N/A';
           final String saNumber =
               data['saNumber'] ?? data['familyDetails']?['saNumber'] ?? 'N/A';
@@ -574,11 +569,11 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
     try {
       // 1. Update Student Record
-      await FirebaseFirestore.instance.collection('students').doc(uid).update({
+      await Supabase.instance.client.from('students').update({
         'status': newStatus,
         'adminRemarks': remarks,
         'requiresResubmission': !isFinalRejection && newStatus == 'Rejected',
-      });
+      }).eq('uid', uid);
 
       // 2. Log Activity
       await _auditService.logActivity(

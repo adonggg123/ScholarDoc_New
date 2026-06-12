@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
@@ -143,7 +143,7 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
   }
 
   Widget _buildUserList() {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _authService.getStudentsStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -154,9 +154,8 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
           return const Center(child: Text('Error loading directory'));
         }
 
-        final docs = snapshot.data?.docs ?? [];
-        final filteredDocs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+        final docs = snapshot.data ?? [];
+        final filteredDocs = docs.where((data) {
           final name = data['fullName']?.toString().toLowerCase() ?? '';
           final major = data['major']?.toString().toLowerCase() ?? '';
           return name.contains(_searchQuery) || major.contains(_searchQuery);
@@ -179,7 +178,7 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
           itemCount: filteredDocs.length,
           itemBuilder: (context, index) {
-            final data = filteredDocs[index].data() as Map<String, dynamic>;
+            final data = filteredDocs[index];
             return _buildUserCard(context, data);
           },
         );

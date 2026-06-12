@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'screens/auth/splash_screen.dart';
-import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
@@ -12,12 +11,12 @@ void main() async {
   // Configure fonts for web
   GoogleFonts.config.allowRuntimeFetching = true;
   try {
-    // Note: requires flutterfire configure for Web options
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+    await Supabase.initialize(
+      url: 'https://ywavesulvkqwpsejprxp.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk',
     );
   } catch (e) {
-    debugPrint('Firebase init error (Did you run flutterfire configure?): $e');
+    debugPrint('Supabase init error: $e');
   }
   runApp(const ScholarDocApp());
 }

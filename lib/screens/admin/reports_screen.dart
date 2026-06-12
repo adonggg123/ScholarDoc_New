@@ -3,7 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/pdf_generator.dart';
@@ -21,8 +21,8 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   final AuthService _authService = AuthService();
   final ReportService _reportService = ReportService();
-  late Stream<QuerySnapshot> _studentsStream;
-  late Stream<QuerySnapshot> _reportsHistoryStream;
+  late Stream<List<Map<String, dynamic>>> _studentsStream;
+  late Stream<List<Map<String, dynamic>>> _reportsHistoryStream;
   final ScrollController _horizontalScrollController = ScrollController();
   final Set<String> _selectedStudentIds = {};
 
@@ -395,11 +395,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final stats = await _reportService.getInstitutionalStats();
 
       // 2. Get Department Counts (from students collection directly for simplicity here)
-      final studentSnap = await FirebaseFirestore.instance
-          .collection('students')
-          .get();
+      final studentSnap = await Supabase.instance.client
+          .from('students')
+          .select();
       Map<String, int> deptCounts = {'BSIT': 0, 'BTLED': 0, 'BFPT': 0};
-      for (var doc in studentSnap.docs) {
+      for (var doc in studentSnap) {
         final course = doc['course'] ?? '';
         if (course.contains('BSIT')) {
           deptCounts['BSIT'] = (deptCounts['BSIT'] ?? 0) + 1;
@@ -450,16 +450,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _handleExportExcel() async {
     setState(() => _isGeneratingExcel = true);
     try {
-      final studentSnap = await FirebaseFirestore.instance
-          .collection('students')
-          .get();
-      List<Map<String, dynamic>> studentsList = studentSnap.docs
+      final studentSnap = await Supabase.instance.client
+          .from('students')
+          .select();
+      List<Map<String, dynamic>> studentsList = studentSnap
           .where(
             (doc) =>
                 _selectedStudentIds.isEmpty ||
-                _selectedStudentIds.contains(doc.id),
+                _selectedStudentIds.contains(doc['uid']),
           )
-          .map((doc) => doc.data())
           .toList();
 
       final title = 'Students_Data';
@@ -497,23 +496,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _getFilteredOrSelectedStudents() async {
-    final studentSnap = await FirebaseFirestore.instance.collection('students').get();
+    final studentSnap = await Supabase.instance.client.from('students').select();
     
     // First, check if there are selected student IDs
     if (_selectedStudentIds.isNotEmpty) {
-      return studentSnap.docs
-          .where((doc) => _selectedStudentIds.contains(doc.id))
-          .map((doc) {
-            final data = doc.data();
-            data['uid'] = doc.id;
-            return data;
-          })
+      return studentSnap
+          .where((doc) => _selectedStudentIds.contains(doc['uid']))
           .toList();
     }
 
     // If none are selected, apply the masterlist active filters to all students
-    return studentSnap.docs.where((doc) {
-      final data = doc.data();
+    return studentSnap.where((doc) {
+      final data = doc;
       final family = data['familyDetails'] as Map<String, dynamic>? ?? {};
 
       // Search Query
@@ -545,10 +539,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           matchesYear &&
           matchesFather &&
           matchesMother;
-    }).map((doc) {
-      final data = doc.data();
-      data['uid'] = doc.id;
-      return data;
     }).toList();
   }
 
@@ -844,10 +834,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             style: TextStyle(fontSize: 12, color: context.textSec),
           ),
           SizedBox(height: 32),
-          StreamBuilder<QuerySnapshot>(
+            StreamBuilder<List<Map<String, dynamic>>>(
             stream: _studentsStream,
             builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return SizedBox(
                   height: 200,
                   child: Center(
@@ -863,8 +853,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
               Map<String, int> deptCounts = {'BSIT': 0, 'BTLED': 0, 'BFPT': 0};
               int total = 0;
 
-              for (var doc in snapshot.data!.docs) {
-                final data = doc.data() as Map<String, dynamic>;
+              for (var doc in snapshot.data!) {
+                final data = doc;
                 final String course = data['course'] ?? '';
 
                 String dept = 'Other';
@@ -1232,10 +1222,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildStudentsTable(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _studentsStream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Container(
             padding: EdgeInsets.all(48),
             decoration: context.glassDecoration,
@@ -1258,11 +1248,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           );
         }
 
-        final allStudents = snapshot.data!.docs;
+        final allStudents = snapshot.data!;
 
         // Apply Filters
-        final students = allStudents.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+        final students = allStudents.where((data) {
           final family = data['familyDetails'] as Map<String, dynamic>? ?? {};
 
           // Search Query
@@ -1368,7 +1357,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 onSelectAll: (selected) {
                   setState(() {
                     if (selected == true) {
-                      _selectedStudentIds.addAll(students.map((d) => d.id));
+                      _selectedStudentIds.addAll(students.map((d) => d['uid'] as String));
                     } else {
                       _selectedStudentIds.clear();
                     }
@@ -1395,19 +1384,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   DataColumn(label: Text('Religion')),
                   DataColumn(label: Text('Tribe')),
                 ],
-                rows: students.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
+                rows: students.map((data) {
                   final family =
                       data['familyDetails'] as Map<String, dynamic>? ?? {};
 
                   return DataRow(
-                    selected: _selectedStudentIds.contains(doc.id),
+                    selected: _selectedStudentIds.contains(data['uid']),
                     onSelectChanged: (selected) {
                       setState(() {
                         if (selected == true) {
-                          _selectedStudentIds.add(doc.id);
+                          _selectedStudentIds.add(data['uid'] as String);
                         } else {
-                          _selectedStudentIds.remove(doc.id);
+                          _selectedStudentIds.remove(data['uid'] as String);
                         }
                       });
                     },

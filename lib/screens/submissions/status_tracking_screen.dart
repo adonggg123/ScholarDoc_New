@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 
@@ -19,7 +19,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     with SingleTickerProviderStateMixin {
   final AuthService _authService = AuthService();
   final ScholarshipService _scholarshipService = ScholarshipService();
-  Stream<DocumentSnapshot>? _studentStream;
+  Stream<List<Map<String, dynamic>>>? _studentStream;
   late AnimationController _animController;
 
   @override
@@ -31,7 +31,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     )..forward();
     final user = _authService.currentUser;
     if (user != null) {
-      _studentStream = _authService.getStudentStream(user.uid);
+      _studentStream = _authService.getStudentStream(user.id);
     }
   }
 
@@ -52,7 +52,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       backgroundColor: const Color(0xFFF0F4FF),
       body: _studentStream == null
           ? const Center(child: Text('Connecting to service...'))
-          : StreamBuilder<DocumentSnapshot>(
+          : StreamBuilder<List<Map<String, dynamic>>>(
               stream: _studentStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -60,16 +60,18 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                 }
                 if (snapshot.hasError ||
                     !snapshot.hasData ||
-                    !snapshot.data!.exists) {
+                    snapshot.data!.isEmpty) {
                   return _buildEmptyState();
                 }
 
-                final data = snapshot.data!.data() as Map<String, dynamic>;
+                final data = snapshot.data!.first;
                 final String status = data['status'] ?? 'Pending';
                 var submittedDate = 'N/A';
                 if (data['createdAt'] != null) {
-                  final Timestamp ts = data['createdAt'];
-                  submittedDate = DateFormat('MMM d, yyyy').format(ts.toDate());
+                  try {
+                    final ts = DateTime.parse(data['createdAt'].toString());
+                    submittedDate = DateFormat('MMM d, yyyy').format(ts);
+                  } catch (_) {}
                 }
                 final String? remarks = data['adminRemarks'];
                 final String scholarshipId = data['scholarshipId'] ?? '';

@@ -6,7 +6,7 @@ import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/notification_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
 class StudentRecordsScreen extends StatefulWidget {
@@ -28,7 +28,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
   String _courseFilter = 'All';
   String _sortBy = 'Name (A-Z)';
 
-  late Stream<QuerySnapshot> _studentsStream;
+  late Stream<List<Map<String, dynamic>>> _studentsStream;
 
   static const List<String> _statusOptions = [
     'All',
@@ -346,9 +346,9 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                           if (!formKey.currentState!.validate()) return;
                           setDialogState(() => isLoading = true);
                           try {
-                            final newDoc = await FirebaseFirestore.instance
-                                .collection('students')
-                                .add({
+                            final newDoc = await Supabase.instance.client
+                                .from('students')
+                                .insert({
                                   'fullName': nameCtrl.text.trim(),
                                   'studentId': idCtrl.text.trim(),
                                   'birthdate': birthdateCtrl.text.trim(),
@@ -367,11 +367,16 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                     'fatherEduStatus': selectedFatherEdu,
                                     'motherEduStatus': selectedMotherEdu,
                                   },
-                                  'createdAt': FieldValue.serverTimestamp(),
-                                });
+                                  'createdAt': DateTime.now().toIso8601String(),
+                                })
+                                .select()
+                                .single();
 
                             // Set uid to match the document ID
-                            await newDoc.update({'uid': newDoc.id});
+                            await Supabase.instance.client
+                                .from('students')
+                                .update({'uid': newDoc['id']})
+                                .eq('id', newDoc['id']);
 
                             await _auditService.logActivity(
                               action:
@@ -1086,7 +1091,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
           constraints: BoxConstraints(minWidth: isMobile ? 800 : 1000),
-          child: StreamBuilder<QuerySnapshot>(
+          child: StreamBuilder<List<Map<String, dynamic>>>(
             stream: _studentsStream,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
@@ -1105,7 +1110,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                 );
               }
 
-              final allDocs = snapshot.data!.docs;
+              final allDocs = snapshot.data!;
               if (allDocs.isEmpty) {
                 return const SizedBox(
                   height: 200,
@@ -1114,8 +1119,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
               }
 
               // Apply filters
-              final filteredDocs = allDocs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+              final filteredDocs = allDocs.where((data) {
                 final String name = (data['fullName'] ?? '').toLowerCase();
                 final String studentId = (data['studentId'] ?? '')
                     .toLowerCase();
@@ -1157,20 +1161,17 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
               }).toList();
 
               // Apply sorting
-              filteredDocs.sort((a, b) {
-                final dataA = a.data() as Map<String, dynamic>;
-                final dataB = b.data() as Map<String, dynamic>;
-
+              filteredDocs.sort((dataA, dataB) {
                 if (_sortBy == 'Name (A-Z)') {
                   return (dataA['fullName'] ?? '').compareTo(
                     dataB['fullName'] ?? '',
                   );
                 } else if (_sortBy == 'Latest First') {
                   final timeA =
-                      (dataA['createdAt'] as Timestamp?)?.toDate() ??
+                      DateTime.tryParse(dataA['createdAt']?.toString() ?? '') ??
                       DateTime(2000);
                   final timeB =
-                      (dataB['createdAt'] as Timestamp?)?.toDate() ??
+                      DateTime.tryParse(dataB['createdAt']?.toString() ?? '') ??
                       DateTime(2000);
                   return timeB.compareTo(timeA);
                 } else if (_sortBy == 'By Status') {
@@ -1324,8 +1325,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                 ],
                 rows: filteredDocs.asMap().entries.map((entry) {
                   final int index = entry.key;
-                  final doc = entry.value;
-                  final data = doc.data() as Map<String, dynamic>;
+                  final data = entry.value;
                   final String name = data['fullName'] ?? 'N/A';
                   final String studentId = data['studentId'] ?? 'N/A';
                   final String course = data['course'] ?? 'N/A';
@@ -1340,7 +1340,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                   return _buildDataRow(
                     context,
                     data,
-                    doc.id,
+                    data['uid'] ?? '',
                     name,
                     studentId,
                     '$course - $year',
@@ -1557,15 +1557,14 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
   ) async {
     try {
       // Update with all administrative fields often required by security rules
-      await FirebaseFirestore.instance
-          .collection('students')
-          .doc(docId)
+      await Supabase.instance.client
+          .from('students')
           .update({
             'status': newStatus,
             'adminRemarks': 'Updated via Student Records',
             'requiresResubmission': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+            'updatedAt': DateTime.now().toIso8601String(),
+          }).eq('uid', docId);
 
       await _auditService.logActivity(
         action: 'Changed student status to $newStatus',
@@ -1636,9 +1635,10 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     final Map<String, dynamic> family = data['familyDetails'] ?? {};
     final String saNumber = family['saNumber'] ?? 'Not Provided';
 
-    final Timestamp? createdAt = data['createdAt'];
+    final String? createdAtStr = data['createdAt']?.toString();
+    final DateTime? createdAt = createdAtStr != null ? DateTime.tryParse(createdAtStr) : null;
     final String registeredOn = createdAt != null
-        ? DateFormat('MMMM dd, yyyy').format(createdAt.toDate())
+        ? DateFormat('MMMM dd, yyyy').format(createdAt.toLocal())
         : 'N/A';
 
     final double screenWidth = MediaQuery.of(context).size.width;

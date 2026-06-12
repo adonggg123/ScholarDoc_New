@@ -1,6 +1,6 @@
 import 'package:excel/excel.dart';
 import 'package:file_saver/file_saver.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
 
@@ -40,8 +40,11 @@ class ExcelGenerator {
       final log = logs[row];
       final ts = log['timestamp'];
       String dateStr = 'N/A';
-      if (ts is Timestamp) {
-        dateStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(ts.toDate());
+      if (ts != null) {
+        try {
+          final parsed = DateTime.parse(ts.toString());
+          dateStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(parsed);
+        } catch (_) {}
       }
 
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row + 2)).value = TextCellValue(dateStr);
@@ -100,8 +103,11 @@ class ExcelGenerator {
       final s = students[row];
       final ts = s['createdAt'];
       String dateStr = 'N/A';
-      if (ts is Timestamp) {
-        dateStr = DateFormat('yyyy-MM-dd').format(ts.toDate());
+      if (ts != null) {
+        try {
+          final parsed = DateTime.parse(ts.toString());
+          dateStr = DateFormat('yyyy-MM-dd').format(parsed);
+        } catch (_) {}
       }
 
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row + 2)).value = TextCellValue(s['studentId']?.toString() ?? 'N/A');
