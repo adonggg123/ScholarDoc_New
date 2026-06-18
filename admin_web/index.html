@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScholarDoc Admin Panel</title>
+    <script>
+        // Ensure trailing slash for directory access so relative paths (like style.css) resolve correctly
+        if (!window.location.pathname.endsWith('/') && !window.location.pathname.endsWith('.html')) {
+            window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- LOGIN SCREEN -->
+        <div class="login-wrapper" id="loginScreen">
+            <div class="login-left">
+                <!-- Decorative Abstract Shapes -->
+                <div class="shape-1"></div>
+                <div class="shape-2"></div>
+
+                <div class="login-content">
+                    <!-- Brand Header -->
+                    <div class="brand-header" style="display: flex; align-items: center; gap: 1px;">
+                        <img src="../assets/app_logo2.png" alt="ScholarDoc Logo"
+                            style="width: 72px; height: 72px; object-fit: contain;">
+                        <div>
+                            <div
+                                style="font-family: 'Inter'; font-size: 26px; font-weight: 800; color: white; letter-spacing: -0.5px; line-height: 1;">
+                                Scholar<span style="color: var(--accent);">Doc</span>
+                            </div>
+                            <div
+                                style="font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 2px; margin-top: 2px;">
+                                ADMIN PANEL
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="brand-showcase">
+                        <div class="brand-badge">Command Center</div>
+                        <h1 class="brand-title">Manage<br>Scholarships<br><span>with Precision.</span></h1>
+                        <p class="brand-desc">The centralized gateway for administrators to oversee student records,
+                            verify submissions, and maintain system integrity.</p>
+                    </div>
+
+                    <div class="features-row">
+                        <div class="feature-item"><i data-lucide="shield-check"></i> Identity Verification</div>
+                        <div class="feature-item"><i data-lucide="file-search"></i> Document Audit</div>
+                        <div class="feature-item"><i data-lucide="bar-chart-3"></i> Analytics & Reports</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="login-right">
+                <div class="login-form-container">
+                    <h2 class="form-title">Welcome Back</h2>
+                    <p class="form-subtitle">Please enter your credentials to access the admin panel.</p>
+
+                    <form id="loginForm">
+                        <div class="input-group">
+                            <label class="input-label">USERNAME</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="user" class="input-icon"></i>
+                                <input type="text" id="username" class="form-input" placeholder="e.g. admin_jdoe"
+                                    required>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">PASSWORD</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="lock" class="input-icon"></i>
+                                <input type="password" id="password" class="form-input" placeholder="••••••••" required>
+                                <button type="button" class="pwd-toggle" id="togglePwd">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="loginBtn">
+                            <span id="loginBtnText">SIGN IN TO DASHBOARD</span>
+                            <i data-lucide="chevron-right" id="loginBtnIcon"></i>
+                            <div class="spinner hidden" id="loginSpinner"></div>
+                        </button>
+                    </form>
+
+                    <div class="security-badge">
+                        <i data-lucide="lock"></i> End-to-end encrypted session
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>

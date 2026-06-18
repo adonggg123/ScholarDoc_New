@@ -1,0 +1,239 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%;">
+
+    <!-- Header Section -->
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Student Records</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage and review all registered students.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <button style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; background: white; white-space: nowrap; flex-shrink: 0; cursor: pointer; color: var(--text-primary); transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='white'">
+                <i class="icon-calendar" style="font-size: 14px; color: var(--text-secondary);"></i>
+                AY 2023-2024, 1st Sem
+                <i class="icon-chevron-down" style="font-size: 14px; color: var(--text-secondary);"></i>
+            </button>
+            <button id="add-student-btn" class="btn btn-primary" style="gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600;">
+                <i class="icon-user-plus" style="font-size: 16px;"></i> Add Student
+            </button>
+            <button class="icon-btn" style="color: var(--primary-color);">
+                <i class="icon-refresh-cw" style="font-size: 18px;"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <!-- Search -->
+        <div style="flex: 1; min-width: 250px; position: relative;">
+            <i class="icon-search" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+            <input type="text" id="search-input" placeholder="Search by name, ID, or SA number..." style="width: 100%; padding: 12px 16px 12px 42px; border: 1px solid var(--border-color); border-radius: 20px; outline: none; background: rgba(0,0,0,0.01); font-family: inherit; font-size: 13px;">
+        </div>
+        
+        <!-- Filters -->
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <select id="filter-status" style="padding: 8px 12px; border: none; background: transparent; outline: none; font-family: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+                <option value="All">Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Verified">Verified</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+            
+            <select id="filter-scholarship" style="padding: 8px 12px; border: none; background: transparent; outline: none; font-family: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+                <option value="All">Scholarship</option>
+                <option value="TES">TES</option>
+                <option value="TDP">TDP</option>
+                <option value="DBP">DBP</option>
+                <option value="SANTEH">SANTEH</option>
+                <option value="STUFAP">STUFAP</option>
+            </select>
+            
+            <select id="filter-course" style="padding: 8px 12px; border: none; background: transparent; outline: none; font-family: inherit; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+                <option value="All">Course</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BTLED">BTLED</option>
+                <option value="BFPT">BFPT</option>
+            </select>
+            
+            <div style="background: rgba(15, 50, 96, 0.08); border-radius: 8px; padding: 0;">
+                <select id="sort-by" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(15, 50, 96, 0.05); color: var(--primary-color); font-weight: 600; outline: none; font-family: inherit; font-size: 13px; cursor: pointer;">
+                    <option value="Name (A-Z)">Name (A-Z)</option>
+                    <option value="Latest First">Latest First</option>
+                </select>
+            </div>
+            
+            <button class="icon-btn" style="color: var(--text-secondary); margin-left: 4px;">
+                <i class="icon-sliders" style="font-size: 18px;"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+        <div style="overflow-x: auto; flex: 1;">
+            <table style="width: 100%; border-collapse: collapse; min-width: 1000px; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <th style="padding: 16px 20px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Student Name</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">ID Number</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Course & Year</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Scholarship</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Scholar Year</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Status</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">SA Number</th>
+                        <th style="padding: 16px 12px; font-weight: 600; font-size: 12px; color: var(--text-primary);">Birthdate</th>
+                        <th style="padding: 16px 20px; font-weight: 600; font-size: 12px; color: var(--text-primary); text-align: left;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="students-table-body">
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading students...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination (Mock) -->
+        <div style="padding: 16px; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 12px; color: var(--text-secondary);" id="pagination-info">Showing results</span>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-outline" style="padding: 6px 12px; border-radius: 8px;" disabled>Prev</button>
+                <button class="btn btn-outline" style="padding: 6px 12px; border-radius: 8px;" disabled>Next</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- General Modal Dialog Wrapper (Hidden by default) -->
+<div id="student-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div class="card" style="width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; padding: 24px; position: relative;">
+        <button id="close-modal-btn" class="icon-btn" style="position: absolute; top: 16px; right: 16px;">
+            <i class="icon-x"></i>
+        </button>
+        
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
+            <div id="modal-icon-container" style="padding: 8px; background: rgba(15, 50, 96, 0.1); border-radius: 8px;">
+                <i id="modal-icon" class="icon-user-plus" style="color: var(--primary-color);"></i>
+            </div>
+            <h2 style="margin: 0; font-size: 18px; font-weight: 700;" id="modal-title">Add New Student</h2>
+        </div>
+        
+        <form id="student-form" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- Name & ID -->
+            <div style="display: grid; grid-template-columns: 1fr; gap: 16px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Full Name <span style="color:red">*</span></label>
+                    <div style="position: relative;">
+                        <i class="icon-user" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                        <input type="text" id="inp-name" required placeholder="e.g. Juan Dela Cruz" style="width: 100%; padding: 12px 12px 12px 36px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Student ID <span style="color:red">*</span></label>
+                    <div style="position: relative;">
+                        <i class="icon-hash" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                        <input type="text" id="inp-studentid" required placeholder="e.g. 2023-00001" style="width: 100%; padding: 12px 12px 12px 36px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Birthdate (mm/dd/yyyy) <span style="color:red">*</span></label>
+                    <div style="position: relative;">
+                        <i class="icon-cake" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                        <input type="date" id="inp-birthdate" required style="width: 100%; padding: 12px 12px 12px 36px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Course, Year, Gender -->
+            <div style="display: grid; grid-template-columns: 3fr 2fr 2fr; gap: 12px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Course</label>
+                    <select id="inp-course" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="BSIT">BSIT</option>
+                        <option value="BTLED">BTLED</option>
+                        <option value="BFPT">BFPT</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Year</label>
+                    <select id="inp-year" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="1st Year">1st</option>
+                        <option value="2nd Year">2nd</option>
+                        <option value="3rd Year">3rd</option>
+                        <option value="4th Year">4th</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Gender</label>
+                    <select id="inp-gender" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">SA Number (Optional)</label>
+                <div style="position: relative;">
+                    <i class="icon-credit-card" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                    <input type="text" id="inp-sa" placeholder="e.g. 1234-5678-9012" style="width: 100%; padding: 12px 12px 12px 36px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Year Became Scholar</label>
+                    <select id="inp-scholar-year" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Payouts Received</label>
+                    <div style="position: relative;">
+                        <i class="icon-wallet" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                        <input type="number" id="inp-payouts" value="0" style="width: 100%; padding: 12px 12px 12px 36px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Father's Education</label>
+                    <select id="inp-father-edu" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="Graduate">Graduate</option>
+                        <option value="Non-graduate" selected>Non-graduate</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Mother's Education</label>
+                    <select id="inp-mother-edu" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                        <option value="Graduate">Graduate</option>
+                        <option value="Non-graduate" selected>Non-graduate</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="add-notice" style="padding: 12px; background: rgba(251, 192, 45, 0.08); border: 1px solid rgba(251, 192, 45, 0.3); border-radius: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                <i class="icon-info" style="color: #F57F17; font-size: 14px; margin-top: 2px;"></i>
+                <span style="font-size: 11px; color: #F57F17;">Student will be added with Pending status and must complete registration.</span>
+            </div>
+
+            <!-- View Only Container -->
+            <div id="view-details-container" style="display: none; flex-direction: column; gap: 16px;">
+                <hr style="border: 0; border-top: 1px solid var(--border-color);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" id="dynamic-details">
+                    <!-- Injected for View Mode -->
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
+                <button type="button" class="btn btn-outline" id="modal-cancel-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="modal-save-btn">Add Student</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,75 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%; overflow-y: auto;">
+    
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800; color: var(--primary-color); letter-spacing: -0.5px;">Operation Logs</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px; font-weight: 500;">Complete audit trail of system activities and user actions.</p>
+        </div>
+        <button class="icon-btn" onclick="loadLogs()" title="Refresh Logs" style="color: var(--primary-color);">
+            <i class="icon-refresh-cw"></i>
+        </button>
+    </div>
+
+    <!-- Filters Section -->
+    <div style="background: rgba(255,255,255,0.02); padding: 16px; border-radius: 16px; border: 1px solid var(--border-color);">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="padding: 8px; background: rgba(15, 50, 96, 0.1); border-radius: 50%;">
+                    <i class="icon-filter" style="font-size: 14px; color: var(--primary-color);"></i>
+                </div>
+                <span style="font-weight: 700; font-size: 15px;">Refine Trail</span>
+            </div>
+            <div id="filter-badge-24h" style="padding: 4px 10px; background: rgba(255, 193, 7, 0.1); border-radius: 20px; display: flex; align-items: center;">
+                <span style="font-size: 9px; color: #FFA000; font-weight: 900; letter-spacing: 0.5px;">24H WINDOW</span>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <div style="flex: 1; min-width: 200px; position: relative;">
+                <i class="icon-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 18px;"></i>
+                <input type="text" id="log-search" placeholder="Search by user, action, or Student ID..." style="width: 100%; padding: 12px 12px 12px 40px; border-radius: 12px; border: none; background: rgba(0,0,0,0.05); font-family: inherit; font-size: 13px; outline: none;">
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="date" id="log-date" style="padding: 12px; border-radius: 12px; border: none; background: rgba(0,0,0,0.05); font-family: inherit; font-size: 13px; outline: none; cursor: pointer;">
+                <button class="icon-btn" id="clear-date-btn" style="display: none;" title="Clear Date Filter"><i class="icon-x"></i></button>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap;">
+            <span style="font-size: 14px; font-weight: 600;">Role:</span>
+            <div style="display: flex; gap: 8px;" id="role-filters">
+                <button class="role-chip active" data-role="All">All</button>
+                <button class="role-chip" data-role="Admin">Admin</button>
+                <button class="role-chip" data-role="Student">Student</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data List -->
+    <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
+        <div id="logs-container" style="display: flex; flex-direction: column;">
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading logs...</div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .role-chip {
+        padding: 6px 12px;
+        border-radius: 10px;
+        border: none;
+        background: rgba(0,0,0,0.05);
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 12px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.2s;
+    }
+    .role-chip.active {
+        background: var(--primary-color);
+        color: white;
+        font-weight: 800;
+    }
+</style>

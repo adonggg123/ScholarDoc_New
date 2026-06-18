@@ -1,0 +1,169 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px;">
+
+    <!-- Header Banner -->
+    <div class="dashboard-header" style="position: relative; border-radius: 24px; overflow: hidden; box-shadow: 0 10px 24px rgba(10, 30, 63, 0.35); color: white;">
+        <img src="campus_bg.jpg" alt="Background" style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.8;">
+        <div style="position: absolute; width: 100%; height: 100%; background: linear-gradient(to bottom right, rgba(10, 30, 63, 0.95), rgba(30, 53, 90, 0.95), rgba(122, 107, 67, 0.92), rgba(212, 175, 55, 0.90)); z-index: 2;"></div>
+        
+        <div style="position: relative; z-index: 3; padding: 28px 32px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <div style="background: rgba(255, 255, 255, 0.18); padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+                    <i id="greeting-icon" class="icon-sun" style="font-size: 13px; color: rgba(255, 255, 255, 0.9);"></i>
+                    <span id="greeting-text" style="font-size: 12px; font-weight: 600; letter-spacing: 0.3px;">Good Morning</span>
+                </div>
+                <h1 style="margin: 0 0 6px 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">ScholarDoc Admin</h1>
+                <p style="margin: 0 0 16px 0; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.75);">Managing student scholarships and system records.</p>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <i class="icon-calendar-days" style="font-size: 13px; color: rgba(255, 255, 255, 0.7);"></i>
+                    <span id="current-date" style="font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">Loading Date...</span>
+                </div>
+            </div>
+            <div style="display: none; padding: 20px; background: rgba(255, 255, 255, 0.12); border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.2);" class="header-icon-badge">
+                <i class="icon-layout-dashboard" style="font-size: 36px;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 32px;" class="dashboard-grid">
+        <!-- Left Column -->
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <!-- Stats Section -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                <!-- Total Students -->
+                <div class="card" style="padding: 20px; position: relative; overflow: hidden;">
+                    <div style="position: absolute; right: -10px; bottom: -10px; opacity: 0.05;">
+                        <i class="icon-users" style="font-size: 80px;"></i>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="background: rgba(15, 50, 96, 0.1); padding: 8px; border-radius: 8px;">
+                            <i class="icon-users" style="color: var(--primary-color);"></i>
+                        </div>
+                        <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Total Students</span>
+                    </div>
+                    <h3 id="stat-total" style="margin: 0; font-size: 24px; font-weight: 800; color: var(--text-primary);">0</h3>
+                </div>
+                
+                <!-- Pending Verifications -->
+                <div class="card" style="padding: 20px; position: relative; overflow: hidden; background: linear-gradient(135deg, rgba(251, 192, 45, 0.05), rgba(251, 192, 45, 0.15)); border: 1px solid rgba(251, 192, 45, 0.2);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="background: rgba(251, 192, 45, 0.2); padding: 8px; border-radius: 8px;">
+                            <i class="icon-clock" style="color: #F57F17;"></i>
+                        </div>
+                        <span style="font-size: 12px; font-weight: 600; color: #F57F17;">Pending Checks</span>
+                    </div>
+                    <h3 id="stat-pending" style="margin: 0; font-size: 24px; font-weight: 800; color: #F57F17;">0</h3>
+                </div>
+
+                <!-- Verified Scholars -->
+                <div class="card" style="padding: 20px; position: relative; overflow: hidden; background: linear-gradient(135deg, rgba(67, 160, 71, 0.05), rgba(67, 160, 71, 0.15)); border: 1px solid rgba(67, 160, 71, 0.2);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="background: rgba(67, 160, 71, 0.2); padding: 8px; border-radius: 8px;">
+                            <i class="icon-check-circle" style="color: var(--success);"></i>
+                        </div>
+                        <span style="font-size: 12px; font-weight: 600; color: var(--success);">Verified Scholars</span>
+                    </div>
+                    <h3 id="stat-approved" style="margin: 0; font-size: 24px; font-weight: 800; color: var(--success);">0</h3>
+                </div>
+
+                <!-- Rejected Scholars -->
+                <div class="card" style="padding: 20px; position: relative; overflow: hidden; background: linear-gradient(135deg, rgba(244, 67, 54, 0.05), rgba(244, 67, 54, 0.15)); border: 1px solid rgba(244, 67, 54, 0.2);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="background: rgba(244, 67, 54, 0.2); padding: 8px; border-radius: 8px;">
+                            <i class="icon-x-circle" style="color: #F44336;"></i>
+                        </div>
+                        <span style="font-size: 12px; font-weight: 600; color: #F44336;">Rejected</span>
+                    </div>
+                    <h3 id="stat-rejected" style="margin: 0; font-size: 24px; font-weight: 800; color: #F44336;">0</h3>
+                </div>
+            </div>
+
+            <!-- Submission Trends -->
+            <div class="card">
+                <h3 style="margin: 0 0 4px 0; font-size: 16px;">Submission Trends</h3>
+                <p style="margin: 0 0 20px 0; font-size: 12px; color: var(--text-secondary);">Monthly document submission volume.</p>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <!-- Calendar Week View -->
+            <div class="card" style="padding: 20px 20px 24px 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.04);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                    <div>
+                        <h2 id="cal-month" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px;">Loading...</h2>
+                        <p id="cal-week" style="margin: 2px 0 0; font-size: 11px; font-weight: 500; color: var(--text-secondary);">Week of...</p>
+                    </div>
+                    <div style="padding: 8px; background: rgba(15,50,96,0.1); border-radius: 10px;">
+                        <i class="icon-calendar-days" style="font-size: 18px; color: var(--primary-color);"></i>
+                    </div>
+                </div>
+                
+                <div id="cal-days-row" style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+                    <!-- Injected via JS -->
+                </div>
+
+                <div style="padding: 7px 12px; background: rgba(15,50,96,0.07); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+                    <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color);"></div>
+                    <span id="cal-today-label" style="font-size: 11px; font-weight: 600; color: var(--primary-color);">Today — Loading...</span>
+                </div>
+            </div>
+
+            <!-- Status Distribution -->
+            <div class="card" style="padding: 20px 20px 24px 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.04);">
+                <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 800; color: var(--text-primary);">Status Distribution</h3>
+                <div style="position: relative; height: 160px; width: 100%; display: flex; justify-content: center; align-items: center;">
+                    <canvas id="statusPieChart"></canvas>
+                    <div id="pie-no-data" style="position: absolute; font-size: 14px; color: var(--text-secondary); display: none;">No data</div>
+                </div>
+                
+                <div id="pie-legend" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; justify-content: center;">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Row -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px;" class="dashboard-grid-bottom">
+        <!-- Pending Queue -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 14px;">Recent Pending Applications</h3>
+                <a href="#" style="font-size: 11px; font-weight: bold; color: var(--primary-color); text-decoration: none;" onclick="document.querySelector('.nav-item[data-view=\'student_records\']').click()">VIEW ALL</a>
+            </div>
+            <div id="pending-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="text-align: center; padding: 20px; color: var(--text-secondary); font-size: 12px;">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+            <h3 style="margin: 0 0 16px 0; font-size: 14px;">Activity Logs</h3>
+            <div id="activity-list" style="display: flex; flex-direction: column; gap: 12px; position: relative;">
+                <div style="position: absolute; left: 15px; top: 10px; bottom: 10px; width: 1px; background: var(--border-color); z-index: 0;"></div>
+                <div style="text-align: center; padding: 20px; color: var(--text-secondary); font-size: 12px;">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    @media (max-width: 900px) {
+        .dashboard-grid, .dashboard-grid-bottom {
+            grid-template-columns: 1fr !important;
+        }
+        .header-icon-badge {
+            display: none !important;
+        }
+    }
+    @media (min-width: 901px) {
+        .header-icon-badge {
+            display: block !important;
+        }
+    }
+</style>

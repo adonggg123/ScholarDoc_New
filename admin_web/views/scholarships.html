@@ -1,0 +1,71 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Scholarship Programs</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage active scholarships, slots, and requirements.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-add-program">
+            <i class="icon-plus" style="font-size: 16px;"></i> Add Program
+        </button>
+    </div>
+
+    <!-- Data Table -->
+    <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+        <div style="overflow-x: auto; flex: 1;">
+            <table style="width: 100%; border-collapse: collapse; min-width: 800px; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.02);">
+                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Program Name</th>
+                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Description</th>
+                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Status</th>
+                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Required Documents</th>
+                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="programs-table-body">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading programs...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dialog Wrapper -->
+<div id="scholarship-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div class="card" style="width: 90%; max-width: 400px; padding: 24px; position: relative;">
+        <button id="close-sch-modal-btn" class="icon-btn" style="position: absolute; top: 16px; right: 16px;">
+            <i class="icon-x"></i>
+        </button>
+        
+        <h2 style="margin: 0 0 24px 0; font-size: 18px; font-weight: 700;" id="sch-modal-title">Add Scholarship</h2>
+        
+        <form id="scholarship-form" style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Program Name (e.g. TES) <span style="color:red">*</span></label>
+                <input type="text" id="sch-inp-name" required style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+            </div>
+            
+            <div>
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Description</label>
+                <textarea id="sch-inp-desc" rows="2" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit; resize: vertical;"></textarea>
+            </div>
+            
+            <div>
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Required Documents (comma separated)</label>
+                <textarea id="sch-inp-docs" rows="3" placeholder="e.g. ID Card, Enrollment Form" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit; resize: vertical;"></textarea>
+            </div>
+            
+            <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 10px; border: 1px solid var(--border-color);">
+                <input type="checkbox" id="sch-inp-active" checked style="width: 18px; height: 18px; accent-color: var(--primary-color);">
+                <span style="font-size: 14px; font-weight: 500;">Active Status</span>
+            </label>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
+                <button type="button" class="btn btn-outline" id="sch-modal-cancel-btn">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="sch-modal-save-btn">Save</button>
+            </div>
+        </form>
+    </div>
+</div>

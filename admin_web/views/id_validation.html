@@ -1,0 +1,45 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%; overflow-y: auto;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">ID Validation Queue</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Validate student IDs and signatures for application finalization.</p>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 24px; align-items: start;" id="id-grid">
+        
+        <!-- Left: Queue List -->
+        <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+            <div id="id-list-container" style="display: flex; flex-direction: column; max-height: 700px; overflow-y: auto;">
+                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading ID validation queue...</div>
+            </div>
+        </div>
+
+        <!-- Right: Validation Panel -->
+        <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.03); position: sticky; top: 0;" id="id-panel-container">
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Select a student to view details.</div>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    @media (max-width: 900px) {
+        #id-grid {
+            grid-template-columns: 1fr !important;
+        }
+        #id-panel-container {
+            position: relative;
+        }
+    }
+    .id-list-item {
+        transition: background 0.2s;
+        cursor: pointer;
+    }
+    .id-list-item:hover {
+        background: rgba(0,0,0,0.02);
+    }
+    .id-list-item.selected {
+        background: rgba(15, 50, 96, 0.04);
+    }
+</style>

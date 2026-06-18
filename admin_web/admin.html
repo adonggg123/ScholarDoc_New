@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScholarDoc Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.344.0/font/lucide.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css"> <!-- Existing global styles if needed -->
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="app_logo2.png" alt="ScholarDoc Logo" class="sidebar-logo">
+            <div class="sidebar-brand">
+                <h2>ScholarDoc</h2>
+                <p>Admin Panel</p>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <hr style="border-top: 1px solid var(--border-color); margin: 8px 0; width: 100%;">
+            
+            <a href="#" class="nav-item" data-view="dashboard">
+                <i class="icon-layout-dashboard"></i> Dashboard
+            </a>
+            
+            <a href="#" class="nav-item" data-view="student_records">
+                <i class="icon-users"></i> Student Records
+            </a>
+            
+            <a href="#" class="nav-item" data-view="scholarships">
+                <i class="icon-graduation-cap"></i> Scholarships
+            </a>
+            
+            <!-- Expandable Validation Menu -->
+            <div class="nav-item expandable" id="validation-menu-btn">
+                <i class="icon-shield-check"></i> Validation
+                <i class="icon-chevron-down" style="margin-left: auto; font-size: 0.9rem;"></i>
+            </div>
+            <div class="nav-sub-menu" id="validation-sub-menu">
+                <a href="#" class="nav-item" data-view="sa_verification">
+                    <i class="icon-landmark"></i> SA Verification
+                </a>
+                <a href="#" class="nav-item" data-view="id_validation">
+                    <i class="icon-badge-check"></i> ID Validation
+                </a>
+            </div>
+            
+            <a href="#" class="nav-item" data-view="announcements">
+                <i class="icon-megaphone"></i> Announcements
+            </a>
+            
+            <a href="#" class="nav-item" data-view="audit_logs">
+                <i class="icon-history"></i> Activity Logs
+            </a>
+            
+            <a href="#" class="nav-item" data-view="reports">
+                <i class="icon-bar-chart-4"></i> Reports
+            </a>
+            
+            <hr style="border-top: 1px solid var(--border-color); margin: 16px 0; width: 100%;">
+            
+            <a href="#" class="nav-item" data-view="settings">
+                <i class="icon-settings"></i> Settings
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+        <!-- Top App Bar -->
+        <header class="topbar">
+            <div style="display: flex; align-items: center; gap: 14px; flex: 1;">
+                <button class="icon-btn" id="mobile-menu-btn" style="display: none;">
+                    <i class="icon-menu"></i>
+                </button>
+                
+                <!-- Page Icon with Gradient Badge -->
+                <div id="topbar-icon-badge" style="padding: 8px; background: linear-gradient(135deg, #0A1E3F, #1E355A, #7A6B43, #D4AF37); border-radius: 10px; box-shadow: 0 4px 8px rgba(10,30,63,0.25); display: flex; align-items: center; justify-content: center;">
+                    <i id="topbar-icon" class="icon-layout-dashboard" style="font-size: 16px; color: white;"></i>
+                </div>
+
+                <!-- Page Title + Sync Status -->
+                <div style="display: flex; flex-direction: column;">
+                    <h1 class="topbar-title" id="topbar-title" style="margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.3px;">Dashboard</h1>
+                    <div id="sync-status" style="display: none; align-items: center; gap: 6px;">
+                        <div class="sync-spinner" style="width: 10px; height: 10px; border: 1.5px solid var(--primary-color); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                        <span style="font-size: 10px; color: var(--primary-color); font-weight: 600;">Syncing...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="topbar-actions" style="display: flex; align-items: center; gap: 6px;">
+                <!-- Sync Button -->
+                <button class="icon-btn" id="sync-btn" title="Sync with Database">
+                    <i class="icon-refresh-cw"></i>
+                </button>
+
+                <!-- Notification Bell with Red Dot -->
+                <div style="position: relative;">
+                    <button class="icon-btn" id="notification-btn" title="Notifications">
+                        <i class="icon-bell"></i>
+                    </button>
+                    <div style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background: var(--error, #F44336); border-radius: 50%; border: 1.5px solid var(--surface-color, white);"></div>
+                </div>
+
+                <!-- Vertical Divider -->
+                <div style="height: 28px; width: 1px; background: rgba(0,0,0,0.08); margin: 0 6px;"></div>
+
+                <!-- Admin Profile Pill with Dropdown -->
+                <div style="position: relative;" id="profile-dropdown-wrapper">
+                    <button id="profile-pill" style="display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); border-radius: 24px; cursor: pointer; font-family: inherit; outline: none;">
+                        <div style="width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #0F3260, #D4AF37); display: flex; align-items: center; justify-content: center; padding: 2px;">
+                            <div style="width: 100%; height: 100%; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center;">
+                                <i class="icon-user" style="font-size: 13px; color: #0F3260;"></i>
+                            </div>
+                        </div>
+                        <span style="font-weight: 600; font-size: 13px; color: var(--text-primary);">Admin</span>
+                        <i class="icon-chevron-down" style="font-size: 12px; color: var(--text-secondary);"></i>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div id="profile-dropdown" class="hidden" style="position: absolute; top: calc(100% + 8px); right: 0; width: 200px; background: var(--surface-color, white); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border: 1px solid var(--border-color); padding: 8px; z-index: 999;">
+                        <div style="padding: 8px 12px; pointer-events: none;">
+                            <div style="font-size: 11px; color: var(--text-secondary);">Signed in as</div>
+                            <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">Administrator</div>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
+                        <button id="dropdown-logout-btn" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; background: none; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; color: var(--error, #F44336); font-weight: 600; font-size: 13px; transition: background 0.15s;" onmouseover="this.style.background='rgba(244,67,54,0.06)'" onmouseout="this.style.background='none'">
+                            <i class="icon-log-out" style="font-size: 15px;"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <main id="app-content">
+            <!-- View content will be injected here -->
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Include Supabase JS & Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/admin.js" type="module"></script>
+</body>
+</html>
