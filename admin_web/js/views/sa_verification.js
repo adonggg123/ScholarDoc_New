@@ -139,6 +139,22 @@ function renderPanel() {
         `;
     }
 
+    let atmCardHtml = '';
+    if (s.atmCardUrl) {
+        atmCardHtml = `
+            <div style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02);">
+                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 8px;"><i class="icon-credit-card" style="font-size: 12px; margin-right: 4px;"></i>ATM Card Proof</div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <img src="${s.atmCardUrl}" style="height: 50px; width: 80px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" onclick="window.open('${s.atmCardUrl}', '_blank')" title="Click to view full size">
+                    <div style="flex: 1;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${s.atmCardFileName || 'ATM_Card_Image'}</div>
+                        <button style="margin-top: 4px; background: none; border: none; padding: 0; color: var(--primary-color); font-size: 10px; font-weight: 700; cursor: pointer;" onclick="window.open('${s.atmCardUrl}', '_blank')">VIEW IMAGE <i class="icon-external-link" style="font-size: 10px;"></i></button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
         <div style="padding: 16px;">
             <div style="text-align: center;">
@@ -159,11 +175,13 @@ function renderPanel() {
                 <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Submitted SA Number</div>
                 <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">${sa}</div>
             </div>
-            <div style="margin-bottom: 10px;">
+            <div style="margin-bottom: 16px;">
                 <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Bank Branch</div>
                 <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">Land Bank</div>
             </div>
             
+            ${atmCardHtml}
+
             <div style="margin-bottom: 16px;">
                 ${duplicateBadge}
             </div>

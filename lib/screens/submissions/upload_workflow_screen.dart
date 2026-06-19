@@ -32,6 +32,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   String? _pdfFeedback;
   String? _pdfFileName;
 
+  String? _atmCardUrl;
+  String? _atmCardFeedback;
+  String? _atmCardFileName;
+
 
   @override
   void initState() {
@@ -144,6 +148,51 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     }
   }
 
+  Future<void> _handleAtmUpload() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+
+      if (result == null || result.files.single.bytes == null) return;
+      
+      final bytes = result.files.single.bytes!;
+      String originalName = result.files.single.name;
+
+      setState(() {
+        _isUploading = true;
+        _atmCardFeedback = null;
+      });
+
+      final uid = _authService.currentUser?.id;
+      if (uid == null) throw Exception("User not authenticated");
+
+      final String storagePath =
+          'submissions/$uid/ATM_${DateTime.now().millisecondsSinceEpoch}_$originalName';
+      final String downloadUrl = await _storageService.uploadFile(
+        path: storagePath,
+        bytes: bytes,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+        _atmCardFeedback = "✅ ATM Card Ready";
+        _atmCardFileName = originalName;
+        _atmCardUrl = downloadUrl;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploading = false;
+        _atmCardFeedback = "Error: ${e.toString()}";
+      });
+    }
+  }
+
   /* 
   Removed _simulateUpload as it is now handled by _handleUpload.
   */
@@ -249,8 +298,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               height: 56,
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  if (_submissionPdfUrl != null) {
-                    final uri = Uri.parse(_submissionPdfUrl!);
+                  final String? urlToOpen = fileName == _pdfFileName ? _submissionPdfUrl : _atmCardUrl;
+                  if (urlToOpen != null) {
+                    final uri = Uri.parse(urlToOpen);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
                     } else {
@@ -402,10 +452,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     if (!_formKey.currentState!.validate()) {
                       return;
                     }
-                    if (_submissionPdfUrl == null) {
+                    if (_submissionPdfUrl == null || _atmCardUrl == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Please upload and review your document before continuing.'),
+                          content: Text('Please upload both your PDF document and ATM Card before continuing.'),
                           backgroundColor: AppTheme.error,
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -435,6 +485,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                           'saNumber': _saController.text.trim(),
                           'submissionPdfUrl': _submissionPdfUrl,
                           'submissionPdfName': _pdfFileName,
+                          'atmCardUrl': _atmCardUrl,
+                          'atmCardFileName': _atmCardFileName,
                           'pdfVerified': true,
                           'createdAt': DateTime.now().toIso8601String(),
                           'submittedAt': DateTime.now().toIso8601String(),
@@ -469,6 +521,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                           _submissionPdfUrl = null;
                           _pdfFeedback = null;
                           _pdfFileName = null;
+                          _atmCardUrl = null;
+                          _atmCardFeedback = null;
+                          _atmCardFileName = null;
                         });
                       }
                     } catch (e) {
@@ -542,6 +597,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         const SizedBox(height: 24),
         _bulletPoint('Combined Document (PDF format only)'),
         _bulletPoint('Must include: ID Front, ID Back, and 3 Signatures'),
+        _bulletPoint('Clear photo of your ATM Card (JPG/PNG format)'),
         const SizedBox(height: 32),
         Container(
           padding: const EdgeInsets.all(20),
@@ -723,6 +779,14 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             feedback: _pdfFeedback,
             subtitle: 'Include ID (Front/Back) + 3 Signatures (Max 10MB)',
             fileName: _pdfFileName,
+          ),
+          _buildUploadCard(
+            'ATM Card Proof (Image)',
+            LucideIcons.creditCard,
+            onTap: () => _handleAtmUpload(),
+            feedback: _atmCardFeedback,
+            subtitle: 'Clear photo of your ATM Card (JPG/PNG)',
+            fileName: _atmCardFileName,
           ),
         ],
       ),
@@ -936,7 +1000,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           _buildReviewItem(_pdfFileName!, 'PDF Document'),
           const SizedBox(height: 12),
         ],
-        if (_pdfFileName == null)
+        if (_atmCardFileName != null) ...[
+          _buildReviewItem(_atmCardFileName!, 'ATM Card Image'),
+          const SizedBox(height: 12),
+        ],
+        if (_pdfFileName == null && _atmCardFileName == null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Text(

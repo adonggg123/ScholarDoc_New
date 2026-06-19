@@ -342,6 +342,12 @@ function showStudentModal(student) {
             <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Mother's Education</p>
             <p style="font-weight: 600; margin: 0; font-size: 13px;">${fam.motherEduStatus || 'N/A'}</p>
         </div>
+        <div style="grid-column: 1 / -1; margin-top: 4px;">
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">ATM Card Proof</p>
+            ${student.atmCardUrl 
+                ? `<a href="${student.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; color: var(--primary-color); font-weight: 700; font-size: 13px; text-decoration: none; padding: 6px 12px; background: rgba(15, 50, 96, 0.05); border-radius: 8px; border: 1px solid rgba(15, 50, 96, 0.1);"><i class="icon-credit-card" style="font-size: 14px;"></i> View Uploaded Image</a>` 
+                : '<p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-secondary);">Not Submitted</p>'}
+        </div>
     `;
 
     // Inject action buttons at the bottom of dynamicDetails
