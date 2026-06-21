@@ -22,6 +22,23 @@ class AuthService {
     required Map<String, dynamic> studentData,
   }) async {
     try {
+      final String fullName = studentData['fullName']?.toString().trim() ?? '';
+      
+      // 0. Validate against Masterlist Import (OCR)
+      if (fullName.isNotEmpty) {
+        final masterlistCheck = await _supabase
+            .from('scholar_masterlist')
+            .select()
+            .ilike('name', fullName)
+            .limit(1);
+
+        if (masterlistCheck.isEmpty) {
+          throw Exception('You are not included in the official scholar masterlist. Registration denied.');
+        }
+      } else {
+        throw Exception('Full name is required for registration validation.');
+      }
+
       final String authEmail = _getAuthEmail(studentId);
       final String authPassword = studentId.trim();
 

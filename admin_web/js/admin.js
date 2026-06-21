@@ -36,7 +36,8 @@ const viewTitles = {
     'announcements': 'Announcement Management',
     'audit_logs': 'Activity Logs',
     'reports': 'Reports & Analytics',
-    'settings': 'System Settings'
+    'settings': 'System Settings',
+    'masterlist_import': 'Scholar Masterlist Import'
 };
 
 // Icon class map matching Flutter's _getPageIcon()
@@ -49,7 +50,8 @@ const viewIcons = {
     'announcements': 'icon-megaphone',
     'audit_logs': 'icon-history',
     'reports': 'icon-bar-chart-4',
-    'settings': 'icon-settings'
+    'settings': 'icon-settings',
+    'masterlist_import': 'icon-file-text'
 };
 
 // Track current view for sync

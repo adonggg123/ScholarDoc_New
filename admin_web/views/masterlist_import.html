@@ -1,0 +1,72 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Scholar Masterlist Import</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Upload masterlist document (PDF or DOCX) to extract student records.</p>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <!-- Upload Card -->
+        <div class="card" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 16px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">1. Upload File</h3>
+            <div id="drop-zone" style="border: 2px dashed var(--border-color); border-radius: 12px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: rgba(0,0,0,0.01);">
+                <i class="icon-file-up" style="font-size: 40px; color: var(--text-secondary); margin-bottom: 12px;"></i>
+                <p style="margin: 0; font-weight: 600; color: var(--text-primary);">Drag & drop a document here</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">or click to browse (PDF, DOCX)</p>
+                <input type="file" id="file-input" accept=".pdf, .doc, .docx" style="display: none;">
+            </div>
+            
+            <div id="file-info-container" class="hidden" style="position: relative; border-radius: 8px; padding: 16px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); display: flex; align-items: center; gap: 12px;">
+                <i class="icon-file-text" style="font-size: 24px; color: var(--primary-color);"></i>
+                <div style="flex: 1; overflow: hidden;">
+                    <p id="file-name-display" style="margin: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
+                    <p id="file-size-display" style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);"></p>
+                </div>
+                <button id="btn-clear-file" class="icon-btn" style="color: var(--text-secondary);">
+                    <i class="icon-x"></i>
+                </button>
+            </div>
+
+            <button class="btn btn-primary" id="btn-extract" disabled style="width: 100%; justify-content: center;">
+                <i class="icon-settings"></i> Extract Data
+            </button>
+            <div id="ocr-progress-container" class="hidden" style="margin-top: 8px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                    <span id="ocr-status-text">Processing Document...</span>
+                    <span id="ocr-progress-text"></span>
+                </div>
+                <div style="height: 6px; background: rgba(0,0,0,0.05); border-radius: 3px; overflow: hidden;">
+                    <div id="ocr-progress-bar" style="height: 100%; width: 100%; background: var(--primary-color); transition: width 0.2s; animation: pulse 1.5s infinite;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extraction Results Card -->
+        <div class="card" style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 16px; padding: 0;">
+            <div style="padding: 24px 24px 0 24px; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">2. Extracted Records</h3>
+                <button class="btn btn-primary hidden" id="btn-save-records">
+                    <i class="icon-save"></i> Save to Database
+                </button>
+            </div>
+            
+            <div style="overflow-x: auto; flex: 1; padding: 0 24px 24px 24px;">
+                <table style="width: 100%; border-collapse: collapse; min-width: 400px; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.02);">
+                            <th style="padding: 12px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Name</th>
+                            <th style="padding: 12px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Batch</th>
+                            <th style="padding: 12px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="extracted-table-body">
+                        <tr>
+                            <td colspan="3" style="text-align: center; padding: 40px; color: var(--text-secondary);">Upload a document and extract data to see results here.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -74,24 +74,40 @@ function renderMasterTable(students) {
         const family = s.familyDetails || {};
         const isChecked = selectedStudentIds.has(s.uid) ? 'checked' : '';
         const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' : 
-                            (s.status || '').toLowerCase() === 'pending' ? '#F57F17' : 'var(--error)';
+                            (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
+                            (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
 
         return `
             <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 14px;">
                     <input type="checkbox" class="rpt-row-checkbox" data-uid="${s.uid}" ${isChecked} style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
                 </td>
-                <td style="padding: 14px; font-weight: 600; font-size: 13px;">${s.fullName || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px;">${s.course || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px;">${s.year || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px;">${s.gender || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px;">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
-                <td style="padding: 14px;">
-                    <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 4px 8px; border-radius: 12px;">${(s.status || 'Pending').toUpperCase()}</span>
+                <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
+                <td style="padding: 14px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color); flex-shrink: 0;">
+                        <i class="icon-user" style="font-size: 12px;"></i>
+                    </div>
+                    ${s.fullName || 'N/A'}
                 </td>
-                <td style="padding: 14px; font-size: 12px;">${s.scholarYearLevel || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 12px;">${s.payoutsReceived || 0}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.email || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.birthdate || '01/01/2000'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.gender || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.course || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${(s.year || '').split(' ')[0] || ''} - ${s.section || ''}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.scholarYearLevel || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.payoutsReceived || 0}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.contactNumber || 'N/A'}</td>
+                <td style="padding: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 4px 10px; border-radius: 16px;">${s.status || 'Pending'}</span>
+                </td>
+                <td style="padding: 14px; font-size: 13px;">${family.fatherName || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.fatherEduStatus || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.motherName || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.motherEduStatus || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.yearlyIncome || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.religion || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${family.tribe || 'N/A'}</td>
             </tr>
         `;
     }).join('');
