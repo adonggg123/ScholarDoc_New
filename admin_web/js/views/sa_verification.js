@@ -45,7 +45,7 @@ function renderQueue() {
         const isSelected = index === selectedIndex;
         const name = s.fullName || 'N/A';
         const sa = s.saNumber || s.familyDetails?.saNumber || 'N/A';
-        const photo = s.profilePictureUrl;
+        const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
 
         let avatarHtml = '';
         if (photo) {
@@ -94,7 +94,7 @@ function renderPanel() {
     const studentId = s.studentId || 'N/A';
     const course = s.course || 'N/A';
     const year = s.year || 'N/A';
-    const photo = s.profilePictureUrl;
+    const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
 
     let avatarHtml = '';
     if (photo) {

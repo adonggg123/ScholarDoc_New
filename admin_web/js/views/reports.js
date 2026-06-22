@@ -77,6 +77,13 @@ function renderMasterTable(students) {
                             (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
                             (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
 
+        const picUrl = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
+        const avatarHtml = picUrl 
+            ? `<img src="${picUrl}" alt="Profile" style="width: 24px; height: 24px; border-radius: 50%; border: 1px solid #FFC107; object-fit: cover; flex-shrink: 0;">`
+            : `<div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color); flex-shrink: 0;">
+                 <i class="icon-user" style="font-size: 12px;"></i>
+               </div>`;
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 14px;">
@@ -84,9 +91,7 @@ function renderMasterTable(students) {
                 </td>
                 <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
                 <td style="padding: 14px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
-                    <div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color); flex-shrink: 0;">
-                        <i class="icon-user" style="font-size: 12px;"></i>
-                    </div>
+                    ${avatarHtml}
                     ${s.fullName || 'N/A'}
                 </td>
                 <td style="padding: 14px; font-size: 13px;">${s.email || 'N/A'}</td>

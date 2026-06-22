@@ -45,8 +45,20 @@ class _NotificationScreenState extends State<NotificationScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              InkWell(
+                onTap: () => Navigator.pop(context),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(LucideIcons.arrowLeft, color: Colors.white, size: 24),
+                ),
+              ),
+              const SizedBox(width: 16),
               const Text(
                 'Notifications',
                 style: TextStyle(
@@ -56,6 +68,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   letterSpacing: -0.5,
                 ),
               ),
+              const Spacer(),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(

@@ -95,13 +95,19 @@ function renderTable() {
 
     tableBody.innerHTML = filteredStudents.map(s => {
         const firstLetter = (s.fullName || 'U').charAt(0).toUpperCase();
+        const picUrl = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
+        
+        const avatarHtml = picUrl 
+            ? `<img src="${picUrl}" alt="Profile" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #FFC107; object-fit: cover; flex-shrink: 0;">`
+            : `<div style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #FFC107; background: #FFF9E6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--primary-color); font-size: 14px;">
+                 ${firstLetter}
+               </div>`;
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #FFC107; background: #FFF9E6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--primary-color); font-size: 14px;">
-                            ${firstLetter}
-                        </div>
+                        ${avatarHtml}
                         <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">${s.fullName || 'Unknown'}</div>
                     </div>
                 </td>
@@ -293,7 +299,19 @@ function showStudentModal(student) {
     
     const fam = student.familyDetails || {};
     
+    const picUrl = student.profilePictureUrl || student.profileImageUrl || student.photoUrl || student.photoURL;
+    const profilePicHtml = picUrl 
+        ? `<div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+             <img src="${picUrl}" alt="Profile" style="width: 64px; height: 64px; border-radius: 50%; border: 3px solid #FFC107; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+             <div>
+               <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary);">${student.fullName || 'Unknown'}</h3>
+               <p style="margin: 2px 0 0; font-size: 13px; color: var(--text-secondary);">${student.studentId || 'N/A'}</p>
+             </div>
+           </div>`
+        : '';
+
     dynamicDetails.innerHTML = `
+        ${profilePicHtml}
         <div>
             <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Full Name</p>
             <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.fullName || 'N/A'}</p>

@@ -4,8 +4,8 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
+import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
-
 
 import '../../services/announcement_service.dart';
 
@@ -79,13 +79,13 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        toolbarHeight: 70,
+        toolbarHeight: 52,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
             SizedBox(
-              width: 80,
-              height: 80,
+              width: 45,
+              height: 45,
               child: ClipOval(
                 child: Image.asset('assets/app_logo2.png', fit: BoxFit.contain),
               ),
@@ -101,21 +101,79 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Text(
                 'ScholarDoc',
                 style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 35,
-                  letterSpacing: 0.5,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 21,
+                  letterSpacing: 0.3,
                 ),
               ),
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(50),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      const Icon(
+                        LucideIcons.bell,
+                        color: Color(0xFF0F3260),
+                        size: 20,
+                      ),
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444), // Red alert dot
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             sliver: SliverAppBar(
-              expandedHeight: 155.0,
+              expandedHeight: 150.0,
               pinned: true,
               elevation: 0,
               shadowColor: Colors.transparent,
@@ -126,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
               flexibleSpace: LayoutBuilder(
                 builder: (context, constraints) {
                   final topPadding = MediaQuery.of(context).padding.top;
-                  final fullyExpandedHeight = 155.0;
+                  final fullyExpandedHeight = 135.0;
                   final fullyCollapsedHeight = topPadding + kToolbarHeight;
 
                   // Calculate percentage of expansion (1.0 = fully expanded, 0.0 = collapsed)
@@ -152,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF0F3260), Color(0xEE1E3A8A)],
+                              colors: [Color(0x990F3260), Color(0x881E3A8A)],
                             ),
                           ),
                         ),
@@ -266,16 +324,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSectionHeader('Scholarship Status'),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   _buildStatusCard(context),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
                   _buildSectionHeader('Quick Actions'),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -315,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -388,16 +446,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final String scholarshipName =
         _profileData?['scholarshipName'] ?? 'No Scholarship Assigned';
     final String status = _profileData?['status'] ?? 'Pending';
-    final String submittedDate =
-        (() {
-          final ts = _profileData?['submittedAt'];
-          if (ts != null) {
-            try {
-              return DateTime.parse(ts.toString()).toString().split(' ')[0];
-            } catch (_) {}
-          }
-          return 'N/A';
-        })();
+    final String submittedDate = (() {
+      final ts = _profileData?['submittedAt'];
+      if (ts != null) {
+        try {
+          return DateTime.parse(ts.toString()).toString().split(' ')[0];
+        } catch (_) {}
+      }
+      return 'N/A';
+    })();
 
     Color statusColor = const Color(
       0xFFF59E0B,
@@ -416,21 +473,16 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: statusColor.withValues(alpha: 0.15),
+          color: const Color(0xFFF1F5F9), // Clean, light border
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: statusColor.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -459,20 +511,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Row(
                 children: [
-                  // Beautiful vertical glowing bar
                   Container(
                     width: 4,
-                    height: 40,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: statusColor,
                       borderRadius: BorderRadius.circular(4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: statusColor.withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(1, 0),
-                        ),
-                      ],
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -503,35 +547,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Status chip badge
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 14,
+                      vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: statusColor.withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(statusIcon, size: 12, color: Colors.white),
+                        Icon(statusIcon, size: 14, color: statusColor),
                         const SizedBox(width: 6),
                         Text(
-                          status.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
+                          status,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -573,15 +608,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 2),
                       Text(
                         submittedDate,
-                        style: TextStyle(
-                          color: const Color(0xFF0F3260).withValues(alpha: 0.9),
-                          fontSize: 12,
+                        style: const TextStyle(
+                          color: Color(0xFF1E293B),
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
-                  const Spacer(),
                   Icon(
                     LucideIcons.chevronRight,
                     size: 18,
@@ -663,73 +697,40 @@ class _HomeScreenState extends State<HomeScreen> {
     Color color,
     VoidCallback onTap,
   ) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: color.withValues(alpha: 0.06),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
           color: Colors.white,
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFE2E8F0), // Cool Slate 200 border
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                children: [
-                  // Animated or highly styled icon bubble
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          color.withValues(alpha: 0.12),
-                          color.withValues(alpha: 0.04),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: color.withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Icon(icon, color: color, size: 24),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    label.toUpperCase(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F3260),
-                      fontSize: 10,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFF1F5F9), // Very light gray border
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 16),
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1E293B), // Slate 800
+                fontSize: 13,
+                letterSpacing: 0.3,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -886,34 +887,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Row(
-      children: [
-        Container(
-          width: 5,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppTheme.accentColor,
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.accentColor.withValues(alpha: 0.3),
-                blurRadius: 4,
-                offset: const Offset(1, 1),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.primaryColor,
-            letterSpacing: -0.3,
-          ),
-        ),
-      ],
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        color: AppTheme.primaryColor,
+        letterSpacing: -0.5,
+      ),
     );
   }
 }

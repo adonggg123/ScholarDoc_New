@@ -26,14 +26,34 @@ class AuthService {
       
       // 0. Validate against Masterlist Import (OCR)
       if (fullName.isNotEmpty) {
-        final masterlistCheck = await _supabase
-            .from('scholar_masterlist')
-            .select()
-            .ilike('name', fullName)
-            .limit(1);
+        // Split the user's input into individual words to allow flexible ordering 
+        // (e.g. "Jude Esidore Jariol" matches "Jariol, Jude Esidore Zacarias")
+        final parts = fullName.toLowerCase().replaceAll(',', '').split(' ').where((s) => s.isNotEmpty).toList();
+        
+        // Fetch the names from the database to perform a robust local match
+        final masterlist = await _supabase.from('scholar_masterlist').select('name');
+        
+        bool foundMatch = false;
+        for (var record in masterlist) {
+          final dbName = (record['name'] as String? ?? '').toLowerCase();
+          
+          // Check if EVERY part of the student's inputted name exists somewhere in the DB record
+          bool matchesAll = true;
+          for (var part in parts) {
+            if (!dbName.contains(part)) {
+              matchesAll = false;
+              break;
+            }
+          }
+          
+          if (matchesAll) {
+            foundMatch = true;
+            break;
+          }
+        }
 
-        if (masterlistCheck.isEmpty) {
-          throw Exception('You are not included in the official scholar masterlist. Registration denied.');
+        if (!foundMatch) {
+          throw Exception('MASTERLIST_DENIED: You are not included in the official scholar masterlist.');
         }
       } else {
         throw Exception('Full name is required for registration validation.');
