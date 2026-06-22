@@ -7,11 +7,19 @@
             <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage and review all registered students.</p>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
-            <button style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; background: white; white-space: nowrap; flex-shrink: 0; cursor: pointer; color: var(--text-primary); transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='white'">
-                <i class="icon-calendar" style="font-size: 14px; color: var(--text-secondary);"></i>
-                AY 2023-2024, 1st Sem
-                <i class="icon-chevron-down" style="font-size: 14px; color: var(--text-secondary);"></i>
-            </button>
+            <div style="position: relative; display: inline-block;">
+                <select onchange="this.nextElementSibling.querySelector('#ay-display').innerText = this.value;" style="appearance: none; -webkit-appearance: none; position: absolute; width: 100%; height: 100%; left: 0; top: 0; opacity: 0; cursor: pointer; z-index: 10;">
+                    <option value="AY 2023-2024, 1st Sem">AY 2023-2024, 1st Sem</option>
+                    <option value="AY 2023-2024, 2nd Sem">AY 2023-2024, 2nd Sem</option>
+                    <option value="AY 2024-2025, 1st Sem">AY 2024-2025, 1st Sem</option>
+                    <option value="AY 2024-2025, 2nd Sem">AY 2024-2025, 2nd Sem</option>
+                </select>
+                <button style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; background: white; white-space: nowrap; flex-shrink: 0; cursor: pointer; color: var(--text-primary); transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='white'">
+                    <i class="icon-calendar" style="font-size: 14px; color: var(--text-secondary);"></i>
+                    <span id="ay-display">AY 2023-2024, 1st Sem</span>
+                    <i class="icon-chevron-down" style="font-size: 14px; color: var(--text-secondary);"></i>
+                </button>
+            </div>
             <button id="add-student-btn" class="btn btn-primary" style="gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600;">
                 <i class="icon-user-plus" style="font-size: 16px;"></i> Add Student
             </button>
