@@ -195,7 +195,7 @@ async function loadActivity() {
 
         container.innerHTML = logs.map(log => {
             const action = log.action || 'Unknown Action';
-            const name = log.adminName || 'Admin';
+            const name = log.userName || log.adminName || 'Admin';
             let timeStr = 'Just now';
             if(log.timestamp) {
                 const diff = Math.floor((new Date() - new Date(log.timestamp)) / 60000);

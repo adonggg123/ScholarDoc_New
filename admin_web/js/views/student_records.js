@@ -120,13 +120,13 @@ function renderTable() {
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.birthdate || 'N/A'}</td>
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; gap: 8px;">
-                        <button class="view-btn" data-id="${s.uid}" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="view-btn" data-id="${s.uid}" title="View Details" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-eye" style="font-size: 14px;"></i>
                         </button>
-                        <button class="edit-btn" data-id="${s.uid}" style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="approve-btn" data-id="${s.uid}" title="Approve Student" style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-check-square" style="font-size: 14px;"></i>
                         </button>
-                        <button class="delete-btn" data-id="${s.uid}" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="reject-btn" data-id="${s.uid}" title="Reject Student" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-x-square" style="font-size: 14px;"></i>
                         </button>
                     </div>
@@ -146,19 +146,19 @@ function renderTable() {
         });
     });
 
-    // Attach edit listeners
-    document.querySelectorAll('.edit-btn').forEach(btn => {
+    // Attach approve listeners
+    document.querySelectorAll('.approve-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const uid = e.currentTarget.getAttribute('data-id');
-            window.editStudent(uid);
+            window.approveStudent(uid);
         });
     });
 
-    // Attach delete listeners
-    document.querySelectorAll('.delete-btn').forEach(btn => {
+    // Attach reject listeners
+    document.querySelectorAll('.reject-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const uid = e.currentTarget.getAttribute('data-id');
-            window.deleteStudent(uid);
+            window.rejectStudent(uid);
         });
     });
 }
@@ -188,6 +188,9 @@ addStudentBtn.addEventListener('click', () => {
     modalTitle.textContent = 'Add New Student';
     document.getElementById('modal-icon').className = 'icon-user-plus';
     
+    // Ensure the form is visible
+    studentForm.style.display = 'flex';
+    
     // Show form inputs
     Array.from(studentForm.querySelectorAll('input, select')).forEach(el => {
         el.parentElement.style.display = '';
@@ -213,7 +216,16 @@ studentForm.addEventListener('submit', async (e) => {
     btn.textContent = 'Saving...';
 
     try {
+        let existingFamilyDetails = {};
+        if (modalMode === 'edit') {
+            const existingStudent = allStudents.find(s => s.uid === currentEditUid);
+            if (existingStudent && existingStudent.familyDetails) {
+                existingFamilyDetails = { ...existingStudent.familyDetails };
+            }
+        }
+
         const familyDetails = {
+            ...existingFamilyDetails,
             saNumber: inpSa.value.trim(),
             fatherEduStatus: inpFatherEdu.value,
             motherEduStatus: inpMotherEdu.value
@@ -284,106 +296,151 @@ function showStudentModal(student) {
     modalTitle.textContent = 'Student Details';
     document.getElementById('modal-icon').className = 'icon-user';
     
-    // Hide form inputs
-    Array.from(studentForm.querySelectorAll('input, select')).forEach(el => {
-        el.parentElement.style.display = 'none';
-        if(el.parentElement.previousElementSibling && el.parentElement.previousElementSibling.tagName === 'LABEL') {
-             el.parentElement.previousElementSibling.style.display = 'none';
-        }
-    });
-    addNotice.style.display = 'none';
-    document.getElementById('modal-save-btn').style.display = 'none';
+    // Hide the entire form instead of iterating inputs
+    studentForm.style.display = 'none';
     
     // Show View details container
     viewDetailsContainer.style.display = 'flex';
     
     const fam = student.familyDetails || {};
-    
     const picUrl = student.profilePictureUrl || student.profileImageUrl || student.photoUrl || student.photoURL;
+    
     const profilePicHtml = picUrl 
-        ? `<div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
-             <img src="${picUrl}" alt="Profile" style="width: 64px; height: 64px; border-radius: 50%; border: 3px solid #FFC107; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-             <div>
-               <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary);">${student.fullName || 'Unknown'}</h3>
-               <p style="margin: 2px 0 0; font-size: 13px; color: var(--text-secondary);">${student.studentId || 'N/A'}</p>
-             </div>
+        ? `<div style="position: relative; width: 80px; height: 80px; border-radius: 50%; padding: 4px; background: linear-gradient(135deg, #FFC107, #F57F17); box-shadow: 0 8px 16px rgba(245, 127, 23, 0.2);">
+             <img src="${picUrl}" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; border: 3px solid white; object-fit: cover; background: white;">
            </div>`
-        : '';
+        : `<div style="width: 80px; height: 80px; border-radius: 50%; background: rgba(15, 50, 96, 0.05); display: flex; align-items: center; justify-content: center; border: 2px dashed rgba(15, 50, 96, 0.2);">
+             <i class="icon-user" style="font-size: 32px; color: var(--primary-color);"></i>
+           </div>`;
+
+    const statusBadge = getStatusBadge(student.status);
 
     dynamicDetails.innerHTML = `
-        ${profilePicHtml}
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Full Name</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.fullName || 'N/A'}</p>
+        <!-- Profile Header -->
+        <div style="display: flex; align-items: center; gap: 20px; padding: 24px; background: linear-gradient(to right, rgba(0,0,0,0.01), rgba(0,0,0,0.03)); border-radius: 16px; margin-bottom: 8px;">
+            ${profilePicHtml}
+            <div style="flex: 1;">
+                <h3 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${student.fullName || 'Unknown'}</h3>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); font-weight: 500;">
+                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-hash" style="font-size: 14px;"></i> ${student.studentId || 'N/A'}</span>
+                    <span style="width: 4px; height: 4px; border-radius: 50%; background: var(--border-color);"></span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-graduation-cap" style="font-size: 14px;"></i> ${student.course || 'N/A'} - ${student.year || 'N/A'}</span>
+                </div>
+            </div>
+            <div>
+                ${statusBadge}
+            </div>
         </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Student ID</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.studentId || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Status</p>
-            ${getStatusBadge(student.status)}
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Course & Year</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.course || 'N/A'} - ${student.year || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Email</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.email || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">SA Number</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.saNumber || fam.saNumber || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Birthdate</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.birthdate || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Gender</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.gender || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Year Became Scholar</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.scholarYearLevel || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Payouts Received</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${student.payoutsReceived || '0'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Father's Education</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${fam.fatherEduStatus || 'N/A'}</p>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">Mother's Education</p>
-            <p style="font-weight: 600; margin: 0; font-size: 13px;">${fam.motherEduStatus || 'N/A'}</p>
-        </div>
-        <div style="grid-column: 1 / -1; margin-top: 4px;">
-            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 4px 0;">ATM Card Proof</p>
-            ${student.atmCardUrl 
-                ? `<a href="${student.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; color: var(--primary-color); font-weight: 700; font-size: 13px; text-decoration: none; padding: 6px 12px; background: rgba(15, 50, 96, 0.05); border-radius: 8px; border: 1px solid rgba(15, 50, 96, 0.1);"><i class="icon-credit-card" style="font-size: 14px;"></i> View Uploaded Image</a>` 
-                : '<p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-secondary);">Not Submitted</p>'}
+
+        <!-- Information Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 8px;">
+            
+            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; grid-column: 1 / -1;">
+                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Personal Information</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Email Address</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary);">${student.email || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Contact Number</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary);">${student.contactNumber || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Birthdate</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.birthdate || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Gender</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.gender || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Religion</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.religion || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Tribe / Ethnicity</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.tribe || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
+                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Scholarship Data</p>
+                <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Scholarship Program</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarshipProgram || student.scholarshipName || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">SA Number</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary); font-family: monospace;">${student.saNumber || fam.saNumber || 'N/A'}</p>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Started</p>
+                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarYearLevel || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Payouts</p>
+                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.payoutsReceived || '0'}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
+                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Family Background</p>
+                <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Name & Education</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.fatherName || 'N/A'} <span style="font-weight: normal; color: var(--text-secondary);">(${fam.fatherEduStatus || 'N/A'})</span></p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Name & Education</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.motherName || 'N/A'} <span style="font-weight: normal; color: var(--text-secondary);">(${fam.motherEduStatus || 'N/A'})</span></p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Yearly Family Income</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.yearlyIncome || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; grid-column: 1 / -1;">
+                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Documents</p>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 6px 0;">ATM Card Proof</p>
+                        ${student.atmCardUrl 
+                            ? `<a href="${student.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; color: #3B82F6; font-weight: 600; font-size: 13px; text-decoration: none; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.15); transition: all 0.2s;"><i class="icon-image" style="font-size: 16px;"></i> View Attached Document</a>` 
+                            : '<div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color); font-size: 13px; color: var(--text-secondary); font-weight: 500;"><i class="icon-file-x-2"></i> Not Submitted</div>'}
+                    </div>
+                </div>
+            </div>
+
         </div>
     `;
 
     // Inject action buttons at the bottom of dynamicDetails
     const actionsDiv = document.createElement('div');
-    actionsDiv.style.gridColumn = "1 / -1";
     actionsDiv.style.display = "flex";
-    actionsDiv.style.gap = "12px";
-    actionsDiv.style.marginTop = "16px";
+    actionsDiv.style.gap = "16px";
+    actionsDiv.style.marginTop = "8px";
+    actionsDiv.style.padding = "0 8px";
     
     actionsDiv.innerHTML = `
-        <button type="button" class="btn btn-outline" style="flex: 1;" onclick="editStudent('${student.uid}')">
-            <i class="icon-edit"></i> Edit Record
+        <button type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 600; font-size: 14px; color: white; background: #22C55E; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2); transition: transform 0.2s, box-shadow 0.2s;" onclick="approveStudent('${student.uid}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(34, 197, 94, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(34, 197, 94, 0.2)'">
+            <i class="icon-check-circle"></i> Approve Student
         </button>
-        <button type="button" class="btn btn-outline" style="flex: 1; color: var(--error); border-color: var(--error);" onclick="deleteStudent('${student.uid}')">
-            <i class="icon-trash-2"></i> Delete
+        <button type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 600; font-size: 14px; color: white; background: #EF4444; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); transition: transform 0.2s, box-shadow 0.2s;" onclick="rejectStudent('${student.uid}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(239, 68, 68, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.2)'">
+            <i class="icon-x-circle"></i> Reject Application
         </button>
     `;
     dynamicDetails.appendChild(actionsDiv);
+
+    if (window.lucide) window.lucide.createIcons();
 
     modal.classList.remove('hidden');
 }
@@ -396,6 +453,9 @@ window.editStudent = function(uid) {
     currentEditUid = uid;
     modalTitle.textContent = 'Edit Student';
     document.getElementById('modal-icon').className = 'icon-edit';
+
+    // Ensure the form is visible
+    studentForm.style.display = 'flex';
 
     // Show form inputs
     Array.from(studentForm.querySelectorAll('input, select')).forEach(el => {
@@ -431,6 +491,8 @@ window.editStudent = function(uid) {
     inpPayouts.value = student.payoutsReceived || '0';
     inpFatherEdu.value = fam.fatherEduStatus || 'Non-graduate';
     inpMotherEdu.value = fam.motherEduStatus || 'Non-graduate';
+
+    modal.classList.remove('hidden');
 };
 
 window.deleteStudent = async function(uid) {
@@ -450,6 +512,72 @@ window.deleteStudent = async function(uid) {
 function hideModal() {
     modal.classList.add('hidden');
 }
+
+window.approveStudent = async function(uid) {
+    if(!confirm('Are you sure you want to approve this student?')) return;
+    try {
+        const student = allStudents.find(s => s.uid === uid);
+        const { error } = await supabase.from('students').update({ status: 'Approved' }).eq('uid', uid);
+        if(error) throw error;
+        
+        await supabase.from('audit_logs').insert([{
+            userName: 'Admin',
+            role: 'Admin',
+            action: `Approved student record: ${student?.fullName || uid}`,
+            studentId: student?.studentId || uid,
+            ipAddress: 'Web Browser'
+        }]);
+
+        await supabase.from('notifications').insert([{
+            studentId: uid,
+            title: 'Application Approved',
+            message: 'Congratulations! Your scholarship application has been officially approved.',
+            type: 'success',
+            isRead: false,
+            createdAt: new Date().toISOString()
+        }]);
+
+        alert('Student approved successfully.');
+        hideModal();
+        loadStudents();
+    } catch(err) {
+        console.error('Error approving student:', err);
+        alert('Failed to approve student.');
+    }
+};
+
+window.rejectStudent = async function(uid) {
+    if(!confirm('Are you sure you want to reject this student?')) return;
+    try {
+        const student = allStudents.find(s => s.uid === uid);
+        const { error } = await supabase.from('students').update({ status: 'Rejected' }).eq('uid', uid);
+        if(error) throw error;
+        
+        await supabase.from('audit_logs').insert([{
+            userName: 'Admin',
+            role: 'Admin',
+            action: `Rejected student record: ${student?.fullName || uid}`,
+            studentId: student?.studentId || uid,
+            ipAddress: 'Web Browser'
+        }]);
+
+        await supabase.from('notifications').insert([{
+            studentId: uid,
+            title: 'Application Rejected',
+            message: 'We regret to inform you that your scholarship application has been rejected.',
+            type: 'error',
+            isRead: false,
+            createdAt: new Date().toISOString()
+        }]);
+
+        alert('Student rejected.');
+        hideModal();
+        loadStudents();
+    } catch(err) {
+        console.error('Error rejecting student:', err);
+        alert('Failed to reject student.');
+    }
+};
 
 // Event Listeners
 searchInput.addEventListener('input', applyFilters);

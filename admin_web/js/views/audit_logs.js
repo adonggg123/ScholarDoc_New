@@ -49,7 +49,7 @@ function applyFilters() {
         // 2. Search Filter
         if (searchVal) {
             const action = (log.action || '').toLowerCase();
-            const name = (log.adminName || '').toLowerCase();
+            const name = (log.userName || log.adminName || '').toLowerCase();
             const sid = (log.studentId || '').toLowerCase();
             if (!action.includes(searchVal) && !name.includes(searchVal) && !sid.includes(searchVal)) {
                 return false;
@@ -96,7 +96,7 @@ function renderList(logs) {
 
     container.innerHTML = logs.map(log => {
         const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A';
-        const name = log.adminName || 'Admin User';
+        const name = log.userName || log.adminName || 'Admin User';
         const role = log.role || 'Admin';
         const action = log.action || 'Performed an action';
 

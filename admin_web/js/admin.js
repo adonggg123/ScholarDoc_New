@@ -9,7 +9,7 @@ window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 async function checkSession() {
     const { data: { session } } = await window.supabaseClient.auth.getSession();
     if (!session) {
-        window.location.href = 'index.html'; // Redirect to login if not authenticated
+        window.location.href = 'login.html'; // Redirect to login if not authenticated
     }
 }
 
@@ -174,7 +174,7 @@ if (dropdownLogoutBtn) {
     dropdownLogoutBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to log out of the Admin Panel?')) {
             await window.supabaseClient.auth.signOut();
-            window.location.href = 'index.html';
+            window.location.href = 'login.html';
         }
     });
 }

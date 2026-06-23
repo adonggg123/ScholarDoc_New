@@ -125,7 +125,9 @@
                                 <input type="checkbox" id="rpt-select-all" style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
                             </th>
                             <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Student ID</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Full Name</th>
+                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Last Name</th>
+                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">First Name</th>
+                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">M.I.</th>
                             <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Email</th>
                             <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Birthdate</th>
                             <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Gender</th>
@@ -149,6 +151,91 @@
                         <tr><td colspan="20" style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading students...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-Fill Billing Modal -->
+    <div id="autofill-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div style="background: var(--surface-color, white); width: 100%; max-width: 800px; border-radius: 24px; box-shadow: 0 24px 48px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+            <!-- Modal Header -->
+            <div style="padding: 20px 24px; background: linear-gradient(135deg, #0F3260, #D4AF37); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div style="background: rgba(255,255,255,0.2); padding: 8px; border-radius: 10px;">
+                        <i class="icon-sparkles" style="color: white; font-size: 20px;"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin: 0; color: white; font-size: 18px; font-weight: 800; letter-spacing: -0.2px;">Auto-Fill Billing Generator</h2>
+                        <p style="margin: 2px 0 0; color: rgba(255,255,255,0.8); font-size: 11px; font-weight: 500;">CHED Annex 5 TES Billing Template Automation</p>
+                    </div>
+                </div>
+                <button id="btn-close-autofill" style="background: rgba(255,255,255,0.15); border: none; width: 32px; height: 32px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
+                    <i class="icon-x"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div id="autofill-modal-body" style="padding: 24px 32px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 24px; justify-content: center; align-items: center;">
+                
+                <!-- Direct Annex 5 Generator Section -->
+                <div id="autofill-direct-generator" style="width: 100%; max-width: 800px; border: 1.5px solid rgba(212,175,55,0.2); border-radius: 16px; padding: 28px; background: linear-gradient(135deg, rgba(15,50,96,0.02), rgba(212,175,55,0.02));">
+                    <div style="display: flex; gap: 16px;">
+                        <div style="background: rgba(212,175,55,0.1); padding: 12px; border-radius: 12px; height: fit-content;">
+                            <i class="icon-file-spreadsheet" style="color: #D4AF37; font-size: 28px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <h3 style="margin: 0 0 4px; font-size: 18px; font-weight: 700;">Direct Annex 5 Government Form Generator</h3>
+                            <p style="margin: 0 0 20px; font-size: 13px; color: var(--text-secondary); font-weight: 500;">Official CHED Tertiary Education Subsidy (TES) Billing Template</p>
+                            
+                            <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.5;">Generate the complete Annex 5 Billing Excel workbook in one click. The system will load the default government template, automatically query the Firestore database, segment scholars, parse their details, and trigger an instant download with all formatting preserved.</p>
+                            
+                            <div style="display: flex; align-items: center; justify-content: center; margin-top: 10px;">
+                                <button id="btn-run-direct-annex5" style="background: var(--primary-color, #0F3260); color: white; border: none; padding: 18px 36px; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: opacity 0.2s; box-shadow: 0 4px 12px rgba(15,50,96,0.2);">
+                                    <i class="icon-sparkles" style="font-size: 20px;"></i> Auto-Fill Annex 5 Form
+                                </button>
+                                <span id="autofill-direct-status" style="font-size: 13px; color: var(--text-secondary); font-style: italic; display: none; margin-left: 16px;">Querying database and compiling sheets...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <!-- Post Upload State (Hidden by default) -->
+                <div id="autofill-results-container" style="display: none; width: 100%; max-width: 800px; flex-direction: column; gap: 24px; animation: slideUp 0.3s ease-out;">
+                    <!-- File Summary -->
+                    <div style="padding: 20px; border: 1px solid var(--border-color); border-radius: 12px; display: flex; align-items: center; background: rgba(0,0,0,0.01);">
+                        <div style="background: rgba(15,50,96,0.1); padding: 12px; border-radius: 12px;">
+                            <i id="autofill-file-icon" class="icon-file-spreadsheet" style="font-size: 24px; color: var(--primary-color);"></i>
+                        </div>
+                        <div style="flex: 1; margin: 0 16px;">
+                            <h4 id="autofill-file-name" style="margin: 0 0 4px; font-size: 16px; font-weight: 700;">Annex_5_TES_Billing_Form.xlsx</h4>
+                            <p id="autofill-file-details" style="margin: 0; font-size: 13px; color: var(--text-secondary);">Detected Official Annex 5 TES Billing Form Template</p>
+                        </div>
+                        <button id="btn-clear-autofill" style="background: none; border: none; color: #F44336; cursor: pointer; padding: 8px;">
+                            <i class="icon-x" style="font-size: 20px;"></i>
+                        </button>
+                    </div>
+
+                    <!-- Stats Panel -->
+                    <div id="autofill-stats-panel" style="display: flex; gap: 16px;">
+                        <!-- Injected by JS -->
+                    </div>
+
+                    <!-- Action Toolbar -->
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; gap: 12px;" id="autofill-action-buttons">
+                            <!-- Process button or Download button goes here -->
+                        </div>
+                        <span id="autofill-progress-text" style="font-size: 13px; color: var(--text-secondary); font-style: italic;">Ready for auto-fill</span>
+                    </div>
+
+                    <!-- Preview Container -->
+                    <div id="autofill-preview-container">
+                        <!-- Success message or Table preview -->
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>

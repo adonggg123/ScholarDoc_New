@@ -1,4 +1,5 @@
 // js/views/reports.js
+import { BillingService } from '../services/billing_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -71,29 +72,50 @@ function renderMasterTable(students) {
     }
 
     body.innerHTML = students.map(s => {
+        let nameParts = { last: 'N/A', first: 'N/A', mi: '' };
+        if (s.fullName) {
+            const fn = s.fullName.trim();
+            if (fn.includes(',')) {
+                const parts = fn.split(',');
+                const last = parts[0].trim();
+                const restParts = parts.slice(1).join(',').trim().split(/\s+/);
+                if (restParts.length > 1) {
+                    const miPart = restParts.pop();
+                    nameParts = { last, first: restParts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                } else {
+                    nameParts = { last, first: restParts.join(' '), mi: '' };
+                }
+            } else {
+                const parts = fn.split(/\s+/);
+                if (parts.length === 1) {
+                    nameParts = { last: parts[0], first: '', mi: '' };
+                } else if (parts.length === 2) {
+                    nameParts = { last: parts[1], first: parts[0], mi: '' };
+                } else {
+                    const last = parts.pop();
+                    const miPart = parts.pop();
+                    nameParts = { last, first: parts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                }
+            }
+        }
+        
         const family = s.familyDetails || {};
         const isChecked = selectedStudentIds.has(s.uid) ? 'checked' : '';
         const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' : 
                             (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
                             (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
 
-        const picUrl = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
-        const avatarHtml = picUrl 
-            ? `<img src="${picUrl}" alt="Profile" style="width: 24px; height: 24px; border-radius: 50%; border: 1px solid #FFC107; object-fit: cover; flex-shrink: 0;">`
-            : `<div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color); flex-shrink: 0;">
-                 <i class="icon-user" style="font-size: 12px;"></i>
-               </div>`;
-
         return `
-            <tr style="border-bottom: 1px solid var(--border-color);">
+            <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 14px;">
                     <input type="checkbox" class="rpt-row-checkbox" data-uid="${s.uid}" ${isChecked} style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
                 </td>
                 <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
-                <td style="padding: 14px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
-                    ${avatarHtml}
-                    ${s.fullName || 'N/A'}
+                <td style="padding: 14px; font-weight: 600; font-size: 13px;">
+                    ${nameParts.last}
                 </td>
+                <td style="padding: 14px; font-size: 13px;">${nameParts.first}</td>
+                <td style="padding: 14px; font-size: 13px;">${nameParts.mi}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.email || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.birthdate || '01/01/2000'}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.gender || 'N/A'}</td>
@@ -280,11 +302,40 @@ document.getElementById('btn-export-excel').addEventListener('click', function()
     }
 
     // Build CSV
-    const headers = ['Full Name', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
+    const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
     const rows = studentsToExport.map(s => {
+        let nameParts = { last: '', first: '', mi: '' };
+        if (s.fullName) {
+            const fn = s.fullName.trim();
+            if (fn.includes(',')) {
+                const parts = fn.split(',');
+                const last = parts[0].trim();
+                const restParts = parts.slice(1).join(',').trim().split(/\s+/);
+                if (restParts.length > 1) {
+                    const miPart = restParts.pop();
+                    nameParts = { last, first: restParts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                } else {
+                    nameParts = { last, first: restParts.join(' '), mi: '' };
+                }
+            } else {
+                const parts = fn.split(/\s+/);
+                if (parts.length === 1) {
+                    nameParts = { last: parts[0], first: '', mi: '' };
+                } else if (parts.length === 2) {
+                    nameParts = { last: parts[1], first: parts[0], mi: '' };
+                } else {
+                    const last = parts.pop();
+                    const miPart = parts.pop();
+                    nameParts = { last, first: parts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                }
+            }
+        }
+
         const fam = s.familyDetails || {};
         return [
-            s.fullName || '',
+            nameParts.last,
+            nameParts.first,
+            nameParts.mi,
             s.studentId || '',
             s.course || '',
             s.year || '',
@@ -394,9 +445,140 @@ document.getElementById('rpt-select-all').addEventListener('change', function() 
     updateExcelBtnLabel();
 });
 
-document.getElementById('btn-autofill-billing').addEventListener('click', () => {
-    alert('Billing details autofilled based on scholar records.');
+// ── Auto-Fill Billing Logic ─────────────────────────────────────────
+const modal = document.getElementById('autofill-modal');
+const btnOpen = document.getElementById('btn-autofill-billing');
+const btnClose = document.getElementById('btn-close-autofill');
+const btnRunDirect = document.getElementById('btn-run-direct-annex5');
+const directStatus = document.getElementById('autofill-direct-status');
+
+const resultsContainer = document.getElementById('autofill-results-container');
+const btnClear = document.getElementById('btn-clear-autofill');
+
+let uploadedFile = null;
+let parsedData = null;
+let isAnnex5Template = false;
+let processedResult = null;
+
+btnOpen.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    resetAutofillState();
 });
+
+btnClose.addEventListener('click', () => {
+    modal.style.display = 'none';
+});
+
+btnClear.addEventListener('click', () => {
+    resetAutofillState();
+});
+
+function resetAutofillState() {
+    uploadedFile = null;
+    parsedData = null;
+    isAnnex5Template = false;
+    processedResult = null;
+    resultsContainer.style.display = 'none';
+    document.getElementById('autofill-direct-generator').style.display = 'block';
+}
+
+// Direct Generation
+btnRunDirect.addEventListener('click', async () => {
+    if (btnRunDirect.disabled) return;
+    
+    try {
+        btnRunDirect.disabled = true;
+        btnRunDirect.innerHTML = '<i class="icon-loader" style="font-size: 18px; animation: spin 1s linear infinite;"></i> Generating...';
+        directStatus.style.display = 'inline';
+        directStatus.textContent = 'Fetching template and querying database...';
+
+        const studentsToProcess = selectedStudentIds.size > 0 
+            ? allStudents.filter(s => selectedStudentIds.has(s.uid))
+            : allStudents;
+
+        const response = await fetch('/assets/Annex_5_TES_New_Form_2.xlsx');
+        if (!response.ok) throw new Error('Could not load the government template file.');
+        const templateBlob = await response.blob();
+        
+        directStatus.textContent = 'Compiling XML sheets...';
+        
+        const result = await BillingService.fillAnnex5Template(templateBlob, studentsToProcess);
+        
+        isAnnex5Template = true;
+        processedResult = result.blob;
+        uploadedFile = { name: 'Annex 5-TES New Form 2.xlsx', size: templateBlob.size };
+        
+        showResultsPanel(result);
+        
+    } catch (e) {
+        console.error(e);
+        alert('Direct generation failed: ' + e.message);
+    } finally {
+        btnRunDirect.disabled = false;
+        btnRunDirect.innerHTML = '<i class="icon-sparkles" style="font-size: 18px;"></i> Auto-Fill Annex 5 Form';
+        directStatus.style.display = 'none';
+    }
+});
+
+
+
+function showResultsPanel(result) {
+    document.getElementById('autofill-direct-generator').style.display = 'none';
+    resultsContainer.style.display = 'flex';
+
+    document.getElementById('autofill-file-name').textContent = 'Annex_5_TES_Billing_Form.xlsx';
+    document.getElementById('autofill-file-icon').className = 'icon-file-spreadsheet';
+    document.getElementById('autofill-file-details').textContent = 'Official Annex 5 Template populated.';
+    
+    document.getElementById('autofill-stats-panel').innerHTML = `
+        <div style="flex: 1; padding: 20px; background: rgba(33, 150, 243, 0.05); border-radius: 12px; border: 1px solid rgba(33, 150, 243, 0.2);">
+            <div style="color: #2196F3; font-size: 24px;"><i class="icon-users"></i></div>
+            <div style="font-size: 24px; font-weight: 700; margin-top: 8px;">${result.totalCount}</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">Total TES Scholars</div>
+        </div>
+        <div style="flex: 1; padding: 20px; background: rgba(76, 175, 80, 0.05); border-radius: 12px; border: 1px solid rgba(76, 175, 80, 0.2);">
+            <div style="color: #4CAF50; font-size: 24px;"><i class="icon-arrow-up-right"></i></div>
+            <div style="font-size: 24px; font-weight: 700; margin-top: 8px;">${result.continuingCount}</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">Continuing (Form 2)</div>
+        </div>
+        <div style="flex: 1; padding: 20px; background: rgba(255, 152, 0, 0.05); border-radius: 12px; border: 1px solid rgba(255, 152, 0, 0.2);">
+            <div style="color: #FF9800; font-size: 24px;"><i class="icon-sparkles"></i></div>
+            <div style="font-size: 24px; font-weight: 700; margin-top: 8px;">${result.newCount}</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">New Grantees (Form 3)</div>
+        </div>
+    `;
+
+    document.getElementById('autofill-action-buttons').innerHTML = `
+        <button id="btn-download-annex5" style="background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <i class="icon-download"></i> Download Excel
+        </button>
+    `;
+
+    document.getElementById('btn-download-annex5').addEventListener('click', () => {
+        saveAs(processedResult, 'AutoFilled_Annex_5_TES_Billing_Form.xlsx');
+    });
+
+    document.getElementById('autofill-progress-text').textContent = 'Government Form Generated';
+
+    document.getElementById('autofill-preview-container').innerHTML = `
+        <div style="padding: 24px; border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 12px; background: rgba(76, 175, 80, 0.05);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="background: rgba(76, 175, 80, 0.2); padding: 8px; border-radius: 50%;">
+                    <i class="icon-check-circle" style="color: #4CAF50; font-size: 20px;"></i>
+                </div>
+                <h4 style="margin: 0; font-size: 18px; font-weight: 700;">Annex 5 Billing Form Auto-Fill Complete</h4>
+            </div>
+            <p style="font-size: 14px; margin-bottom: 16px;">The official CHED billing Excel workbook has been dynamically compiled and populated. The following operations were completed successfully:</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                <div style="display: flex; gap: 8px;"><i class="icon-check" style="color: #4CAF50;"></i> Continuing TES scholars were successfully inserted into Form 2 (Row 42 onwards).</div>
+                <div style="display: flex; gap: 8px;"><i class="icon-check" style="color: #4CAF50;"></i> New TES scholars were successfully inserted into Form 3 (Row 34 onwards).</div>
+                <div style="display: flex; gap: 8px;"><i class="icon-check" style="color: #4CAF50;"></i> Student names were parsed and split into Last Name, Given Name, and Middle Initial.</div>
+                <div style="display: flex; gap: 8px;"><i class="icon-check" style="color: #4CAF50;"></i> Total and formula cell ranges were preserved for official CHED verification.</div>
+            </div>
+        </div>
+    `;
+}
+
 
 // Init
 loadAllData();

@@ -230,18 +230,17 @@
                 <span style="font-size: 11px; color: #F57F17;">Student will be added with Pending status and must complete registration.</span>
             </div>
 
-            <!-- View Only Container -->
-            <div id="view-details-container" style="display: none; flex-direction: column; gap: 16px;">
-                <hr style="border: 0; border-top: 1px solid var(--border-color);">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" id="dynamic-details">
-                    <!-- Injected for View Mode -->
-                </div>
-            </div>
-
             <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
                 <button type="button" class="btn btn-outline" id="modal-cancel-btn">Cancel</button>
                 <button type="submit" class="btn btn-primary" id="modal-save-btn">Add Student</button>
             </div>
         </form>
+
+        <!-- View Only Container -->
+        <div id="view-details-container" style="display: none; flex-direction: column; gap: 24px; margin-top: -16px;">
+            <div id="dynamic-details">
+                <!-- Injected for View Mode -->
+            </div>
+        </div>
     </div>
 </div>

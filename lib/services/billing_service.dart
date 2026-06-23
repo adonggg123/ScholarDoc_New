@@ -290,12 +290,8 @@ class BillingService {
       String middleInitial = '';
       if (restParts.length > 1) {
         final lastPart = restParts.last;
-        if (lastPart.length <= 2) {
-          middleInitial = lastPart.replaceAll('.', '').toUpperCase().trim();
-          givenName = restParts.sublist(0, restParts.length - 1).join(' ').trim();
-        } else {
-          givenName = restParts.join(' ').trim();
-        }
+        middleInitial = lastPart.isNotEmpty ? lastPart[0].toUpperCase() : '';
+        givenName = restParts.sublist(0, restParts.length - 1).join(' ').trim();
       } else {
         givenName = rest;
       }
@@ -321,23 +317,15 @@ class BillingService {
       } else {
         final lastPart = parts.last;
         final secondToLast = parts[parts.length - 2];
-        if (secondToLast.length <= 2) {
-          final middleInitial = secondToLast.replaceAll('.', '').toUpperCase().trim();
-          final givenName = parts.sublist(0, parts.length - 2).join(' ').trim();
-          return {
-            'lastName': lastPart,
-            'givenName': givenName,
-            'middleInitial': middleInitial,
-          };
-        } else {
-          final givenName = parts.sublist(0, parts.length - 1).join(' ').trim();
-          return {
-            'lastName': lastPart,
-            'givenName': givenName,
-            'middleInitial': '',
-          };
-        }
+        final middleInitial = secondToLast.isNotEmpty ? secondToLast[0].toUpperCase() : '';
+        final givenName = parts.sublist(0, parts.length - 2).join(' ').trim();
+        return {
+          'lastName': lastPart,
+          'givenName': givenName,
+          'middleInitial': middleInitial,
+        };
       }
+
     }
   }
 
@@ -606,12 +594,11 @@ class BillingService {
       ..sort((a, b) => (a['fullName'] ?? '').toString().toLowerCase()
           .compareTo((b['fullName'] ?? '').toString().toLowerCase()));
 
-    // Categorise: payoutsReceived > 0 → continuing (Form 2); 0 → new (Form 3)
+    // Categorise: The user explicitly requested all scholars to fill Form 2.
     final continuingScholars = <Map<String, dynamic>>[];
     final newScholars        = <Map<String, dynamic>>[];
     for (final s in tesScholars) {
-      final p = int.tryParse(s['payoutsReceived']?.toString() ?? '0') ?? 0;
-      if (p > 0) continuingScholars.add(s); else newScholars.add(s);
+      continuingScholars.add(s);
     }
 
     // ── Direct XML injection into the original template ZIP ──────────────────
@@ -631,8 +618,8 @@ class BillingService {
     final outputArchive   = Archive();
 
     for (final file in templateArchive.files) {
-      if (file.name == 'xl/worksheets/sheet2.xml') {
-        // Form 2 – Consolidated TES New Details (Continuing Grantees)
+      if (file.name == 'xl/worksheets/sheet1.xml') {
+        // The user's new template is a single Form 2 file, so the target sheet is sheet1.xml
         // Data rows start at Excel row 42 (header row = 41).
         final modifiedXml = _injectStudentRows(
           String.fromCharCodes(file.content),
@@ -641,18 +628,7 @@ class BillingService {
           isForm2: true,
         );
         final xmlBytes = utf8.encode(modifiedXml);
-        outputArchive.addFile(ArchiveFile('xl/worksheets/sheet2.xml', xmlBytes.length, xmlBytes));
-      } else if (file.name == 'xl/worksheets/sheet3.xml') {
-        // Form 3 – Consolidated New TES Grantees Details
-        // Data rows start at Excel row 34 (header row = 33).
-        final modifiedXml = _injectStudentRows(
-          String.fromCharCodes(file.content),
-          newScholars,
-          34,
-          isForm2: false,
-        );
-        final xmlBytes = utf8.encode(modifiedXml);
-        outputArchive.addFile(ArchiveFile('xl/worksheets/sheet3.xml', xmlBytes.length, xmlBytes));
+        outputArchive.addFile(ArchiveFile('xl/worksheets/sheet1.xml', xmlBytes.length, xmlBytes));
       } else {
         // All other files (styles, sharedStrings, other sheets, rels…) stay
         // exactly as-is from the original template.

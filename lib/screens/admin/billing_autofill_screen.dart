@@ -124,7 +124,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
   Future<void> _generateDirectAnnex5() async {
     setState(() => _isProcessing = true);
     try {
-      final data = await DefaultAssetBundle.of(context).load('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+      final data = await DefaultAssetBundle.of(context).load('assets/Annex 5-TES New Form 2.xlsx');
       final bytes = data.buffer.asUint8List();
       
       final result = await _billingService.fillAnnex5Template(bytes, customStudents: widget.selectedStudents);
@@ -143,7 +143,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
         _isProcessing = false;
       });
       
-      final String fileName = 'Annex_5_TES_Billing_Form_Filled.xlsx';
+      final String fileName = 'Annex 5-TES New Form 2.xlsx';
       await FileSaver.instance.saveFile(
         name: fileName,
         bytes: result.bytes,
@@ -160,7 +160,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
     try {
       if (_isAnnex5) {
         if (_annex5Result == null) return;
-        final String originalName = _uploadedFile?.name ?? 'Annex_5_TES_Billing_Form.xlsx';
+        final String originalName = _uploadedFile?.name ?? 'Annex 5-TES New Form 2.xlsx';
         final String fileName = 'AutoFilled_${originalName.replaceAll(RegExp(r'\..+$'), '')}.xlsx';
         await FileSaver.instance.saveFile(
           name: fileName,
