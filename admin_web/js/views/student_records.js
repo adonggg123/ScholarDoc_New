@@ -452,7 +452,7 @@ window.editStudent = function(uid) {
     modalMode = 'edit';
     currentEditUid = uid;
     modalTitle.textContent = 'Edit Student';
-    document.getElementById('modal-icon').className = 'icon-edit';
+    document.getElementById('modal-icon').className = 'icon-pencil';
 
     // Ensure the form is visible
     studentForm.style.display = 'flex';

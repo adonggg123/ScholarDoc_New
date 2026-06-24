@@ -72,30 +72,40 @@ function renderTable(programs) {
         }
 
         const docsHtml = docsArray.length > 0 
-            ? `<div style="display: flex; gap: 4px; flex-wrap: wrap;">` + docsArray.map(d => `<span style="background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-size: 10px; border: 1px solid var(--border-color);">${d}</span>`).join('') + `</div>`
-            : `<span style="font-size: 11px; font-style: italic; color: var(--text-secondary);">None</span>`;
+            ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">` + docsArray.map(d => `<span style="background: #F1F5F9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid #E2E8F0;">${d}</span>`).join('') + `</div>`
+            : `<span style="font-size: 12px; font-style: italic; color: #94A3B8;">No documents required</span>`;
 
         return `
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 16px;">
-                    <div style="font-weight: 700; font-size: 13px;">${p.name}</div>
+            <tr style="border-bottom: 1px solid #F1F5F9;">
+                <td style="padding: 20px 24px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #EEF2FF; color: #4F46E5; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">
+                            ${p.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div style="font-weight: 700; font-size: 14px; color: #0F172A;">${p.name}</div>
+                    </div>
                 </td>
-                <td style="padding: 16px; max-width: 200px;">
-                    <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">${p.description || 'No description'}</span>
+                <td style="padding: 20px 24px; max-width: 250px;">
+                    <span style="font-size: 13px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 1.5;">${p.description || 'No description provided'}</span>
                 </td>
-                <td style="padding: 16px;">
-                    <span style="font-size: 11px; font-weight: 700; color: ${isActive ? 'var(--success)' : 'var(--text-secondary)'}; background: ${isActive ? 'rgba(67, 160, 71, 0.1)' : 'rgba(0,0,0,0.05)'}; padding: 4px 8px; border-radius: 12px;">${isActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                <td style="padding: 20px 24px;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: ${isActive ? '#059669' : '#64748B'}; background: ${isActive ? '#D1FAE5' : '#F1F5F9'}; padding: 4px 10px; border-radius: 20px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isActive ? '#059669' : '#94A3B8'};"></span>
+                        ${isActive ? 'ACTIVE' : 'INACTIVE'}
+                    </span>
                 </td>
-                <td style="padding: 16px;">
+                <td style="padding: 20px 24px;">
                     ${docsHtml}
                 </td>
-                <td style="padding: 16px; text-align: right;">
-                    <button class="icon-btn" title="Edit" onclick="editProgram('${p.id}')">
-                        <i class="icon-edit"></i>
-                    </button>
-                    <button class="icon-btn" title="Delete" style="color: var(--error);" onclick="deleteProgram('${p.id}')">
-                        <i class="icon-trash-2"></i>
-                    </button>
+                <td style="padding: 20px 24px; text-align: right;">
+                    <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                        <button class="icon-btn" title="Edit" onclick="editProgram('${p.id}')" style="background: white; border: 1px solid #E2E8F0; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748B; transition: all 0.2s;" onmouseover="this.style.borderColor='#4F46E5'; this.style.color='#4F46E5';" onmouseout="this.style.borderColor='#E2E8F0'; this.style.color='#64748B';">
+                            <i class="icon-pencil" style="font-size: 14px;"></i>
+                        </button>
+                        <button class="icon-btn" title="Delete" onclick="deleteProgram('${p.id}')" style="background: white; border: 1px solid #E2E8F0; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #EF4444; transition: all 0.2s;" onmouseover="this.style.borderColor='#EF4444'; this.style.background='#FEF2F2';" onmouseout="this.style.borderColor='#E2E8F0'; this.style.background='white';">
+                            <i class="icon-trash-2" style="font-size: 14px;"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
@@ -155,7 +165,7 @@ form.addEventListener('submit', async (e) => {
 });
 
 window.editProgram = function(id) {
-    const p = allScholarships.find(x => x.id === id);
+    const p = allScholarships.find(x => String(x.id) === String(id));
     if (!p) return;
     modalMode = 'edit';
     currentEditId = id;

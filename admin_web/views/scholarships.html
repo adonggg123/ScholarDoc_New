@@ -1,30 +1,44 @@
-<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%;">
-    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%; animation: fadeIn 0.4s ease-out;">
+    <!-- Header Section -->
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.04);">
         <div>
-            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Scholarship Programs</h2>
-            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage active scholarships, slots, and requirements.</p>
+            <h2 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #0A1E3F; letter-spacing: -0.5px;">Scholarship Programs</h2>
+            <p style="margin: 0; color: #64748B; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                <i class="icon-info" style="font-size: 14px;"></i> Manage active scholarships, slots, and requirements.
+            </p>
         </div>
-        <button class="btn btn-primary" id="btn-add-program">
+        <button class="btn" id="btn-add-program" style="width: auto; height: 46px; padding: 0 24px; margin-top: 0; background: linear-gradient(135deg, #0A1E3F 0%, #1E355A 100%); color: white; border-radius: 12px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; border: none; box-shadow: 0 8px 16px rgba(10, 30, 63, 0.15); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 12px 20px rgba(10, 30, 63, 0.25)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 16px rgba(10, 30, 63, 0.15)';">
             <i class="icon-plus" style="font-size: 16px;"></i> Add Program
         </button>
     </div>
 
-    <!-- Data Table -->
-    <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+    <!-- Data Table Card -->
+    <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0; background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.06);">
+        <!-- Table Header Actions (Optional space for search/filter in future) -->
+        <div style="padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.06); background: #F8FAFC; display: flex; align-items: center; justify-content: space-between;">
+            <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #334155;">Active Programs</h3>
+            <span style="font-size: 12px; font-weight: 600; color: #94A3B8; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(0,0,0,0.05);">Auto-sync enabled</span>
+        </div>
+        
         <div style="overflow-x: auto; flex: 1;">
             <table style="width: 100%; border-collapse: collapse; min-width: 800px; text-align: left;">
                 <thead>
-                    <tr style="border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.02);">
-                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Program Name</th>
-                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Description</th>
-                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Status</th>
-                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Required Documents</th>
-                        <th style="padding: 16px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; text-align: right;">Actions</th>
+                    <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0;">
+                        <th style="padding: 16px 24px; font-weight: 700; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Program Name</th>
+                        <th style="padding: 16px 24px; font-weight: 700; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Description</th>
+                        <th style="padding: 16px 24px; font-weight: 700; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Status</th>
+                        <th style="padding: 16px 24px; font-weight: 700; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Required Documents</th>
+                        <th style="padding: 16px 24px; font-weight: 700; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; text-align: right;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="programs-table-body">
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading programs...</td>
+                        <td colspan="5" style="text-align: center; padding: 60px; color: #94A3B8;">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                <div class="sync-spinner" style="width: 24px; height: 24px; border: 3px solid #E2E8F0; border-top-color: #0A1E3F; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                                <span style="font-weight: 500; font-size: 14px;">Loading programs...</span>
+                            </div>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -33,39 +47,74 @@
 </div>
 
 <!-- Modal Dialog Wrapper -->
-<div id="scholarship-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-    <div class="card" style="width: 90%; max-width: 400px; padding: 24px; position: relative;">
-        <button id="close-sch-modal-btn" class="icon-btn" style="position: absolute; top: 16px; right: 16px;">
-            <i class="icon-x"></i>
+<div id="scholarship-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); opacity: 1; transition: opacity 0.2s ease;">
+    <div class="card" style="width: 90%; max-width: 480px; padding: 32px; position: relative; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); background: white; transform: scale(1); transition: transform 0.2s ease;">
+        <button id="close-sch-modal-btn" class="icon-btn" style="position: absolute; top: 20px; right: 20px; background: #F1F5F9; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #64748B; transition: all 0.2s;" onmouseover="this.style.background='#E2E8F0'; this.style.color='#0F172A';" onmouseout="this.style.background='#F1F5F9'; this.style.color='#64748B';">
+            <i class="icon-x" style="font-size: 18px;"></i>
         </button>
         
-        <h2 style="margin: 0 0 24px 0; font-size: 18px; font-weight: 700;" id="sch-modal-title">Add Scholarship</h2>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
+            <div style="width: 40px; height: 40px; background: #EEF2FF; color: #4F46E5; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                <i class="icon-graduation-cap" style="font-size: 20px;"></i>
+            </div>
+            <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0F172A;" id="sch-modal-title">Add Scholarship</h2>
+        </div>
         
-        <form id="scholarship-form" style="display: flex; flex-direction: column; gap: 16px;">
+        <form id="scholarship-form" style="display: flex; flex-direction: column; gap: 20px;">
             <div>
-                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Program Name (e.g. TES) <span style="color:red">*</span></label>
-                <input type="text" id="sch-inp-name" required style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit;">
+                <label style="font-size: 13px; font-weight: 700; color: #334155; display: block; margin-bottom: 8px;">Program Name (e.g. TES) <span style="color: #EF4444;">*</span></label>
+                <input type="text" id="sch-inp-name" required style="width: 100%; padding: 14px; border: 1.5px solid #E2E8F0; border-radius: 12px; background: #F8FAFC; outline: none; font-family: inherit; font-size: 14px; color: #0F172A; transition: border-color 0.2s;" onfocus="this.style.borderColor='#4F46E5'; this.style.background='white';" onblur="this.style.borderColor='#E2E8F0'; this.style.background='#F8FAFC';">
             </div>
             
             <div>
-                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Description</label>
-                <textarea id="sch-inp-desc" rows="2" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit; resize: vertical;"></textarea>
+                <label style="font-size: 13px; font-weight: 700; color: #334155; display: block; margin-bottom: 8px;">Description</label>
+                <textarea id="sch-inp-desc" rows="2" style="width: 100%; padding: 14px; border: 1.5px solid #E2E8F0; border-radius: 12px; background: #F8FAFC; outline: none; font-family: inherit; font-size: 14px; color: #0F172A; resize: vertical; transition: border-color 0.2s;" onfocus="this.style.borderColor='#4F46E5'; this.style.background='white';" onblur="this.style.borderColor='#E2E8F0'; this.style.background='#F8FAFC';"></textarea>
             </div>
             
             <div>
-                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">Required Documents (comma separated)</label>
-                <textarea id="sch-inp-docs" rows="3" placeholder="e.g. ID Card, Enrollment Form" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); outline: none; font-family: inherit; resize: vertical;"></textarea>
+                <label style="font-size: 13px; font-weight: 700; color: #334155; display: block; margin-bottom: 8px;">Required Documents</label>
+                <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748B;">Separate each document with a comma (e.g. ID Card, Enrollment Form)</p>
+                <textarea id="sch-inp-docs" rows="3" placeholder="ID Card, Enrollment Form" style="width: 100%; padding: 14px; border: 1.5px solid #E2E8F0; border-radius: 12px; background: #F8FAFC; outline: none; font-family: inherit; font-size: 14px; color: #0F172A; resize: vertical; transition: border-color 0.2s;" onfocus="this.style.borderColor='#4F46E5'; this.style.background='white';" onblur="this.style.borderColor='#E2E8F0'; this.style.background='#F8FAFC';"></textarea>
             </div>
             
-            <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 10px; border: 1px solid var(--border-color);">
-                <input type="checkbox" id="sch-inp-active" checked style="width: 18px; height: 18px; accent-color: var(--primary-color);">
-                <span style="font-size: 14px; font-weight: 500;">Active Status</span>
+            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 16px; background: #F8FAFC; border-radius: 12px; border: 1.5px solid #E2E8F0; transition: border-color 0.2s;" onmouseover="this.style.borderColor='#CBD5E1'" onmouseout="this.style.borderColor='#E2E8F0'">
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 14px; font-weight: 700; color: #0F172A;">Active Status</span>
+                    <span style="font-size: 12px; color: #64748B;">Toggle whether this program is open for applications</span>
+                </div>
+                <div style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                    <input type="checkbox" id="sch-inp-active" checked style="opacity: 0; width: 0; height: 0;">
+                    <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #E2E8F0; transition: .4s; border-radius: 34px;">
+                        <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+                    </span>
+                </div>
             </label>
 
-            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;">
-                <button type="button" class="btn btn-outline" id="sch-modal-cancel-btn">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="sch-modal-save-btn">Save</button>
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+                <button type="button" class="btn" id="sch-modal-cancel-btn" style="padding: 12px 24px; border-radius: 10px; font-weight: 600; font-size: 14px; background: white; color: #64748B; border: 1px solid #E2E8F0; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#F8FAFC'; this.style.color='#0F172A';" onmouseout="this.style.background='white'; this.style.color='#64748B';">Cancel</button>
+                <button type="submit" class="btn" id="sch-modal-save-btn" style="padding: 12px 28px; border-radius: 10px; font-weight: 600; font-size: 14px; background: #4F46E5; color: white; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); transition: all 0.2s;" onmouseover="this.style.background='#4338CA'; this.style.transform='translateY(-1px)';" onmouseout="this.style.background='#4F46E5'; this.style.transform='translateY(0)';">Save Program</button>
             </div>
         </form>
     </div>
 </div>
+
+<style>
+/* Custom checkbox slider logic for the modal */
+#sch-inp-active:checked + .slider {
+    background-color: #10B981;
+}
+#sch-inp-active:checked + .slider > span {
+    transform: translateX(20px);
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+/* Enhanced table row hover */
+#programs-table-body tr {
+    transition: background-color 0.2s ease;
+}
+#programs-table-body tr:hover {
+    background-color: #F8FAFC;
+}
+</style>

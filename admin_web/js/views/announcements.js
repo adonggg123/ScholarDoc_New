@@ -52,7 +52,7 @@ function renderList(announcements) {
                     
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <span style="font-size: 10px; font-weight: 700; color: ${isActive ? 'var(--success)' : 'var(--text-secondary)'}; background: ${isActive ? 'rgba(67, 160, 71, 0.1)' : 'rgba(0,0,0,0.05)'}; padding: 4px 8px; border-radius: 12px;">${isActive ? 'LIVE' : 'ARCHIVED'}</span>
-                        <button class="icon-btn" title="Edit" onclick="editAnnouncement('${a.id}')"><i class="icon-edit" style="font-size: 14px;"></i></button>
+                        <button class="icon-btn" title="Edit" onclick="editAnnouncement('${a.id}')"><i class="icon-pencil" style="font-size: 14px;"></i></button>
                         <button class="icon-btn" title="${isActive ? 'Archive' : 'Unarchive'}" onclick="toggleStatus('${a.id}', ${!isActive})"><i class="${isActive ? 'icon-archive' : 'icon-inbox'}" style="font-size: 14px; color: ${isActive ? 'var(--text-secondary)' : 'var(--success)'}"></i></button>
                         <button class="icon-btn" title="Delete" onclick="deleteAnnouncement('${a.id}')"><i class="icon-trash-2" style="font-size: 14px; color: var(--error);"></i></button>
                     </div>
@@ -145,7 +145,7 @@ form.addEventListener('submit', async (e) => {
 });
 
 window.editAnnouncement = function(id) {
-    const a = allAnnouncements.find(x => x.id === id);
+    const a = allAnnouncements.find(x => String(x.id) === String(id));
     if (!a) return;
     modalMode = 'edit';
     currentEditId = id;
