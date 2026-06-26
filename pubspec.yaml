@@ -52,6 +52,7 @@ dependencies:
   csv: ^7.1.1
   supabase_flutter: ^2.14.2
   flutter_tesseract_ocr: ^0.4.31
+  signature: ^6.3.0
 
 dev_dependencies:
   flutter_test:

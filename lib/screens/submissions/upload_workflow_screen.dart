@@ -10,6 +10,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:typed_data';
+import 'id_capture_screen.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
   const UploadWorkflowScreen({super.key});
@@ -100,17 +102,18 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
   Future<void> _handleUpload() async {
     try {
-      // 1. Pick PDF File
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: true,
+      // 1. Navigate to IDCaptureScreen to get the generated PDF bytes
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const IDCaptureScreen()),
       );
 
-      if (result == null || result.files.single.bytes == null) return;
+      if (result == null || result is! Map) return;
       
-      final bytes = result.files.single.bytes!;
-      String originalName = result.files.single.name;
+      final bytes = result['bytes'] as Uint8List?;
+      final originalName = result['fileName'] as String?;
+
+      if (bytes == null || originalName == null) return;
 
       setState(() {
         _isUploading = true;
@@ -119,9 +122,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
       final uid = _authService.currentUser?.id;
       if (uid == null) throw Exception("User not authenticated");
-
-      // 2. Skip ML Verification for PDF
-      // (Bypassing ML face/OCR as current logic expects images)
 
       // 3. Real Upload to Firebase Storage
       final String storagePath =
@@ -302,7 +302,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   if (urlToOpen != null) {
                     final uri = Uri.parse(urlToOpen);
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                     } else {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -595,8 +595,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           style: TextStyle(color: context.textSec, fontSize: 13),
         ),
         const SizedBox(height: 24),
-        _bulletPoint('Combined Document (PDF format only)'),
-        _bulletPoint('Must include: ID Front, ID Back, and 3 Signatures'),
+        _bulletPoint('Camera Capture: Front and Back of ID'),
+        _bulletPoint('Digital Signature: Draw your signature directly in the app'),
         _bulletPoint('Clear photo of your ATM Card (JPG/PNG format)'),
         const SizedBox(height: 32),
         Container(
@@ -635,7 +635,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Please ensure your PDF contains all required documents (ID Front, ID Back, and 3 Signatures). Note: All ID images must be clear, well-lit, and easily readable. A blurred or incomplete PDF may lead to rejection.',
+                'Please ensure your ID captures are clear, well-lit, and easily readable. Your digital signature should be drawn clearly. A blurred or incomplete submission may lead to rejection.',
                 style: TextStyle(
                   color: AppTheme.warning,
                   fontSize: 12,
@@ -665,9 +665,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             child: const Icon(LucideIcons.check, size: 10, color: Colors.white),
           ),
           const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+            ),
           ),
         ],
       ),
@@ -773,11 +775,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           const SizedBox(height: 24),
 
           _buildUploadCard(
-            'ID & Signatures (Single PDF)',
-            LucideIcons.fileText,
+            'ID Capture & Digital Signature',
+            LucideIcons.camera,
             onTap: () => _handleUpload(),
             feedback: _pdfFeedback,
-            subtitle: 'Include ID (Front/Back) + 3 Signatures (Max 10MB)',
+            subtitle: 'Use camera to scan ID and sign',
             fileName: _pdfFileName,
           ),
           _buildUploadCard(
