@@ -6,7 +6,8 @@ import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
-import 'package:intl/intl.dart';
+
+import '../../services/announcement_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,9 +18,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
+  final AnnouncementService _announcementService = AnnouncementService();
 
   Map<String, dynamic>? _profileData;
+  List<Announcement> _announcements = [];
   bool _isLoading = true;
+  final Set<String> _expandedAnnouncementIds = {};
 
   @override
   void initState() {
@@ -34,56 +38,41 @@ class _HomeScreenState extends State<HomeScreen> {
       if (doc != null && mounted) {
         setState(() {
           _profileData = doc;
-          _isLoading = false;
         });
       }
-    } else {
-      if (mounted) {
+    }
+
+    _announcementService.getActiveAnnouncements().listen(
+      (list) {
+        if (mounted) {
+          setState(() {
+            _announcements = list;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('Error loading announcements: $error');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      },
+    );
+
+    // Fallback timer to disable loading after 5 seconds if no announcements emit
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _isLoading) {
         setState(() {
           _isLoading = false;
         });
       }
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, String>> submissions = [];
-    if (_profileData != null && _profileData!['submittedAt'] != null) {
-      final String submittedAt = (() {
-        final ts = _profileData!['submittedAt'];
-        if (ts != null) {
-          try {
-            final parsed = DateTime.parse(ts.toString());
-            return DateFormat('MMM d, y – h:mm a').format(parsed);
-          } catch (_) {}
-        }
-        return 'N/A';
-      })();
-
-      final String status = _profileData!['status'] ?? 'Pending';
-
-      if (_profileData!['submissionPdfName'] != null) {
-        submissions.add({
-          'type': 'ID Capture & Digital Signature',
-          'fileName': _profileData!['submissionPdfName'].toString(),
-          'date': submittedAt,
-          'status': status,
-        });
-      }
-
-      final atmCardFileName = _profileData!['atmCardFileName'] ?? 
-                              (_profileData!['documents'] is Map ? _profileData!['documents']['atmCardFileName'] : null);
-      if (atmCardFileName != null) {
-        submissions.add({
-          'type': 'ATM Card Proof',
-          'fileName': atmCardFileName.toString(),
-          'date': submittedAt,
-          'status': status,
-        });
-      }
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -388,16 +377,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSectionHeader('Submission History'),
+                      _buildSectionHeader('Recent Updates'),
                       TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SubmissionHistoryScreen(),
-                            ),
-                          );
-                        },
+                        onPressed: () {},
                         style: TextButton.styleFrom(
                           foregroundColor: context.textSec.withValues(
                             alpha: 0.5,
@@ -428,30 +410,30 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 }
-                if (submissions.isEmpty) {
+                if (_announcements.isEmpty) {
                   return Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.all(20),
                       child: Text(
-                        'No submission history found.',
+                        'No recent updates.',
                         style: TextStyle(color: context.textSec),
                       ),
                     ),
                   );
                 }
 
-                final item = submissions[index];
+                final a = _announcements[index];
                 return Padding(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 24.0,
                     vertical: 8.0,
                   ),
-                  child: _buildSubmissionHistoryItem(context, item),
+                  child: _buildAnnouncementWidget(context, a),
                 );
               },
               childCount: _isLoading
                   ? 1
-                  : (submissions.isEmpty ? 1 : submissions.length),
+                  : (_announcements.isEmpty ? 1 : _announcements.length),
             ),
           ),
           const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -754,119 +736,152 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
-
-  Widget _buildSubmissionHistoryItem(BuildContext context, Map<String, String> item) {
-    final type = item['type']!;
-    final fileName = item['fileName']!;
-    final date = item['date']!;
-    final status = item['status']!;
-
-    Color statusColor = const Color(0xFFF59E0B);
-    IconData statusIcon = LucideIcons.hourglass;
-    if (status == 'Approved' || status == 'Verified') {
-      statusColor = const Color(0xFF10B981);
-      statusIcon = LucideIcons.badgeCheck;
-    } else if (status == 'Rejected' || status == 'Needs Correction') {
-      statusColor = const Color(0xFFEF4444);
-      statusIcon = LucideIcons.alertTriangle;
+  Widget _buildAnnouncementWidget(BuildContext context, Announcement a) {
+    Color typeColor = const Color(0xFF64748B); // Slate Grey
+    IconData typeIcon = LucideIcons.info;
+    if (a.type == 'Deadline') {
+      typeColor = const Color(0xFFEF4444); // Crimson
+      typeIcon = LucideIcons.calendarRange;
+    }
+    if (a.type == 'Update') {
+      typeColor = const Color(0xFF10B981); // Emerald
+      typeIcon = LucideIcons.bellRing;
     }
 
+    final bool isExpanded = _expandedAnnouncementIds.contains(a.id);
+
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0), // Cool Grey border
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.015),
+            blurRadius: 10,
             offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: typeColor.withValues(alpha: 0.02),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              type.contains('ID') ? LucideIcons.fileText : LucideIcons.creditCard,
-              color: AppTheme.primaryColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  type,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Color(0xFF0F3260),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  fileName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.textSec,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(LucideIcons.calendar, size: 12, color: context.textSec.withValues(alpha: 0.7)),
-                    const SizedBox(width: 4),
-                    Text(
-                      date,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.textSec.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w500,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedAnnouncementIds.remove(a.id);
+                } else {
+                  _expandedAnnouncementIds.add(a.id);
+                }
+              });
+            },
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Distinct side border vertical accent indicator
+                  Container(
+                    width: 6,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [typeColor, typeColor.withValues(alpha: 0.5)],
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(statusIcon, size: 10, color: statusColor),
-                const SizedBox(width: 4),
-                Text(
-                  status,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: typeColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(typeIcon, size: 10, color: typeColor),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      a.type.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: typeColor,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Spacer(),
+                              Icon(
+                                isExpanded
+                                    ? LucideIcons.chevronUp
+                                    : LucideIcons.chevronDown,
+                                size: 16,
+                                color: context.textSec.withValues(alpha: 0.4),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            a.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: Color(0xFF0F3260),
+                              letterSpacing: -0.3,
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeInOut,
+                            child: Text(
+                              a.content,
+                              style: TextStyle(
+                                color: context.textSec.withValues(alpha: 0.85),
+                                fontSize: 13,
+                                height: 1.5,
+                              ),
+                              maxLines: isExpanded ? null : 2,
+                              overflow: isExpanded
+                                  ? TextOverflow.clip
+                                  : TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
