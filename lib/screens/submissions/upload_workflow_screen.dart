@@ -443,142 +443,169 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   primary: AppTheme.primaryColor,
                 ),
               ),
-              child: Stepper(
-                type: StepperType.horizontal,
-                currentStep: _currentStep,
-                elevation: 0,
-                onStepContinue: () async {
-                  if (_currentStep == 1) {
-                    if (!_formKey.currentState!.validate()) {
-                      return;
-                    }
-                    if (_submissionPdfUrl == null || _atmCardUrl == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please upload both your PDF document and ATM Card before continuing.'),
-                          backgroundColor: AppTheme.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-                  }
-                  if (_currentStep < 2) {
-                    setState(() {
-                      _currentStep += 1;
-                    });
-                  } else {
-                    setState(() => _isUploading = true);
-                    try {
-                      final user = _authService.currentUser;
-                      if (user != null) {
-                        final doc = await _authService.getStudentProfile(
-                          user.id,
-                        );
-                        final data = doc;
-                        final String studentId =
-                            data?['studentId'] ?? 'Unknown ID';
-                        final String fullName = data?['fullName'] ?? 'Student';
-
-                        Map<String, dynamic> documents = {};
-                        if (data != null && data['documents'] is Map) {
-                          documents = Map<String, dynamic>.from(data['documents']);
-                        }
-                        documents['atmCardUrl'] = _atmCardUrl;
-                        documents['atmCardFileName'] = _atmCardFileName;
-
-                        await _authService.updateStudentProfile(user.id, {
-                          'status': 'Pending',
-                          'saNumber': _saController.text.trim(),
-                          'submissionPdfUrl': _submissionPdfUrl,
-                          'submissionPdfName': _pdfFileName,
-                          'documents': documents,
-                          'pdfVerified': true,
-                          'createdAt': DateTime.now().toIso8601String(),
-                          'submittedAt': DateTime.now().toIso8601String(),
-                          'requiresResubmission': false,
-                          'adminRemarks': null,
-                        });
-
-                        await _auditService.logActivity(
-                          action:
-                              'Submitted documents for scholarship verification',
-                          userName: fullName,
-                          role: 'Student',
-                          studentId: studentId,
-                        );
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 100),
+                child: Stepper(
+                  type: StepperType.horizontal,
+                  currentStep: _currentStep,
+                  elevation: 0,
+                  controlsBuilder: (BuildContext context, ControlsDetails details) {
+                    final isLastStep = _currentStep == 2;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 24.0),
+                      child: Row(
+                        children: [
+                          if (_currentStep > 0)
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: details.onStepCancel,
+                                child: const Text('Back'),
+                              ),
+                            ),
+                          if (_currentStep > 0) const SizedBox(width: 16),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: details.onStepContinue,
+                              child: Text(isLastStep ? 'Submit' : 'Continue'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  onStepContinue: () async {
+                    if (_currentStep == 1) {
+                      if (!_formKey.currentState!.validate()) {
+                        return;
                       }
+                      if (_submissionPdfUrl == null || _atmCardUrl == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please upload both your PDF document and ATM Card before continuing.'),
+                            backgroundColor: AppTheme.error,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+                    if (_currentStep < 2) {
+                      setState(() {
+                        _currentStep += 1;
+                      });
+                    } else {
+                      setState(() => _isUploading = true);
+                      try {
+                        final user = _authService.currentUser;
+                        if (user != null) {
+                          final doc = await _authService.getStudentProfile(
+                            user.id,
+                          );
+                          final data = doc;
+                          final String studentId =
+                              data?['studentId'] ?? 'Unknown ID';
+                          final String fullName = data?['fullName'] ?? 'Student';
 
-                      if (!mounted) return;
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Documents submitted successfully!'),
-                          backgroundColor: AppTheme.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
+                          Map<String, dynamic> documents = {};
+                          if (data != null && data['documents'] is Map) {
+                            documents = Map<String, dynamic>.from(data['documents']);
+                          }
+                          documents['atmCardUrl'] = _atmCardUrl;
+                          documents['atmCardFileName'] = _atmCardFileName;
 
+                          await _authService.updateStudentProfile(user.id, {
+                            'status': 'Pending',
+                            'saNumber': _saController.text.trim(),
+                            'submissionPdfUrl': _submissionPdfUrl,
+                            'submissionPdfName': _pdfFileName,
+                            'documents': documents,
+                            'pdfVerified': true,
+                            'createdAt': DateTime.now().toIso8601String(),
+                            'submittedAt': DateTime.now().toIso8601String(),
+                            'requiresResubmission': false,
+                            'adminRemarks': null,
+                          });
+
+                          await _auditService.logActivity(
+                            action:
+                                'Submitted documents for scholarship verification',
+                            userName: fullName,
+                            role: 'Student',
+                            studentId: studentId,
+                          );
+                        }
+
+                        if (!mounted) return;
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Documents submitted successfully!'),
+                            backgroundColor: AppTheme.success,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        } else {
+                          setState(() {
+                            _currentStep = 0;
+                            _submissionPdfUrl = null;
+                            _pdfFeedback = null;
+                            _pdfFileName = null;
+                            _atmCardUrl = null;
+                            _atmCardFeedback = null;
+                            _atmCardFileName = null;
+                          });
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to submit documents: $e'),
+                            backgroundColor: AppTheme.error,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => _isUploading = false);
+                      }
+                    }
+                  },
+                  onStepCancel: () {
+                    if (_currentStep > 0) {
+                      setState(() {
+                        _currentStep -= 1;
+                      });
+                    } else {
                       if (Navigator.canPop(context)) {
                         Navigator.pop(context);
-                      } else {
-                        setState(() {
-                          _currentStep = 0;
-                          _submissionPdfUrl = null;
-                          _pdfFeedback = null;
-                          _pdfFileName = null;
-                          _atmCardUrl = null;
-                          _atmCardFeedback = null;
-                          _atmCardFileName = null;
-                        });
                       }
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to submit documents: $e'),
-                          backgroundColor: AppTheme.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } finally {
-                      if (mounted) setState(() => _isUploading = false);
                     }
-                  }
-                },
-                onStepCancel: () {
-                  if (_currentStep > 0) {
-                    setState(() {
-                      _currentStep -= 1;
-                    });
-                  } else {
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                    }
-                  }
-                },
-                steps: [
-                  Step(
-                    title: const Text('Guide', style: TextStyle(fontSize: 12)),
-                    content: _buildStep1(),
-                    isActive: _currentStep >= 0,
-                    state: _currentStep > 0
-                        ? StepState.complete
-                        : StepState.indexed,
-                  ),
-                  Step(
-                    title: const Text('Files', style: TextStyle(fontSize: 12)),
-                    content: _buildStep2(),
-                    isActive: _currentStep >= 1,
-                    state: _currentStep > 1
-                        ? StepState.complete
-                        : StepState.indexed,
-                  ),
-                  Step(
-                    title: const Text('Final', style: TextStyle(fontSize: 12)),
-                    content: _buildStep3(),
-                  ),
-                ],
+                  },
+                  steps: [
+                    Step(
+                      title: const Text('Guide', style: TextStyle(fontSize: 12)),
+                      content: _buildStep1(),
+                      isActive: _currentStep >= 0,
+                      state: _currentStep > 0
+                          ? StepState.complete
+                          : StepState.indexed,
+                    ),
+                    Step(
+                      title: const Text('Files', style: TextStyle(fontSize: 12)),
+                      content: _buildStep2(),
+                      isActive: _currentStep >= 1,
+                      state: _currentStep > 1
+                          ? StepState.complete
+                          : StepState.indexed,
+                    ),
+                    Step(
+                      title: const Text('Final', style: TextStyle(fontSize: 12)),
+                      content: _buildStep3(),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
