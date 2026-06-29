@@ -1011,9 +1011,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
                               )
                             : null,
-                        color: !isSelected && isToday 
-                            ? const Color(0xFF0F3260).withValues(alpha: 0.05)
-                            : Colors.transparent,
+                        color: isSelected
+                            ? null
+                            : (isToday 
+                                ? const Color(0xFF0F3260).withValues(alpha: 0.08)
+                                : Colors.transparent),
                         border: !isSelected
                             ? Border.all(color: const Color(0xFFE2E8F0), width: 1)
                             : null,
