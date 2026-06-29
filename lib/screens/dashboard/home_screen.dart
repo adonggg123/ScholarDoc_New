@@ -6,8 +6,8 @@ import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
-
 import '../../services/announcement_service.dart';
+import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,9 +25,20 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   final Set<String> _expandedAnnouncementIds = {};
 
+  DateTime _selectedDate = DateTime.now();
+  late DateTime _startOfWeek;
+  late List<DateTime> _weekDays;
+
+  void _calculateWeek() {
+    final today = DateTime.now();
+    _startOfWeek = today.subtract(Duration(days: today.weekday % 7));
+    _weekDays = List.generate(7, (index) => _startOfWeek.add(Duration(days: index)));
+  }
+
   @override
   void initState() {
     super.initState();
+    _calculateWeek();
     _loadData();
   }
 
@@ -331,7 +342,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildSectionHeader('Scholarship Status'),
                   const SizedBox(height: 10),
                   _buildStatusCard(context),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
+                  _buildCalendarCard(context),
+                  const SizedBox(height: 24),
                   _buildSectionHeader('Quick Actions'),
                   const SizedBox(height: 10),
                   Row(
@@ -882,6 +895,186 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarCard(BuildContext context) {
+    final weekFormat = DateFormat('MMMM yyyy');
+    final rangeFormat = DateFormat('MMM d');
+    final dayLabelFormat = DateFormat('E');
+    final dayNumFormat = DateFormat('d');
+
+    final String monthYearLabel = weekFormat.format(_selectedDate);
+    final String weekRangeLabel = 'Week of ${rangeFormat.format(_weekDays.first)} – ${rangeFormat.format(_weekDays.last)}';
+    
+    final isTodaySelected = DateUtils.isSameDay(_selectedDate, DateTime.now());
+    final String bottomPillLabel = isTodaySelected
+        ? 'Today — ${DateFormat('EEEE, MMMM d').format(_selectedDate)}'
+        : DateFormat('EEEE, MMMM d').format(_selectedDate);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    monthYearLabel,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F3260),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    weekRangeLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.textSec.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  LucideIcons.calendar,
+                  color: Color(0xFF0F3260),
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Days Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              final date = _weekDays[index];
+              final isSelected = DateUtils.isSameDay(date, _selectedDate);
+              final isToday = DateUtils.isSameDay(date, DateTime.now());
+              final dayLabel = dayLabelFormat.format(date); // Sun, Mon, etc.
+              final dayNum = dayNumFormat.format(date); // 28, 29, etc.
+
+              return Column(
+                children: [
+                  Text(
+                    dayLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? const Color(0xFF0F3260) : context.textSec,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedDate = date;
+                      });
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: isSelected
+                            ? const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
+                              )
+                            : null,
+                        color: !isSelected && isToday 
+                            ? const Color(0xFF0F3260).withValues(alpha: 0.05)
+                            : Colors.transparent,
+                        border: !isSelected
+                            ? Border.all(color: const Color(0xFFE2E8F0), width: 1)
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        dayNum,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? Colors.white : const Color(0xFF1F2937),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Small selection dot below
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? const Color(0xFF0F3260) : Colors.transparent,
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+          const SizedBox(height: 16),
+          // Bottom Today pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F3260).withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF0F3260),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  bottomPillLabel,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F3260),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
