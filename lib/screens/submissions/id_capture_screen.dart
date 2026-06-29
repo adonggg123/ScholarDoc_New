@@ -22,7 +22,17 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   XFile? _frontImage;
   XFile? _backImage;
   
-  final SignatureController _signatureController = SignatureController(
+  final SignatureController _signatureController1 = SignatureController(
+    penStrokeWidth: 3,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.transparent,
+  );
+  final SignatureController _signatureController2 = SignatureController(
+    penStrokeWidth: 3,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.transparent,
+  );
+  final SignatureController _signatureController3 = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.black,
     exportBackgroundColor: Colors.transparent,
@@ -57,9 +67,13 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   }
 
   Future<void> _generateAndReturnPdf() async {
-    if (_frontImage == null || _backImage == null || _signatureController.isEmpty) {
+    if (_frontImage == null || 
+        _backImage == null || 
+        _signatureController1.isEmpty || 
+        _signatureController2.isEmpty || 
+        _signatureController3.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please complete all 3 steps before generating the PDF.')),
+        const SnackBar(content: Text('Please complete all capture and signature steps before generating the PDF.')),
       );
       return;
     }
@@ -79,11 +93,13 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       final pw.MemoryImage backPwImage = pw.MemoryImage(backBytes);
 
       // Export signature to bytes
-      final signatureBytes = await _signatureController.toPngBytes();
-      pw.MemoryImage? signaturePwImage;
-      if (signatureBytes != null) {
-        signaturePwImage = pw.MemoryImage(signatureBytes);
-      }
+      final sigBytes1 = await _signatureController1.toPngBytes();
+      final sigBytes2 = await _signatureController2.toPngBytes();
+      final sigBytes3 = await _signatureController3.toPngBytes();
+
+      pw.MemoryImage? sigPwImage1 = sigBytes1 != null ? pw.MemoryImage(sigBytes1) : null;
+      pw.MemoryImage? sigPwImage2 = sigBytes2 != null ? pw.MemoryImage(sigBytes2) : null;
+      pw.MemoryImage? sigPwImage3 = sigBytes3 != null ? pw.MemoryImage(sigBytes3) : null;
 
       pdf.addPage(
         pw.MultiPage(
@@ -105,7 +121,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 height: 200,
                 child: pw.Image(frontPwImage, fit: pw.BoxFit.contain),
               ),
-              pw.SizedBox(height: 30),
+              pw.SizedBox(height: 24),
               
               // Back ID
               pw.Text('ID Back', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
@@ -115,17 +131,65 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 height: 200,
                 child: pw.Image(backPwImage, fit: pw.BoxFit.contain),
               ),
-              pw.SizedBox(height: 30),
+              pw.SizedBox(height: 24),
               
               // Signature
-              pw.Text('Digital Signature', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Specimen Signatures', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
-              if (signaturePwImage != null)
-                pw.Container(
-                  alignment: pw.Alignment.center,
-                  height: 100,
-                  child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
-                ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Column(
+                    children: [
+                      if (sigPwImage1 != null)
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          width: 150,
+                          height: 70,
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                          ),
+                          child: pw.Image(sigPwImage1, fit: pw.BoxFit.contain),
+                        ),
+                      pw.SizedBox(height: 4),
+                      pw.Text('Signature 1', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      if (sigPwImage2 != null)
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          width: 150,
+                          height: 70,
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                          ),
+                          child: pw.Image(sigPwImage2, fit: pw.BoxFit.contain),
+                        ),
+                      pw.SizedBox(height: 4),
+                      pw.Text('Signature 2', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      if (sigPwImage3 != null)
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          width: 150,
+                          height: 70,
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                          ),
+                          child: pw.Image(sigPwImage3, fit: pw.BoxFit.contain),
+                        ),
+                      pw.SizedBox(height: 4),
+                      pw.Text('Signature 3', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 16),
               pw.Divider(),
               pw.SizedBox(height: 10),
               pw.Text('Generated by ScholarDoc App', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
@@ -159,7 +223,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
 
   @override
   void dispose() {
-    _signatureController.dispose();
+    _signatureController1.dispose();
+    _signatureController2.dispose();
+    _signatureController3.dispose();
     super.dispose();
   }
 
@@ -298,38 +364,22 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Step 3: Signature',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _signatureController.clear(),
-                        icon: const Icon(LucideIcons.eraser, size: 16),
-                        label: const Text('Clear'),
-                      ),
-                    ],
+                  _buildSignaturePad(
+                    stepLabel: 'Step 3: Specimen Signature 1',
+                    controller: _signatureController1,
+                    onClear: () => _signatureController1.clear(),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Signature(
-                      controller: _signatureController,
-                      height: 150,
-                      backgroundColor: Colors.white,
-                    ),
+                  const SizedBox(height: 24),
+                  _buildSignaturePad(
+                    stepLabel: 'Step 4: Specimen Signature 2',
+                    controller: _signatureController2,
+                    onClear: () => _signatureController2.clear(),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please sign in the box above.',
-                    style: TextStyle(fontSize: 12, color: context.textSec),
-                    textAlign: TextAlign.center,
+                  const SizedBox(height: 24),
+                  _buildSignaturePad(
+                    stepLabel: 'Step 5: Specimen Signature 3',
+                    controller: _signatureController3,
+                    onClear: () => _signatureController3.clear(),
                   ),
                   
                   const SizedBox(height: 32),
@@ -351,6 +401,51 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildSignaturePad({
+    required String stepLabel,
+    required SignatureController controller,
+    required VoidCallback onClear,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              stepLabel,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            TextButton.icon(
+              onPressed: onClear,
+              icon: const Icon(LucideIcons.eraser, size: 16),
+              label: const Text('Clear'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Signature(
+            controller: controller,
+            height: 120,
+            backgroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Please sign in the box above.',
+          style: TextStyle(fontSize: 12, color: context.textSec),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
