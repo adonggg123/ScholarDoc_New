@@ -77,7 +77,7 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                           child: ClipOval(
                             child: Image.asset(
-                              'assets/app_logo2.png',
+                              'assets/app_logo3.png',
                               width: 250,
                               height: 250,
                               fit: BoxFit.contain,

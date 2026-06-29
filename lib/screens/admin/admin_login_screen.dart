@@ -261,7 +261,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         Image.asset(
-          'assets/app_logo2.png',
+          'assets/app_logo3.png',
           height: 90,
           width: 90,
           fit: BoxFit.contain,

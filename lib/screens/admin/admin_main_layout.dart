@@ -149,10 +149,19 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                   label: 'Validation',
                   icon: LucideIcons.shieldCheck,
                   isExpanded: _isValidationExpanded,
-                  onExpand: (val) => setState(() => _isValidationExpanded = val),
+                  onExpand: (val) =>
+                      setState(() => _isValidationExpanded = val),
                   children: [
-                    _buildSubNavItem(3, 'SA Verification', LucideIcons.landmark),
-                    _buildSubNavItem(8, 'ID Validation', LucideIcons.badgeCheck),
+                    _buildSubNavItem(
+                      3,
+                      'SA Verification',
+                      LucideIcons.landmark,
+                    ),
+                    _buildSubNavItem(
+                      8,
+                      'ID Validation',
+                      LucideIcons.badgeCheck,
+                    ),
                   ],
                 ),
                 _buildNavItem(4, 'Announcements', LucideIcons.megaphone),
@@ -163,7 +172,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 const SizedBox(height: 24),
                 _buildNavItem(7, 'Settings', LucideIcons.settings),
                 const SizedBox(height: 24),
-              ],  
+              ],
             ),
           ),
         ),
@@ -178,7 +187,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Image.asset(
-            'assets/app_logo2.png',
+            'assets/app_logo3.png',
             width: 58,
             height: 58,
             fit: BoxFit.contain,
@@ -312,7 +321,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
               borderRadius: BorderRadius.circular(12),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: hasSelectedChild && !isExpanded
                       ? AppTheme.primaryColor.withValues(alpha: 0.1)
@@ -331,7 +343,9 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                       ),
                       child: Icon(
                         icon,
-                        color: hasSelectedChild ? Colors.white : context.textSec,
+                        color: hasSelectedChild
+                            ? Colors.white
+                            : context.textSec,
                         size: 18,
                       ),
                     ),
@@ -341,13 +355,19 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                         label,
                         style: TextStyle(
                           fontSize: 13,
-                          color: hasSelectedChild ? context.textPri : context.textSec,
-                          fontWeight: hasSelectedChild ? FontWeight.w600 : FontWeight.w500,
+                          color: hasSelectedChild
+                              ? context.textPri
+                              : context.textSec,
+                          fontWeight: hasSelectedChild
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                         ),
                       ),
                     ),
                     Icon(
-                      isExpanded ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                      isExpanded
+                          ? LucideIcons.chevronDown
+                          : LucideIcons.chevronRight,
                       size: 14,
                       color: context.textSec.withValues(alpha: 0.5),
                     ),
@@ -404,8 +424,12 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                     label,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSelected ? AppTheme.primaryColor : context.textSec,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : context.textSec,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -420,31 +444,51 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   String _getPageTitle() {
     switch (_selectedIndex) {
-      case 0: return 'Dashboard';
-      case 1: return 'Student Records';
-      case 2: return 'Scholarships';
-      case 3: return 'SA Verification';
-      case 4: return 'Announcements';
-      case 5: return 'Activity Logs';
-      case 6: return 'Reports';
-      case 7: return 'Settings';
-      case 8: return 'ID Validation';
-      default: return 'Dashboard';
+      case 0:
+        return 'Dashboard';
+      case 1:
+        return 'Student Records';
+      case 2:
+        return 'Scholarships';
+      case 3:
+        return 'SA Verification';
+      case 4:
+        return 'Announcements';
+      case 5:
+        return 'Activity Logs';
+      case 6:
+        return 'Reports';
+      case 7:
+        return 'Settings';
+      case 8:
+        return 'ID Validation';
+      default:
+        return 'Dashboard';
     }
   }
 
   IconData _getPageIcon() {
     switch (_selectedIndex) {
-      case 0: return LucideIcons.layoutDashboard;
-      case 1: return LucideIcons.users;
-      case 2: return LucideIcons.graduationCap;
-      case 3: return LucideIcons.landmark;
-      case 4: return LucideIcons.megaphone;
-      case 5: return LucideIcons.history;
-      case 6: return LucideIcons.barChart4;
-      case 7: return LucideIcons.settings;
-      case 8: return LucideIcons.badgeCheck;
-      default: return LucideIcons.layoutDashboard;
+      case 0:
+        return LucideIcons.layoutDashboard;
+      case 1:
+        return LucideIcons.users;
+      case 2:
+        return LucideIcons.graduationCap;
+      case 3:
+        return LucideIcons.landmark;
+      case 4:
+        return LucideIcons.megaphone;
+      case 5:
+        return LucideIcons.history;
+      case 6:
+        return LucideIcons.barChart4;
+      case 7:
+        return LucideIcons.settings;
+      case 8:
+        return LucideIcons.badgeCheck;
+      default:
+        return LucideIcons.layoutDashboard;
     }
   }
 
@@ -502,7 +546,9 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                         borderRadius: BorderRadius.circular(10),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0A1E3F).withValues(alpha: 0.25),
+                            color: const Color(
+                              0xFF0A1E3F,
+                            ).withValues(alpha: 0.25),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -587,10 +633,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                       decoration: BoxDecoration(
                         color: AppTheme.error,
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: context.surfaceC,
-                          width: 1.5,
-                        ),
+                        border: Border.all(color: context.surfaceC, width: 1.5),
                       ),
                     ),
                   ),
@@ -618,7 +661,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                           ),
                           title: const Row(
                             children: [
-                              Icon(LucideIcons.logOut, color: AppTheme.error, size: 22),
+                              Icon(
+                                LucideIcons.logOut,
+                                color: AppTheme.error,
+                                size: 22,
+                              ),
                               SizedBox(width: 12),
                               Text('Confirm Logout'),
                             ],
@@ -691,7 +738,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                       value: 'logout',
                       child: Row(
                         children: [
-                          Icon(LucideIcons.logOut, color: AppTheme.error, size: 16),
+                          Icon(
+                            LucideIcons.logOut,
+                            color: AppTheme.error,
+                            size: 16,
+                          ),
                           SizedBox(width: 10),
                           Text(
                             'Logout',
@@ -705,7 +756,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                     ),
                   ],
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: context.isDark
                           ? Colors.white.withValues(alpha: 0.06)
@@ -722,7 +776,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                           padding: const EdgeInsets.all(2),
                           decoration: const BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                              colors: [
+                                AppTheme.primaryColor,
+                                AppTheme.secondaryColor,
+                              ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
@@ -788,9 +845,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
           child: Icon(
             icon,
             size: 18,
-            color: isActive
-                ? AppTheme.primaryColor
-                : context.textSec,
+            color: isActive ? AppTheme.primaryColor : context.textSec,
           ),
         ),
       ),

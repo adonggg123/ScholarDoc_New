@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       Image.asset(
-                        'assets/app_logo2.png',
+                        'assets/app_logo3.png',
                         width: 36,
                         height: 36,
                       ),
@@ -127,21 +127,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontSize: 16,
                       color: Color(0xFF1E293B),
                     ),
-                    decoration: _buildInputDecoration(
-                      hintText: 'Enter your password',
-                      icon: LucideIcons.lock,
-                    ).copyWith(
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                          color: Colors.grey.shade400,
-                          size: 22,
+                    decoration:
+                        _buildInputDecoration(
+                          hintText: 'Enter your password',
+                          icon: LucideIcons.lock,
+                        ).copyWith(
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? LucideIcons.eye
+                                  : LucideIcons.eyeOff,
+                              color: Colors.grey.shade400,
+                              size: 22,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                          ),
                         ),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                      ),
-                    ),
                     validator: (v) => (v == null || v.isEmpty)
                         ? 'Please enter your password'
                         : null,
@@ -150,7 +153,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Info tip
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC), // Very light slate
                       borderRadius: BorderRadius.circular(16),
@@ -162,7 +168,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0F3260).withValues(alpha: 0.1),
+                            color: const Color(
+                              0xFF0F3260,
+                            ).withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -194,13 +202,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF0F3260), Color(0xFF1E3A8A)], // Navy to Royal
+                        colors: [
+                          Color(0xFF0F3260),
+                          Color(0xFF1E3A8A),
+                        ], // Navy to Royal
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0F3260).withValues(alpha: 0.25),
+                          color: const Color(
+                            0xFF0F3260,
+                          ).withValues(alpha: 0.25),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -277,10 +290,16 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  InputDecoration _buildInputDecoration({required String hintText, required IconData icon}) {
+  InputDecoration _buildInputDecoration({
+    required String hintText,
+    required IconData icon,
+  }) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w400),
+      hintStyle: TextStyle(
+        color: Colors.grey.shade400,
+        fontWeight: FontWeight.w400,
+      ),
       prefixIcon: Icon(icon, color: const Color(0xFF0F3260), size: 20),
       filled: true,
       fillColor: const Color(0xFFF8FAFC), // Slate 50

@@ -72,13 +72,14 @@ flutter_launcher_icons:
   ios: true
   web:
     generate: true
-    image_path: "assets/app_logo2.png"
+    image_path: "assets/app_logo3.png"
     background_color: "#FFFFFF"
     theme_color: "#FFFFFF"
-  image_path: "assets/app_logo2.png"
+  image_path: "assets/app_logo3.png"
 
 flutter_native_splash:
   color: "#FFFFFF"
+  image: "assets/app_logo3.png"
   web: true
 
 # For information on the generic Dart part of this file, see the
@@ -94,8 +95,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/app_logo2.png
-    - assets/app_logo1.png
+    - assets/app_logo3.png
     - assets/campus_bg.jpg
     - assets/Annex 5-TES New Form 2.xlsx
 

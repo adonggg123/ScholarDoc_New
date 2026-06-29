@@ -27,7 +27,7 @@ class PdfGenerator {
     // Load logo if available (optional)
     pw.MemoryImage? logo;
     try {
-      final logoBytes = await rootBundle.load('assets/app_logo1.png');
+      final logoBytes = await rootBundle.load('assets/app_logo3.png');
       logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
     } catch (e) {
       // Fallback: no logo if image doesn't exist

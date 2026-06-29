@@ -96,7 +96,7 @@ index b26e665..0cc8215 100644
          mainAxisAlignment: MainAxisAlignment.center,
          children: [
            Image.asset(
-             'assets/app_logo2.png',
+             'assets/app_logo3.png',
 -            width: 58,
 -            height: 58,
 +            width: 48,

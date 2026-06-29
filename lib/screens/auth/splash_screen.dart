@@ -78,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Image.asset(
-                            'assets/app_logo2.png',
+                            'assets/app_logo3.png',
                             width: 160,
                             height: 160,
                             fit: BoxFit.contain,
@@ -91,7 +91,9 @@ class _SplashScreenState extends State<SplashScreen>
                               borderRadius: BorderRadius.circular(10),
                               child: const LinearProgressIndicator(
                                 backgroundColor: Color(0xFFF1F5F9),
-                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFBC02D)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFFBC02D),
+                                ),
                                 minHeight: 4,
                               ),
                             ),

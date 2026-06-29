@@ -63,7 +63,7 @@ function renderQueue() {
         }
 
         return `
-            <div class="sa-list-item ${isSelected ? 'selected' : ''}" style="padding: 12px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border-color);" onclick="selectStudent(${index})">
+            <div class="sa-list-item ${isSelected ? 'selected' : ''}" style="padding: 12px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border-color);" onclick="selectSaStudent(${index})">
                 ${avatarHtml}
                 <div style="flex: 1; overflow: hidden;">
                     <div style="font-weight: 800; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--text-primary);">${name}</div>
@@ -191,22 +191,22 @@ function renderPanel() {
             <div style="margin-bottom: 6px; font-size: 13px; font-weight: 700;">Admin Remarks</div>
             <textarea id="sa-remarks" placeholder="e.g. Please re-upload your SA number, current one is blurred." style="width: 100%; height: 60px; padding: 12px 14px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); font-family: inherit; font-size: 13px; font-weight: 500; resize: none; margin-bottom: 12px;"></textarea>
 
-            <button class="btn" style="width: 100%; background: var(--success); color: white; border: none; padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 8px; cursor: pointer;" onclick="updateStatus('Verified')">Mark as Verified</button>
-            <button class="btn btn-outline" style="width: 100%; border: 1.5px solid var(--error); color: var(--error); padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 2px; cursor: pointer;" onclick="updateStatus('Missing')">Mark as Missing Documents</button>
-            <button class="btn" style="width: 100%; background: transparent; color: var(--text-secondary); border: none; padding: 6px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="updateStatus('Rejected', true)">Permanent Rejection</button>
+            <button class="btn" style="width: 100%; background: var(--success); color: white; border: none; padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 8px; cursor: pointer;" onclick="updateSaStatus('Verified')">Mark as Verified</button>
+            <button class="btn btn-outline" style="width: 100%; border: 1.5px solid var(--error); color: var(--error); padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 2px; cursor: pointer;" onclick="updateSaStatus('Missing')">Mark as Missing Documents</button>
+            <button class="btn" style="width: 100%; background: transparent; color: var(--text-secondary); border: none; padding: 6px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="updateSaStatus('Rejected', true)">Permanent Rejection</button>
         </div>
     `;
 
     if (window.lucide) window.lucide.createIcons();
 }
 
-window.selectStudent = function(index) {
+window.selectSaStudent = function(index) {
     selectedIndex = index;
     renderQueue();
     renderPanel();
 };
 
-window.updateStatus = async function(newStatus, isFinalRejection = false) {
+window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
     if (isUpdating) return;
     const s = saStudents[selectedIndex];
     if (!s || !s.uid) return;

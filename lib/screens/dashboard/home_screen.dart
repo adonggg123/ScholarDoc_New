@@ -32,7 +32,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _calculateWeek() {
     final today = DateTime.now();
     _startOfWeek = today.subtract(Duration(days: today.weekday % 7));
-    _weekDays = List.generate(7, (index) => _startOfWeek.add(Duration(days: index)));
+    _weekDays = List.generate(
+      7,
+      (index) => _startOfWeek.add(Duration(days: index)),
+    );
   }
 
   @override
@@ -95,26 +98,26 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             SizedBox(
-              width: 45,
-              height: 45,
-              child: ClipOval(
-                child: Image.asset('assets/app_logo2.png', fit: BoxFit.contain),
-              ),
+              width: 50,
+              height: 50,
+              child: Image.asset('assets/app_logo3.png', fit: BoxFit.contain),
             ),
-            const SizedBox(width: 0),
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
-              ).createShader(bounds),
-              blendMode: BlendMode.srcIn,
-              child: const Text(
-                'ScholarDoc',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 21,
-                  letterSpacing: 0.3,
+            Transform.translate(
+              offset: const Offset(-8, 0),
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
+                ).createShader(bounds),
+                blendMode: BlendMode.srcIn,
+                child: const Text(
+                  'ScholarDoc',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 21,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ),
@@ -907,8 +910,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final dayNumFormat = DateFormat('d');
 
     final String monthYearLabel = weekFormat.format(_selectedDate);
-    final String weekRangeLabel = 'Week of ${rangeFormat.format(_weekDays.first)} – ${rangeFormat.format(_weekDays.last)}';
-    
+    final String weekRangeLabel =
+        'Week of ${rangeFormat.format(_weekDays.first)} – ${rangeFormat.format(_weekDays.last)}';
+
     final isTodaySelected = DateUtils.isSameDay(_selectedDate, DateTime.now());
     final String bottomPillLabel = isTodaySelected
         ? 'Today — ${DateFormat('EEEE, MMMM d').format(_selectedDate)}'
@@ -989,8 +993,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     dayLabel,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      color: isSelected ? const Color(0xFF0F3260) : context.textSec,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
+                      color: isSelected
+                          ? const Color(0xFF0F3260)
+                          : context.textSec,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1014,11 +1022,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             : null,
                         color: isSelected
                             ? null
-                            : (isToday 
-                                ? const Color(0xFF0F3260).withValues(alpha: 0.08)
-                                : Colors.transparent),
+                            : (isToday
+                                  ? const Color(
+                                      0xFF0F3260,
+                                    ).withValues(alpha: 0.08)
+                                  : Colors.transparent),
                         border: !isSelected
-                            ? Border.all(color: const Color(0xFFE2E8F0), width: 1)
+                            ? Border.all(
+                                color: const Color(0xFFE2E8F0),
+                                width: 1,
+                              )
                             : null,
                       ),
                       alignment: Alignment.center,
@@ -1027,7 +1040,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : const Color(0xFF1F2937),
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF1F2937),
                         ),
                       ),
                     ),
@@ -1039,7 +1054,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 4,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? const Color(0xFF0F3260) : Colors.transparent,
+                      color: isSelected
+                          ? const Color(0xFF0F3260)
+                          : Colors.transparent,
                     ),
                   ),
                 ],

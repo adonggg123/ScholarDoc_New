@@ -54,7 +54,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (status == 'Approved' || status == 'Verified') {
       statusColor = const Color(0xFF10B981);
       statusIcon = LucideIcons.badgeCheck;
-    } else if (status == 'Rejected' || status == 'Needs Correction') {
+    } else if (status == 'Rejected' || status == 'Needs Correction' || status == 'Missing') {
       statusColor = const Color(0xFFEF4444);
       statusIcon = LucideIcons.alertTriangle;
     }

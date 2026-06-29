@@ -81,14 +81,14 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                 Color statusColor = AppTheme.warning;
                 IconData statusIcon = LucideIcons.clock;
                 String statusLabel = 'Under Review';
-                if (status == 'Approved') {
+                if (status == 'Approved' || status == 'Verified') {
                   statusColor = AppTheme.success;
                   statusIcon = LucideIcons.checkCircle2;
-                  statusLabel = 'Approved';
-                } else if (status == 'Rejected') {
+                  statusLabel = status;
+                } else if (status == 'Rejected' || status == 'Missing') {
                   statusColor = AppTheme.error;
                   statusIcon = LucideIcons.xCircle;
-                  statusLabel = 'Rejected';
+                  statusLabel = status;
                 }
 
                 return FutureBuilder<Scholarship?>(
@@ -290,7 +290,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                   (e) => _buildRequirementItem(
                                     context,
                                     e.value,
-                                    status == 'Approved',
+                                    status == 'Approved' || status == 'Verified',
                                     e.key,
                                   ),
                                 ),
@@ -369,10 +369,10 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   Widget _buildProgressCard(String status, Color statusColor) {
     double progress = 0.25;
     String progressLabel = 'Submitted — Awaiting Review';
-    if (status == 'Approved') {
+    if (status == 'Approved' || status == 'Verified') {
       progress = 1.0;
       progressLabel = 'All requirements complete';
-    } else if (status == 'Rejected') {
+    } else if (status == 'Rejected' || status == 'Missing') {
       progress = 0.5;
       progressLabel = 'Resubmission Required';
     }

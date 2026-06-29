@@ -169,7 +169,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Image.asset('assets/app_logo2.png', width: 60, height: 60),
+                    Image.asset('assets/app_logo3.png', width: 60, height: 60),
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
                         colors: [AppTheme.primaryColor, Color(0xFFFBC02D)],
@@ -711,7 +711,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             } catch (e) {
                               if (!context.mounted) return;
                               final errorMsg = e.toString();
-                              
+
                               if (errorMsg.contains('MASTERLIST_DENIED')) {
                                 // Show professional masterlist denial dialog
                                 _showMasterlistDeniedDialog(context);
@@ -721,7 +721,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     content: Text(
                                       errorMsg
                                           .replaceAll(RegExp(r'\[.*\]'), '')
-                                          .replaceAll('Exception: Registration failed: Exception: ', '')
+                                          .replaceAll(
+                                            'Exception: Registration failed: Exception: ',
+                                            '',
+                                          )
                                           .trim(),
                                     ),
                                     backgroundColor: AppTheme.error,
@@ -895,7 +898,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline, size: 18, color: AppTheme.primaryColor),
+                        Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
                         const SizedBox(width: 8),
                         const Text(
                           'What should I do?',
@@ -908,11 +915,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _buildStep('1', 'Double-check that you entered your full name correctly as it appears in official records.'),
+                    _buildStep(
+                      '1',
+                      'Double-check that you entered your full name correctly as it appears in official records.',
+                    ),
                     const SizedBox(height: 8),
-                    _buildStep('2', 'Contact the Scholarship Office to verify your enrollment status.'),
+                    _buildStep(
+                      '2',
+                      'Contact the Scholarship Office to verify your enrollment status.',
+                    ),
                     const SizedBox(height: 8),
-                    _buildStep('3', 'Ask your admin to ensure your name has been imported into the system.'),
+                    _buildStep(
+                      '3',
+                      'Ask your admin to ensure your name has been imported into the system.',
+                    ),
                   ],
                 ),
               ),
