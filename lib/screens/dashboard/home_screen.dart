@@ -1002,13 +1002,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedDate = date;
-                      });
-                    },
-                    child: Container(
+                  Container(
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
@@ -1046,7 +1040,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 6),
                   // Small selection dot below
                   Container(

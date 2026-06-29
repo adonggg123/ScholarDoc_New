@@ -36,6 +36,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
   String? _profilePictureUrl;
+  final Set<String> _expandedSections = {};
 
   @override
   void initState() {
@@ -222,10 +223,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Personal Info card
-                    _buildCard(
+                    // Personal Info section
+                    _buildCollapsibleSection(
+                      sectionKey: 'personal',
                       title: 'Personal Information',
                       icon: LucideIcons.user,
+                      subtitle: _profileData?['fullName'] ?? 'View & edit your details',
                       children: [
                         _buildEditableField('Full Name', _nameController, LucideIcons.user),
                         const SizedBox(height: 16),
@@ -238,11 +241,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _buildEditableField('Section', _sectionController, LucideIcons.layers),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // Academic card
-                    _buildCard(
+                    const SizedBox(height: 12),
+                    // Academic section
+                    _buildCollapsibleSection(
+                      sectionKey: 'academic',
                       title: 'Academic & Program',
                       icon: LucideIcons.graduationCap,
+                      subtitle: _profileData?['scholarshipName'] ?? 'Scholarship details',
                       children: [
                         _buildReadOnlyField('Scholarship Program',
                             _profileData?['scholarshipName'] ?? 'Not Assigned',
@@ -259,14 +264,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                         const SizedBox(height: 16),
                         _buildReadOnlyField('Payouts Received',
                             (_profileData?['payoutsReceived']?.toString() ?? '0'), LucideIcons.wallet),
-                        const SizedBox(height: 16),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // Banking card
-                    _buildCard(
+                    const SizedBox(height: 12),
+                    // Banking section
+                    _buildCollapsibleSection(
+                      sectionKey: 'banking',
                       title: 'Banking Details',
                       icon: LucideIcons.landmark,
+                      subtitle: 'SA number for disbursement',
                       children: [
                         Text(
                           'Provide your Savings Account (SA) number for scholarship fund disbursement.',
@@ -318,11 +324,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // App Preferences card
-                    _buildCard(
+                    const SizedBox(height: 12),
+                    // App Preferences section
+                    _buildCollapsibleSection(
+                      sectionKey: 'preferences',
                       title: 'App Preferences',
                       icon: LucideIcons.settings,
+                      subtitle: 'Theme & display settings',
                       children: [
                         ValueListenableBuilder<ThemeMode>(
                           valueListenable: ThemeProvider().themeNotifier,
@@ -419,51 +427,139 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildCard({
+  Widget _buildCollapsibleSection({
+    required String sectionKey,
     required String title,
     required IconData icon,
+    required String subtitle,
     required List<Widget> children,
   }) {
+    final bool isExpanded = _expandedSections.contains(sectionKey);
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: AppTheme.softShadow,
+        border: Border.all(
+          color: isExpanded
+              ? AppTheme.primaryColor.withValues(alpha: 0.2)
+              : const Color(0xFFF1F5F9),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isExpanded
+                ? AppTheme.primaryColor.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.02),
+            blurRadius: isExpanded ? 16 : 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, size: 16, color: AppTheme.primaryColor),
+          // Tappable header
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedSections.remove(sectionKey);
+                  } else {
+                    _expandedSections.add(sectionKey);
+                  }
+                });
+              },
+              borderRadius: isExpanded
+                  ? const BorderRadius.vertical(top: Radius.circular(20))
+                  : BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isExpanded
+                            ? AppTheme.primaryColor.withValues(alpha: 0.12)
+                            : AppTheme.primaryColor.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, size: 18, color: AppTheme.primaryColor),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F3260),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isExpanded
+                              ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          LucideIcons.chevronDown,
+                          size: 16,
+                          color: isExpanded
+                              ? AppTheme.primaryColor
+                              : Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.primaryColor,
+              ),
+            ),
+          ),
+          // Expandable content
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: [
+                Divider(height: 1, color: Colors.grey.shade100),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: children,
                   ),
                 ),
               ],
             ),
-          ),
-          Divider(height: 1, color: Colors.grey.shade100),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
+            crossFadeState: isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 250),
+            sizeCurve: Curves.easeInOut,
           ),
         ],
       ),
