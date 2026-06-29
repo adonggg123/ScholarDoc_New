@@ -222,7 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [Color(0xCC0F3260), Color(0x99FBC02D)],
-                              stops: [0.55, 1.0],
+                              stops: [0.3, 1.0],
                             ),
                           ),
                         ),
