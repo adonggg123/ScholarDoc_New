@@ -413,8 +413,8 @@ function showStudentModal(student) {
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 6px 0;">ATM Card Proof</p>
-                        ${student.atmCardUrl 
-                            ? `<a href="${student.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; color: #3B82F6; font-weight: 600; font-size: 13px; text-decoration: none; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.15); transition: all 0.2s;"><i class="icon-image" style="font-size: 16px;"></i> View Attached Document</a>` 
+                        ${(student.atmCardUrl || (student.documents && student.documents.atmCardUrl))
+                            ? `<a href="${student.atmCardUrl || student.documents.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; color: #3B82F6; font-weight: 600; font-size: 13px; text-decoration: none; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.15); transition: all 0.2s;"><i class="icon-image" style="font-size: 16px;"></i> View Attached Document</a>` 
                             : '<div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color); font-size: 13px; color: var(--text-secondary); font-weight: 500;"><i class="icon-file-x-2"></i> Not Submitted</div>'}
                     </div>
                 </div>

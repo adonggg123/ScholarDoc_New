@@ -480,13 +480,19 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                             data?['studentId'] ?? 'Unknown ID';
                         final String fullName = data?['fullName'] ?? 'Student';
 
+                        Map<String, dynamic> documents = {};
+                        if (data != null && data['documents'] is Map) {
+                          documents = Map<String, dynamic>.from(data['documents']);
+                        }
+                        documents['atmCardUrl'] = _atmCardUrl;
+                        documents['atmCardFileName'] = _atmCardFileName;
+
                         await _authService.updateStudentProfile(user.id, {
                           'status': 'Pending',
                           'saNumber': _saController.text.trim(),
                           'submissionPdfUrl': _submissionPdfUrl,
                           'submissionPdfName': _pdfFileName,
-                          'atmCardUrl': _atmCardUrl,
-                          'atmCardFileName': _atmCardFileName,
+                          'documents': documents,
                           'pdfVerified': true,
                           'createdAt': DateTime.now().toIso8601String(),
                           'submittedAt': DateTime.now().toIso8601String(),
