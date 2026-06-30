@@ -294,11 +294,10 @@ async function renderChart() {
             }
         });
 
-        // Only show months up to current month
-        const currentMonth = now.getMonth();
-        const labels = months.slice(0, currentMonth + 1);
-        const submissionsData = submissionsByMonth.slice(0, currentMonth + 1);
-        const approvedData = approvedByMonth.slice(0, currentMonth + 1);
+        // Show all 12 months for the year-to-date trend
+        const labels = months;
+        const submissionsData = submissionsByMonth;
+        const approvedData = approvedByMonth;
 
         new Chart(ctx, {
             type: 'line',

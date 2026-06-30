@@ -215,12 +215,26 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
 
     isUpdating = true;
     try {
-        // 1. Update Student
-        const { error } = await supabase.from('students').update({
-            status: newStatus,
+        // 1. Update SA Verification Status (stored inside documents JSON)
+        const currentDocs = s.documents || {};
+        const updatedDocs = { ...currentDocs, saVerificationStatus: newStatus };
+
+        const updatePayload = {
+            documents: updatedDocs,
             adminRemarks: remarks,
-            requiresResubmission: !isFinalRejection && newStatus === 'Rejected'
-        }).eq('uid', s.uid);
+            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected')
+        };
+
+        // Auto-calculate overall status:
+        // Only set global status to Verified when BOTH SA and ID are verified
+        const currentIdStatus = currentDocs.idValidationStatus || 'Pending';
+        if (newStatus === 'Verified' && (currentIdStatus === 'Verified' || currentIdStatus === 'Approved')) {
+            updatePayload.status = 'Verified';
+        } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
+            updatePayload.status = newStatus;
+        }
+
+        const { error } = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
         if (error) throw error;
 
         // 2. Audit Log

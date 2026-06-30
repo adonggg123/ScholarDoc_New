@@ -112,6 +112,31 @@ function renderPanel() {
     }
 
     let docsHtml = '';
+    let imagesHtml = '';
+
+    if (s.idFrontUrl || s.idBackUrl) {
+        imagesHtml = `
+            <div style="display: flex; gap: 16px; margin-bottom: 16px; width: 100%;">
+                ${s.idFrontUrl ? `
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">Front ID</div>
+                        <div style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.01); display: flex; align-items: center; justify-content: center; height: 200px; overflow: hidden; padding: 4px;">
+                            <img src="${s.idFrontUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in;" onclick="window.open('${s.idFrontUrl}', '_blank')" />
+                        </div>
+                    </div>
+                ` : ''}
+                ${s.idBackUrl ? `
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">Back ID</div>
+                        <div style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.01); display: flex; align-items: center; justify-content: center; height: 200px; overflow: hidden; padding: 4px;">
+                            <img src="${s.idBackUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in;" onclick="window.open('${s.idBackUrl}', '_blank')" />
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
     if (s.idFrontUrl) {
         docsHtml += buildDocTile('Front ID Image', 'ID_Front.jpg', s.idFrontUrl, 'image');
     }
@@ -144,6 +169,7 @@ function renderPanel() {
             </div>
             
             <div style="margin-bottom: 6px; font-size: 13px; font-weight: 700;">ID Documents</div>
+            ${imagesHtml}
             <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
                 ${docsHtml}
             </div>
@@ -188,12 +214,26 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
 
     isUpdating = true;
     try {
-        // 1. Update Student
-        const { error } = await supabase.from('students').update({
-            status: newStatus,
+        // 1. Update ID Validation Status (stored inside documents JSON)
+        const currentDocs = s.documents || {};
+        const updatedDocs = { ...currentDocs, idValidationStatus: newStatus };
+
+        const updatePayload = {
+            documents: updatedDocs,
             adminRemarks: remarks,
-            requiresResubmission: !isFinalRejection && newStatus === 'Rejected'
-        }).eq('uid', s.uid);
+            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected')
+        };
+
+        // Auto-calculate overall status:
+        // Only set global status to Verified when BOTH SA and ID are verified
+        const currentSaStatus = currentDocs.saVerificationStatus || 'Pending';
+        if (newStatus === 'Verified' && (currentSaStatus === 'Verified' || currentSaStatus === 'Approved')) {
+            updatePayload.status = 'Verified';
+        } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
+            updatePayload.status = newStatus;
+        }
+
+        const { error } = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
         if (error) throw error;
 
         // 2. Audit Log

@@ -517,7 +517,10 @@ window.approveStudent = async function(uid) {
     if(!confirm('Are you sure you want to approve this student?')) return;
     try {
         const student = allStudents.find(s => s.uid === uid);
-        const { error } = await supabase.from('students').update({ status: 'Approved' }).eq('uid', uid);
+        const { error } = await supabase.from('students').update({ 
+            status: 'Approved',
+            idValidationStatus: 'Approved'
+        }).eq('uid', uid);
         if(error) throw error;
         
         await supabase.from('audit_logs').insert([{
@@ -550,7 +553,10 @@ window.rejectStudent = async function(uid) {
     if(!confirm('Are you sure you want to reject this student?')) return;
     try {
         const student = allStudents.find(s => s.uid === uid);
-        const { error } = await supabase.from('students').update({ status: 'Rejected' }).eq('uid', uid);
+        const { error } = await supabase.from('students').update({ 
+            status: 'Rejected',
+            idValidationStatus: 'Rejected'
+        }).eq('uid', uid);
         if(error) throw error;
         
         await supabase.from('audit_logs').insert([{

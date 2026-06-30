@@ -179,10 +179,11 @@ function buildThroughputChart(students) {
         const year = now.getFullYear();
         for (let q = 0; q < 4; q++) {
             const start = new Date(year, q * 3, 1);
-            const end = new Date(year, (q + 1) * 3, 0);
+            const end = new Date(year, (q + 1) * 3, 1); // 1st day of next quarter
             const qStudents = students.filter(s => {
+                if (!s.createdAt) return false;
                 const d = new Date(s.createdAt);
-                return d >= start && d <= end;
+                return d >= start && d < end;
             });
             submissions.push(qStudents.length);
             approved.push(qStudents.filter(s => (s.status || '').toLowerCase() === 'verified' || (s.status || '').toLowerCase() === 'approved').length);
@@ -192,10 +193,13 @@ function buildThroughputChart(students) {
         const now = new Date();
         for (let w = 0; w < 4; w++) {
             const start = new Date(now.getFullYear(), now.getMonth(), 1 + w * 7);
-            const end = new Date(now.getFullYear(), now.getMonth(), Math.min(7 + w * 7, 31));
+            const end = w === 3 
+                ? new Date(now.getFullYear(), now.getMonth() + 1, 1) // 1st of next month
+                : new Date(now.getFullYear(), now.getMonth(), 1 + (w + 1) * 7); // Start of next week
             const wStudents = students.filter(s => {
+                if (!s.createdAt) return false;
                 const d = new Date(s.createdAt);
-                return d >= start && d <= end;
+                return d >= start && d < end;
             });
             submissions.push(wStudents.length);
             approved.push(wStudents.filter(s => (s.status || '').toLowerCase() === 'verified' || (s.status || '').toLowerCase() === 'approved').length);
