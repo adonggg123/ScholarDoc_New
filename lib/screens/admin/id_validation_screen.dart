@@ -221,8 +221,109 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
             const Divider(height: 32),
             Text('ID Documents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
-            if (idFrontUrl != null) _documentTile('Front ID Image', 'ID_Front.jpg', idFrontUrl, LucideIcons.image),
-            if (idBackUrl != null) _documentTile('Back ID Image', 'ID_Back.jpg', idBackUrl, LucideIcons.image),
+            if (idFrontUrl != null || idBackUrl != null) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (idFrontUrl != null)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ID Front', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textPri)),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  insetPadding: const EdgeInsets.all(10),
+                                  child: InteractiveViewer(
+                                    child: Image.network(
+                                      idFrontUrl,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                color: context.surfaceC,
+                                child: AspectRatio(
+                                  aspectRatio: 1.58,
+                                  child: Image.network(
+                                    idFrontUrl,
+                                    fit: BoxFit.contain,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(child: Icon(LucideIcons.imageOff, color: Colors.grey, size: 20));
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (idFrontUrl != null && idBackUrl != null) const SizedBox(width: 12),
+                  if (idBackUrl != null)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ID Back', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textPri)),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  insetPadding: const EdgeInsets.all(10),
+                                  child: InteractiveViewer(
+                                    child: Image.network(
+                                      idBackUrl,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                color: context.surfaceC,
+                                child: AspectRatio(
+                                  aspectRatio: 1.58,
+                                  child: Image.network(
+                                    idBackUrl,
+                                    fit: BoxFit.contain,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(child: Icon(LucideIcons.imageOff, color: Colors.grey, size: 20));
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             if (pdfUrl != null) _documentTile('ID Front & Back + Signatures (PDF)', data['submissionPdfName'] ?? 'Submission.pdf', pdfUrl, LucideIcons.fileText),
             if (idFrontUrl == null && idBackUrl == null && pdfUrl == null)
               const Text('No documents uploaded', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey)),
@@ -244,7 +345,7 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _updateStatus(context, data['uid'], 'Verified'),
+                    onPressed: () => _updateStatus(context, data, 'Verified'),
                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success, foregroundColor: Colors.white),
                     child: const Text('Accepted'),
                   ),
@@ -252,7 +353,7 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _updateStatus(context, data['uid'], 'Missing'),
+                    onPressed: () => _updateStatus(context, data, 'Missing'),
                     style: OutlinedButton.styleFrom(foregroundColor: AppTheme.error, side: const BorderSide(color: AppTheme.error)),
                     child: const Text('Invalid/Missing'),
                   ),
@@ -323,13 +424,37 @@ class _IdValidationScreenState extends State<IdValidationScreen> {
     );
   }
 
-  Future<void> _updateStatus(BuildContext context, String? uid, String newStatus) async {
+  Future<void> _updateStatus(BuildContext context, Map<String, dynamic> studentData, String newStatus, {bool isFinalRejection = false}) async {
+    final String? uid = studentData['uid'];
     if (uid == null) return;
     try {
-      await Supabase.instance.client.from('students').update({
-        'idValidationStatus': newStatus,
-        'adminRemarks': _remarksController.text.trim(),
-      }).eq('uid', uid);
+      final String remarks = _remarksController.text.trim();
+
+      // Get current documents map
+      final Map<String, dynamic> currentDocs = (studentData['documents'] is Map)
+          ? Map<String, dynamic>.from(studentData['documents'])
+          : {};
+
+      // Update idValidationStatus inside documents
+      currentDocs['idValidationStatus'] = newStatus;
+
+      final Map<String, dynamic> updatePayload = {
+        'documents': currentDocs,
+        'adminRemarks': remarks,
+        'requiresResubmission': !isFinalRejection && (newStatus == 'Missing' || newStatus == 'Rejected'),
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      // Auto-calculate overall status:
+      // Only set global status to Verified when BOTH SA and ID are verified
+      final String currentSaStatus = currentDocs['saVerificationStatus']?.toString() ?? 'Pending';
+      if (newStatus == 'Verified' && (currentSaStatus == 'Verified' || currentSaStatus == 'Approved')) {
+        updatePayload['status'] = 'Verified';
+      } else if (newStatus == 'Missing' || newStatus == 'Rejected') {
+        updatePayload['status'] = newStatus;
+      }
+
+      await Supabase.instance.client.from('students').update(updatePayload).eq('uid', uid);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ID status updated to $newStatus')));
       }

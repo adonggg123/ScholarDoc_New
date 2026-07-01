@@ -86,98 +86,117 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       }
 
       pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
+        pw.Page(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           build: (pw.Context context) {
-            return [
-              pw.Header(
-                level: 0,
-                child: pw.Text('Document Submission', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              ),
-              pw.SizedBox(height: 20),
-              
-              // Front ID
-              pw.Text('ID Front', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              pw.Container(
-                alignment: pw.Alignment.center,
-                height: 200,
-                child: pw.Image(frontPwImage, fit: pw.BoxFit.contain),
-              ),
-              pw.SizedBox(height: 24),
-              
-              // Back ID
-              pw.Text('ID Back', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              pw.Container(
-                alignment: pw.Alignment.center,
-                height: 200,
-                child: pw.Image(backPwImage, fit: pw.BoxFit.contain),
-              ),
-              pw.SizedBox(height: 24),
-              
-              // Signature (replicated 3 times)
-              pw.Text('Specimen Signatures', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                children: [
-                  pw.Column(
-                    children: [
-                      if (signaturePwImage != null)
-                        pw.Container(
-                          alignment: pw.Alignment.center,
-                          width: 150,
-                          height: 70,
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Header(
+                  level: 0,
+                  child: pw.Text('Document Submission', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                ),
+                pw.SizedBox(height: 16),
+                // ID Front & Back side-by-side
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('ID Front', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 8),
+                          pw.Container(
+                            alignment: pw.Alignment.center,
+                            height: 250,
+                            child: pw.Image(frontPwImage, fit: pw.BoxFit.contain),
                           ),
-                          child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
-                        ),
-                      pw.SizedBox(height: 4),
-                      pw.Text('Signature 1', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    ],
-                  ),
-                  pw.Column(
-                    children: [
-                      if (signaturePwImage != null)
-                        pw.Container(
-                          alignment: pw.Alignment.center,
-                          width: 150,
-                          height: 70,
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                        ],
+                      ),
+                    ),
+                    pw.SizedBox(width: 12),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('ID Back', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 8),
+                          pw.Container(
+                            alignment: pw.Alignment.center,
+                            height: 250,
+                            child: pw.Image(backPwImage, fit: pw.BoxFit.contain),
                           ),
-                          child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
-                        ),
-                      pw.SizedBox(height: 4),
-                      pw.Text('Signature 2', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    ],
-                  ),
-                  pw.Column(
-                    children: [
-                      if (signaturePwImage != null)
-                        pw.Container(
-                          alignment: pw.Alignment.center,
-                          width: 150,
-                          height: 70,
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+                
+                // Signature (replicated 3 times)
+                pw.Text('Specimen Signatures', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                  children: [
+                    pw.Column(
+                      children: [
+                        if (signaturePwImage != null)
+                          pw.Container(
+                            alignment: pw.Alignment.center,
+                            width: 140,
+                            height: 60,
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                            ),
+                            child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
                           ),
-                          child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
-                        ),
-                      pw.SizedBox(height: 4),
-                      pw.Text('Signature 3', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 16),
-              pw.Divider(),
-              pw.SizedBox(height: 10),
-              pw.Text('Generated by ScholarDoc App', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
-            ];
+                        pw.SizedBox(height: 4),
+                        pw.Text('Signature 1', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      ],
+                    ),
+                    pw.Column(
+                      children: [
+                        if (signaturePwImage != null)
+                          pw.Container(
+                            alignment: pw.Alignment.center,
+                            width: 140,
+                            height: 60,
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                            ),
+                            child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
+                          ),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Signature 2', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      ],
+                    ),
+                    pw.Column(
+                      children: [
+                        if (signaturePwImage != null)
+                          pw.Container(
+                            alignment: pw.Alignment.center,
+                            width: 140,
+                            height: 60,
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                            ),
+                            child: pw.Image(signaturePwImage, fit: pw.BoxFit.contain),
+                          ),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Signature 3', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.Spacer(),
+                pw.Divider(),
+                pw.SizedBox(height: 6),
+                pw.Text('Generated by ScholarDoc App', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey)),
+              ],
+            );
           },
         ),
       );
@@ -322,27 +341,45 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Step 1: ID Front',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildImagePreview(
-                    image: _frontImage,
-                    onTap: () => _captureImage(true),
-                    label: 'Capture Front of ID',
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  const Text(
-                    'Step 2: ID Back',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildImagePreview(
-                    image: _backImage,
-                    onTap: () => _captureImage(false),
-                    label: 'Capture Back of ID',
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Step 1: ID Front',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildImagePreview(
+                              image: _frontImage,
+                              onTap: () => _captureImage(true),
+                              label: 'Capture Front',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Step 2: ID Back',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildImagePreview(
+                              image: _backImage,
+                              onTap: () => _captureImage(false),
+                              label: 'Capture Back',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 24),
 
@@ -407,7 +444,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        height: 160,
+        height: 200,
         decoration: BoxDecoration(
           color: context.surfaceC,
           border: Border.all(color: context.crispBorder),
@@ -422,41 +459,71 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                   Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
                 ],
               )
-            : Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    // Ignoring FutureBuilder for bytes since XFile path might not work on web,
-                    // but since this is camera on mobile, path works. However, for cross-platform
-                    // FutureBuilder reading bytes is better.
-                    child: FutureBuilder<Uint8List>(
-                      future: image.readAsBytes(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-                        if (snapshot.hasData) {
-                          return Image.memory(snapshot.data!, fit: BoxFit.cover);
-                        }
-                        return const Center(child: Icon(Icons.error));
-                      },
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(LucideIcons.refreshCw, color: Colors.white, size: 20),
-                    ),
-                  ),
-                ],
-              ),
+             : Stack(
+                 fit: StackFit.expand,
+                 children: [
+                   ClipRRect(
+                     borderRadius: BorderRadius.circular(12),
+                     child: FutureBuilder<Uint8List>(
+                       future: image.readAsBytes(),
+                       builder: (context, snapshot) {
+                         if (snapshot.connectionState == ConnectionState.waiting) {
+                           return const Center(child: CircularProgressIndicator());
+                         }
+                         if (snapshot.hasData) {
+                           return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                         }
+                         return const Center(child: Icon(Icons.error));
+                       },
+                     ),
+                   ),
+                   Positioned(
+                     top: 8,
+                     right: 8,
+                     child: GestureDetector(
+                       onTap: () {
+                         if (image != null) {
+                           image.readAsBytes().then((bytes) {
+                             showDialog(
+                               context: context,
+                               builder: (context) => Dialog(
+                                 backgroundColor: Colors.transparent,
+                                 insetPadding: const EdgeInsets.all(10),
+                                 child: InteractiveViewer(
+                                   child: Image.memory(
+                                     bytes,
+                                     fit: BoxFit.contain,
+                                   ),
+                                 ),
+                               ),
+                             );
+                           });
+                         }
+                       },
+                       child: Container(
+                         padding: const EdgeInsets.all(8),
+                         decoration: const BoxDecoration(
+                           color: Colors.black54,
+                           shape: BoxShape.circle,
+                         ),
+                         child: const Icon(LucideIcons.maximize2, color: Colors.white, size: 20),
+                       ),
+                     ),
+                   ),
+                   Positioned(
+                     bottom: 8,
+                     right: 8,
+                     child: Container(
+                       padding: const EdgeInsets.all(8),
+                       decoration: const BoxDecoration(
+                         color: Colors.black54,
+                         shape: BoxShape.circle,
+                       ),
+                       child: const Icon(LucideIcons.refreshCw, color: Colors.white, size: 20),
+                     ),
+                   ),
+                 ],
+               ),
       ),
     );
   }

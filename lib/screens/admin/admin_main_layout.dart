@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import 'admin_login_screen.dart';
 import 'dashboard_overview.dart';
 import 'student_records_screen.dart';
@@ -42,6 +43,294 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   bool _isValidationExpanded = false;
 
+  Stream<List<Map<String, dynamic>>>? _notificationStream;
+  OverlayEntry? _currentToastEntry;
+  final Set<String> _shownNotificationIds = {};
+  bool _isInitialLoad = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    if (_currentToastEntry != null) {
+      _currentToastEntry!.remove();
+      _currentToastEntry = null;
+    }
+    super.dispose();
+  }
+
+  void _setupNotificationListener() {
+    if (_notificationStream == null) {
+      _notificationStream = NotificationService().getNotificationsStream('admin').asBroadcastStream();
+      _notificationStream?.listen((notifications) {
+        if (!mounted) return;
+        
+        final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
+        
+        if (_isInitialLoad) {
+          for (var n in unread) {
+            final String? id = n['id']?.toString();
+            if (id != null) {
+              _shownNotificationIds.add(id);
+            }
+          }
+          _isInitialLoad = false;
+          return;
+        }
+
+        for (var n in unread) {
+          final String? id = n['id']?.toString();
+          if (id != null && !_shownNotificationIds.contains(id)) {
+            _shownNotificationIds.add(id);
+            _showToastPopup(
+              n['title'] ?? 'Notification',
+              n['message'] ?? '',
+              n,
+            );
+          }
+        }
+      }, onError: (err) {
+        debugPrint('AdminMainLayout notifications listener error: $err');
+      });
+    }
+  }
+
+  void _showToastPopup(String title, String message, Map<String, dynamic> notification) {
+    if (_currentToastEntry != null) {
+      _currentToastEntry!.remove();
+      _currentToastEntry = null;
+    }
+
+    _currentToastEntry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: MediaQuery.of(context).padding.top + 10,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: -100.0, end: 0.0),
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, value),
+                  child: child,
+                );
+              },
+              child: GestureDetector(
+                onTap: () {
+                  if (_currentToastEntry != null) {
+                    _currentToastEntry!.remove();
+                    _currentToastEntry = null;
+                  }
+                  _handleNotificationClick(notification);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFF0F3260).withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F3260).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          LucideIcons.bellRing,
+                          color: Color(0xFF0F3260),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                color: Color(0xFF0F3260),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              message,
+                              style: const TextStyle(
+                                color: Colors.black87,
+                                fontSize: 11,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        color: Color(0xFF0F3260),
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    Overlay.of(context).insert(_currentToastEntry!);
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (_currentToastEntry != null) {
+        _currentToastEntry!.remove();
+        _currentToastEntry = null;
+      }
+    });
+  }
+
+  void _handleNotificationClick(Map<String, dynamic> notification) async {
+    final String title = notification['title'] ?? '';
+    final String id = notification['id'] ?? '';
+    
+    await NotificationService().markAsRead(id);
+    
+    if (title.contains('SA Number')) {
+      setState(() {
+        _selectedIndex = 3;
+      });
+    } else if (title.contains('ID Validation')) {
+      setState(() {
+        _selectedIndex = 8;
+      });
+    } else if (title.contains('Student Registered')) {
+      setState(() {
+        _selectedIndex = 1;
+      });
+    }
+  }
+
+  void _showNotificationsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Admin Alerts',
+                style: TextStyle(
+                  color: Color(0xFF0F3260),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await NotificationService().markAllAsRead('admin');
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  'Mark all read',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 350,
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _notificationStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final notifs = snapshot.data ?? [];
+                if (notifs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No notifications yet.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  itemCount: notifs.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final n = notifs[index];
+                    final bool isRead = n['isRead'] ?? true;
+                    final String title = n['title'] ?? 'Notification';
+                    final String msg = n['message'] ?? '';
+                    
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      leading: CircleAvatar(
+                        backgroundColor: (isRead ? const Color(0xFF0F3260) : Colors.amber).withOpacity(0.1),
+                        child: Icon(
+                          isRead ? LucideIcons.bell : LucideIcons.bellRing,
+                          color: isRead ? const Color(0xFF0F3260) : Colors.amber,
+                          size: 18,
+                        ),
+                      ),
+                      title: Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      subtitle: Text(
+                        msg,
+                        style: const TextStyle(fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _handleNotificationClick(n);
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _refreshSystem() async {
     setState(() => _isSyncing = true);
 
@@ -73,6 +362,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   @override
   Widget build(BuildContext context) {
+    _setupNotificationListener();
     return LayoutBuilder(
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 1100;
@@ -617,27 +907,50 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
               const SizedBox(width: 6),
 
               // Notifications
-              Stack(
-                children: [
-                  _buildTopBarIconButton(
-                    icon: LucideIcons.bell,
-                    onTap: () {},
-                    tooltip: 'Notifications',
-                  ),
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppTheme.error,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: context.surfaceC, width: 1.5),
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _notificationStream,
+                builder: (context, snapshot) {
+                  final notifications = snapshot.data ?? [];
+                  final unreadCount = notifications.where((n) => !(n['isRead'] ?? true)).length;
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      _buildTopBarIconButton(
+                        icon: LucideIcons.bell,
+                        onTap: _showNotificationsDialog,
+                        tooltip: 'Notifications',
                       ),
-                    ),
-                  ),
-                ],
+                      if (unreadCount > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.error,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: context.surfaceC, width: 1.5),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 14,
+                              minHeight: 14,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '$unreadCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
 
               if (!isMobile) ...[

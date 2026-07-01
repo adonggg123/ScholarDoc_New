@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
-
+import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/scholarship_service.dart';
 import 'upload_workflow_screen.dart';
@@ -49,7 +48,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: context.bgC,
       body: _studentStream == null
           ? const Center(child: Text('Connecting to service...'))
           : StreamBuilder<List<Map<String, dynamic>>>(
@@ -106,18 +105,37 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                         ];
 
                     // --- Label Auto-Remapping Logic ---
-                    // Automatically replace 'Enrollment Form' and 'ID Card' with modern requirements
                     requirements =
                         requirements.expand((doc) {
                           if (doc == 'Enrollment Form' || doc == 'ID Card') {
-                            // If we find either legacy doc, check if we've already added the new ones
-                            // We replace them with the requested bundle if they exist
                             return ['ID (Front)', 'ID (Back)', 'Combined PDF Submission'];
                           }
                           return [doc];
-                        }).toSet().toList(); // Use Set to avoid duplicates if both were present
+                        }).toSet().toList();
+
+                    final Map<String, dynamic> docs = (data['documents'] is Map) ? Map<String, dynamic>.from(data['documents']) : {};
+                    final String saVerificationStatus = docs['saVerificationStatus']?.toString() ?? 'Pending';
+                    final String idValidationStatus = docs['idValidationStatus']?.toString() ?? 'Pending';
+
+                    // Calculate requirement verification progress
+                    int verifiedCount = 0;
+                    for (var req in requirements) {
+                      if (_isRequirementVerified(req, saVerificationStatus, idValidationStatus)) {
+                        verifiedCount++;
+                      }
+                    }
+                    double progressValue = requirements.isNotEmpty ? (verifiedCount / requirements.length) : 0.0;
+
+                    String progressLabel = 'Awaiting Review ($verifiedCount of ${requirements.length} verified)';
+                    if (verifiedCount == requirements.length && requirements.isNotEmpty) {
+                      progressValue = 1.0;
+                      progressLabel = 'All requirements complete';
+                    } else if (saVerificationStatus == 'Missing' || saVerificationStatus == 'Rejected' || idValidationStatus == 'Missing' || idValidationStatus == 'Rejected' || data['requiresResubmission'] == true) {
+                      progressLabel = 'Resubmission Required ($verifiedCount of ${requirements.length} verified)';
+                    }
 
                     return CustomScrollView(
+                      physics: const BouncingScrollPhysics(),
                       slivers: [
                         // --- Header ---
                         SliverAppBar(
@@ -134,43 +152,38 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                           flexibleSpace: FlexibleSpaceBar(
                             background: Container(
                               decoration: const BoxDecoration(
-                                color: AppTheme.primaryColor,
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFF0F3260), Color(0xFF1E3A8A)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
                                 borderRadius: BorderRadius.vertical(
                                   bottom: Radius.circular(32),
                                 ),
                               ),
                               child: SafeArea(
                                 child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    24,
-                                    12,
-                                    24,
-                                    24,
-                                  ),
+                                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           const Text(
                                             'My Submissions',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 22,
-                                              fontWeight: FontWeight.bold,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: -0.5,
                                             ),
                                           ),
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
+                                              color: Colors.white.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
                                             child: const Icon(
                                               LucideIcons.filter,
@@ -184,20 +197,15 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                       // Status chip
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 8,
+                                          horizontal: 12,
+                                          vertical: 6,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: statusColor.withValues(
-                                            alpha: 0.18,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
+                                          color: statusColor.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(20),
                                           border: Border.all(
-                                            color: statusColor.withValues(
-                                              alpha: 0.4,
-                                            ),
+                                            color: statusColor.withOpacity(0.3),
+                                            width: 1,
                                           ),
                                         ),
                                         child: Row(
@@ -206,39 +214,40 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                             Icon(
                                               statusIcon,
                                               color: statusColor,
-                                              size: 14,
+                                              size: 13,
                                             ),
                                             const SizedBox(width: 6),
                                             Text(
-                                              statusLabel,
+                                              statusLabel.toUpperCase(),
                                               style: TextStyle(
                                                 color: statusColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 10,
+                                                letterSpacing: 0.5,
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 10),
                                       Text(
                                         scholarshipName,
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.3,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 4),
                                       Text(
                                         'Submitted on $submittedDate',
                                         style: TextStyle(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.65,
-                                          ),
+                                          color: Colors.white.withOpacity(0.65),
                                           fontSize: 12,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
@@ -261,26 +270,27 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                   const SizedBox(height: 20),
                                 ],
                                 // Progress bar
-                                _buildProgressCard(status, statusColor),
-                                const SizedBox(height: 24),
+                                _buildProgressCard(progressValue, progressLabel, statusColor),
+                                const SizedBox(height: 28),
                                 // Section header
                                 Row(
                                   children: [
                                     Container(
                                       width: 4,
-                                      height: 22,
+                                      height: 20,
                                       decoration: BoxDecoration(
-                                        color: AppTheme.accentColor,
-                                        borderRadius: BorderRadius.circular(2),
+                                        color: AppTheme.accentColor, // Golden Yellow
+                                        borderRadius: BorderRadius.circular(4),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     const Text(
                                       'Document Checklist',
                                       style: TextStyle(
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w900,
                                         fontSize: 18,
                                         color: Color(0xFF0F3260),
+                                        letterSpacing: -0.5,
                                       ),
                                     ),
                                   ],
@@ -290,7 +300,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                                   (e) => _buildRequirementItem(
                                     context,
                                     e.value,
-                                    status == 'Approved' || status == 'Verified',
+                                    _getRequirementState(e.value, saVerificationStatus, idValidationStatus),
                                     e.key,
                                   ),
                                 ),
@@ -314,7 +324,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
 
   Widget _buildLoadingState() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: context.bgC,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -323,7 +333,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
             const SizedBox(height: 16),
             Text(
               'Loading your submission status...',
-              style: TextStyle(color: Colors.grey.shade500),
+              style: TextStyle(color: context.textSec, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -333,7 +343,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
 
   Widget _buildEmptyState() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: context.bgC,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -341,7 +351,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F3260).withValues(alpha: 0.08),
+                color: const Color(0xFF0F3260).withOpacity(0.06),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -353,12 +363,12 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
             const SizedBox(height: 20),
             const Text(
               'No submission data found.',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
               'Submit your documents to get started.',
-              style: TextStyle(color: Colors.grey.shade500),
+              style: TextStyle(color: context.textSec, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -366,22 +376,13 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     );
   }
 
-  Widget _buildProgressCard(String status, Color statusColor) {
-    double progress = 0.25;
-    String progressLabel = 'Submitted — Awaiting Review';
-    if (status == 'Approved' || status == 'Verified') {
-      progress = 1.0;
-      progressLabel = 'All requirements complete';
-    } else if (status == 'Rejected' || status == 'Missing') {
-      progress = 0.5;
-      progressLabel = 'Resubmission Required';
-    }
-
+  Widget _buildProgressCard(double progress, String progressLabel, Color statusColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.surfaceC,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.crispBorder, width: 1.5),
         boxShadow: AppTheme.softShadow,
       ),
       child: Column(
@@ -393,15 +394,15 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
               Text(
                 progressLabel,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
               ),
               Text(
                 '${(progress * 100).toInt()}%',
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
                   color: statusColor,
                 ),
               ),
@@ -412,8 +413,8 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 10,
-              backgroundColor: Colors.grey.shade100,
+              minHeight: 8,
+              backgroundColor: context.bgC,
               valueColor: AlwaysStoppedAnimation<Color>(statusColor),
             ),
           ),
@@ -427,7 +428,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
+        color: color.withOpacity(0.06),
         borderRadius: BorderRadius.circular(18),
         border: Border(left: BorderSide(color: color, width: 4)),
       ),
@@ -443,15 +444,21 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                 Text(
                   'Official Remarks',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w900,
                     color: color,
                     fontSize: 13,
+                    letterSpacing: 0.2,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   remarks,
-                  style: const TextStyle(fontSize: 13, height: 1.5),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: context.textPri,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -464,9 +471,47 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   Widget _buildRequirementItem(
     BuildContext context,
     String title,
-    bool isVerified,
+    String state, // 'verified', 'missing', or 'pending'
     int index,
   ) {
+    final bool isVerified = state == 'verified';
+    final bool isMissing = state == 'missing';
+
+    // Determine colors based on state
+    Color borderColor;
+    Color iconBgColor;
+    Color iconColor;
+    IconData iconData;
+    Color titleColor;
+    String subtitle;
+    Color subtitleColor;
+
+    if (isVerified) {
+      borderColor = AppTheme.success.withOpacity(0.2);
+      iconBgColor = AppTheme.success.withOpacity(0.08);
+      iconColor = AppTheme.success;
+      iconData = LucideIcons.checkCircle2;
+      titleColor = AppTheme.success;
+      subtitle = '✓ Verified & Accepted';
+      subtitleColor = AppTheme.success.withOpacity(0.7);
+    } else if (isMissing) {
+      borderColor = AppTheme.error.withOpacity(0.2);
+      iconBgColor = AppTheme.error.withOpacity(0.08);
+      iconColor = AppTheme.error;
+      iconData = LucideIcons.alertCircle;
+      titleColor = AppTheme.error;
+      subtitle = '⚠ Missing — Tap to resubmit';
+      subtitleColor = AppTheme.error.withOpacity(0.7);
+    } else {
+      borderColor = context.crispBorder;
+      iconBgColor = const Color(0xFF0F3260).withOpacity(0.05);
+      iconColor = const Color(0xFF0F3260);
+      iconData = LucideIcons.fileText;
+      titleColor = const Color(0xFF0F3260);
+      subtitle = 'Tap to upload';
+      subtitleColor = context.textSec.withOpacity(0.7);
+    }
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 400 + index * 80),
@@ -483,12 +528,10 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.surfaceC,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: isVerified
-                ? AppTheme.success.withValues(alpha: 0.25)
-                : Colors.grey.shade200,
+            color: borderColor,
             width: 1.5,
           ),
           boxShadow: AppTheme.softShadow,
@@ -510,18 +553,12 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: isVerified
-                        ? AppTheme.success.withValues(alpha: 0.1)
-                        : const Color(0xFF0F3260).withValues(alpha: 0.06),
+                    color: iconBgColor,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isVerified
-                        ? LucideIcons.checkCircle2
-                        : LucideIcons.fileText,
-                    color: isVerified
-                        ? AppTheme.success
-                        : const Color(0xFF0F3260),
+                    iconData,
+                    color: iconColor,
                     size: 20,
                   ),
                 ),
@@ -534,46 +571,30 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                         title,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isVerified
-                              ? AppTheme.success
-                              : const Color(0xFF0F3260),
+                          fontWeight: FontWeight.w700,
+                          color: titleColor,
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        isVerified ? '✓ Verified & Accepted' : 'Tap to upload',
+                        subtitle,
                         style: TextStyle(
                           fontSize: 12,
-                          color: isVerified
-                              ? AppTheme.success.withValues(alpha: 0.8)
-                              : Colors.grey.shade400,
+                          fontWeight: FontWeight.w500,
+                          color: subtitleColor,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (!isVerified)
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      LucideIcons.chevronRight,
-                      size: 16,
-                      color: Color(0xFF0F3260),
-                    ),
-                  )
-                else
+                if (isVerified)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.1),
+                      color: AppTheme.success.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -581,8 +602,34 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                       style: TextStyle(
                         fontSize: 11,
                         color: AppTheme.success,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                       ),
+                    ),
+                  )
+                else if (isMissing)
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      LucideIcons.refreshCw,
+                      size: 16,
+                      color: AppTheme.error,
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      LucideIcons.chevronRight,
+                      size: 16,
+                      color: Color(0xFF0F3260),
                     ),
                   ),
               ],
@@ -598,12 +645,14 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFFBC02D), Color(0xFFF9A825)],
+          colors: [Color(0xFFFBC02D), Color(0xFFF5A623)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.accentColor.withValues(alpha: 0.4),
+            color: AppTheme.accentColor.withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -619,7 +668,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
           'Action Required: Resubmit Documents',
           style: TextStyle(
             color: Color(0xFF0F3260),
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
           ),
         ),
         style: ElevatedButton.styleFrom(
@@ -632,5 +681,38 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
         ),
       ),
     );
+  }
+
+  /// Returns 'verified', 'missing', or 'pending' based on admin actions.
+  /// SA Number checks saVerificationStatus; ID documents check idValidationStatus.
+  String _getRequirementState(String requirement, String saVerificationStatus, String idValidationStatus) {
+    final r = requirement.toLowerCase();
+    
+    // SA Number → check saVerificationStatus
+    if (r.contains('sa number')) {
+      if (saVerificationStatus == 'Verified' || saVerificationStatus == 'Approved') {
+        return 'verified';
+      } else if (saVerificationStatus == 'Missing' || saVerificationStatus == 'Rejected') {
+        return 'missing';
+      }
+      return 'pending';
+    }
+    
+    // ID documents → check idValidationStatus
+    if (r.contains('id') || r.contains('pdf') || r.contains('signature')) {
+      if (idValidationStatus == 'Verified' || idValidationStatus == 'Approved') {
+        return 'verified';
+      } else if (idValidationStatus == 'Missing' || idValidationStatus == 'Rejected') {
+        return 'missing';
+      }
+      return 'pending';
+    }
+    
+    return 'pending';
+  }
+
+  /// Helper used by progress calculation.
+  bool _isRequirementVerified(String requirement, String saVerificationStatus, String idValidationStatus) {
+    return _getRequirementState(requirement, saVerificationStatus, idValidationStatus) == 'verified';
   }
 }

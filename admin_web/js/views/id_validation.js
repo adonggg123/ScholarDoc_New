@@ -221,7 +221,8 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
         const updatePayload = {
             documents: updatedDocs,
             adminRemarks: remarks,
-            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected')
+            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
+            updatedAt: new Date().toISOString()
         };
 
         // Auto-calculate overall status:
@@ -246,17 +247,35 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
         }]);
 
         // 3. Notification
-        let title = newStatus === 'Verified' ? 'Account Verified' : (newStatus === 'Missing' ? 'Missing Documents' : 'Update on Application');
-        let message = newStatus === 'Verified' ? 'Great news! Your ID has been verified and your status is now Verified.' : 
-                      (newStatus === 'Missing' ? `Issue found: ${remarks}. Your status is now Missing; please submit the required document.` : `Issue found: ${remarks}. Please contact support.`);
+        let title = '';
+        let message = '';
+        let type = 'info';
+
+        if (newStatus === 'Verified') {
+            title = 'ID Validation Approved';
+            message = 'Your ID Front & Back + Signature document has been approved.';
+            type = 'success';
+        } else if (newStatus === 'Missing') {
+            title = 'ID Validation Missing';
+            message = remarks 
+                ? `Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator: ${remarks}`
+                : 'Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator.';
+            type = 'warning';
+        } else {
+            title = 'ID Validation Rejected';
+            message = remarks
+                ? `Your ID Front & Back + Signature document has been rejected. Feedback: ${remarks}`
+                : 'Your ID Front & Back + Signature document has been rejected.';
+            type = 'error';
+        }
         
         await supabase.from('notifications').insert([{
             studentId: s.uid,
             title: title,
             message: message,
-            type: newStatus === 'Verified' ? 'success' : 'error',
+            type: type,
             isRead: false,
-            createdAt: new Date().toISOString()
+            timestamp: new Date().toISOString()
         }]);
 
         alert(`Student ${s.fullName} status updated to ${newStatus}.`);

@@ -10,6 +10,11 @@
     <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
+    <script>
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark');
+        }
+    </script>
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
@@ -104,16 +109,33 @@
                     <i class="icon-refresh-cw"></i>
                 </button>
 
+                <!-- Theme Toggle Button -->
+                <button class="icon-btn" id="theme-toggle-btn" title="Toggle Theme">
+                    <i class="icon-moon" id="theme-toggle-icon"></i>
+                </button>
+
                 <!-- Notification Bell with Red Dot -->
-                <div style="position: relative;">
+                <div style="position: relative;" id="notification-dropdown-wrapper">
                     <button class="icon-btn" id="notification-btn" title="Notifications">
                         <i class="icon-bell"></i>
                     </button>
-                    <div style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background: var(--error, #F44336); border-radius: 50%; border: 1.5px solid var(--surface-color, white);"></div>
+                    <div id="bell-badge" style="display: none; position: absolute; top: 1px; right: 1px; background: var(--error, #F44336); color: white; border-radius: 50%; border: 1.5px solid var(--surface-color, white); font-size: 8px; font-weight: bold; width: 14px; height: 14px; align-items: center; justify-content: center; z-index: 10;">0</div>
+
+                    <!-- Notifications Dropdown -->
+                    <div id="notification-dropdown" class="hidden" style="position: absolute; top: calc(100% + 8px); right: 0; width: 340px; background: var(--surface-color, white); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); border: 1px solid var(--border-color); padding: 8px; z-index: 999; max-height: 400px; overflow-y: auto;">
+                        <div style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">Recent Notifications</div>
+                            <button id="mark-all-read-btn" style="background: none; border: none; color: var(--primary-color, #0F3260); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit;">Mark All Read</button>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
+                        <div id="notification-items-container" style="display: flex; flex-direction: column; gap: 4px;">
+                            <!-- Items will be injected here -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Vertical Divider -->
-                <div style="height: 28px; width: 1px; background: rgba(0,0,0,0.08); margin: 0 6px;"></div>
+                <div style="height: 28px; width: 1px; background: var(--border-color); margin: 0 6px;"></div>
 
                 <!-- Admin Profile Pill with Dropdown -->
                 <div style="position: relative;" id="profile-dropdown-wrapper">

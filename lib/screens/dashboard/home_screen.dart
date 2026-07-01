@@ -7,7 +7,9 @@ import '../submissions/upload_workflow_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/announcement_service.dart';
+import '../../services/notification_service.dart';
 import 'package:intl/intl.dart';
+import 'widgets/system_banner_carousel.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   final AnnouncementService _announcementService = AnnouncementService();
+  final NotificationService _notificationService = NotificationService();
 
   Map<String, dynamic>? _profileData;
   List<Announcement> _announcements = [];
@@ -28,6 +31,11 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime _selectedDate = DateTime.now();
   late DateTime _startOfWeek;
   late List<DateTime> _weekDays;
+
+  Stream<List<Map<String, dynamic>>>? _notificationStream;
+  final Set<String> _shownNotificationIds = {};
+  bool _isInitialLoad = true;
+  OverlayEntry? _currentToastEntry;
 
   void _calculateWeek() {
     final today = DateTime.now();
@@ -43,6 +51,178 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _calculateWeek();
     _loadData();
+    _setupNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    if (_currentToastEntry != null) {
+      _currentToastEntry!.remove();
+      _currentToastEntry = null;
+    }
+    super.dispose();
+  }
+
+  void _setupNotificationListener() {
+    final uid = _authService.currentUser?.id;
+    if (uid != null) {
+      _notificationStream = _notificationService.getNotificationsStream(uid).asBroadcastStream();
+      _notificationStream?.listen((notifications) {
+        if (!mounted) return;
+        
+        final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
+        
+        if (_isInitialLoad) {
+          // Initialize shown set with all current unread IDs to prevent startup spam
+          for (var n in unread) {
+            final String? id = n['id']?.toString();
+            if (id != null) {
+              _shownNotificationIds.add(id);
+            }
+          }
+          _isInitialLoad = false;
+          return;
+        }
+
+        // Detect new unread notifications
+        for (var n in unread) {
+          final String? id = n['id']?.toString();
+          if (id != null && !_shownNotificationIds.contains(id)) {
+            _shownNotificationIds.add(id);
+            _showToastPopup(
+              n['title'] ?? 'Notification',
+              n['message'] ?? '',
+              id,
+            );
+          }
+        }
+      });
+    }
+  }
+
+  void _showToastPopup(String title, String message, String notificationId) {
+    if (_currentToastEntry != null) {
+      _currentToastEntry!.remove();
+      _currentToastEntry = null;
+    }
+
+    _currentToastEntry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: MediaQuery.of(context).padding.top + 10,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: -100.0, end: 0.0),
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, value),
+                  child: child,
+                );
+              },
+              child: GestureDetector(
+                onTap: () {
+                  if (_currentToastEntry != null) {
+                    _currentToastEntry!.remove();
+                    _currentToastEntry = null;
+                  }
+                  // Mark as read immediately on click
+                  _notificationService.markAsRead(notificationId);
+                  // Redirect to Notifications screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFD4AF37).withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F3260).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          LucideIcons.bellRing,
+                          color: Color(0xFF0F3260),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Color(0xFF0F3260),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              message,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        color: Color(0xFF0F3260),
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    Overlay.of(context).insert(_currentToastEntry!);
+
+    // Auto dismiss after 4 seconds
+    Future.delayed(const Duration(seconds: 4), () {
+      if (_currentToastEntry != null) {
+        _currentToastEntry!.remove();
+        _currentToastEntry = null;
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -87,6 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _setupNotificationListener();
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -155,26 +336,57 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  child: Stack(
-                    children: [
-                      const Icon(
-                        LucideIcons.bell,
-                        color: Color(0xFF0F3260),
-                        size: 20,
-                      ),
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEF4444), // Red alert dot
-                            shape: BoxShape.circle,
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _notificationStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        debugPrint('HomeScreen bell badge error: ${snapshot.error}');
+                        return const Icon(
+                          LucideIcons.bell,
+                          color: Color(0xFF0F3260),
+                          size: 20,
+                        );
+                      }
+                      final notifications = snapshot.data ?? [];
+                      final unreadCount = notifications.where((n) => !(n['isRead'] ?? true)).length;
+
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(
+                            LucideIcons.bell,
+                            color: Color(0xFF0F3260),
+                            size: 20,
                           ),
-                        ),
-                      ),
-                    ],
+                          if (unreadCount > 0)
+                            Positioned(
+                              right: -4,
+                              top: -4,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEF4444),
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 14,
+                                  minHeight: 14,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '$unreadCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -184,171 +396,140 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: CustomScrollView(
         slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            sliver: SliverAppBar(
-              expandedHeight: 150.0,
-              pinned: true,
-              elevation: 0,
-              shadowColor: Colors.transparent,
-              backgroundColor: const Color(0xFF0F3260),
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(20)),
-              ),
-              flexibleSpace: LayoutBuilder(
-                builder: (context, constraints) {
-                  final topPadding = MediaQuery.of(context).padding.top;
-                  final fullyExpandedHeight = 135.0;
-                  final fullyCollapsedHeight = topPadding + kToolbarHeight;
-
-                  // Calculate percentage of expansion (1.0 = fully expanded, 0.0 = collapsed)
-                  final double expandRatio =
-                      ((constraints.maxHeight - fullyCollapsedHeight) /
-                              (fullyExpandedHeight - fullyCollapsedHeight))
-                          .clamp(0.0, 1.0);
-
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.all(Radius.circular(20)),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Transform.scale(
-                          scale: 1.15,
-                          child: Image.asset(
-                            'assets/campus_bg.jpg',
-                            fit: BoxFit.cover,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Container(
+                height: 120.0,
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.all(Radius.circular(20)),
+                  color: Color(0xFF0F3260),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.all(Radius.circular(20)),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Transform.scale(
+                        scale: 1.15,
+                        child: Image.asset(
+                          'assets/campus_bg.jpg',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xCC0F3260), Color(0x99FBC02D)],
+                            stops: [0.3, 1.0],
                           ),
                         ),
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xCC0F3260), Color(0x99FBC02D)],
-                              stops: [0.3, 1.0],
+                      ),
+                      Positioned(
+                        left: 24,
+                        right: 24,
+                        bottom: 12,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _getGreeting().toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _profileData != null
+                                      ? '${_profileData!['fullName']?.toString().split(' ').first}!'
+                                      : 'Student!',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                    height: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildVerificationBadge(),
+                              ],
                             ),
-                          ),
-                        ),
-                        // Greeting section only — logo moved to top AppBar
-                        Positioned(
-                          left: 24,
-                          right: 24,
-                          bottom:
-                              16 +
-                              (expandRatio *
-                                  0), // Moves up slightly when expanded
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _getGreeting().toUpperCase(),
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize:
-                                          10 + (expandRatio * 2), // 10 -> 12
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    height: 2 + (expandRatio * 2),
-                                  ), // 2 -> 4
-                                  Text(
-                                    _profileData != null
-                                        ? '${_profileData!['fullName']?.toString().split(' ').first}!'
-                                        : 'Student!',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize:
-                                          24 + (expandRatio * 6), // 24 -> 30
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.5,
-                                      height: 1.1,
-                                    ),
-                                  ),
-                                  if (expandRatio > 0.5) ...[
-                                    const SizedBox(height: 8),
-                                    _buildVerificationBadge(),
-                                  ],
-                                ],
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  // Navigate to profile tab - handled by parent nav
-                                },
-                                child: () {
-                                  final String? photoUrl =
-                                      _profileData?['profilePictureUrl']
-                                          as String?;
-                                  final double r = 20 + (expandRatio * 8);
-                                  final Widget avatar =
-                                      (photoUrl != null && photoUrl.isNotEmpty)
-                                      ? CircleAvatar(
-                                          radius: r,
-                                          backgroundColor: Colors.white24,
-                                          backgroundImage: NetworkImage(
-                                            photoUrl,
-                                          ),
-                                        )
-                                      : CircleAvatar(
-                                          radius: r,
-                                          backgroundColor: Colors.white24,
-                                          child: Icon(
-                                            LucideIcons.user,
-                                            color: Colors.white,
-                                            size: r,
-                                          ),
-                                        );
-                                  // Gold border ring
-                                  return Container(
-                                    padding: const EdgeInsets.all(2.5),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFFFBC02D),
-                                        width: 2.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFFFBC02D,
-                                          ).withValues(alpha: 0.2),
-                                          blurRadius: 10,
-                                          spreadRadius: 2,
+                            GestureDetector(
+                              onTap: () {
+                                // Navigate to profile tab - handled by parent nav
+                              },
+                              child: () {
+                                final String? photoUrl =
+                                    _profileData?['profilePictureUrl']
+                                        as String?;
+                                const double r = 22.0;
+                                final Widget avatar =
+                                    (photoUrl != null && photoUrl.isNotEmpty)
+                                    ? CircleAvatar(
+                                        radius: r,
+                                        backgroundColor: Colors.white24,
+                                        backgroundImage: NetworkImage(
+                                          photoUrl,
                                         ),
-                                      ],
+                                      )
+                                    : const CircleAvatar(
+                                        radius: r,
+                                        backgroundColor: Colors.white24,
+                                        child: Icon(
+                                          LucideIcons.user,
+                                          color: Colors.white,
+                                          size: r,
+                                        ),
+                                      );
+                                // Gold border ring
+                                return Container(
+                                  padding: const EdgeInsets.all(2.5),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: const Color(0xFFFBC02D),
+                                      width: 2.5,
                                     ),
-                                    child: avatar,
-                                  );
-                                }(),
-                              ),
-                            ],
-                          ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFFFBC02D,
+                                        ).withValues(alpha: 0.2),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: avatar,
+                                );
+                              }(),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                },
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionHeader('Scholarship Status'),
-                  const SizedBox(height: 10),
-                  _buildStatusCard(context),
-                  const SizedBox(height: 24),
-                  _buildCalendarCard(context),
-                  const SizedBox(height: 24),
                   _buildSectionHeader('Quick Actions'),
                   const SizedBox(height: 10),
                   Row(
@@ -390,6 +571,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 8),
+              child: const ScholarDocCarousel(),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader('Scholarship Status'),
+                  const SizedBox(height: 10),
+                  _buildStatusCard(context),
+                  const SizedBox(height: 24),
+                  _buildCalendarCard(context),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

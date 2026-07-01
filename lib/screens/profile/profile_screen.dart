@@ -79,8 +79,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: context.bgC,
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
           // --- Profile Header ---
           SliverAppBar(
@@ -100,10 +101,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: Colors.white.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(LucideIcons.logOut, color: Colors.white70, size: 18),
+                    child: const Icon(LucideIcons.logOut, color: Colors.white, size: 18),
                   ),
                 ),
               ),
@@ -111,14 +112,24 @@ class _ProfileScreenState extends State<ProfileScreen>
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
-                  color: AppTheme.primaryColor,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF0F3260), Color(0xFF1E3A8A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Color(0xFFFBC02D), // Golden Yellow line
+                      width: 3.0,
+                    ),
+                  ),
                 ),
                 child: SafeArea(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 30),
                       GestureDetector(
                         onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
                         child: Stack(
@@ -127,11 +138,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                               padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: _isUploadingPhoto
-                                      ? [Colors.white38, Colors.white24]
-                                      : [const Color(0xFFFBC02D), const Color(0xFFF9A825)],
-                                ),
+                                color: const Color(0xFFFBC02D), // Golden Yellow
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFFBC02D).withOpacity(0.3),
+                                    blurRadius: 16,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
                               ),
                               child: Container(
                                 padding: const EdgeInsets.all(3),
@@ -175,34 +189,37 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _profileData?['fullName'] ?? 'Student Name',
                           style: const TextStyle(
                             fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w900,
                             color: Colors.white,
+                            letterSpacing: -0.3,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '${_profileData?['course'] ?? 'Course'} • ${_profileData?['year'] ?? 'Year'}',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.72),
+                            color: Colors.white.withOpacity(0.72),
                             fontSize: 13,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Container(
                           padding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: AppTheme.accentColor.withValues(alpha: 0.22),
+                            color: AppTheme.accentColor.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: AppTheme.accentColor.withValues(alpha: 0.5)),
+                                color: AppTheme.accentColor.withOpacity(0.4)),
                           ),
                           child: Text(
                             _profileData?['scholarshipName'] ?? 'No Scholarship',
                             style: TextStyle(
                               color: AppTheme.accentColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
                             ),
                           ),
                         ),
@@ -221,7 +238,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Personal Info section
                     _buildCollapsibleSection(
@@ -241,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _buildEditableField('Section', _sectionController, LucideIcons.layers),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     // Academic section
                     _buildCollapsibleSection(
                       sectionKey: 'academic',
@@ -266,7 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             (_profileData?['payoutsReceived']?.toString() ?? '0'), LucideIcons.wallet),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     // Banking section
                     _buildCollapsibleSection(
                       sectionKey: 'banking',
@@ -277,32 +293,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           'Provide your Savings Account (SA) number for scholarship fund disbursement.',
                           style: TextStyle(
-                              fontSize: 13, color: context.textSec, height: 1.5),
+                              fontSize: 13, color: context.textSec, height: 1.5, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _saController,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
                             labelText: 'SA Number',
                             hintText: 'xxxx-xxxx-xxxx',
                             prefixIcon: const Icon(LucideIcons.creditCard,
-                                color: AppTheme.primaryColor),
+                                color: AppTheme.primaryColor, size: 18),
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: context.bgC,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(color: Colors.grey.shade200),
+                              borderSide: BorderSide(color: context.crispBorder),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: const BorderSide(
-                                  color: AppTheme.primaryColor, width: 2),
+                                  color: Color(0xFFFBC02D), width: 2), // Golden Yellow
                             ),
                             errorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
@@ -324,7 +340,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     // App Preferences section
                     _buildCollapsibleSection(
                       sectionKey: 'preferences',
@@ -340,7 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                                    color: AppTheme.primaryColor.withOpacity(0.08),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(LucideIcons.moon,
@@ -353,10 +369,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     children: [
                                       const Text('Dark Mode',
                                           style: TextStyle(
-                                              fontWeight: FontWeight.w600, fontSize: 14)),
+                                              fontWeight: FontWeight.w700, fontSize: 14)),
                                       Text('Switch between Light and Dark mode',
                                           style: TextStyle(
-                                              fontSize: 12, color: context.textSec)),
+                                              fontSize: 12, color: context.textSec, fontWeight: FontWeight.w500)),
                                     ],
                                   ),
                                 ),
@@ -364,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   value: theme == ThemeMode.dark,
                                   activeThumbColor: AppTheme.primaryColor,
                                   activeTrackColor:
-                                      AppTheme.primaryColor.withValues(alpha: 0.2),
+                                      AppTheme.primaryColor.withOpacity(0.2),
                                   onChanged: (_) => ThemeProvider().toggleTheme(),
                                 ),
                               ],
@@ -373,7 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 32),
                     // Save button
                     Container(
                       width: double.infinity,
@@ -383,9 +399,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                            color: const Color(0xFFFBC02D).withOpacity(0.25), // Golden Yellow Glow Shadow
                             blurRadius: 16,
                             offset: const Offset(0, 6),
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
@@ -393,6 +410,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         onPressed: _isSaving ? null : _handleSave,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
                           shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -408,12 +426,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 'Save Profile Changes',
                                 style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w900,
                                     fontSize: 16),
                               ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     // Activity log tile
                     _buildActivityLogTile(context),
                     const SizedBox(height: 20),
@@ -437,19 +455,19 @@ class _ProfileScreenState extends State<ProfileScreen>
     final bool isExpanded = _expandedSections.contains(sectionKey);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.surfaceC,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isExpanded
-              ? AppTheme.primaryColor.withValues(alpha: 0.2)
-              : const Color(0xFFF1F5F9),
+              ? AppTheme.primaryColor.withOpacity(0.2)
+              : context.crispBorder,
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: isExpanded
-                ? AppTheme.primaryColor.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.02),
+                ? AppTheme.primaryColor.withOpacity(0.04)
+                : Colors.black.withOpacity(0.015),
             blurRadius: isExpanded ? 16 : 8,
             offset: const Offset(0, 4),
           ),
@@ -481,8 +499,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isExpanded
-                            ? AppTheme.primaryColor.withValues(alpha: 0.12)
-                            : AppTheme.primaryColor.withValues(alpha: 0.06),
+                            ? AppTheme.primaryColor.withOpacity(0.12)
+                            : AppTheme.primaryColor.withOpacity(0.06),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(icon, size: 18, color: AppTheme.primaryColor),
@@ -496,7 +514,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             title,
                             style: const TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w800,
                               color: Color(0xFF0F3260),
                             ),
                           ),
@@ -505,7 +523,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             subtitle,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade500,
+                              color: context.textSec,
                               fontWeight: FontWeight.w500,
                             ),
                             maxLines: 1,
@@ -522,8 +540,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: isExpanded
-                              ? AppTheme.primaryColor.withValues(alpha: 0.1)
-                              : const Color(0xFFF1F5F9),
+                              ? AppTheme.primaryColor.withOpacity(0.1)
+                              : context.bgC,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
@@ -545,7 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             firstChild: const SizedBox.shrink(),
             secondChild: Column(
               children: [
-                Divider(height: 1, color: Colors.grey.shade100),
+                Divider(height: 1, color: context.crispBorder),
                 Padding(
                   padding: const EdgeInsets.all(18),
                   child: Column(
@@ -571,23 +589,23 @@ class _ProfileScreenState extends State<ProfileScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F7FF),
+            color: context.bgC,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: context.crispBorder, width: 1),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: Colors.grey.shade400),
+              Icon(icon, size: 16, color: context.textSec.withOpacity(0.6)),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(value,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.textPri)),
               ),
             ],
           ),
@@ -602,8 +620,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -611,7 +629,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           decoration: InputDecoration(
             prefixIcon: Icon(icon, size: 16, color: AppTheme.primaryColor),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: context.surfaceC,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
@@ -620,12 +638,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+              borderSide: BorderSide(color: context.crispBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide:
-                  const BorderSide(color: AppTheme.primaryColor, width: 2),
+                  const BorderSide(color: Color(0xFFFBC02D), width: 2), // Golden Yellow
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -649,9 +667,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.surfaceC,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: context.crispBorder, width: 1.5),
           boxShadow: AppTheme.softShadow,
         ),
         child: Row(
@@ -659,28 +677,28 @@ class _ProfileScreenState extends State<ProfileScreen>
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                color: AppTheme.primaryColor.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(LucideIcons.history, size: 20, color: AppTheme.primaryColor),
             ),
             const SizedBox(width: 14),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('View Account Activity',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  SizedBox(height: 2),
+                  const Text('View Account Activity',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 2),
                   Text('Security & Privacy logs',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      style: TextStyle(fontSize: 12, color: context.textSec, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.accentColor.withValues(alpha: 0.15),
+                color: AppTheme.accentColor.withOpacity(0.15), // Golden Yellow Accent
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(LucideIcons.chevronRight,
@@ -692,7 +710,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// Builds the profile avatar — shows actual photo if URL exists, else icon.
   Widget _buildAvatarWidget() {
     final String? url = _profilePictureUrl;
     if (url != null && url.isNotEmpty) {
@@ -713,14 +730,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
     return CircleAvatar(
       radius: 52,
-      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.5),
+      backgroundColor: AppTheme.primaryColor.withOpacity(0.5),
       child: _isUploadingPhoto
           ? const CircularProgressIndicator(color: Colors.white)
           : const Icon(LucideIcons.user, size: 52, color: Colors.white),
     );
   }
 
-  /// Opens file picker and uploads selected image to Cloudinary.
   Future<void> _pickAndUploadPhoto() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -744,13 +760,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       setState(() => _isUploadingPhoto = true);
 
-      // Upload to Cloudinary
       final String url = await _cloudinaryService.uploadProfilePicture(
         bytes: bytes,
         fileName: file.name,
       );
 
-      // Save URL to Firestore
       final uid = _authService.currentUser?.id;
       if (uid != null) {
         await _authService.updateStudentProfile(uid, {
@@ -859,9 +873,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Birthdate (mm/dd/yyyy)',
+        Text('Birthdate (mm/dd/yyyy)',
             style: TextStyle(
-                fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         TextFormField(
           controller: _birthdateController,
@@ -871,7 +885,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           decoration: InputDecoration(
             prefixIcon: const Icon(LucideIcons.cake, size: 16, color: AppTheme.primaryColor),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: context.surfaceC,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
@@ -880,16 +894,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+              borderSide: BorderSide(color: context.crispBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide:
-                  const BorderSide(color: AppTheme.primaryColor, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppTheme.error),
+                  const BorderSide(color: Color(0xFFFBC02D), width: 2), // Golden Yellow
             ),
           ),
           validator: (v) =>

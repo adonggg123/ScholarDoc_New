@@ -271,6 +271,18 @@ async function renderChart() {
     const ctx = document.getElementById('trendChart');
     if (!ctx) return;
 
+    // Destroy existing chart to prevent canvas reuse errors
+    if (window.activeTrendChart) {
+        window.activeTrendChart.destroy();
+        window.activeTrendChart = null;
+    }
+
+    const isDark = document.body.classList.contains('dark');
+    const primaryColor = isDark ? '#3b82f6' : '#0F3260';
+    const primaryBg = isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(15, 50, 96, 0.1)';
+    const textColor = isDark ? '#94A3B8' : '#6B7280';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+
     try {
         const { data: students, error } = await supabase.from('students').select('createdAt, status');
         if (error) throw error;
@@ -299,7 +311,7 @@ async function renderChart() {
         const submissionsData = submissionsByMonth;
         const approvedData = approvedByMonth;
 
-        new Chart(ctx, {
+        window.activeTrendChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
@@ -307,8 +319,8 @@ async function renderChart() {
                     {
                         label: 'Submissions',
                         data: submissionsData,
-                        borderColor: '#0F3260',
-                        backgroundColor: 'rgba(15, 50, 96, 0.1)',
+                        borderColor: primaryColor,
+                        backgroundColor: primaryBg,
                         borderWidth: 2,
                         fill: true,
                         tension: 0.4
@@ -328,26 +340,33 @@ async function renderChart() {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true, position: 'bottom', labels: { font: { size: 11 } } }
+                    legend: { display: true, position: 'bottom', labels: { color: textColor, font: { size: 11 } } }
                 },
                 scales: {
-                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                    x: { grid: { display: false } }
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: textColor }
+                    }
                 }
             }
         });
     } catch (e) {
         console.error('Error building trend chart:', e);
         // Fallback to dummy data
-        new Chart(ctx, {
+        window.activeTrendChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
                 datasets: [{
                     label: 'Submissions',
                     data: [12, 19, 15, 25, 22, 30],
-                    borderColor: '#0F3260',
-                    backgroundColor: 'rgba(15, 50, 96, 0.1)',
+                    borderColor: primaryColor,
+                    backgroundColor: primaryBg,
                     borderWidth: 2,
                     fill: true,
                     tension: 0.4
@@ -358,12 +377,28 @@ async function renderChart() {
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                    x: { grid: { display: false } }
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: textColor }
+                    }
                 }
             }
         });
     }
+
+    // Set up window listener for theme change
+    if (window.trendChartThemeListener) {
+        window.removeEventListener('themechanged', window.trendChartThemeListener);
+    }
+    window.trendChartThemeListener = () => {
+        renderChart();
+    };
+    window.addEventListener('themechanged', window.trendChartThemeListener);
 }
 
 // Init

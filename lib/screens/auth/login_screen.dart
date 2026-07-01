@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
-
 import '../../services/auth_service.dart';
 import '../main_layout.dart';
 import 'register_screen.dart';
@@ -35,8 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Form(
               key: _formKey,
               child: Column(
@@ -48,10 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Image.asset(
                         'assets/app_logo3.png',
-                        width: 36,
-                        height: 36,
+                        width: 38,
+                        height: 38,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
                           colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: const Text(
                           'ScholarDoc',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.5,
                           ),
@@ -70,17 +70,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 50),
+                  const SizedBox(height: 48),
 
                   // Welcome Text
                   const Text(
                     'Welcome\nBack',
                     style: TextStyle(
                       color: Color(0xFF0F3260), // Navy Blue
-                      fontSize: 42,
+                      fontSize: 44,
                       fontWeight: FontWeight.w900,
-                      height: 1.1,
-                      letterSpacing: -1.0,
+                      height: 1.05,
+                      letterSpacing: -1.2,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -88,22 +88,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Sign in to access and manage your scholarship documents and profile.',
                     style: TextStyle(
                       color: Colors.grey.shade600,
-                      fontSize: 16,
+                      fontSize: 15,
                       height: 1.5,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 40),
 
                   // Student ID field
                   _buildLabel('Student ID Number'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _studentIdController,
                     keyboardType: TextInputType.text,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                      fontSize: 15,
                       color: Color(0xFF1E293B),
                     ),
                     decoration: _buildInputDecoration(
@@ -114,69 +114,63 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'Please enter your student ID'
                         : null,
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
                   // Password field
                   _buildLabel('Password'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                      fontSize: 15,
                       color: Color(0xFF1E293B),
                     ),
-                    decoration:
-                        _buildInputDecoration(
-                          hintText: 'Enter your password',
-                          icon: LucideIcons.lock,
-                        ).copyWith(
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? LucideIcons.eye
-                                  : LucideIcons.eyeOff,
-                              color: Colors.grey.shade400,
-                              size: 22,
-                            ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                          ),
+                    decoration: _buildInputDecoration(
+                      hintText: 'Enter your password',
+                      icon: LucideIcons.lock,
+                    ).copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? LucideIcons.eye
+                              : LucideIcons.eyeOff,
+                          color: Colors.grey.shade400,
+                          size: 20,
                         ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
+                    ),
                     validator: (v) => (v == null || v.isEmpty)
                         ? 'Please enter your password'
                         : null,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
                   // Info tip
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC), // Very light slate
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      color: const Color(0xFF0F3260).withOpacity(0.03), // Subtle Navy Tint
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFF0F3260).withOpacity(0.08)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF0F3260,
-                            ).withValues(alpha: 0.1),
+                            color: const Color(0xFFFBC02D).withOpacity(0.15), // Golden Yellow Background
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             LucideIcons.info,
                             size: 16,
-                            color: Color(0xFF0F3260),
+                            color: Color(0xFFFBC02D), // Golden Yellow Icon
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -187,35 +181,27 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontSize: 13,
                               color: Colors.grey.shade700,
                               fontWeight: FontWeight.w500,
-                              height: 1.5,
+                              height: 1.45,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 40),
 
                   // Sign In button
                   Container(
-                    height: 60,
+                    height: 56,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFF0F3260),
-                          Color(0xFF1E3A8A),
-                        ], // Navy to Royal
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
+                      color: const Color(0xFF0F3260), // Navy Blue
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(
-                            0xFF0F3260,
-                          ).withValues(alpha: 0.25),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                          color: const Color(0xFFFBC02D).withOpacity(0.25), // Glowing Golden Yellow Shadow
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
@@ -223,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: const Color(0xFFFBC02D),
                         shadowColor: Colors.transparent,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(18),
@@ -235,20 +221,32 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                color: Colors.white,
+                                color: Color(0xFFFBC02D), // Golden Yellow Indicator
                               ),
                             )
-                          : const Text(
-                              'Sign In',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Sign In',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(
+                                  LucideIcons.arrowRight,
+                                  size: 18,
+                                  color: Color(0xFFFBC02D), // Golden Yellow Arrow
+                                ),
+                              ],
                             ),
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
 
                   // Register row
                   Row(
@@ -258,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         "Don't have an account?",
                         style: TextStyle(
                           color: Colors.grey.shade600,
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -273,8 +271,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           foregroundColor: const Color(0xFF0F3260),
                           textStyle: const TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                         child: const Text('Register Here'),
                       ),
@@ -299,8 +298,9 @@ class _LoginScreenState extends State<LoginScreen> {
       hintStyle: TextStyle(
         color: Colors.grey.shade400,
         fontWeight: FontWeight.w400,
+        fontSize: 14,
       ),
-      prefixIcon: Icon(icon, color: const Color(0xFF0F3260), size: 20),
+      prefixIcon: Icon(icon, color: const Color(0xFF0F3260), size: 18),
       filled: true,
       fillColor: const Color(0xFFF8FAFC), // Slate 50
       border: OutlineInputBorder(
@@ -313,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF0F3260), width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2), // Golden Yellow
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -321,9 +321,9 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: AppTheme.error, width: 1.5),
+        borderSide: BorderSide(color: AppTheme.error, width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
     );
   }
 
@@ -332,7 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
       text,
       style: const TextStyle(
         fontSize: 13,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         color: Color(0xFF0F3260),
       ),
     );

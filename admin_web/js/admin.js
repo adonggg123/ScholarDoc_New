@@ -153,6 +153,41 @@ if (syncBtn) {
     });
 }
 
+// ── Theme Toggle System ──────────────────────────────────────────────
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const themeToggleIcon = document.getElementById('theme-toggle-icon');
+
+function updateThemeToggleIcon(theme) {
+    if (!themeToggleIcon) return;
+    if (theme === 'dark') {
+        themeToggleIcon.className = 'icon-sun';
+    } else {
+        themeToggleIcon.className = 'icon-moon';
+    }
+}
+
+// Initial set based on localStorage/body class
+const savedTheme = localStorage.getItem('theme') || 'light';
+if (savedTheme === 'dark') {
+    document.body.classList.add('dark');
+    updateThemeToggleIcon('dark');
+} else {
+    document.body.classList.remove('dark');
+    updateThemeToggleIcon('light');
+}
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('dark');
+        const theme = isDark ? 'dark' : 'light';
+        localStorage.setItem('theme', theme);
+        updateThemeToggleIcon(theme);
+        
+        // Dispatch theme change event so that other elements (like charts) can respond
+        window.dispatchEvent(new CustomEvent('themechanged', { detail: { theme: theme } }));
+    });
+}
+
 // ── Profile Dropdown Toggle ─────────────────────────────────────────
 if (profilePill && profileDropdown) {
     profilePill.addEventListener('click', (e) => {
@@ -179,12 +214,231 @@ if (dropdownLogoutBtn) {
     });
 }
 
-// ── Notification Bell (placeholder) ─────────────────────────────────
-if (notificationBtn) {
-    notificationBtn.addEventListener('click', () => {
-        showToast('No new notifications.', 'bell');
+// ── Real-Time Notifications System (Admin Web Interface) ────────────
+let systemNotifications = [];
+const notificationDropdown = document.getElementById('notification-dropdown');
+const markAllReadBtn = document.getElementById('mark-all-read-btn');
+
+window.navigateToView = function(viewName) {
+    // Find the nav item
+    const targetNav = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+    if (targetNav) {
+        navItems.forEach(nav => nav.classList.remove('active'));
+        targetNav.classList.add('active');
+        
+        // Expand the validation sub-menu if targeting a validation sub-screen
+        if (viewName === 'sa_verification' || viewName === 'id_validation') {
+            const valMenu = document.getElementById('validation-menu-btn');
+            if (valMenu && !valMenu.classList.contains('expanded')) {
+                valMenu.click();
+            }
+        }
+    }
+    loadView(viewName);
+};
+
+async function loadNotifications() {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('notifications')
+            .select('*')
+            .eq('studentId', 'admin')
+            .order('timestamp', { ascending: false })
+            .limit(20);
+        if (error) throw error;
+
+        systemNotifications = data || [];
+        renderNotificationsDropdown();
+        updateBellBadge();
+    } catch (e) {
+        console.error('Error loading notifications:', e);
+    }
+}
+
+function updateBellBadge() {
+    const unreadCount = systemNotifications.filter(n => !n.isRead).length;
+    const badge = document.getElementById('bell-badge');
+    if (!badge) return;
+
+    if (unreadCount > 0) {
+        badge.innerText = unreadCount;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderNotificationsDropdown() {
+    const container = document.getElementById('notification-items-container');
+    if (!container) return;
+
+    if (systemNotifications.length === 0) {
+        container.innerHTML = `
+            <div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 12px; font-family: inherit;">
+                No notifications yet.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = systemNotifications.map(n => {
+        let iconClass = 'icon-info';
+        let colorClass = 'var(--primary-color, #0F3260)';
+        if (n.type === 'success') {
+            iconClass = 'icon-check-circle-2';
+            colorClass = 'var(--success, #4CAF50)';
+        } else if (n.type === 'warning') {
+            iconClass = 'icon-alert-circle';
+            colorClass = 'var(--warning, #FF9800)';
+        } else if (n.type === 'error') {
+            iconClass = 'icon-x-circle';
+            colorClass = 'var(--error, #F44336)';
+        }
+
+        const dateStr = n.timestamp ? new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const bg = n.isRead ? 'transparent' : 'var(--notification-unread-bg)';
+        const border = n.isRead ? '1px solid transparent' : '1px solid var(--notification-unread-border)';
+
+        return `
+            <div class="notification-item" style="padding: 10px; border-radius: 10px; background: ${bg}; border: ${border}; display: flex; gap: 10px; cursor: pointer; transition: background 0.15s;" onclick="handleWebNotificationClick('${n.id}', '${n.title}')" onmouseover="this.style.background='var(--notification-unread-border)'" onmouseout="this.style.background='${bg}'">
+                <div style="width: 28px; height: 28px; border-radius: 50%; background: ${colorClass}15; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="${iconClass}" style="color: ${colorClass}; font-size: 14px;"></i>
+                </div>
+                <div style="flex: 1; min-width: 0; font-family: inherit;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+                        <span style="font-weight: ${n.isRead ? '600' : '700'}; font-size: 12px; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${n.title}</span>
+                        <span style="font-size: 9px; color: var(--text-secondary); flex-shrink: 0;">${dateStr}</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${n.message}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Re-initialize lucide icons for injected items
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+}
+
+window.handleWebNotificationClick = async function(notificationId, title) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('notifications')
+            .update({ isRead: true })
+            .eq('id', notificationId);
+        if (error) throw error;
+
+        // Close dropdown
+        if (notificationDropdown) notificationDropdown.classList.add('hidden');
+
+        // Redirect based on the notification title
+        if (title.includes('SA Number')) {
+            window.navigateToView('sa_verification');
+        } else if (title.includes('ID Validation')) {
+            window.navigateToView('id_validation');
+        } else if (title.includes('Student Registered') || title.includes('Application')) {
+            window.navigateToView('student_records');
+        }
+
+        // Reload notifications list
+        loadNotifications();
+    } catch (e) {
+        console.error('Error handling notification click:', e);
+    }
+};
+
+window.showWebPopupNotification = function(title, message, notificationId) {
+    // Remove existing top toasts
+    document.querySelectorAll('.top-toast-notification').forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = 'top-toast-notification';
+    toast.innerHTML = `
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i class="icon-bell-ring" style="color: var(--primary-color); font-size: 16px;"></i>
+        </div>
+        <div style="flex: 1; min-width: 0; font-family: inherit;">
+            <div style="font-weight: 800; font-size: 13px; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${title}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3;">${message}</div>
+        </div>
+        <i class="icon-chevron-right" style="color: var(--primary-color); font-size: 14px; flex-shrink: 0;"></i>
+    `;
+
+    toast.addEventListener('click', () => {
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 300);
+        window.handleWebNotificationClick(notificationId, title);
+    });
+
+    document.body.appendChild(toast);
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+
+    setTimeout(() => {
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+};
+
+function setupRealtimeNotifications() {
+    window.supabaseClient
+        .channel('admin-notifications')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'notifications',
+                filter: 'studentId=eq.admin'
+            },
+            (payload) => {
+                loadNotifications();
+                if (payload.eventType === 'INSERT') {
+                    window.showWebPopupNotification(payload.new.title, payload.new.message, payload.new.id);
+                }
+            }
+        )
+        .subscribe();
+}
+
+if (notificationBtn && notificationDropdown) {
+    notificationBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        notificationDropdown.classList.toggle('hidden');
+        loadNotifications();
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        const wrapper = document.getElementById('notification-dropdown-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            notificationDropdown.classList.add('hidden');
+        }
     });
 }
+
+if (markAllReadBtn) {
+    markAllReadBtn.addEventListener('click', async () => {
+        try {
+            const unreadIds = systemNotifications.filter(n => !n.isRead).map(n => n.id);
+            if (unreadIds.length === 0) return;
+
+            const { error } = await window.supabaseClient
+                .from('notifications')
+                .update({ isRead: true })
+                .in('id', unreadIds);
+            if (error) throw error;
+
+            loadNotifications();
+        } catch (e) {
+            console.error('Error marking all as read:', e);
+        }
+    });
+}
+
 
 // Sidebar Navigation
 navItems.forEach(item => {
@@ -223,6 +477,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (initialNav) initialNav.classList.add('active');
     loadView(initialView);
     
+    // Init notifications
+    loadNotifications();
+    setupRealtimeNotifications();
+
     // Init icons for main layout
     if (window.lucide) {
         window.lucide.createIcons();

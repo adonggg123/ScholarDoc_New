@@ -517,9 +517,17 @@ window.approveStudent = async function(uid) {
     if(!confirm('Are you sure you want to approve this student?')) return;
     try {
         const student = allStudents.find(s => s.uid === uid);
+        const currentDocs = student?.documents || {};
+        const updatedDocs = { 
+            ...currentDocs, 
+            saVerificationStatus: 'Approved',
+            idValidationStatus: 'Approved' 
+        };
+
         const { error } = await supabase.from('students').update({ 
             status: 'Approved',
-            idValidationStatus: 'Approved'
+            documents: updatedDocs,
+            updatedAt: new Date().toISOString()
         }).eq('uid', uid);
         if(error) throw error;
         
@@ -537,7 +545,7 @@ window.approveStudent = async function(uid) {
             message: 'Congratulations! Your scholarship application has been officially approved.',
             type: 'success',
             isRead: false,
-            createdAt: new Date().toISOString()
+            timestamp: new Date().toISOString()
         }]);
 
         alert('Student approved successfully.');
@@ -553,9 +561,17 @@ window.rejectStudent = async function(uid) {
     if(!confirm('Are you sure you want to reject this student?')) return;
     try {
         const student = allStudents.find(s => s.uid === uid);
+        const currentDocs = student?.documents || {};
+        const updatedDocs = { 
+            ...currentDocs, 
+            saVerificationStatus: 'Rejected',
+            idValidationStatus: 'Rejected' 
+        };
+
         const { error } = await supabase.from('students').update({ 
             status: 'Rejected',
-            idValidationStatus: 'Rejected'
+            documents: updatedDocs,
+            updatedAt: new Date().toISOString()
         }).eq('uid', uid);
         if(error) throw error;
         
@@ -573,7 +589,7 @@ window.rejectStudent = async function(uid) {
             message: 'We regret to inform you that your scholarship application has been rejected.',
             type: 'error',
             isRead: false,
-            createdAt: new Date().toISOString()
+            timestamp: new Date().toISOString()
         }]);
 
         alert('Student rejected.');

@@ -162,10 +162,22 @@ function updateExcelBtnLabel() {
 function buildCharts(students) {
     buildThroughputChart(students);
     buildDeptChart(students);
+
+    // Rebuild charts on theme change
+    if (window.reportsChartsThemeListener) {
+        window.removeEventListener('themechanged', window.reportsChartsThemeListener);
+    }
+    window.reportsChartsThemeListener = () => {
+        buildThroughputChart(students);
+        buildDeptChart(students);
+    };
+    window.addEventListener('themechanged', window.reportsChartsThemeListener);
 }
 
 function buildThroughputChart(students) {
-    const ctx = document.getElementById('throughputChart').getContext('2d');
+    const canvas = document.getElementById('throughputChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
     const timeframe = document.getElementById('throughput-timeframe').value;
 
     // Compute data based on timeframe
@@ -215,6 +227,12 @@ function buildThroughputChart(students) {
 
     if (throughputChart) throughputChart.destroy();
 
+    const isDark = document.body.classList.contains('dark');
+    const colorSubmissions = isDark ? 'rgba(59, 130, 246, 0.4)' : 'rgba(15, 50, 96, 0.3)';
+    const colorApproved = isDark ? '#3b82f6' : '#0F3260';
+    const textColor = isDark ? '#94A3B8' : '#6B7280';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0,0,0,0.05)';
+
     throughputChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -223,14 +241,14 @@ function buildThroughputChart(students) {
                 {
                     label: 'Total Submissions',
                     data: submissions,
-                    backgroundColor: 'rgba(15, 50, 96, 0.3)',
+                    backgroundColor: colorSubmissions,
                     borderRadius: 4,
                     barPercentage: 0.6,
                 },
                 {
                     label: 'Approved',
                     data: approved,
-                    backgroundColor: '#0F3260',
+                    backgroundColor: colorApproved,
                     borderRadius: 4,
                     barPercentage: 0.6,
                 }
@@ -239,17 +257,32 @@ function buildThroughputChart(students) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { 
+                legend: { 
+                    display: true, 
+                    position: 'bottom', 
+                    labels: { color: textColor, font: { size: 11 } } 
+                } 
+            },
             scales: {
-                x: { grid: { display: false } },
-                y: { grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
+                x: { 
+                    grid: { display: false },
+                    ticks: { color: textColor }
+                },
+                y: { 
+                    grid: { color: gridColor }, 
+                    beginAtZero: true,
+                    ticks: { color: textColor }
+                }
             }
         }
     });
 }
 
 function buildDeptChart(students) {
-    const ctx = document.getElementById('deptChart').getContext('2d');
+    const canvas = document.getElementById('deptChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
     const deptCounts = { BSIT: 0, BTLED: 0, BFPT: 0 };
     students.forEach(s => {
         const course = s.course || '';
@@ -260,7 +293,11 @@ function buildDeptChart(students) {
 
     const total = deptCounts.BSIT + deptCounts.BTLED + deptCounts.BFPT;
     const legendContainer = document.getElementById('dept-legend');
-    const colors = ['#0F3260', '#D4AF37', '#43A047'];
+    
+    const isDark = document.body.classList.contains('dark');
+    const colors = isDark ? ['#3b82f6', '#f59e0b', '#10b981'] : ['#0F3260', '#D4AF37', '#43A047'];
+    const borderColor = isDark ? '#111827' : 'white';
+    
     const labels = ['BSIT', 'BTLED', 'BFPT'];
     const values = [deptCounts.BSIT, deptCounts.BTLED, deptCounts.BFPT];
 
@@ -282,7 +319,7 @@ function buildDeptChart(students) {
                 data: values,
                 backgroundColor: colors,
                 borderWidth: 2,
-                borderColor: 'white',
+                borderColor: borderColor,
             }]
         },
         options: {

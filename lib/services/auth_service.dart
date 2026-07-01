@@ -92,6 +92,15 @@ class AuthService {
               'Your account has been created successfully. Use your Student ID ($studentId) to login next time.',
           type: 'success',
         );
+
+        // Send Registration Notification to Admin
+        final String fullName = studentData['fullName'] ?? 'A student';
+        await _notificationService.sendNotification(
+          studentId: 'admin',
+          title: 'New Student Registered',
+          message: 'New student $fullName has registered in the system.',
+          type: 'info',
+        );
       }
 
       return response;

@@ -367,7 +367,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                     'fatherEduStatus': selectedFatherEdu,
                                     'motherEduStatus': selectedMotherEdu,
                                   },
-                                  'createdAt': DateTime.now().toIso8601String(),
+                                  'createdAt': DateTime.now().toUtc().toIso8601String(),
                                 })
                                 .select()
                                 .single();
@@ -1563,7 +1563,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
             'status': newStatus,
             'adminRemarks': 'Updated via Student Records',
             'requiresResubmission': false,
-            'updatedAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
           }).eq('uid', docId);
 
       await _auditService.logActivity(

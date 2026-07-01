@@ -98,6 +98,9 @@ flutter:
     - assets/app_logo3.png
     - assets/campus_bg.jpg
     - assets/Annex 5-TES New Form 2.xlsx
+    - assets/Slide_image1.jpg
+    - assets/Slide_image2.jpg
+    - assets/slide_image3.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

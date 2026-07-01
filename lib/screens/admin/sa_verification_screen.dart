@@ -461,9 +461,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
               child: ElevatedButton(
                 onPressed: () => _updateStatus(
                   context,
-                  data['uid'], // Firestore doc ID
-                  name,
-                  studentId,
+                  data,
                   'Verified',
                 ),
                 style: ElevatedButton.styleFrom(
@@ -486,9 +484,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
               child: OutlinedButton(
                 onPressed: () => _updateStatus(
                   context,
-                  data['uid'],
-                  name,
-                  studentId,
+                  data,
                   'Missing',
                 ),
                 style: OutlinedButton.styleFrom(
@@ -511,16 +507,14 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
               child: TextButton(
                 onPressed: () => _updateStatus(
                   context,
-                  data['uid'],
-                  name,
-                  studentId,
+                  data,
                   'Rejected',
                   isFinalRejection: true,
                 ),
                 style: TextButton.styleFrom(foregroundColor: context.textSec),
                 child: const Text(
                   'Permanent Rejection',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -557,23 +551,44 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
   Future<void> _updateStatus(
     BuildContext context,
-    String? uid,
-    String name,
-    String studentId,
+    Map<String, dynamic> studentData,
     String newStatus, {
     bool isFinalRejection = false,
   }) async {
+    final String? uid = studentData['uid'];
     if (uid == null) return;
 
     final String remarks = _remarksController.text.trim();
+    final String studentId = studentData['studentId'] ?? 'N/A';
+    final String name = studentData['fullName'] ?? 'Student';
 
     try {
-      // 1. Update Student Record
-      await Supabase.instance.client.from('students').update({
-        'status': newStatus,
+      // Get current documents map
+      final Map<String, dynamic> currentDocs = (studentData['documents'] is Map)
+          ? Map<String, dynamic>.from(studentData['documents'])
+          : {};
+
+      // Update saVerificationStatus inside documents
+      currentDocs['saVerificationStatus'] = newStatus;
+
+      final Map<String, dynamic> updatePayload = {
+        'documents': currentDocs,
         'adminRemarks': remarks,
-        'requiresResubmission': !isFinalRejection && newStatus == 'Rejected',
-      }).eq('uid', uid);
+        'requiresResubmission': !isFinalRejection && (newStatus == 'Missing' || newStatus == 'Rejected'),
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      // Auto-calculate overall status:
+      // Only set global status to Verified when BOTH SA and ID are verified
+      final String currentIdStatus = currentDocs['idValidationStatus']?.toString() ?? 'Pending';
+      if (newStatus == 'Verified' && (currentIdStatus == 'Verified' || currentIdStatus == 'Approved')) {
+        updatePayload['status'] = 'Verified';
+      } else if (newStatus == 'Missing' || newStatus == 'Rejected') {
+        updatePayload['status'] = newStatus;
+      }
+
+      // 1. Update Student Record
+      await Supabase.instance.client.from('students').update(updatePayload).eq('uid', uid);
 
       // 2. Log Activity
       await _auditService.logActivity(

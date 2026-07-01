@@ -4,8 +4,8 @@ import '../../theme/theme_provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
-
 import '../../services/storage_service.dart';
+import '../../services/notification_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
@@ -37,7 +37,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   String? _atmCardUrl;
   String? _atmCardFeedback;
   String? _atmCardFileName;
-
 
   @override
   void initState() {
@@ -98,11 +97,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     super.dispose();
   }
 
-  // ATM Scanning removed in favor of manual entry
-
   Future<void> _handleUpload() async {
     try {
-      // 1. Navigate to IDCaptureScreen to get the generated PDF bytes
       final result = await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const IDCaptureScreen()),
@@ -123,7 +119,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       final uid = _authService.currentUser?.id;
       if (uid == null) throw Exception("User not authenticated");
 
-      // 3. Real Upload to Firebase Storage
       final String storagePath =
           'submissions/$uid/DOC_${DateTime.now().millisecondsSinceEpoch}_$originalName';
       final String downloadUrl = await _storageService.uploadFile(
@@ -193,23 +188,15 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     }
   }
 
-  /* 
-  Removed _simulateUpload as it is now handled by _handleUpload.
-  */
-
-  /* 
-  Removed _simulateDuplicateCheck as it is no longer used for the new requirements.
-  */
-
   void _showReviewSheet(String label, String fileName) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
+        height: MediaQuery.of(context).size.height * 0.65,
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
+          color: context.bgC,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
         padding: const EdgeInsets.all(24),
@@ -219,7 +206,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.3),
+                color: Colors.grey.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -229,7 +216,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    color: AppTheme.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -259,7 +246,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -275,28 +262,34 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       fileName.endsWith('.pdf')
                           ? LucideIcons.fileText
                           : LucideIcons.image,
-                      size: 64,
-                      color: AppTheme.primaryColor.withValues(alpha: 0.5),
+                      size: 56,
+                      color: AppTheme.primaryColor.withOpacity(0.5),
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      fileName,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        fileName,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    const Text(
                       'File ready for submission',
-                      style: TextStyle(color: AppTheme.success, fontSize: 12),
+                      style: TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
+              height: 52,
+              child: OutlinedButton.icon(
                 onPressed: () async {
                   final String? urlToOpen = fileName == _pdfFileName ? _submissionPdfUrl : _atmCardUrl;
                   if (urlToOpen != null) {
@@ -311,26 +304,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     }
                   }
                 },
-                icon: const Icon(LucideIcons.externalLink),
+                icon: const Icon(LucideIcons.externalLink, size: 18),
                 label: const Text(
                   'Preview Document',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: context.surfaceC,
+                style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.primaryColor,
-                  side: const BorderSide(color: AppTheme.primaryColor),
+                  side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  elevation: 0,
                 ),
               ),
             ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              height: 56,
+              height: 52,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
@@ -343,16 +334,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ),
                 child: const Text(
                   'Confirm Document',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Needs Correction?',
-                style: TextStyle(color: context.textSec),
               ),
             ),
           ],
@@ -366,12 +349,18 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     final canPop = Navigator.canPop(context);
 
     return Container(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 24, 40),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 24, 24),
       decoration: const BoxDecoration(
         color: AppTheme.primaryColor,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(32),
           bottomRight: Radius.circular(32),
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFFBC02D), // Golden Yellow Bottom Accent Line
+            width: 3.0,
+          ),
         ),
       ),
       child: Row(
@@ -393,7 +382,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 const Text(
                   'Document Submission',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: 21,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: -0.5,
@@ -404,7 +393,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   'Complete your application',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: Colors.white.withOpacity(0.7),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -414,13 +403,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
               LucideIcons.fileUp,
               color: Colors.white,
-              size: 22,
+              size: 20,
             ),
           ),
         ],
@@ -435,209 +424,349 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       body: Column(
         children: [
           _buildHeader(context),
+          _buildCustomStepIndicator(),
           Expanded(
-            child: Theme(
-              data: Theme.of(context).copyWith(
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: AppTheme.primaryColor,
-                  primary: AppTheme.primaryColor,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 100),
-                child: Stepper(
-                  type: StepperType.horizontal,
-                  currentStep: _currentStep,
-                  elevation: 0,
-                  controlsBuilder: (BuildContext context, ControlsDetails details) {
-                    final isLastStep = _currentStep == 2;
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 24.0),
-                      child: Row(
-                        children: [
-                          if (_currentStep > 0)
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: details.onStepCancel,
-                                child: const Text('Back'),
-                              ),
-                            ),
-                          if (_currentStep > 0) const SizedBox(width: 16),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: details.onStepContinue,
-                              child: Text(isLastStep ? 'Submit' : 'Continue'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  onStepContinue: () async {
-                    if (_currentStep == 1) {
-                      if (!_formKey.currentState!.validate()) {
-                        return;
-                      }
-                      if (_submissionPdfUrl == null || _atmCardUrl == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please upload both your PDF document and ATM Card before continuing.'),
-                            backgroundColor: AppTheme.error,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        return;
-                      }
-                    }
-                    if (_currentStep < 2) {
-                      setState(() {
-                        _currentStep += 1;
-                      });
-                    } else {
-                      setState(() => _isUploading = true);
-                      try {
-                        final user = _authService.currentUser;
-                        if (user != null) {
-                          final doc = await _authService.getStudentProfile(
-                            user.id,
-                          );
-                          final data = doc;
-                          final String studentId =
-                              data?['studentId'] ?? 'Unknown ID';
-                          final String fullName = data?['fullName'] ?? 'Student';
-
-                          Map<String, dynamic> documents = {};
-                          if (data != null && data['documents'] is Map) {
-                            documents = Map<String, dynamic>.from(data['documents']);
-                          }
-                          documents['atmCardUrl'] = _atmCardUrl;
-                          documents['atmCardFileName'] = _atmCardFileName;
-
-                          await _authService.updateStudentProfile(user.id, {
-                            'status': 'Pending',
-                            'saNumber': _saController.text.trim(),
-                            'submissionPdfUrl': _submissionPdfUrl,
-                            'submissionPdfName': _pdfFileName,
-                            'documents': documents,
-                            'pdfVerified': true,
-                            'createdAt': DateTime.now().toIso8601String(),
-                            'submittedAt': DateTime.now().toIso8601String(),
-                            'requiresResubmission': false,
-                            'adminRemarks': null,
-                          });
-
-                          await _auditService.logActivity(
-                            action:
-                                'Submitted documents for scholarship verification',
-                            userName: fullName,
-                            role: 'Student',
-                            studentId: studentId,
-                          );
-                        }
-
-                        if (!mounted) return;
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Documents submitted successfully!'),
-                            backgroundColor: AppTheme.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-
-                        if (Navigator.canPop(context)) {
-                          Navigator.pop(context);
-                        } else {
-                          setState(() {
-                            _currentStep = 0;
-                            _submissionPdfUrl = null;
-                            _pdfFeedback = null;
-                            _pdfFileName = null;
-                            _atmCardUrl = null;
-                            _atmCardFeedback = null;
-                            _atmCardFileName = null;
-                          });
-                        }
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to submit documents: $e'),
-                            backgroundColor: AppTheme.error,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _isUploading = false);
-                      }
-                    }
-                  },
-                  onStepCancel: () {
-                    if (_currentStep > 0) {
-                      setState(() {
-                        _currentStep -= 1;
-                      });
-                    } else {
-                      if (Navigator.canPop(context)) {
-                        Navigator.pop(context);
-                      }
-                    }
-                  },
-                  steps: [
-                    Step(
-                      title: const Text('Guide', style: TextStyle(fontSize: 12)),
-                      content: _buildStep1(),
-                      isActive: _currentStep >= 0,
-                      state: _currentStep > 0
-                          ? StepState.complete
-                          : StepState.indexed,
-                    ),
-                    Step(
-                      title: const Text('Files', style: TextStyle(fontSize: 12)),
-                      content: _buildStep2(),
-                      isActive: _currentStep >= 1,
-                      state: _currentStep > 1
-                          ? StepState.complete
-                          : StepState.indexed,
-                    ),
-                    Step(
-                      title: const Text('Final', style: TextStyle(fontSize: 12)),
-                      content: _buildStep3(),
-                    ),
-                  ],
-                ),
-              ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: _buildCurrentStepContent(),
             ),
           ),
+          _buildStepNavigationButtons(),
         ],
       ),
     );
+  }
+
+  Widget _buildCustomStepIndicator() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: context.surfaceC,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.crispBorder, width: 1.5),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Row(
+        children: [
+          _buildStepNode(0, 'Guide', LucideIcons.bookOpen),
+          _buildStepConnector(0),
+          _buildStepNode(1, 'Files', LucideIcons.fileText),
+          _buildStepConnector(1),
+          _buildStepNode(2, 'Final', LucideIcons.checkCircle),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepNode(int stepIndex, String title, IconData fallbackIcon) {
+    final isCompleted = _currentStep > stepIndex;
+    final isActive = _currentStep == stepIndex;
+
+    Color nodeBgColor = context.bgC;
+    Color nodeContentColor = context.textSec;
+    Border? border = Border.all(color: context.crispBorder, width: 1.5);
+
+    if (isCompleted) {
+      nodeBgColor = AppTheme.primaryColor;
+      nodeContentColor = const Color(0xFFFBC02D); // Golden Yellow Icon/Number
+      border = null;
+    } else if (isActive) {
+      nodeBgColor = const Color(0xFFFBC02D); // Golden Yellow Active
+      nodeContentColor = AppTheme.primaryColor; // Navy Text
+      border = null;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: nodeBgColor,
+            shape: BoxShape.circle,
+            border: border,
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFFBC02D).withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    )
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: isCompleted
+              ? Icon(LucideIcons.check, color: nodeContentColor, size: 18)
+              : Text(
+                  '${stepIndex + 1}',
+                  style: TextStyle(
+                    color: nodeContentColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          style: TextStyle(
+            color: isActive ? AppTheme.primaryColor : context.textSec,
+            fontSize: 11,
+            fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepConnector(int precedingStep) {
+    final isFilled = _currentStep > precedingStep;
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16, left: 8, right: 8),
+        height: 3,
+        decoration: BoxDecoration(
+          color: isFilled ? AppTheme.primaryColor : context.crispBorder,
+          borderRadius: BorderRadius.circular(1.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return _buildStep1();
+      case 1:
+        return _buildStep2();
+      case 2:
+        return _buildStep3();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildStepNavigationButtons() {
+    final isLastStep = _currentStep == 2;
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        decoration: BoxDecoration(
+          color: context.surfaceC,
+          border: Border(top: BorderSide(color: context.crispBorder, width: 1.5)),
+        ),
+        child: Row(
+          children: [
+            if (_currentStep > 0)
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: _isUploading ? null : _handleBack,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ),
+            if (_currentStep > 0) const SizedBox(width: 16),
+            Expanded(
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.primaryColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFBC02D).withOpacity(0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: _isUploading ? null : _handleContinue,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    isLastStep ? 'Submit Application' : 'Continue',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleBack() {
+    if (_currentStep > 0) {
+      setState(() {
+        _currentStep -= 1;
+      });
+    }
+  }
+
+  Future<void> _handleContinue() async {
+    if (_currentStep == 1) {
+      if (!_formKey.currentState!.validate()) {
+        return;
+      }
+      if (_submissionPdfUrl == null || _atmCardUrl == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload both your PDF document and ATM Card before continuing.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+    if (_currentStep < 2) {
+      setState(() {
+        _currentStep += 1;
+      });
+    } else {
+      setState(() => _isUploading = true);
+      try {
+        final user = _authService.currentUser;
+        if (user != null) {
+          final doc = await _authService.getStudentProfile(
+            user.id,
+          );
+          final data = doc;
+          final String studentId =
+              data?['studentId'] ?? 'Unknown ID';
+          final String fullName = data?['fullName'] ?? 'Student';
+
+          Map<String, dynamic> documents = {};
+          if (data != null && data['documents'] is Map) {
+            documents = Map<String, dynamic>.from(data['documents']);
+          }
+          documents['atmCardUrl'] = _atmCardUrl;
+          documents['atmCardFileName'] = _atmCardFileName;
+          documents['saVerificationStatus'] = 'Pending';
+          documents['idValidationStatus'] = 'Pending';
+
+          await _authService.updateStudentProfile(user.id, {
+            'status': 'Pending',
+            'saNumber': _saController.text.trim(),
+            'submissionPdfUrl': _submissionPdfUrl,
+            'submissionPdfName': _pdfFileName,
+            'documents': documents,
+            'pdfVerified': true,
+            'createdAt': DateTime.now().toUtc().toIso8601String(),
+            'submittedAt': DateTime.now().toUtc().toIso8601String(),
+            'requiresResubmission': false,
+            'adminRemarks': null,
+          });
+
+          final notificationService = NotificationService();
+          await notificationService.sendNotification(
+            studentId: 'admin',
+            title: 'SA Number Submitted',
+            message: 'Student $fullName has submitted SA Number for verification.',
+            type: 'info',
+          );
+          await notificationService.sendNotification(
+            studentId: 'admin',
+            title: 'ID Validation Submitted',
+            message: 'Student $fullName has uploaded ID documents for validation.',
+            type: 'info',
+          );
+
+          await _auditService.logActivity(
+            action:
+                'Submitted documents for scholarship verification',
+            userName: fullName,
+            role: 'Student',
+            studentId: studentId,
+          );
+        }
+
+        if (!mounted) return;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Documents submitted successfully!'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        } else {
+          setState(() {
+            _currentStep = 0;
+            _submissionPdfUrl = null;
+            _pdfFeedback = null;
+            _pdfFileName = null;
+            _atmCardUrl = null;
+            _atmCardFeedback = null;
+            _atmCardFileName = null;
+          });
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit documents: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
   }
 
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: 10),
         const Text(
           'Submission Protocol',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF0F3260)),
         ),
         const SizedBox(height: 8),
         Text(
-          'Please ensure you have high-quality scans of the following:',
-          style: TextStyle(color: context.textSec, fontSize: 13),
+          'Please ensure you have high-quality scans of the following requirements ready:',
+          style: TextStyle(color: context.textSec, fontSize: 13, fontWeight: FontWeight.w500),
         ),
-        const SizedBox(height: 24),
-        _bulletPoint('Camera Capture: Front and Back of ID'),
-        _bulletPoint('Digital Signature: Draw your signature directly in the app'),
-        _bulletPoint('Clear photo of your ATM Card (JPG/PNG format)'),
-        const SizedBox(height: 32),
+        const SizedBox(height: 20),
+        _bulletPoint('Camera Capture: Front and Back of Student ID'),
+        _bulletPoint('Digital Signature: Draw signature directly in the app'),
+        _bulletPoint('Clear photo of your Payout ATM Card (JPG/PNG format)'),
+        const SizedBox(height: 28),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppTheme.warning.withValues(alpha: 0.1),
+            color: const Color(0xFFFBC02D).withOpacity(0.08), // Light Yellow tint
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+            border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.2)),
           ),
           child: Column(
             children: [
@@ -646,12 +775,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: const BoxDecoration(
-                      color: AppTheme.warning,
+                      color: Color(0xFFFBC02D),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       LucideIcons.shieldAlert,
-                      color: Colors.white,
+                      color: Color(0xFF0F3260),
                       size: 16,
                     ),
                   ),
@@ -659,7 +788,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   const Text(
                     'Quality Check Required',
                     style: TextStyle(
-                      color: AppTheme.warning,
+                      color: Color(0xFF0F3260),
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
@@ -670,9 +799,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               const Text(
                 'Please ensure your ID captures are clear, well-lit, and easily readable. Your digital signature should be drawn clearly. A blurred or incomplete submission may lead to rejection.',
                 style: TextStyle(
-                  color: AppTheme.warning,
+                  color: Color(0xFF0F3260),
                   fontSize: 12,
-                  height: 1.5,
+                  height: 1.45,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -690,7 +819,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(2),
+            padding: const EdgeInsets.all(4),
             decoration: const BoxDecoration(
               color: AppTheme.success,
               shape: BoxShape.circle,
@@ -701,7 +830,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: context.textPri),
             ),
           ),
         ],
@@ -715,15 +844,15 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       child: Column(
         children: [
           if (_isUploading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
               child: Column(
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
+                  const CircularProgressIndicator(color: Color(0xFF0F3260)),
+                  const SizedBox(height: 12),
                   Text(
                     'Uploading document...',
-                    style: TextStyle(color: AppTheme.primaryColor),
+                    style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -736,8 +865,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             children: [
               TextButton.icon(
                 onPressed: _saveDraftOffline,
-                icon: const Icon(LucideIcons.save, size: 16),
-                label: const Text('Save Draft Offline'),
+                icon: const Icon(LucideIcons.save, size: 15),
+                label: const Text('Save Draft Offline', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 style: TextButton.styleFrom(
                   foregroundColor: AppTheme.primaryColor,
                 ),
@@ -752,14 +881,14 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               color: context.surfaceC,
               borderRadius: BorderRadius.circular(24),
               boxShadow: AppTheme.softShadow,
-              border: Border.all(color: context.crispBorder),
+              border: Border.all(color: context.crispBorder, width: 1.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       LucideIcons.landmark,
                       size: 18,
                       color: AppTheme.primaryColor,
@@ -767,18 +896,33 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     const SizedBox(width: 10),
                     const Text(
                       'Banking Details',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F3260)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _saController,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   decoration: InputDecoration(
                     labelText: 'SA Number',
                     hintText: 'Enter your 10 to 12-digit SA number',
-                    prefixIcon: const Icon(LucideIcons.creditCard),
+                    prefixIcon: const Icon(LucideIcons.creditCard, size: 18),
                     counterText: "",
+                    filled: true,
+                    fillColor: context.bgC,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: context.crispBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+                    ),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [
@@ -796,11 +940,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
                   'Please enter your official scholarship account number carefully.',
-                  style: TextStyle(fontSize: 11, color: context.textSec),
+                  style: TextStyle(fontSize: 11, color: context.textSec, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -850,9 +993,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           color: isDuplicate
               ? AppTheme.error
               : (isCompleted
-                    ? AppTheme.success.withValues(alpha: 0.5)
+                    ? AppTheme.success.withOpacity(0.5)
                     : context.crispBorder),
-          width: isCompleted || isDuplicate ? 2 : 1,
+          width: isCompleted || isDuplicate ? 2 : 1.5,
         ),
       ),
       child: Material(
@@ -870,11 +1013,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isCompleted
-                            ? AppTheme.success.withValues(alpha: 0.1)
+                            ? AppTheme.success.withOpacity(0.08)
                             : (isDuplicate
-                                  ? AppTheme.error.withValues(alpha: 0.1)
-                                  : AppTheme.primaryColor.withValues(
-                                      alpha: 0.05,
+                                  ? AppTheme.error.withOpacity(0.08)
+                                  : AppTheme.primaryColor.withOpacity(
+                                      0.05,
                                     )),
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -900,13 +1043,15 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
+                              color: Color(0xFF0F3260),
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Text(
                             isCompleted ? 'Tap to Review: $fileName' : subtitle,
                             style: TextStyle(
                               fontSize: 12,
+                              fontWeight: FontWeight.w500,
                               color: isCompleted
                                   ? AppTheme.success
                                   : context.textSec,
@@ -923,13 +1068,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       )
                     else
                       Icon(
-                        isCompleted
-                            ? LucideIcons.refreshCcw
-                            : LucideIcons.uploadCloud,
+                        LucideIcons.uploadCloud,
                         size: 18,
-                        color: isCompleted
-                            ? context.textSec
-                            : AppTheme.primaryColor,
+                        color: AppTheme.primaryColor,
                       ),
                   ],
                 ),
@@ -940,8 +1081,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: isCompleted
-                          ? AppTheme.success.withValues(alpha: 0.05)
-                          : AppTheme.warning.withValues(alpha: 0.05),
+                          ? AppTheme.success.withOpacity(0.05)
+                          : AppTheme.warning.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -964,7 +1105,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                               color: isCompleted
                                   ? AppTheme.success
                                   : AppTheme.warning,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -979,10 +1120,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                         children: [
                           TextButton.icon(
                             onPressed: onTap,
-                            icon: const Icon(LucideIcons.refreshCw, size: 14),
+                            icon: const Icon(LucideIcons.refreshCw, size: 13),
                             label: const Text(
                               'Re-upload',
-                              style: TextStyle(fontSize: 12),
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             style: TextButton.styleFrom(
                               foregroundColor: AppTheme.primaryColor,
@@ -1010,7 +1151,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: AppTheme.success.withValues(alpha: 0.1),
+            color: AppTheme.success.withOpacity(0.08),
             shape: BoxShape.circle,
           ),
           child: const Icon(
@@ -1022,15 +1163,15 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         const SizedBox(height: 24),
         const Text(
           'Verification Complete',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F3260)),
         ),
         const SizedBox(height: 12),
         Text(
           'Your documents have been processed and are ready for official filing.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: context.textSec, height: 1.5, fontSize: 14),
+          style: TextStyle(color: context.textSec, height: 1.5, fontSize: 13.5, fontWeight: FontWeight.w500),
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 32),
         if (_pdfFileName != null) ...[
           _buildReviewItem(_pdfFileName!, 'PDF Document'),
           const SizedBox(height: 12),
@@ -1047,6 +1188,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               style: TextStyle(
                 color: context.textSec,
                 fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -1055,24 +1197,25 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     );
   }
 
-  Widget _buildReviewItem(String name, String size) {
+  Widget _buildReviewItem(String name, String label) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfaceC,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.crispBorder),
+        border: Border.all(color: context.crispBorder, width: 1.5),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.05),
+              color: AppTheme.primaryColor.withOpacity(0.05),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
-              LucideIcons.fileText,
+            child: Icon(
+              label.contains('PDF') ? LucideIcons.fileText : LucideIcons.image,
               size: 20,
               color: AppTheme.primaryColor,
             ),
@@ -1087,21 +1230,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
+                    color: Color(0xFF0F3260),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 2),
                 Text(
-                  size,
-                  style: TextStyle(fontSize: 11, color: context.textSec),
+                  label,
+                  style: TextStyle(fontSize: 11, color: context.textSec, fontWeight: FontWeight.w500),
                 ),
               ],
-            ),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              LucideIcons.trash2,
-              size: 18,
-              color: AppTheme.error,
             ),
           ),
         ],

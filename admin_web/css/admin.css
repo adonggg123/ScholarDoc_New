@@ -321,3 +321,368 @@ body {
     from { opacity: 1; transform: translateX(-50%) translateY(0); }
     to { opacity: 0; transform: translateX(-50%) translateY(20px); }
 }
+
+/* Top Toast Notification */
+.top-toast-notification {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    background: white;
+    color: var(--text-primary, #0F3260);
+    border: 1.5px solid rgba(212, 175, 55, 0.3);
+    padding: 16px;
+    border-radius: 16px;
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+    z-index: 10000;
+    opacity: 0;
+    transform: translateY(-20px);
+    animation: topToastIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    cursor: pointer;
+    max-width: 380px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.top-toast-notification:hover {
+    transform: translateY(0) scale(1.02);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+}
+
+.top-toast-notification.toast-out {
+    animation: topToastOut 0.3s ease forwards;
+}
+
+@keyframes topToastIn {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes topToastOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-20px); }
+}
+
+/* ==========================================
+   PREMIUM DARK MODE DESIGN SYSTEM
+   ========================================== */
+body.dark {
+    --primary-color: #3b82f6; /* Modern Vibrant Blue */
+    --secondary-color: #10b981; /* Emerald Green */
+    --accent-color: #f59e0b; /* Amber */
+    --background-color: #0b0f19; /* Deeper slate dark */
+    --surface-color: #111827; /* Dark gray surface */
+    --text-primary: #f3f4f6; /* Light gray text */
+    --text-secondary: #9ca3af; /* Muted text */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --border-color: #1f2937; /* Border color for dark mode */
+    
+    --notification-unread-bg: rgba(59, 130, 246, 0.08);
+    --notification-unread-border: rgba(59, 130, 246, 0.15);
+}
+
+/* Base resets for body/layout in Dark Mode */
+body.dark {
+    background-color: var(--background-color) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Sidebar overrides */
+body.dark .sidebar {
+    background-color: rgba(17, 24, 39, 0.8) !important;
+    border-right-color: var(--border-color) !important;
+}
+body.dark .sidebar-brand h2 {
+    background: linear-gradient(to right, #3b82f6, #f59e0b) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+body.dark .sidebar-brand p {
+    color: var(--text-secondary) !important;
+}
+body.dark .nav-item {
+    color: var(--text-secondary) !important;
+}
+body.dark .nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--primary-color) !important;
+}
+body.dark .nav-item.active {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    color: var(--primary-color) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+body.dark .nav-item.active i {
+    background-color: var(--primary-color) !important;
+}
+
+/* Topbar & Profile pill */
+body.dark .topbar {
+    background-color: var(--surface-color) !important;
+    border-bottom-color: var(--border-color) !important;
+}
+body.dark #profile-pill {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+body.dark #profile-pill span {
+    color: var(--text-primary) !important;
+}
+body.dark #profile-pill i {
+    color: var(--text-secondary) !important;
+}
+body.dark #profile-dropdown,
+body.dark #notification-dropdown {
+    background: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* General Layout Elements and Cards */
+body.dark div[style*="background: white"],
+body.dark div[style*="background: #ffffff"],
+body.dark div[style*="background:#ffffff"],
+body.dark div[style*="background:white"] {
+    background: var(--surface-color) !important;
+}
+body.dark .card {
+    background: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Tables and Lists */
+body.dark table,
+body.dark tr,
+body.dark th,
+body.dark td {
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+body.dark tr[style*="background: #F8FAFC"],
+body.dark tr[style*="background:#F8FAFC"],
+body.dark th[style*="background: #F8FAFC"],
+body.dark td[style*="background: #F8FAFC"],
+body.dark div[style*="background: #F8FAFC"] {
+    background: var(--background-color) !important;
+}
+body.dark tr[style*="background: #F1F5F9"],
+body.dark td[style*="background: #F1F5F9"] {
+    background: var(--background-color) !important;
+}
+body.dark thead tr {
+    background: var(--background-color) !important;
+}
+
+/* Inputs, Textareas, Selects */
+body.dark input,
+body.dark select,
+body.dark textarea {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+body.dark input::placeholder,
+body.dark textarea::placeholder {
+    color: #6b7280 !important;
+}
+body.dark option {
+    background-color: var(--surface-color) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Headings and Texts */
+body.dark h1,
+body.dark h2,
+body.dark h3,
+body.dark h4,
+body.dark h5,
+body.dark h6 {
+    color: var(--text-primary) !important;
+}
+body.dark p,
+body.dark span:not(.btn):not(.brand-badge):not(#greeting-text),
+body.dark label {
+    color: var(--text-secondary) !important;
+}
+
+/* Specific view overrides */
+body.dark select[style*="background: white"],
+body.dark button[style*="background: white"],
+body.dark button[style*="background: #ffffff"] {
+    background: var(--surface-color) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+body.dark select[style*="background: white"]:hover,
+body.dark button[style*="background: white"]:hover,
+body.dark button[style*="background: #ffffff"]:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Close/Action buttons */
+body.dark button[style*="background: #F1F5F9"],
+body.dark button[style*="background:#F1F5F9"] {
+    background: var(--background-color) !important;
+    color: var(--text-secondary) !important;
+}
+body.dark button[style*="background: #F1F5F9"]:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Modals background */
+body.dark div[style*="background: rgba(15, 23, 42, 0.6)"] {
+    background: rgba(0, 0, 0, 0.7) !important;
+}
+body.dark div[style*="background:rgba(15, 23, 42, 0.6)"] {
+    background: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Fix calendar specific overlays */
+body.dark div[style*="background: rgba(15,50,96,0.1)"] {
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+body.dark div[style*="background: rgba(15, 50, 96, 0.08)"] {
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+body.dark select[style*="background: rgba(15, 50, 96, 0.05)"] {
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: var(--primary-color) !important;
+}
+
+/* Sync icon color override */
+body.dark .icon-btn {
+    color: var(--text-secondary) !important;
+}
+body.dark .icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--primary-color) !important;
+}
+
+/* Inline styles overrides for dark mode */
+body.dark div[style*="background: white"],
+body.dark div[style*="background: #ffffff"],
+body.dark div[style*="background:#ffffff"],
+body.dark div[style*="background:white"],
+body.dark div[style*="background: #FFF"],
+body.dark div[style*="background:#FFF"] {
+    background: var(--surface-color) !important;
+}
+
+body.dark div[style*="color: #0F172A"],
+body.dark div[style*="color:#0F172A"],
+body.dark span[style*="color: #0F172A"],
+body.dark span[style*="color:#0F172A"],
+body.dark td[style*="color: #0F172A"],
+body.dark td[style*="color:#0F172A"] {
+    color: var(--text-primary) !important;
+}
+
+body.dark div[style*="color: #64748B"],
+body.dark div[style*="color:#64748B"],
+body.dark span[style*="color: #64748B"],
+body.dark span[style*="color:#64748B"],
+body.dark p[style*="color: #64748B"],
+body.dark p[style*="color:#64748B"] {
+    color: var(--text-secondary) !important;
+}
+
+body.dark div[style*="color: #334155"],
+body.dark div[style*="color:#334155"],
+body.dark label[style*="color: #334155"],
+body.dark label[style*="color:#334155"] {
+    color: var(--text-primary) !important;
+}
+
+body.dark div[style*="color: #1e293b"],
+body.dark div[style*="color:#1e293b"],
+body.dark span[style*="color: #1e293b"],
+body.dark span[style*="color:#1e293b"],
+body.dark p[style*="color: #1e293b"],
+body.dark p[style*="color:#1e293b"],
+body.dark h2[style*="color: #1e293b"],
+body.dark h2[style*="color:#1e293b"] {
+    color: var(--text-primary) !important;
+}
+
+body.dark span[style*="background: #F1F5F9"],
+body.dark span[style*="background:#F1F5F9"] {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+body.dark div[style*="background: #EEF2FF"],
+body.dark div[style*="background:#EEF2FF"] {
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: #60a5fa !important;
+}
+
+body.dark span[style*="background: #D1FAE5"],
+body.dark span[style*="background:#D1FAE5"] {
+    background: rgba(16, 185, 129, 0.15) !important;
+    color: #34d399 !important;
+}
+body.dark span[style*="background: #D1FAE5"] span,
+body.dark span[style*="background:#D1FAE5"] span {
+    background: #34d399 !important;
+}
+
+body.dark div[style*="border: 1px solid rgba(0,0,0,0.04)"],
+body.dark div[style*="border: 1px solid rgba(0,0,0,0.06)"],
+body.dark div[style*="border:1px solid rgba(0,0,0,0.04)"],
+body.dark div[style*="border:1px solid rgba(0,0,0,0.06)"] {
+    border-color: var(--border-color) !important;
+}
+
+body.dark div[style*="background: rgba(15, 50, 96, 0.06)"] {
+    background: rgba(59, 130, 246, 0.12) !important;
+    color: var(--primary-color) !important;
+}
+
+body.dark div[style*="background: rgba(0,0,0,0.02)"] {
+    background: rgba(255, 255, 255, 0.02) !important;
+}
+
+body.dark i[style*="color: rgba(0,0,0,0.2)"],
+body.dark i[style*="color:rgba(0,0,0,0.2)"] {
+    color: rgba(255, 255, 255, 0.2) !important;
+}
+
+body.dark .sa-list-item:hover,
+body.dark .id-list-item:hover {
+    background: rgba(255, 255, 255, 0.03) !important;
+}
+
+body.dark .sa-list-item.selected,
+body.dark .id-list-item.selected {
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+
+body.dark .top-toast-notification {
+    background: var(--surface-color) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Custom Scrollbar for Dark Mode */
+body.dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+body.dark ::-webkit-scrollbar-track {
+    background: var(--background-color);
+}
+body.dark ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+body.dark ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+
