@@ -1,0 +1,74 @@
+<!-- ScholarDoc Student Web — Status Tracking View -->
+<!-- Mirrors status_tracking_screen.dart -->
+
+<!-- Status Header -->
+<div class="card" style="background: linear-gradient(135deg, #0F3260, #1E3A8A); border: none; margin-bottom: 24px; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(251,192,45,0.12) 0%, transparent 70%); border-radius: 50%;"></div>
+    <div style="position: relative; z-index: 2; padding: 28px 28px 24px;">
+        <div style="font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); letter-spacing: 1.5px; text-transform: uppercase;">Document Verification</div>
+        <div style="font-size: 22px; font-weight: 800; color: white; letter-spacing: -0.5px; margin-top: 6px;" id="status-scholarship-name">Loading...</div>
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+            <div id="status-overall-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: rgba(245,158,11,0.15);">
+                <i data-lucide="hourglass" style="width: 14px; height: 14px; color: #F59E0B;"></i>
+                <span style="font-size: 12px; font-weight: 800; color: #F59E0B;">Pending</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress Overview -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-body" style="padding: 20px 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Verification Progress</span>
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);" id="progress-label">0 of 0 verified</span>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progress-bar" style="width: 0%;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Resubmission Alert -->
+<div class="card hidden" id="resubmission-alert" style="margin-bottom: 24px; border-left: 4px solid var(--error);">
+    <div class="card-body" style="padding: 16px 20px; display: flex; align-items: center; gap: 14px;">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(239,68,68,0.08); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: var(--error);"></i>
+        </div>
+        <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--error);">Resubmission Required</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">One or more requirements need to be corrected and resubmitted.</div>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="loadView('submit')" style="flex-shrink: 0;">
+            <i data-lucide="upload-cloud"></i> Resubmit
+        </button>
+    </div>
+</div>
+
+<!-- Requirements List -->
+<div style="margin-bottom: 24px;">
+    <div class="section-header">Requirements Checklist</div>
+    <div id="requirements-list">
+        <div class="spinner-container"><div class="spinner"></div></div>
+    </div>
+</div>
+
+<!-- Admin Remarks -->
+<div class="card hidden" id="remarks-card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="message-square" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 6px;"></i>
+            Admin Remarks
+        </div>
+    </div>
+    <div class="card-body">
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; font-style: italic;" id="remarks-text"></p>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div style="display: flex; gap: 12px; margin-bottom: 24px;">
+    <button class="btn btn-primary-solid btn-block" onclick="loadView('submit')">
+        <i data-lucide="upload-cloud"></i> Submit Documents
+    </button>
+</div>

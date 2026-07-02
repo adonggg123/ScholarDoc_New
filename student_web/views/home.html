@@ -1,0 +1,91 @@
+<!-- ScholarDoc Student Web — Home Dashboard View -->
+<!-- Mirrors home_screen.dart -->
+
+<!-- Welcome Banner -->
+<div class="card" style="background: linear-gradient(135deg, #0F3260 0%, #1E3A8A 60%, #FBC02D 150%); border: none; position: relative; overflow: hidden; margin-bottom: 24px;">
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0.15;">
+        <img src="campus_bg.jpg" alt="" style="width: 100%; height: 100%; object-fit: cover;">
+    </div>
+    <div style="position: relative; z-index: 2; padding: 28px 32px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <div style="font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 1.5px; text-transform: uppercase;" id="home-greeting">GOOD MORNING</div>
+                <div style="font-size: 28px; font-weight: 800; color: white; letter-spacing: -0.5px; margin-top: 4px;" id="home-name">Student!</div>
+                <div style="margin-top: 10px;" id="home-badge-container"></div>
+            </div>
+            <div id="home-avatar" style="width: 52px; height: 52px; border-radius: 50%; border: 3px solid #FBC02D; overflow: hidden; background-color: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(251,192,45,0.3);">
+                <i data-lucide="user" style="color: white; width: 24px; height: 24px;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div style="margin-bottom: 24px;">
+    <div class="section-header">Quick Actions</div>
+    <div class="grid-2">
+        <div class="card" style="cursor: pointer; transition: all 0.3s;" onclick="loadView('submit')" id="action-upload">
+            <div class="card-body" style="text-align: center; padding: 28px;">
+                <i data-lucide="upload-cloud" style="width: 32px; height: 32px; color: var(--primary-color); margin-bottom: 12px;"></i>
+                <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">Upload Documents</div>
+            </div>
+        </div>
+        <div class="card" style="cursor: pointer; transition: all 0.3s;" onclick="loadView('history')" id="action-history">
+            <div class="card-body" style="text-align: center; padding: 28px;">
+                <i data-lucide="history" style="width: 32px; height: 32px; color: var(--secondary-color, #43A047); margin-bottom: 12px;"></i>
+                <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">View History</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Banner Carousel -->
+<div class="card" style="margin-bottom: 24px; overflow: hidden;" id="carousel-container">
+    <div style="position: relative; width: 100%; height: 180px; overflow: hidden; border-radius: var(--radius-xl);" id="carousel-track-wrapper">
+        <div id="carousel-track" style="display: flex; transition: transform 0.5s ease; height: 100%;">
+            <img src="assets/Slide_image1.jpg" alt="Banner 1" style="min-width: 100%; height: 100%; object-fit: cover;">
+            <img src="assets/Slide_image2.jpg" alt="Banner 2" style="min-width: 100%; height: 100%; object-fit: cover;">
+            <img src="assets/slide_image3.jpg" alt="Banner 3" style="min-width: 100%; height: 100%; object-fit: cover;">
+        </div>
+        <!-- Carousel dots -->
+        <div style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;" id="carousel-dots">
+            <div class="carousel-dot active" data-index="0" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 1; cursor: pointer; transition: all 0.3s;"></div>
+            <div class="carousel-dot" data-index="1" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.5; cursor: pointer; transition: all 0.3s;"></div>
+            <div class="carousel-dot" data-index="2" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.5; cursor: pointer; transition: all 0.3s;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Scholarship Status Card -->
+<div style="margin-bottom: 24px;">
+    <div class="section-header">Scholarship Status</div>
+    <div class="card" id="scholarship-status-card">
+        <div class="spinner-container" id="status-loading">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Calendar Week Strip -->
+<div class="card" style="margin-bottom: 24px;" id="calendar-card">
+    <div class="card-body" style="padding: 16px 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);" id="calendar-month">July 2026</span>
+            <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);" id="calendar-year">This Week</span>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: space-between;" id="calendar-days"></div>
+    </div>
+</div>
+
+<!-- Recent Announcements -->
+<div style="margin-bottom: 24px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div class="section-header" style="margin-bottom: 0;">Recent Updates</div>
+        <button class="btn btn-sm btn-outline" style="font-size: 10px; font-weight: 800; letter-spacing: 0.5px;" onclick="loadView('notifications')">SEE ALL</button>
+    </div>
+    <div id="announcements-list">
+        <div class="spinner-container">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
