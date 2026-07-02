@@ -134,183 +134,60 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                       progressLabel = 'Resubmission Required ($verifiedCount of ${requirements.length} verified)';
                     }
 
-                    return CustomScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      slivers: [
-                        // --- Header ---
-                        SliverAppBar(
-                          expandedHeight: 180,
-                          pinned: true,
-                          backgroundColor: AppTheme.primaryColor,
-                          elevation: 0,
-                          automaticallyImplyLeading: false,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              bottom: Radius.circular(32),
-                            ),
-                          ),
-                          flexibleSpace: FlexibleSpaceBar(
-                            background: Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Color(0xFF0F3260), Color(0xFF1E3A8A)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.vertical(
-                                  bottom: Radius.circular(32),
-                                ),
-                              ),
-                              child: SafeArea(
+                    return Column(
+                      children: [
+                        _buildHeader(
+                          context,
+                          scholarshipName,
+                          status,
+                          data['requiresResubmission'] == true,
+                          saVerificationStatus,
+                          idValidationStatus,
+                        ),
+                        Expanded(
+                          child: CustomScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            slivers: [
+                              // --- Content Body ---
+                              SliverToBoxAdapter(
                                 child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          const Text(
-                                            'My Submissions',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: -0.5,
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withOpacity(0.12),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: const Icon(
-                                              LucideIcons.filter,
-                                              color: Colors.white,
-                                              size: 18,
-                                            ),
-                                          ),
-                                        ],
+                                      // 1. Main Status Indicator Card
+                                      _buildMainStatusCard(context, status, data['requiresResubmission'] == true, submittedDate),
+                                      const SizedBox(height: 24),
+
+                                      // 2. Official Remarks (Alert Box) if present
+                                      if (remarks != null && remarks.isNotEmpty) ...[
+                                        _buildRemarksCard(remarks, statusColor),
+                                        const SizedBox(height: 24),
+                                      ],
+
+                                      // 3. Checklist Progress Summary
+                                      _buildProgressCard(progressValue, progressLabel, statusColor),
+                                      const SizedBox(height: 32),
+
+                                      // 4. Vertical Process Timeline Component
+                                      _buildVerticalTimeline(
+                                        context: context,
+                                        saStatus: saVerificationStatus,
+                                        idStatus: idValidationStatus,
+                                        overallStatus: status,
+                                        requiresResubmission: data['requiresResubmission'] == true,
                                       ),
-                                      const Spacer(),
-                                      // Status chip
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: statusColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: statusColor.withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              statusIcon,
-                                              color: statusColor,
-                                              size: 13,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              statusLabel.toUpperCase(),
-                                              style: TextStyle(
-                                                color: statusColor,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 10,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Text(
-                                        scholarshipName,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 19,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.3,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Submitted on $submittedDate',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.65),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
+                                      const SizedBox(height: 32),
+
+                                      // 5. Action Resubmit Button
+                                      if (data['requiresResubmission'] == true || saVerificationStatus == 'Missing' || idValidationStatus == 'Missing') ...[
+                                        _buildResubmitButton(context),
+                                      ],
                                     ],
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Remarks card (if any)
-                                if (remarks != null && remarks.isNotEmpty) ...[
-                                  _buildRemarksCard(remarks, statusColor),
-                                  const SizedBox(height: 20),
-                                ],
-                                // Progress bar
-                                _buildProgressCard(progressValue, progressLabel, statusColor),
-                                const SizedBox(height: 28),
-                                // Section header
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 4,
-                                      height: 20,
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.accentColor, // Golden Yellow
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Text(
-                                      'Document Checklist',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 18,
-                                        color: Color(0xFF0F3260),
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                ...requirements.asMap().entries.map(
-                                  (e) => _buildRequirementItem(
-                                    context,
-                                    e.value,
-                                    _getRequirementState(e.value, saVerificationStatus, idValidationStatus),
-                                    e.key,
-                                  ),
-                                ),
-                                if (data['requiresResubmission'] == true) ...[
-                                  const SizedBox(height: 24),
-                                  _buildResubmitButton(context),
-                                ],
-                                const SizedBox(height: 100),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
                       ],
@@ -322,6 +199,97 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     );
   }
 
+  Widget _buildHeader(
+    BuildContext context,
+    String scholarshipName,
+    String status,
+    bool requiresResubmission,
+    String saStatus,
+    String idStatus,
+  ) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final canPop = Navigator.canPop(context);
+
+    IconData headerIcon = LucideIcons.clock;
+    if (status == 'Approved' || status == 'Verified') {
+      headerIcon = LucideIcons.shieldCheck;
+    } else if (status == 'Rejected') {
+      headerIcon = LucideIcons.xCircle;
+    } else if (requiresResubmission || saStatus == 'Missing' || idStatus == 'Missing') {
+      headerIcon = LucideIcons.alertTriangle;
+    }
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 24, 24),
+      decoration: const BoxDecoration(
+        color: AppTheme.primaryColor,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFFBC02D), // Golden Yellow Bottom Accent Line
+            width: 3.0,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (canPop)
+            IconButton(
+              icon: const Icon(
+                LucideIcons.chevronLeft,
+                color: Colors.white,
+                size: 24,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Verification Status',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  scholarshipName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              headerIcon,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoadingState() {
     return Scaffold(
       backgroundColor: context.bgC,
@@ -330,10 +298,10 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: Color(0xFF0F3260)),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text(
-              'Loading your submission status...',
-              style: TextStyle(color: context.textSec, fontWeight: FontWeight.w500),
+              'Syncing application status...',
+              style: TextStyle(color: context.textSec, fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ],
         ),
@@ -345,118 +313,171 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     return Scaffold(
       backgroundColor: context.bgC,
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F3260).withOpacity(0.06),
-                shape: BoxShape.circle,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F3260).withOpacity(0.06),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.fileX,
+                  size: 56,
+                  color: Color(0xFF0F3260),
+                ),
               ),
-              child: const Icon(
-                LucideIcons.fileX,
-                size: 48,
-                color: Color(0xFF0F3260),
+              const SizedBox(height: 24),
+              const Text(
+                'No Submission History',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'No submission data found.',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Submit your documents to get started.',
-              style: TextStyle(color: context.textSec, fontWeight: FontWeight.w500),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Complete and submit your scholarship checklist to initialize review.',
+                style: TextStyle(color: context.textSec, fontWeight: FontWeight.w500, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildProgressCard(double progress, String progressLabel, Color statusColor) {
+  Widget _buildMainStatusCard(BuildContext context, String status, bool requiresResubmission, String submittedDate) {
+    Color cardColor;
+    Gradient cardGradient;
+    IconData icon;
+    String statusTitle;
+    String statusSubtitle;
+    Color iconBgColor;
+
+    if (status == 'Approved' || status == 'Verified') {
+      cardColor = const Color(0xFF10B981);
+      cardGradient = const LinearGradient(
+        colors: [Color(0xFF059669), Color(0xFF10B981)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+      icon = LucideIcons.shieldCheck;
+      statusTitle = 'Application Approved';
+      statusSubtitle = 'Congratulations! Your scholarship application is verified and approved by the administrator.';
+      iconBgColor = Colors.white24;
+    } else if (requiresResubmission) {
+      cardColor = const Color(0xFFD97706);
+      cardGradient = const LinearGradient(
+        colors: [Color(0xFFB45309), Color(0xFFD97706)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+      icon = LucideIcons.alertTriangle;
+      statusTitle = 'Action Required';
+      statusSubtitle = 'One or more of your documents require revision. Please resubmit the missing details below.';
+      iconBgColor = Colors.white24;
+    } else if (status == 'Rejected') {
+      cardColor = const Color(0xFFDC2626);
+      cardGradient = const LinearGradient(
+        colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+      icon = LucideIcons.xCircle;
+      statusTitle = 'Submission Denied';
+      statusSubtitle = 'Your application was rejected. Review the remarks below or contact the scholarship desk.';
+      iconBgColor = Colors.white24;
+    } else {
+      cardColor = const Color(0xFF3B82F6);
+      cardGradient = const LinearGradient(
+        colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+      icon = LucideIcons.clock;
+      statusTitle = 'Under Evaluation';
+      statusSubtitle = 'Your credentials are currently in the review queue. We will notify you once verification completes.';
+      iconBgColor = Colors.white24;
+    }
+
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: context.surfaceC,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.crispBorder, width: 1.5),
-        boxShadow: AppTheme.softShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                progressLabel,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-              Text(
-                '${(progress * 100).toInt()}%',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: statusColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: context.bgC,
-              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-            ),
+        gradient: cardGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildRemarksCard(String remarks, Color color) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border(left: BorderSide(color: color, width: 4)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Icon(LucideIcons.messageCircle, color: color, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(
+              icon,
+              size: 150,
+              color: Colors.white10,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Official Remarks',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: color,
-                    fontSize: 13,
-                    letterSpacing: 0.2,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: iconBgColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        icon,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            statusTitle,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Submitted on $submittedDate',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 16),
                 Text(
-                  remarks,
+                  statusSubtitle,
                   style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
                     fontSize: 13,
-                    height: 1.45,
-                    color: context.textPri,
+                    height: 1.4,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -468,207 +489,360 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     );
   }
 
-  Widget _buildRequirementItem(
-    BuildContext context,
-    String title,
-    String state, // 'verified', 'missing', or 'pending'
-    int index,
-  ) {
-    final bool isVerified = state == 'verified';
-    final bool isMissing = state == 'missing';
-
-    // Determine colors based on state
-    Color borderColor;
-    Color iconBgColor;
-    Color iconColor;
-    IconData iconData;
-    Color titleColor;
-    String subtitle;
-    Color subtitleColor;
-
-    if (isVerified) {
-      borderColor = AppTheme.success.withOpacity(0.2);
-      iconBgColor = AppTheme.success.withOpacity(0.08);
-      iconColor = AppTheme.success;
-      iconData = LucideIcons.checkCircle2;
-      titleColor = AppTheme.success;
-      subtitle = '✓ Verified & Accepted';
-      subtitleColor = AppTheme.success.withOpacity(0.7);
-    } else if (isMissing) {
-      borderColor = AppTheme.error.withOpacity(0.2);
-      iconBgColor = AppTheme.error.withOpacity(0.08);
-      iconColor = AppTheme.error;
-      iconData = LucideIcons.alertCircle;
-      titleColor = AppTheme.error;
-      subtitle = '⚠ Missing — Tap to resubmit';
-      subtitleColor = AppTheme.error.withOpacity(0.7);
-    } else {
-      borderColor = context.crispBorder;
-      iconBgColor = const Color(0xFF0F3260).withOpacity(0.05);
-      iconColor = const Color(0xFF0F3260);
-      iconData = LucideIcons.fileText;
-      titleColor = const Color(0xFF0F3260);
-      subtitle = 'Tap to upload';
-      subtitleColor = context.textSec.withOpacity(0.7);
-    }
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 400 + index * 80),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, 20 * (1 - value)),
-            child: child,
+  Widget _buildRemarksCard(String remarks, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.messageCircle, color: color, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                'OFFICIAL REMARKS',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: context.surfaceC,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: borderColor,
-            width: 1.5,
-          ),
-          boxShadow: AppTheme.softShadow,
-        ),
-        child: InkWell(
-          onTap: isVerified
-              ? null
-              : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const UploadWorkflowScreen(),
-                  ),
-                ),
-          borderRadius: BorderRadius.circular(18),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconBgColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    iconData,
-                    color: iconColor,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: titleColor,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: subtitleColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isVerified)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.success.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Done',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.success,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  )
-                else if (isMissing)
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.error.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      LucideIcons.refreshCw,
-                      size: 16,
-                      color: AppTheme.error,
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      LucideIcons.chevronRight,
-                      size: 16,
-                      color: Color(0xFF0F3260),
-                    ),
-                  ),
-              ],
+          const SizedBox(height: 10),
+          Text(
+            remarks,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: context.textPri,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildProgressCard(double progress, String progressLabel, Color statusColor) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceC,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.crispBorder, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(context.isDark ? 0.2 : 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Requirements Progress',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: context.textPri,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  color: statusColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            progressLabel,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textSec,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: context.isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerticalTimeline({
+    required BuildContext context,
+    required String saStatus,
+    required String idStatus,
+    required String overallStatus,
+    required bool requiresResubmission,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: context.surfaceC,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: context.crispBorder, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Verification Timeline',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: context.textPri,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Step 1: Account Registration
+          _buildTimelineNode(
+            context: context,
+            title: 'Account Registration',
+            subtitle: 'Profile created and masterlist verified successfully.',
+            state: 'verified',
+            isLast: false,
+          ),
+
+          // Step 2: SA Number Verification
+          _buildTimelineNode(
+            context: context,
+            title: 'SA Number Verification',
+            subtitle: _getTimelineSubtitle('sa', saStatus),
+            state: _getTimelineNodeState(saStatus),
+            isLast: false,
+            onTap: () => _navigateToUpload(context),
+          ),
+
+          // Step 3: ID Validation
+          _buildTimelineNode(
+            context: context,
+            title: 'ID & Signature Validation',
+            subtitle: _getTimelineSubtitle('id', idStatus),
+            state: _getTimelineNodeState(idStatus),
+            isLast: false,
+            onTap: () => _navigateToUpload(context),
+          ),
+
+          // Step 4: Final Board Approval
+          _buildTimelineNode(
+            context: context,
+            title: 'Final Scholarship Board Approval',
+            subtitle: _getTimelineSubtitle('overall', overallStatus),
+            state: (overallStatus == 'Approved' || overallStatus == 'Verified') ? 'verified' : (overallStatus == 'Rejected' ? 'missing' : 'pending'),
+            isLast: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineNode({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required String state, // 'verified', 'missing', or 'pending'
+    required bool isLast,
+    VoidCallback? onTap,
+  }) {
+    Color iconColor;
+    Color nodeBg;
+    IconData icon;
+    Color lineColor;
+
+    if (state == 'verified') {
+      iconColor = const Color(0xFF10B981);
+      nodeBg = const Color(0xFF10B981).withOpacity(0.08);
+      icon = LucideIcons.check;
+      lineColor = const Color(0xFF10B981);
+    } else if (state == 'missing') {
+      iconColor = const Color(0xFFEF4444);
+      nodeBg = const Color(0xFFEF4444).withOpacity(0.08);
+      icon = LucideIcons.alertTriangle;
+      lineColor = const Color(0xFFEF4444);
+    } else {
+      iconColor = const Color(0xFF3B82F6);
+      nodeBg = const Color(0xFF3B82F6).withOpacity(0.08);
+      icon = LucideIcons.clock;
+      lineColor = context.isDark ? const Color(0xFF334155) : Colors.grey.shade300;
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Graphic node structure
+          Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: nodeBg,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: iconColor, width: 2),
+                ),
+                child: Center(
+                  child: Icon(icon, color: iconColor, size: 14),
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: lineColor,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          // Description details
+          Expanded(
+            child: InkWell(
+              onTap: state != 'verified' ? onTap : null,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: state == 'pending' ? context.textPri.withOpacity(0.6) : context.textPri,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textSec,
+                        height: 1.4,
+                      ),
+                    ),
+                    if (state != 'verified' && onTap != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Text(
+                            state == 'missing' ? 'Resolve Now' : 'Tap to upload',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: iconColor,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(LucideIcons.chevronRight, size: 12, color: iconColor),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTimelineNodeState(String subStatus) {
+    if (subStatus == 'Verified' || subStatus == 'Approved') {
+      return 'verified';
+    } else if (subStatus == 'Missing' || subStatus == 'Rejected') {
+      return 'missing';
+    }
+    return 'pending';
+  }
+
+  String _getTimelineSubtitle(String type, String status) {
+    if (type == 'sa') {
+      if (status == 'Verified' || status == 'Approved') {
+        return 'SA Number verified and matching official records.';
+      } else if (status == 'Missing' || status == 'Rejected') {
+        return 'Requires attention: SA Number rejected or missing.';
+      }
+      return 'SA Number submitted and awaiting evaluation.';
+    } else if (type == 'id') {
+      if (status == 'Verified' || status == 'Approved') {
+        return 'ID verification PDF is successfully validated.';
+      } else if (status == 'Missing' || status == 'Rejected') {
+        return 'Requires attention: PDF is missing or signatures are unreadable.';
+      }
+      return 'ID capture images submitted and awaiting review.';
+    } else {
+      if (status == 'Approved' || status == 'Verified') {
+        return 'All verifications resolved. Scholarship activated.';
+      } else if (status == 'Rejected') {
+        return 'Scholarship application denied. Remarks provided.';
+      }
+      return 'Awaiting SA and ID validation completions.';
+    }
+  }
+
+  void _navigateToUpload(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()),
     );
   }
 
   Widget _buildResubmitButton(BuildContext context) {
     return Container(
-      width: double.infinity,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFFBC02D), Color(0xFFF5A623)],
+          colors: [Color(0xFFD97706), Color(0xFFF59E0B)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.accentColor.withOpacity(0.3),
+            color: const Color(0xFFF59E0B).withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
       ),
       child: ElevatedButton.icon(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()),
-        ),
-        icon: const Icon(LucideIcons.uploadCloud, color: Color(0xFF0F3260)),
+        onPressed: () => _navigateToUpload(context),
+        icon: const Icon(LucideIcons.refreshCw, color: Colors.white, size: 18),
         label: const Text(
-          'Action Required: Resubmit Documents',
+          'RESUBMIT DOCUMENTS',
           style: TextStyle(
-            color: Color(0xFF0F3260),
+            color: Colors.white,
             fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
           ),
         ),
         style: ElevatedButton.styleFrom(
@@ -676,19 +850,16 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
       ),
     );
   }
 
-  /// Returns 'verified', 'missing', or 'pending' based on admin actions.
-  /// SA Number checks saVerificationStatus; ID documents check idValidationStatus.
+  /// Keep helper matching original signatures
   String _getRequirementState(String requirement, String saVerificationStatus, String idValidationStatus) {
     final r = requirement.toLowerCase();
-    
-    // SA Number → check saVerificationStatus
     if (r.contains('sa number')) {
       if (saVerificationStatus == 'Verified' || saVerificationStatus == 'Approved') {
         return 'verified';
@@ -697,8 +868,6 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       }
       return 'pending';
     }
-    
-    // ID documents → check idValidationStatus
     if (r.contains('id') || r.contains('pdf') || r.contains('signature')) {
       if (idValidationStatus == 'Verified' || idValidationStatus == 'Approved') {
         return 'verified';
@@ -707,11 +876,9 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       }
       return 'pending';
     }
-    
     return 'pending';
   }
 
-  /// Helper used by progress calculation.
   bool _isRequirementVerified(String requirement, String saVerificationStatus, String idValidationStatus) {
     return _getRequirementState(requirement, saVerificationStatus, idValidationStatus) == 'verified';
   }
