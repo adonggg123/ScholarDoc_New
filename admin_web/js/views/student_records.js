@@ -50,7 +50,7 @@ function applyFilters() {
         const matchCourse = course === 'All' || (s.course || '') === course;
         
         // Actually the scholarship program is sometimes stored inside 'scholarships' array or a string, let's assume it's in a single string or just ignore if complex
-        const matchSchol = scholarship === 'All' || (s.scholarshipProgram || '').includes(scholarship);
+        const matchSchol = scholarship === 'All' || (s.scholarshipProgram || s.scholarshipName || '').includes(scholarship);
 
         return matchSearch && matchStatus && matchCourse && matchSchol;
     });
@@ -113,7 +113,7 @@ function renderTable() {
                 </td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.course || 'N/A'} - ${s.year || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${(s.scholarshipProgram && s.scholarshipProgram.length > 0) ? s.scholarshipProgram : 'N/A'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || 'N/A'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>

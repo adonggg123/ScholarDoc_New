@@ -18,8 +18,8 @@ async function checkSession() {
 
 // ─── DOM Elements ───
 const appContent = document.getElementById('app-content');
-const topbarTitle = document.getElementById('topbar-title');
-const topbarIcon = document.getElementById('topbar-icon');
+const topbarTitle = document.getElementById('topbar-title'); // May be null now, handled safely
+const topbarIcon = document.getElementById('topbar-icon');   // May be null now, handled safely
 const navItems = document.querySelectorAll('.nav-item[data-view]');
 const profilePill = document.getElementById('profile-pill');
 const profileDropdown = document.getElementById('profile-dropdown');
@@ -29,7 +29,9 @@ const profileAvatar = document.getElementById('profile-avatar');
 const notificationBtn = document.getElementById('notification-btn');
 const notificationCount = document.getElementById('notification-count');
 const navNotifBadge = document.getElementById('nav-notif-badge');
+const navNotifBadgeMobile = document.getElementById('nav-notif-badge-mobile');
 const themeToggle = document.getElementById('theme-toggle');
+const themeToggleMobile = document.getElementById('theme-toggle-mobile');
 const dropdownThemeToggle = document.getElementById('dropdown-theme-toggle');
 const dropdownLogoutBtn = document.getElementById('dropdown-logout-btn');
 const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -72,8 +74,35 @@ async function loadView(viewName) {
         if (!response.ok) throw new Error('View not found');
         const html = await response.text();
         
-        appContent.innerHTML = html;
-        topbarTitle.textContent = viewTitles[viewName] || 'Dashboard';
+        // Add content with a smooth fade-in
+        appContent.style.opacity = '0';
+        appContent.style.transform = 'translateY(8px)';
+        appContent.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        
+        setTimeout(() => {
+            appContent.innerHTML = html;
+            appContent.style.opacity = '1';
+            appContent.style.transform = 'translateY(0)';
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+
+            // Remove old script
+            if (currentScript) {
+                currentScript.remove();
+            }
+
+            // Load new JS module
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = `js/views/${viewName}.js?t=${Date.now()}`;
+            document.body.appendChild(script);
+            currentScript = script;
+        }, 150);
+
+        if (topbarTitle) {
+            topbarTitle.textContent = viewTitles[viewName] || 'Dashboard';
+        }
 
         if (topbarIcon) {
             topbarIcon.className = viewIcons[viewName] || 'icon-home';
@@ -81,29 +110,12 @@ async function loadView(viewName) {
 
         currentViewName = viewName;
 
-        // Update active nav
+        // Update active nav items (desktop + mobile)
         navItems.forEach(item => {
             item.classList.toggle('active', item.dataset.view === viewName);
         });
 
-        // Initialize Lucide icons
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
-
-        // Remove old script
-        if (currentScript) {
-            currentScript.remove();
-        }
-
-        // Load new JS module
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = `js/views/${viewName}.js?t=${Date.now()}`;
-        document.body.appendChild(script);
-        currentScript = script;
-
-        // Close mobile sidebar
+        // Close mobile sidebar if open
         closeMobileSidebar();
 
     } catch (err) {
@@ -188,13 +200,36 @@ mobileMenuBtn?.addEventListener('click', () => {
 sidebarOverlay?.addEventListener('click', closeMobileSidebar);
 
 // ─── Theme Toggle ───
+function updateThemeIcons(isDark) {
+    const themeIcon = document.getElementById('theme-icon');
+    if (themeIcon) {
+        themeIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+    }
+    const mobileThemeIcon = themeToggleMobile?.querySelector('i');
+    if (mobileThemeIcon) {
+        mobileThemeIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+    }
+    const dropdownToggleIcon = dropdownThemeToggle?.querySelector('i');
+    if (dropdownToggleIcon) {
+        dropdownToggleIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+    }
+}
+
+// Initial theme icon sync
+setTimeout(() => {
+    const isDark = document.body.classList.contains('dark');
+    updateThemeIcons(isDark);
+}, 200);
+
 function toggleTheme() {
     document.body.classList.toggle('dark');
     const isDark = document.body.classList.contains('dark');
     localStorage.setItem('scholardoc_theme', isDark ? 'dark' : 'light');
+    updateThemeIcons(isDark);
 }
 
 themeToggle?.addEventListener('click', toggleTheme);
+themeToggleMobile?.addEventListener('click', toggleTheme);
 dropdownThemeToggle?.addEventListener('click', () => {
     toggleTheme();
     profileDropdown?.classList.add('hidden');
@@ -305,6 +340,11 @@ function updateNotificationBadge(notifications) {
     if (navNotifBadge) {
         navNotifBadge.textContent = unreadCount;
         navNotifBadge.classList.toggle('hidden', unreadCount === 0);
+    }
+
+    if (navNotifBadgeMobile) {
+        navNotifBadgeMobile.textContent = unreadCount;
+        navNotifBadgeMobile.classList.toggle('hidden', unreadCount === 0);
     }
 }
 

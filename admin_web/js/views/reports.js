@@ -25,7 +25,10 @@ async function loadAllData() {
 // ── Populate Scholarship Filter ─────────────────────────────────────
 function populateScholarshipFilter(students) {
     const set = new Set();
-    students.forEach(s => { if (s.scholarshipProgram) set.add(s.scholarshipProgram); });
+    students.forEach(s => {
+        const name = s.scholarshipProgram || s.scholarshipName;
+        if (name) set.add(name);
+    });
     const sel = document.getElementById('rpt-filter-scholarship');
     set.forEach(name => {
         const opt = document.createElement('option');
@@ -50,7 +53,7 @@ function getFilteredStudents() {
         const id = (s.studentId || '').toLowerCase();
         const matchSearch = !query || name.includes(query) || id.includes(query);
         const matchGender = gender === 'All Genders' || s.gender === gender;
-        const matchScholarship = scholarship === 'All Scholarships' || s.scholarshipProgram === scholarship;
+        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarshipProgram || s.scholarshipName) === scholarship;
         const matchYear = year === 'All Year Levels' || s.scholarYearLevel === year;
         const matchFather = fatherEdu === 'All (Father)' || (family.fatherEduStatus || 'Non-graduate') === fatherEdu;
         const matchMother = motherEdu === 'All (Mother)' || (family.motherEduStatus || 'Non-graduate') === motherEdu;

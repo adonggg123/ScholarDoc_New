@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScholarDoc — Student Dashboard</title>
-    <meta name="description" content="ScholarDoc Student Dashboard — Manage your scholarship documents, track submissions, and stay updated.">
+    <meta name="description"
+        content="ScholarDoc Student Dashboard — Manage your scholarship documents, track submissions, and stay updated.">
     <link rel="icon" type="image/png" href="favicon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap"
+        rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.344.0/font/lucide.css" rel="stylesheet">
     <link rel="stylesheet" href="css/student.css">
 </head>
+
 <body>
     <script>
         if (localStorage.getItem('scholardoc_theme') === 'dark') {
@@ -17,56 +22,56 @@
         }
     </script>
 
-    <!-- Sidebar Overlay (mobile) -->
+    <!-- Sidebar Overlay (mobile menu backdrop) -->
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <!-- Sidebar -->
+    <!-- Mobile Drawer Navigation -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <img src="app_logo3.png" alt="ScholarDoc Logo" class="sidebar-logo">
             <div class="sidebar-brand">
                 <h2>ScholarDoc</h2>
-                <p>Oroquieta City Campus</p>
+                <p>USTP Oroquieta City Campus</p>
             </div>
         </div>
-        
-        <nav class="sidebar-nav" style="padding-top: 0;">
-            <hr style="border: none; border-top: 1px solid var(--border-color, #E5E7EB); margin: 0 0 8px 0; width: 100%;">
-            
-            <a href="#" class="nav-item active" data-view="home" id="nav-home">
+
+        <nav class="sidebar-nav">
+            <hr class="nav-divider">
+
+            <a href="#" class="nav-item active" data-view="home" id="nav-home-mobile">
                 <i class="icon-home"></i> Home
             </a>
-            
-            <a href="#" class="nav-item" data-view="status" id="nav-status">
+
+            <a href="#" class="nav-item" data-view="status" id="nav-status-mobile">
                 <i class="icon-clipboard-list"></i> Status Tracking
             </a>
-            
-            <a href="#" class="nav-item" data-view="submit" id="nav-submit">
+
+            <a href="#" class="nav-item" data-view="submit" id="nav-submit-mobile">
                 <i class="icon-upload-cloud"></i> Submit Documents
             </a>
-            
-            <a href="#" class="nav-item" data-view="history" id="nav-history">
+
+            <a href="#" class="nav-item" data-view="history" id="nav-history-mobile">
                 <i class="icon-history"></i> Submission History
             </a>
 
-            <a href="#" class="nav-item" data-view="directory" id="nav-directory">
+            <a href="#" class="nav-item" data-view="directory" id="nav-directory-mobile">
                 <i class="icon-users"></i> Scholar Directory
             </a>
-            
-            <hr>
-            
-            <a href="#" class="nav-item" data-view="notifications" id="nav-notifications">
+
+            <hr class="nav-divider">
+
+            <a href="#" class="nav-item" data-view="notifications" id="nav-notifications-mobile">
                 <i class="icon-bell"></i> Notifications
-                <span class="nav-badge hidden" id="nav-notif-badge">0</span>
+                <span class="nav-badge hidden" id="nav-notif-badge-mobile">0</span>
             </a>
-            
-            <a href="#" class="nav-item" data-view="profile" id="nav-profile">
+
+            <a href="#" class="nav-item" data-view="profile" id="nav-profile-mobile">
                 <i class="icon-user"></i> My Profile
             </a>
         </nav>
 
         <div class="sidebar-footer">
-            <div class="theme-toggle-row" id="theme-toggle">
+            <div class="theme-toggle-row" id="theme-toggle-mobile">
                 <i class="icon-moon"></i>
                 <span>Dark Mode</span>
                 <div class="theme-switch"></div>
@@ -74,58 +79,98 @@
         </div>
     </aside>
 
-    <!-- Main Content Wrapper -->
-    <div class="main-wrapper">
-        <!-- Top App Bar -->
-        <header class="topbar">
-            <div class="topbar-left">
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="header-brand-group">
+                <!-- Hamburger Menu for mobile/tablet drawer -->
                 <button class="mobile-menu-btn" id="mobile-menu-btn">
                     <i class="icon-menu"></i>
                 </button>
-                
-                <div class="topbar-icon-badge" id="topbar-icon-badge">
-                    <i id="topbar-icon" class="icon-home"></i>
-                </div>
 
-                <h1 class="topbar-title" id="topbar-title">Home</h1>
+                <div class="app-logo-lockup">
+                    <img src="app_logo3.png" alt="ScholarDoc Logo" class="app-logo">
+                    <div class="app-brand-text">
+                        <span class="brand-title">ScholarDoc</span>
+                        <span class="brand-subtitle">Oroquieta City Campus</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="topbar-right">
+            <!-- Tab Navigation (Desktop) -->
+            <nav class="header-nav">
+                <a href="#" class="nav-item active" data-view="home" id="nav-home">
+                    <i class="icon-home"></i> Home
+                </a>
+                <a href="#" class="nav-item" data-view="status" id="nav-status">
+                    <i class="icon-clipboard-list"></i> Status Tracking
+                </a>
+                <a href="#" class="nav-item" data-view="submit" id="nav-submit">
+                    <i class="icon-upload-cloud"></i> Submit Documents
+                </a>
+                <a href="#" class="nav-item" data-view="history" id="nav-history">
+                    <i class="icon-history"></i> History
+                </a>
+                <a href="#" class="nav-item" data-view="directory" id="nav-directory">
+                    <i class="icon-users"></i> Scholar Directory
+                </a>
+            </nav>
+
+            <div class="header-actions">
+                <!-- Notifications Button -->
                 <button class="notification-btn" id="notification-btn" title="Notifications">
                     <i class="icon-bell"></i>
                     <span class="notification-count hidden" id="notification-count">0</span>
                 </button>
 
-                <div class="profile-pill" id="profile-pill">
-                    <div class="profile-avatar" id="profile-avatar">
-                        <span id="profile-initial">S</span>
-                    </div>
-                    <span class="profile-name" id="profile-name">Student</span>
-                </div>
+                <!-- Dark Mode Toggle Button (Desktop) -->
+                <button class="theme-btn" id="theme-toggle" title="Toggle Theme">
+                    <i class="icon-moon" id="theme-icon"></i>
+                </button>
 
-                <!-- Profile Dropdown -->
-                <div class="profile-dropdown hidden" id="profile-dropdown">
-                    <button class="dropdown-item" data-view="profile">
-                        <i class="icon-user"></i> My Profile
-                    </button>
-                    <button class="dropdown-item" id="dropdown-theme-toggle">
-                        <i class="icon-moon"></i> Toggle Dark Mode
-                    </button>
-                    <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
-                    <button class="dropdown-item danger" id="dropdown-logout-btn">
-                        <i class="icon-log-out"></i> Sign Out
-                    </button>
+                <!-- Profile Avatar Dropdown -->
+                <div class="profile-pill-wrapper">
+                    <div class="profile-pill" id="profile-pill">
+                        <div class="profile-avatar" id="profile-avatar">
+                            <span id="profile-initial">S</span>
+                        </div>
+                        <span class="profile-name" id="profile-name">Student</span>
+                        <i class="icon-chevron-down profile-chevron"></i>
+                    </div>
+
+                    <!-- Profile Dropdown Menu -->
+                    <div class="profile-dropdown hidden" id="profile-dropdown">
+                        <div class="dropdown-header">
+                            <span class="dropdown-greeting">Welcome back</span>
+                        </div>
+                        <button class="dropdown-item" data-view="profile">
+                            <i class="icon-user"></i> My Profile
+                        </button>
+                        <button class="dropdown-item" data-view="notifications">
+                            <i class="icon-bell"></i> Notifications
+                            <span class="nav-badge hidden" id="nav-notif-badge">0</span>
+                        </button>
+                        <button class="dropdown-item" id="dropdown-theme-toggle">
+                            <i class="icon-moon"></i> Toggle Dark Mode
+                        </button>
+                        <hr class="dropdown-divider">
+                        <button class="dropdown-item danger" id="dropdown-logout-btn">
+                            <i class="icon-log-out"></i> Sign Out
+                        </button>
+                    </div>
                 </div>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <!-- Dynamic Content Area -->
-        <main class="content-area" id="app-content">
+    <!-- Main Content Area -->
+    <main class="app-main" id="app-content-wrapper">
+        <div class="content-container" id="app-content">
             <div class="spinner-container">
                 <div class="spinner"></div>
             </div>
-        </main>
-    </div>
+        </div>
+    </main>
 
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
@@ -139,4 +184,5 @@
     <!-- Dashboard Controller -->
     <script src="js/student.js?v=2"></script>
 </body>
+
 </html>

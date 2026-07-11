@@ -101,10 +101,13 @@ async function loadStatusData() {
             const reqStatus = getReqStatus(req, saVerificationStatus, idValidationStatus, docs);
             
             let dotColor = '#F59E0B', dotIcon = 'clock', statusText = 'Pending';
+            let itemClass = 'pending';
             if (verified) {
                 dotColor = '#10B981'; dotIcon = 'check-circle'; statusText = 'Verified';
+                itemClass = 'verified';
             } else if (reqStatus === 'Rejected' || reqStatus === 'Missing') {
                 dotColor = '#EF4444'; dotIcon = 'x-circle'; statusText = reqStatus;
+                itemClass = 'rejected';
             }
 
             let reqIcon = 'file-text';
@@ -114,17 +117,19 @@ async function loadStatusData() {
             if (req.includes('ATM')) reqIcon = 'credit-card';
 
             return `
-                <div class="card" style="margin-bottom: 10px;">
-                    <div class="card-body" style="padding: 14px 18px; display: flex; align-items: center; gap: 14px;">
-                        <div style="width: 38px; height: 38px; border-radius: 10px; background: ${dotColor}10; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            <i data-lucide="${reqIcon}" style="width: 18px; height: 18px; color: ${dotColor};"></i>
-                        </div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">${req}</div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <i data-lucide="${dotIcon}" style="width: 14px; height: 14px; color: ${dotColor};"></i>
-                            <span style="font-size: 11px; font-weight: 700; color: ${dotColor};">${statusText}</span>
+                <div class="status-timeline-item ${itemClass}">
+                    <div class="card status-timeline-card">
+                        <div class="card-body" style="padding: 14px 18px; display: flex; align-items: center; gap: 14px;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: ${dotColor}10; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <i data-lucide="${reqIcon}" style="width: 18px; height: 18px; color: ${dotColor};"></i>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary);">${req}</div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="${dotIcon}" style="width: 14px; height: 14px; color: ${dotColor};"></i>
+                                <span style="font-size: 11px; font-weight: 700; color: ${dotColor};">${statusText}</span>
+                            </div>
                         </div>
                     </div>
                 </div>

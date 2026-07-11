@@ -59,10 +59,10 @@ function renderDirectory() {
         const initial = fullName.charAt(0).toUpperCase() || 'S';
 
         return `
-            <div class="card" style="padding: 16px 20px; transition: all 0.3s; position: relative;">
+            <div class="card action-card" style="padding: 16px 20px; transition: all 0.3s; position: relative;">
                 <div style="display: flex; align-items: center; gap: 14px;">
                     <!-- Avatar Stack with Presence Indicator -->
-                    <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                    <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;" class="${isOnline ? 'pulse-glow' : ''}">
                         <div style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid ${isOnline ? 'var(--success)' : 'transparent'}; padding: 1.5px; overflow: hidden; background-color: rgba(15, 50, 96, 0.06); display: flex; align-items: center; justify-content: center;">
                             ${photoUrl ? `
                                 <img src="${photoUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
@@ -70,11 +70,6 @@ function renderDirectory() {
                                 <span style="font-weight: 700; font-size: 15px; color: var(--primary-color);">${initial}</span>
                             `}
                         </div>
-                        ${isOnline ? `
-                            <div style="position: absolute; bottom: 0; right: 0; width: 14px; height: 14px; background-color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
-                                <div style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--success); animation: pulse 2s infinite;"></div>
-                            </div>
-                        ` : ''}
                     </div>
 
                     <!-- Details -->
@@ -95,20 +90,6 @@ function renderDirectory() {
             </div>
         `;
     }).join('');
-
-    // CSS Pulse Animation for online dot
-    if (!document.getElementById('pulse-animation-style')) {
-        const style = document.createElement('style');
-        style.id = 'pulse-animation-style';
-        style.innerHTML = `
-            @keyframes pulse {
-                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
-                70% { transform: scale(1); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
-                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-            }
-        `;
-        document.head.appendChild(style);
-    }
 
     if (window.lucide) window.lucide.createIcons();
 }

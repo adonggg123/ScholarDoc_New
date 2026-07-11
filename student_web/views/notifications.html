@@ -1,17 +1,18 @@
 <!-- ScholarDoc Student Web — Notifications View -->
 <!-- Mirrors notification_screen.dart -->
 
-<div class="card" style="background: linear-gradient(135deg, #0F3260, #1E3A8A); border: none; margin-bottom: 24px; position: relative; overflow: hidden;">
-    <div style="position: absolute; top: -40px; right: -40px; width: 160px; height: 160px; background: radial-gradient(circle, rgba(251,192,45,0.1) 0%, transparent 70%); border-radius: 50%;"></div>
-    <div style="padding: 24px 28px; position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <div>
-            <div style="font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); letter-spacing: 1.5px; text-transform: uppercase;">NOTIFICATIONS</div>
-            <div style="font-size: 20px; font-weight: 800; color: white; letter-spacing: -0.3px; margin-top: 4px;">Recent Alerts</div>
-            <div style="font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px;">Stay updated with your scholarship status</div>
+<div class="card view-page-header">
+    <div class="view-page-header-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+                <div class="page-label">NOTIFICATIONS</div>
+                <div class="page-title">Recent Alerts</div>
+                <div class="page-subtitle">Stay updated with your scholarship status</div>
+            </div>
+            <button class="btn btn-sm" id="mark-all-read-btn" style="background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px); flex-shrink: 0;">
+                <i data-lucide="check-check" style="width: 14px; height: 14px;"></i> Mark all read
+            </button>
         </div>
-        <button class="btn btn-sm btn-accent" id="mark-all-read-btn">
-            <i class="icon-check-square"></i> Mark all as read
-        </button>
     </div>
 </div>
 
@@ -20,7 +21,7 @@
 </div>
 
 <div class="empty-state hidden" id="notifications-empty">
-    <i class="icon-bell-off" style="width: 48px; height: 48px; opacity: 0.4;"></i>
+    <i data-lucide="bell-off"></i>
     <h3>All Caught Up!</h3>
     <p>You have no notifications at the moment.</p>
 </div>

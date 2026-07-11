@@ -2,7 +2,7 @@
 <!-- Mirrors upload_workflow_screen.dart + id_capture_screen.dart -->
 
 <!-- Stepper -->
-<div style="margin-bottom: 8px; padding: 0 16px;">
+<div class="mb-sm">
     <div class="stepper" id="stepper">
         <div class="stepper-step active" data-step="0">
             <div class="stepper-circle">1</div>
@@ -23,10 +23,10 @@
 
 <!-- Step 1: SA Number -->
 <div class="step-content" id="step-0">
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card mb-lg">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="landmark" style="width: 18px; height: 18px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="landmark" style="width: 18px; height: 18px;"></i>
                 SA Number Submission
             </div>
         </div>
@@ -38,7 +38,7 @@
                 <label class="form-label">SA NUMBER</label>
                 <div class="form-control-icon">
                     <i data-lucide="credit-card"></i>
-                    <input type="text" class="form-control" id="sa-input" placeholder="xxxx-xxxx-xxxx" style="font-size: 16px; font-weight: 600; letter-spacing: 1px;">
+                    <input type="text" class="form-control" id="sa-input" placeholder="xxxx-xxxx-xxxx" style="font-size: 16px; font-weight: 600; letter-spacing: 1.2px;">
                 </div>
             </div>
             <button class="btn btn-outline btn-sm" id="save-draft-btn">
@@ -46,7 +46,7 @@
             </button>
         </div>
     </div>
-    <div style="display: flex; gap: 12px;">
+    <div class="flex gap-md">
         <button class="btn btn-primary-solid btn-block" id="next-step-0">
             Continue <i data-lucide="chevron-right"></i>
         </button>
@@ -56,10 +56,10 @@
 <!-- Step 2: Document Upload -->
 <div class="step-content hidden" id="step-1">
     <!-- ID Front -->
-    <div class="card" style="margin-bottom: 16px;">
+    <div class="card mb-md">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="image" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="image" style="width: 16px; height: 16px;"></i>
                 ID Front
             </div>
             <span class="badge badge-pending" id="front-badge"><i data-lucide="clock"></i> Required</span>
@@ -71,17 +71,17 @@
                 <p>Click to select an image (JPG, PNG)</p>
                 <input type="file" id="front-file-input" accept="image/*" style="display: none;">
             </div>
-            <div id="front-preview" class="hidden" style="margin-top: 12px; text-align: center;">
+            <div id="front-preview" class="hidden mt-md text-center">
                 <img id="front-preview-img" style="max-width: 100%; max-height: 250px; border-radius: 12px; border: 1px solid var(--border-color);">
             </div>
         </div>
     </div>
 
     <!-- ID Back -->
-    <div class="card" style="margin-bottom: 16px;">
+    <div class="card mb-md">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="image" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="image" style="width: 16px; height: 16px;"></i>
                 ID Back
             </div>
             <span class="badge badge-pending" id="back-badge"><i data-lucide="clock"></i> Required</span>
@@ -93,17 +93,17 @@
                 <p>Click to select an image (JPG, PNG)</p>
                 <input type="file" id="back-file-input" accept="image/*" style="display: none;">
             </div>
-            <div id="back-preview" class="hidden" style="margin-top: 12px; text-align: center;">
+            <div id="back-preview" class="hidden mt-md text-center">
                 <img id="back-preview-img" style="max-width: 100%; max-height: 250px; border-radius: 12px; border: 1px solid var(--border-color);">
             </div>
         </div>
     </div>
 
     <!-- Digital Signature -->
-    <div class="card" style="margin-bottom: 16px;">
+    <div class="card mb-md">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="pen-tool" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="pen-tool" style="width: 16px; height: 16px;"></i>
                 Digital Signature
             </div>
             <span class="badge badge-pending" id="sig-badge"><i data-lucide="clock"></i> Required</span>
@@ -121,10 +121,10 @@
     </div>
 
     <!-- ATM Card (Optional) -->
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card mb-lg">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="credit-card" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="credit-card" style="width: 16px; height: 16px;"></i>
                 ATM Card Photo
             </div>
             <span class="badge badge-info"><i data-lucide="info"></i> Optional</span>
@@ -136,13 +136,13 @@
                 <p>Click to select an image (JPG, PNG)</p>
                 <input type="file" id="atm-file-input" accept="image/*" style="display: none;">
             </div>
-            <div id="atm-preview" class="hidden" style="margin-top: 12px; text-align: center;">
+            <div id="atm-preview" class="hidden mt-md text-center">
                 <img id="atm-preview-img" style="max-width: 100%; max-height: 200px; border-radius: 12px; border: 1px solid var(--border-color);">
             </div>
         </div>
     </div>
 
-    <div style="display: flex; gap: 12px;">
+    <div class="flex gap-md">
         <button class="btn btn-outline" id="prev-step-1" style="flex: 1;">
             <i data-lucide="chevron-left"></i> Back
         </button>
@@ -154,10 +154,10 @@
 
 <!-- Step 3: Review & Submit -->
 <div class="step-content hidden" id="step-2">
-    <div class="card" style="margin-bottom: 24px;">
+    <div class="card mb-lg">
         <div class="card-header">
             <div class="card-title">
-                <i data-lucide="check-square" style="width: 16px; height: 16px; display: inline; vertical-align: middle; margin-right: 8px;"></i>
+                <i data-lucide="check-square" style="width: 16px; height: 16px;"></i>
                 Review Your Submission
             </div>
         </div>
@@ -166,11 +166,11 @@
         </div>
     </div>
 
-    <div style="display: flex; gap: 12px;">
+    <div class="flex gap-md">
         <button class="btn btn-outline" id="prev-step-2" style="flex: 1;">
             <i data-lucide="chevron-left"></i> Back
         </button>
-        <button class="btn btn-accent" id="submit-btn" style="flex: 2; height: 52px; font-weight: 800; font-size: 15px;">
+        <button class="btn btn-accent" id="submit-btn" style="flex: 2; height: 50px; font-weight: 800; font-size: 15px;">
             <i data-lucide="send"></i>
             <span id="submit-btn-text">Submit Documents</span>
             <div class="spinner hidden" id="submit-spinner" style="width: 20px; height: 20px; border-width: 2px;"></div>

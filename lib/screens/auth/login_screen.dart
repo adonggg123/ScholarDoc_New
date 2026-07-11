@@ -32,7 +32,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Modern premium soft-grey background
+      backgroundColor: const Color(
+        0xFFF8FAFC,
+      ), // Modern premium soft-grey background
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -49,7 +51,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(15), // Corner curve 15px
+                        borderRadius: BorderRadius.circular(
+                          15,
+                        ), // Corner curve 15px
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xFF0F3260).withOpacity(0.06),
@@ -57,9 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             offset: const Offset(0, 8),
                           ),
                         ],
-                        border: Border.all(color: const Color(0xFFE2E8F0)), // Border matching web
+                        border: Border.all(
+                          color: const Color(0xFFE2E8F0),
+                        ), // Border matching web
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40), // Exact padding match
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 40,
+                      ), // Exact padding match
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -74,17 +83,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fit: BoxFit.contain,
                               ),
                               Transform.translate(
-                                offset: const Offset(-6, 0), // Compressed spacing matching -10px margin-left
+                                offset: const Offset(
+                                  -6,
+                                  0,
+                                ), // Compressed spacing matching -10px margin-left
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     ShaderMask(
-                                      shaderCallback: (bounds) => const LinearGradient(
-                                        colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
-                                      ).createShader(bounds),
+                                      shaderCallback: (bounds) =>
+                                          const LinearGradient(
+                                            colors: [
+                                              Color(0xFF0F3260),
+                                              Color(0xFFFBC02D),
+                                            ],
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                          ).createShader(bounds),
                                       blendMode: BlendMode.srcIn,
                                       child: Text(
                                         'ScholarDoc',
@@ -99,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'OROQUIETA CITY CAMPUS',
+                                      'USTP Oroquieta City Campus',
                                       style: GoogleFonts.inter(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w700,
@@ -114,7 +130,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                           const SizedBox(height: 32), // margin-bottom: 32px
-
                           // Restored and centered description text
                           Text(
                             'Enter your Student ID as your password to access your scholarship portal.',
@@ -148,7 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : null,
                           ),
                           const SizedBox(height: 28), // gap: 28px
-
                           // Password input field
                           _buildLabel('PASSWORD'),
                           const SizedBox(height: 10), // margin-bottom: 10px
@@ -160,34 +174,37 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontSize: 15,
                               color: const Color(0xFF1E293B),
                             ),
-                            decoration: _buildInputDecoration(
-                              hintText: '••••••••',
-                              icon: LucideIcons.lock,
-                            ).copyWith(
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? LucideIcons.eye
-                                      : LucideIcons.eyeOff,
-                                  color: Colors.grey.shade400,
-                                  size: 20,
+                            decoration:
+                                _buildInputDecoration(
+                                  hintText: '••••••••',
+                                  icon: LucideIcons.lock,
+                                ).copyWith(
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? LucideIcons.eye
+                                          : LucideIcons.eyeOff,
+                                      color: Colors.grey.shade400,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
+                                  ),
                                 ),
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                              ),
-                            ),
                             validator: (v) => (v == null || v.isEmpty)
                                 ? 'Please enter your password'
                                 : null,
                           ),
                           const SizedBox(height: 24), // gap: 24px
-
                           // Gold/Yellow action button
                           Container(
                             height: 54, // height: 54px
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12), // border-radius: 12px
+                              borderRadius: BorderRadius.circular(
+                                12,
+                              ), // border-radius: 12px
                               gradient: const LinearGradient(
                                 colors: [Color(0xFFFBC02D), Color(0xFFFFD54F)],
                                 begin: Alignment.topLeft,
@@ -195,7 +212,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFBC02D).withOpacity(0.25),
+                                  color: const Color(
+                                    0xFFFBC02D,
+                                  ).withOpacity(0.25),
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
                                 ),
@@ -221,7 +240,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     )
                                   : Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Text(
                                           'SIGN IN TO PORTAL',
@@ -291,7 +311,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,
                                   ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
                                 ),
                                 child: const Text('Register Here'),
                               ),
@@ -325,9 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
         padding: const EdgeInsets.only(left: 20, right: 14),
         child: Icon(icon, color: const Color(0xFF94A3B8), size: 18),
       ),
-      prefixIconConstraints: const BoxConstraints(
-        minWidth: 52,
-      ),
+      prefixIconConstraints: const BoxConstraints(minWidth: 52),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       border: OutlineInputBorder(
