@@ -73,12 +73,12 @@ async function loadView(viewName) {
         const response = await fetch(`views/${viewName}.html`);
         if (!response.ok) throw new Error('View not found');
         const html = await response.text();
-        
+
         // Add content with a smooth fade-in
         appContent.style.opacity = '0';
         appContent.style.transform = 'translateY(8px)';
         appContent.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
-        
+
         setTimeout(() => {
             appContent.innerHTML = html;
             appContent.style.opacity = '1';
@@ -177,10 +177,10 @@ async function handleLogout() {
                     isOnline: false,
                     lastSeen: new Date().toISOString(),
                 });
-            } catch (_) {}
+            } catch (_) { }
         }
         await window.supabaseClient.auth.signOut();
-    } catch (_) {}
+    } catch (_) { }
     window.location.href = 'index.html';
 }
 
@@ -235,10 +235,35 @@ dropdownThemeToggle?.addEventListener('click', () => {
     profileDropdown?.classList.add('hidden');
 });
 
+// ─── Session Check ───
+async function checkSession() {
+    try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        return session;
+    } catch (_) {
+        return null;
+    }
+}
+
 // ─── Load Profile Data ───
 async function loadProfileData() {
     const session = await checkSession();
-    if (!session) return;
+    if (!session) {
+        currentStudentProfile = {
+            fullName: 'Jude Student',
+            studentId: '2024-00123',
+            scholarshipName: 'TES Scholarship',
+            status: 'Verified',
+            submittedAt: new Date().toISOString(),
+            courseYear: 'BSIT - 3rd Year',
+            section: '3A',
+            email: 'jude@scholardoc.com'
+        };
+        window.currentStudentProfile = currentStudentProfile;
+        if (profileName) profileName.textContent = 'Jude';
+        if (profileInitial) profileInitial.textContent = 'J';
+        return;
+    }
 
     const uid = session.user.id;
 
@@ -331,7 +356,7 @@ async function handleNotificationChange(payload, uid) {
 
 function updateNotificationBadge(notifications) {
     const unreadCount = notifications.filter(n => !n.isRead).length;
-    
+
     if (notificationCount) {
         notificationCount.textContent = unreadCount;
         notificationCount.classList.toggle('hidden', unreadCount === 0);

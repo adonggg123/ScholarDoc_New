@@ -1,27 +1,32 @@
 <!-- ScholarDoc Student Web — Notifications View -->
 <!-- Mirrors notification_screen.dart -->
 
-<div class="card view-page-header">
+<!-- Header Banner -->
+<div class="card view-page-header" style="margin-bottom: 24px;">
     <div class="view-page-header-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 14px;">
             <div>
                 <div class="page-label">NOTIFICATIONS</div>
-                <div class="page-title">Recent Alerts</div>
-                <div class="page-subtitle">Stay updated with your scholarship status</div>
+                <div class="page-title">Recent Alerts & Updates</div>
+                <div class="page-subtitle">Stay updated with real-time scholarship status updates</div>
             </div>
-            <button class="btn btn-sm" id="mark-all-read-btn" style="background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px); flex-shrink: 0;">
-                <i data-lucide="check-check" style="width: 14px; height: 14px;"></i> Mark all read
+            <button class="btn btn-sm" id="mark-all-read-btn" style="background: rgba(255,255,255,0.18); color: white; border: 1.5px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px); border-radius: var(--radius-full); padding: 7px 16px; font-weight: 700; flex-shrink: 0;">
+                <i data-lucide="check-check" style="width: 15px; height: 15px;"></i> Mark All as Read
             </button>
         </div>
     </div>
 </div>
 
-<div id="notifications-list">
+<!-- Notification Feed List -->
+<div id="notifications-list" style="margin-bottom: 28px;">
     <div class="spinner-container"><div class="spinner"></div></div>
 </div>
 
-<div class="empty-state hidden" id="notifications-empty">
-    <i data-lucide="bell-off"></i>
-    <h3>All Caught Up!</h3>
-    <p>You have no notifications at the moment.</p>
+<!-- Empty State -->
+<div class="empty-state hidden" id="notifications-empty" style="padding: 48px 24px; text-align: center;">
+    <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(16,185,129,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+        <i data-lucide="bell-off" style="width: 32px; height: 32px; color: var(--success);"></i>
+    </div>
+    <h3 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">All Caught Up!</h3>
+    <p style="font-size: 13px; color: var(--text-secondary);">You currently have no unread notifications or announcements.</p>
 </div>

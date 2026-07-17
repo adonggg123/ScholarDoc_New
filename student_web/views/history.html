@@ -1,33 +1,35 @@
 <!-- ScholarDoc Student Web — Submission History View -->
 <!-- Mirrors submission_history_screen.dart -->
 
-<!-- Header -->
-<div class="card view-page-header">
+<!-- Header Banner -->
+<div class="card view-page-header" style="margin-bottom: 24px;">
     <div class="view-page-header-content">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div>
                 <div class="page-label">SUBMISSION HISTORY</div>
-                <div class="page-title" id="history-scholarship">Your Documents</div>
-                <div class="page-subtitle" id="history-subtitle">Track all your submitted documents</div>
+                <div class="page-title" id="history-scholarship">Your Document History</div>
+                <div class="page-subtitle" id="history-subtitle">Track all your previous document submissions and receipts</div>
             </div>
-            <div class="page-icon">
-                <i data-lucide="folder-open"></i>
+            <div class="page-icon" style="width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;">
+                <i data-lucide="folder-open" style="width: 26px; height: 26px; color: white;"></i>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Timeline -->
-<div id="history-list">
+<!-- History Log List Container -->
+<div id="history-list" style="margin-bottom: 28px;">
     <div class="spinner-container"><div class="spinner"></div></div>
 </div>
 
-<!-- Empty State (hidden by default) -->
-<div class="empty-state hidden" id="history-empty">
-    <i data-lucide="folder-open"></i>
-    <h3>No Submissions Yet</h3>
-    <p>You haven't submitted any documents yet. Start by uploading your requirements.</p>
-    <button class="btn btn-primary-solid mt-md" onclick="loadView('submit')">
+<!-- Empty State -->
+<div class="empty-state hidden" id="history-empty" style="padding: 48px 24px; text-align: center;">
+    <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(15,50,96,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+        <i data-lucide="folder-open" style="width: 32px; height: 32px; color: var(--primary-color);"></i>
+    </div>
+    <h3 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">No Submissions Yet</h3>
+    <p style="font-size: 13px; color: var(--text-secondary); max-width: 360px; margin: 0 auto;">You haven't submitted any scholarship requirement files yet. Start by uploading your requirements.</p>
+    <button class="btn btn-primary-solid mt-md" onclick="loadView('submit')" style="border-radius: var(--radius-full); padding: 10px 24px; font-weight: 700;">
         <i data-lucide="upload-cloud"></i> Submit Documents
     </button>
 </div>
