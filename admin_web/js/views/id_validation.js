@@ -289,5 +289,174 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
     }
 };
 
+// ── Bulk Download of Student ID Validation Documents ──────────────────
+function formatStudentFolderName(student) {
+    let namePart = '';
+    if (student.lastName && student.firstName) {
+        namePart = `${student.lastName.trim()}_${student.firstName.trim()}`;
+    } else if (student.fullName) {
+        let parts = student.fullName.split(',');
+        if (parts.length === 2) {
+            namePart = `${parts[0].trim()}_${parts[1].trim()}`;
+        } else {
+            namePart = student.fullName.trim().replace(/\s+/g, '_');
+        }
+    } else {
+        namePart = 'Student';
+    }
+    const idPart = student.studentId || student.id || student.uid || 'NoID';
+    const rawName = `${namePart}_${idPart}`;
+    // Sanitize to create safe folder names in ZIP
+    return rawName.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function updateBulkDownloadProgress(percent, subtitleText, titleText = 'Generating ZIP Archive...') {
+    const modal = document.getElementById('bulk-download-modal');
+    const titleEl = document.getElementById('modal-title');
+    const subtitleEl = document.getElementById('modal-subtitle');
+    const barEl = document.getElementById('modal-progress-bar');
+    const pctEl = document.getElementById('modal-percentage');
+    const actionsEl = document.getElementById('modal-actions');
+
+    if (modal) modal.style.display = 'flex';
+    if (titleEl) titleEl.textContent = titleText;
+    if (subtitleEl) subtitleEl.textContent = subtitleText;
+    if (barEl) barEl.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    if (pctEl) pctEl.textContent = `${Math.min(100, Math.max(0, Math.round(percent)))}%`;
+    if (actionsEl) actionsEl.style.display = percent >= 100 ? 'flex' : 'none';
+}
+
+window.closeBulkDownloadModal = function() {
+    const modal = document.getElementById('bulk-download-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.downloadAllIdDocuments = async function() {
+    const btn = document.getElementById('bulk-download-btn');
+    const JSZip = window.JSZip;
+    const saveAs = window.saveAs || window.FileSaver?.saveAs;
+
+    if (!JSZip) {
+        alert('ZIP utility (JSZip) is not loaded. Please refresh the page and try again.');
+        return;
+    }
+    if (!saveAs) {
+        alert('FileSaver utility is not loaded. Please refresh the page and try again.');
+        return;
+    }
+
+    try {
+        if (btn) btn.disabled = true;
+
+        updateBulkDownloadProgress(5, 'Fetching student records from database...');
+
+        // Fetch all students from database
+        const { data: allStudents, error } = await supabase
+            .from('students')
+            .select('*')
+            .order('createdAt', { ascending: false });
+
+        if (error) throw error;
+
+        // Filter students who have uploaded PDF document requirements
+        const eligibleStudents = (allStudents || []).filter(s => {
+            const pdfUrl = s.submissionPdfUrl || (s.documents && s.documents.submissionPdfUrl);
+            return !!pdfUrl;
+        });
+
+        if (eligibleStudents.length === 0) {
+            window.closeBulkDownloadModal();
+            if (window.showToast) {
+                window.showToast('No student PDF documents available to download.', 'alert-circle');
+            } else {
+                alert('No student PDF documents available to download.');
+            }
+            return;
+        }
+
+        updateBulkDownloadProgress(10, `Found ${eligibleStudents.length} student document(s). Preparing download...`);
+
+        const zip = new JSZip();
+        let successCount = 0;
+        let failedCount = 0;
+        const total = eligibleStudents.length;
+
+        // Fetch files in controlled batches of 5 for optimal performance
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+            const batch = eligibleStudents.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (student) => {
+                const pdfUrl = student.submissionPdfUrl || (student.documents && student.documents.submissionPdfUrl);
+                const folderName = formatStudentFolderName(student);
+                const fileName = student.submissionPdfName || 'ID Front & Back + Signatures.pdf';
+
+                try {
+                    const response = await fetch(pdfUrl);
+                    if (!response.ok) throw new Error(`HTTP status ${response.status}`);
+                    const pdfBlob = await response.blob();
+
+                    const studentFolder = zip.folder(folderName);
+                    studentFolder.file(fileName, pdfBlob);
+                    successCount++;
+                } catch (err) {
+                    console.error(`Error fetching PDF for student ${folderName}:`, err);
+                    failedCount++;
+                }
+            }));
+
+            const processed = Math.min(i + BATCH_SIZE, total);
+            const progressPct = 10 + Math.round((processed / total) * 65); // 10% to 75%
+            updateBulkDownloadProgress(progressPct, `Downloading documents: ${processed} of ${total}...`);
+        }
+
+        if (successCount === 0) {
+            updateBulkDownloadProgress(100, 'Could not retrieve any PDF files.', 'Download Failed');
+            if (window.showToast) window.showToast('Failed to download student document files.', 'alert-circle');
+            return;
+        }
+
+        // Generate ZIP archive
+        updateBulkDownloadProgress(75, 'Compressing documents into ZIP archive...');
+        const zipBlob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+            const compPercent = 75 + Math.round((metadata.percent / 100) * 20); // 75% to 95%
+            updateBulkDownloadProgress(compPercent, `Compressing archive: ${Math.round(metadata.percent)}%...`);
+        });
+
+        updateBulkDownloadProgress(98, 'Saving ZIP file to disk...');
+        saveAs(zipBlob, 'Student_ID_Validation_Documents.zip');
+
+        // Finalize notification
+        const statusMsg = failedCount > 0
+            ? `Successfully archived ${successCount} document(s). ${failedCount} file(s) could not be retrieved.`
+            : `All ${successCount} student PDF document(s) compiled into ZIP archive.`;
+
+        updateBulkDownloadProgress(100, statusMsg, 'Download Ready!');
+
+        if (window.showToast) {
+            window.showToast(`ZIP generated for ${successCount} student(s).`, 'check-circle');
+        }
+
+        // Audit Log
+        try {
+            await supabase.from('audit_logs').insert([{
+                adminId: (await supabase.auth.getUser()).data.user?.id || 'unknown',
+                adminName: 'Admin',
+                action: `Bulk downloaded ${successCount} student ID validation documents ZIP`,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (_) {}
+
+    } catch (err) {
+        console.error('Bulk download error:', err);
+        updateBulkDownloadProgress(100, `An error occurred: ${err.message || err}`, 'Error');
+        if (window.showToast) {
+            window.showToast('Bulk download failed.', 'alert-circle');
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
 // Init
 loadIdQueue();
+

@@ -128,6 +128,9 @@ function showToast(message, icon = 'check-circle') {
     }, 2500);
 }
 
+window.showToast = showToast;
+
+
 if (syncBtn) {
     syncBtn.addEventListener('click', async () => {
         if (isSyncing) return;
