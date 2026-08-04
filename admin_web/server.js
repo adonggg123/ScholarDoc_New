@@ -27,8 +27,13 @@ const server = http.createServer((req, res) => {
     // Parse URL and remove query string
     let urlPath = req.url.split('?')[0];
     
-    // Default to index.html
-    if (urlPath === '/') urlPath = '/index.html';
+    // Default to login.html
+    if (urlPath === '/' || urlPath === '/index.html') urlPath = '/login.html';
+    
+    // Serve favicon.png if favicon.ico requested but does not exist
+    if (urlPath === '/favicon.ico' && !fs.existsSync(path.join(ROOT, 'favicon.ico')) && fs.existsSync(path.join(ROOT, 'favicon.png'))) {
+        urlPath = '/favicon.png';
+    }
     
     // Resolve file path
     const filePath = path.join(ROOT, urlPath);
