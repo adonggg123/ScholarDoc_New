@@ -4,15 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScholarDoc — Student Dashboard</title>
+    <title>ScholarDoc — Student Portal</title>
     <meta name="description"
         content="ScholarDoc Student Dashboard — Manage your scholarship documents, track submissions, and stay updated.">
     <link rel="icon" type="image/png" href="favicon.png">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap"
         rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.344.0/font/lucide.css" rel="stylesheet">
-    <link rel="stylesheet" href="css/student.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="css/student.css?v=4">
 </head>
 
 <body>
@@ -36,44 +40,50 @@
         </div>
 
         <nav class="sidebar-nav">
-            <hr class="nav-divider">
-
             <a href="#" class="nav-item active" data-view="home" id="nav-home-mobile">
-                <i class="icon-home"></i> Home
+                <i data-lucide="home"></i> Home
             </a>
 
             <a href="#" class="nav-item" data-view="status" id="nav-status-mobile">
-                <i class="icon-clipboard-list"></i> Status Tracking
+                <i data-lucide="clipboard-check"></i> Status Tracking
             </a>
 
             <a href="#" class="nav-item" data-view="submit" id="nav-submit-mobile">
-                <i class="icon-upload-cloud"></i> Submit Documents
+                <i data-lucide="upload-cloud"></i> Submit Documents
             </a>
 
             <a href="#" class="nav-item" data-view="history" id="nav-history-mobile">
-                <i class="icon-history"></i> Submission History
+                <i data-lucide="history"></i> Submission History
             </a>
 
             <a href="#" class="nav-item" data-view="directory" id="nav-directory-mobile">
-                <i class="icon-users"></i> Scholar Directory
+                <i data-lucide="users"></i> Scholar Directory
             </a>
 
             <hr class="nav-divider">
 
             <a href="#" class="nav-item" data-view="notifications" id="nav-notifications-mobile">
-                <i class="icon-bell"></i> Notifications
+                <i data-lucide="bell"></i> Notifications
                 <span class="nav-badge hidden" id="nav-notif-badge-mobile">0</span>
             </a>
 
             <a href="#" class="nav-item" data-view="profile" id="nav-profile-mobile">
-                <i class="icon-user"></i> My Profile
+                <i data-lucide="user"></i> My Profile
+            </a>
+
+            <hr class="nav-divider">
+
+            <a href="#" class="nav-item" id="nav-logout-mobile" style="color: var(--error);">
+                <i data-lucide="log-out"></i> Sign Out
             </a>
         </nav>
 
         <div class="sidebar-footer">
             <div class="theme-toggle-row" id="theme-toggle-mobile">
-                <i class="icon-moon"></i>
-                <span>Dark Mode</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i data-lucide="moon"></i>
+                    <span>Dark Mode</span>
+                </div>
                 <div class="theme-switch"></div>
             </div>
         </div>
@@ -84,15 +94,15 @@
         <div class="header-container">
             <div class="header-brand-group">
                 <!-- Hamburger Menu for mobile/tablet drawer -->
-                <button class="mobile-menu-btn" id="mobile-menu-btn">
-                    <i class="icon-menu"></i>
+                <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle Navigation">
+                    <i data-lucide="menu"></i>
                 </button>
 
-                <div class="app-logo-lockup">
+                <div class="app-logo-lockup" onclick="loadView('home')">
                     <img src="app_logo3.png" alt="ScholarDoc Logo" class="app-logo">
                     <div class="app-brand-text">
                         <span class="brand-title">ScholarDoc</span>
-                        <span class="brand-subtitle">Oroquieta City Campus</span>
+                        <span class="brand-subtitle">USTP Oroquieta City Campus</span>
                     </div>
                 </div>
             </div>
@@ -100,32 +110,32 @@
             <!-- Tab Navigation (Desktop) -->
             <nav class="header-nav">
                 <a href="#" class="nav-item active" data-view="home" id="nav-home">
-                    <i class="icon-home"></i> Home
+                    <i data-lucide="home"></i> Home
                 </a>
                 <a href="#" class="nav-item" data-view="status" id="nav-status">
-                    <i class="icon-clipboard-list"></i> Status Tracking
+                    <i data-lucide="clipboard-check"></i> Status Tracking
                 </a>
                 <a href="#" class="nav-item" data-view="submit" id="nav-submit">
-                    <i class="icon-upload-cloud"></i> Submit Documents
+                    <i data-lucide="upload-cloud"></i> Submit Documents
                 </a>
                 <a href="#" class="nav-item" data-view="history" id="nav-history">
-                    <i class="icon-history"></i> History
+                    <i data-lucide="history"></i> History
                 </a>
                 <a href="#" class="nav-item" data-view="directory" id="nav-directory">
-                    <i class="icon-users"></i> Scholar Directory
+                    <i data-lucide="users"></i> Directory
                 </a>
             </nav>
 
             <div class="header-actions">
                 <!-- Notifications Button -->
                 <button class="notification-btn" id="notification-btn" title="Notifications">
-                    <i class="icon-bell"></i>
+                    <i data-lucide="bell"></i>
                     <span class="notification-count hidden" id="notification-count">0</span>
                 </button>
 
                 <!-- Dark Mode Toggle Button (Desktop) -->
                 <button class="theme-btn" id="theme-toggle" title="Toggle Theme">
-                    <i class="icon-moon" id="theme-icon"></i>
+                    <i data-lucide="moon" id="theme-icon"></i>
                 </button>
 
                 <!-- Profile Avatar Dropdown -->
@@ -135,7 +145,7 @@
                             <span id="profile-initial">S</span>
                         </div>
                         <span class="profile-name" id="profile-name">Student</span>
-                        <i class="icon-chevron-down profile-chevron"></i>
+                        <i data-lucide="chevron-down" class="profile-chevron"></i>
                     </div>
 
                     <!-- Profile Dropdown Menu -->
@@ -144,18 +154,18 @@
                             <span class="dropdown-greeting">Welcome back</span>
                         </div>
                         <button class="dropdown-item" data-view="profile">
-                            <i class="icon-user"></i> My Profile
+                            <i data-lucide="user"></i> My Profile
                         </button>
                         <button class="dropdown-item" data-view="notifications">
-                            <i class="icon-bell"></i> Notifications
+                            <i data-lucide="bell"></i> Notifications
                             <span class="nav-badge hidden" id="nav-notif-badge">0</span>
                         </button>
                         <button class="dropdown-item" id="dropdown-theme-toggle">
-                            <i class="icon-moon"></i> Toggle Dark Mode
+                            <i data-lucide="moon"></i> Toggle Dark Mode
                         </button>
                         <hr class="dropdown-divider">
                         <button class="dropdown-item danger" id="dropdown-logout-btn">
-                            <i class="icon-log-out"></i> Sign Out
+                            <i data-lucide="log-out"></i> Sign Out
                         </button>
                     </div>
                 </div>
@@ -177,12 +187,10 @@
 
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
     <!-- jsPDF for PDF generation in submission workflow -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Dashboard Controller -->
-    <script src="js/student.js?v=2"></script>
+    <script src="js/student.js?v=4"></script>
 </body>
 
 </html>

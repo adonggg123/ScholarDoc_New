@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../screens/submissions/submission_history_screen.dart';
@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   final Set<String> _expandedAnnouncementIds = {};
 
-  DateTime _selectedDate = DateTime.now();
+  final DateTime _selectedDate = DateTime.now();
   late DateTime _startOfWeek;
   late List<DateTime> _weekDays;
 

@@ -28,8 +28,9 @@ const server = http.createServer((req, res) => {
     // Parse URL and remove query string
     let urlPath = req.url.split('?')[0];
     
-    // Default to landing.html
+    // Default routing
     if (urlPath === '/') urlPath = '/landing.html';
+    if (urlPath === '/login' || urlPath === '/login.html') urlPath = '/index.html';
     
     // Resolve file path
     const filePath = path.join(ROOT, urlPath);

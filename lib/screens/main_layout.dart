@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
 import 'dashboard/home_screen.dart';
@@ -46,80 +46,94 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
   }
 
   Widget _buildBottomNav(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
     return Container(
+      margin: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding > 0 ? bottomPadding + 6 : 16),
       decoration: BoxDecoration(
-        color: context.surfaceC,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        color: context.surfaceC.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: const Color(0xFFFBC02D).withValues(alpha: 0.35), // Golden Yellow subtle border
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
+            color: const Color(0xFF0F3260).withValues(alpha: 0.22),
+            blurRadius: 28,
+            spreadRadius: 2,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, -4),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Row(
-            children: List.generate(_items.length, (i) {
-              final selected = _currentIndex == i;
-              return Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    setState(() => _currentIndex = i);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppTheme.primaryColor.withValues(alpha: 0.08)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedScale(
-                          scale: selected ? 1.1 : 1.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            _items[i].icon,
-                            color: selected ? AppTheme.primaryColor : context.textSec,
-                            size: 20,
-                          ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(_items.length, (i) {
+            final selected = _currentIndex == i;
+            return Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() => _currentIndex = i);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppTheme.primaryColor
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedScale(
+                        scale: selected ? 1.15 : 1.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          _items[i].icon,
+                          color: selected ? Colors.white : context.textSec,
+                          size: 20,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
+                      ),
+                      const SizedBox(height: 3),
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 200),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          color: selected ? const Color(0xFFFBC02D) : context.textSec,
+                          letterSpacing: selected ? 0.2 : 0.0,
+                        ),
+                        child: Text(
                           _items[i].label,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                            color: selected ? AppTheme.primaryColor : context.textSec,
-                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          height: 2,
-                          width: selected ? 14 : 0,
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentColor,
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }),
-          ),
+              ),
+            );
+          }),
         ),
       ),
     );

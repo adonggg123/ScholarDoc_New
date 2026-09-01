@@ -181,10 +181,11 @@ async function handleLogout() {
         }
         await window.supabaseClient.auth.signOut();
     } catch (_) { }
-    window.location.href = 'index.html';
+    window.location.href = 'http://localhost:8080/login.html';
 }
 
 dropdownLogoutBtn?.addEventListener('click', handleLogout);
+document.getElementById('nav-logout-mobile')?.addEventListener('click', handleLogout);
 
 // ─── Mobile Sidebar ───
 function closeMobileSidebar() {
@@ -203,15 +204,18 @@ sidebarOverlay?.addEventListener('click', closeMobileSidebar);
 function updateThemeIcons(isDark) {
     const themeIcon = document.getElementById('theme-icon');
     if (themeIcon) {
-        themeIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+        themeIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
     }
     const mobileThemeIcon = themeToggleMobile?.querySelector('i');
     if (mobileThemeIcon) {
-        mobileThemeIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+        mobileThemeIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
     }
     const dropdownToggleIcon = dropdownThemeToggle?.querySelector('i');
     if (dropdownToggleIcon) {
-        dropdownToggleIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+        dropdownToggleIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+    }
+    if (window.lucide) {
+        window.lucide.createIcons();
     }
 }
 
@@ -235,6 +239,33 @@ dropdownThemeToggle?.addEventListener('click', () => {
     profileDropdown?.classList.add('hidden');
 });
 
+// ─── Hash Token & Session Initialization ───
+async function initSessionFromHash() {
+    if (window.location.hash && (window.location.hash.includes('access_token=') || window.location.hash.includes('student_id='))) {
+        try {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            const studentId = params.get('student_id');
+
+            if (accessToken && refreshToken) {
+                await window.supabaseClient.auth.setSession({
+                    access_token: decodeURIComponent(accessToken),
+                    refresh_token: decodeURIComponent(refreshToken),
+                });
+            }
+            if (studentId) {
+                sessionStorage.setItem('scholardoc_student_id', decodeURIComponent(studentId));
+            }
+            // Clean up the URL hash without page reload
+            history.replaceState(null, '', window.location.pathname);
+        } catch (e) {
+            console.error('Error setting session from URL hash:', e);
+        }
+    }
+}
+
 // ─── Session Check ───
 async function checkSession() {
     try {
@@ -247,50 +278,73 @@ async function checkSession() {
 
 // ─── Load Profile Data ───
 async function loadProfileData() {
+    await initSessionFromHash();
     const session = await checkSession();
-    if (!session) {
-        currentStudentProfile = {
-            fullName: 'Jude Student',
-            studentId: '2024-00123',
-            scholarshipName: 'TES Scholarship',
-            status: 'Verified',
-            submittedAt: new Date().toISOString(),
-            courseYear: 'BSIT - 3rd Year',
-            section: '3A',
-            email: 'jude@scholardoc.com'
-        };
+    const storedStudentId = sessionStorage.getItem('scholardoc_student_id');
+
+    let studentRecord = null;
+    let uid = session?.user?.id;
+
+    // 1. Attempt lookup by authenticated user ID
+    if (uid) {
+        const { data, error } = await window.supabaseClient
+            .from('students')
+            .select('*')
+            .eq('uid', uid)
+            .limit(1);
+        if (!error && data && data.length > 0) {
+            studentRecord = data[0];
+        }
+    }
+
+    // 2. Attempt lookup by student ID or email from session or storage
+    if (!studentRecord) {
+        let queryTarget = storedStudentId;
+        if (!queryTarget && session?.user?.email) {
+            queryTarget = session.user.email.split('@')[0];
+        }
+        if (queryTarget) {
+            const { data } = await window.supabaseClient
+                .from('students')
+                .select('*')
+                .or(`studentId.eq.${queryTarget},authEmail.eq.${queryTarget}@scholardoc.com,email.eq.${session?.user?.email}`)
+                .limit(1);
+            if (data && data.length > 0) {
+                studentRecord = data[0];
+                uid = studentRecord.uid;
+            }
+        }
+    }
+
+    // 3. Fallback: Fetch default active student from database (2023305311)
+    if (!studentRecord) {
+        const { data: defaultStudent } = await window.supabaseClient
+            .from('students')
+            .select('*')
+            .eq('studentId', '2023305311')
+            .limit(1);
+        if (defaultStudent && defaultStudent.length > 0) {
+            studentRecord = defaultStudent[0];
+            uid = studentRecord.uid;
+        }
+    }
+
+    if (studentRecord) {
+        currentStudentProfile = studentRecord;
         window.currentStudentProfile = currentStudentProfile;
-        if (profileName) profileName.textContent = 'Jude';
-        if (profileInitial) profileInitial.textContent = 'J';
-        return;
-    }
+        window.currentStudentUid = uid || studentRecord.uid;
 
-    const uid = session.user.id;
+        // Update topbar profile
+        const fullName = currentStudentProfile.fullName || 'Student';
+        const firstName = fullName.split(' ')[0];
+        if (profileName) profileName.textContent = firstName;
+        if (profileInitial) profileInitial.textContent = firstName[0]?.toUpperCase() || 'S';
 
-    const { data, error } = await window.supabaseClient
-        .from('students')
-        .select()
-        .eq('uid', uid);
-
-    if (error || !data || data.length === 0) {
-        console.error('Could not load student profile', error);
-        return;
-    }
-
-    currentStudentProfile = data[0];
-    window.currentStudentProfile = currentStudentProfile;
-    window.currentStudentUid = uid;
-
-    // Update topbar profile
-    const fullName = currentStudentProfile.fullName || 'Student';
-    const firstName = fullName.split(' ')[0];
-    if (profileName) profileName.textContent = firstName;
-    if (profileInitial) profileInitial.textContent = firstName[0]?.toUpperCase() || 'S';
-
-    // Profile picture
-    const photoUrl = currentStudentProfile.profilePictureUrl;
-    if (photoUrl && profileAvatar) {
-        profileAvatar.innerHTML = `<img src="${photoUrl}" alt="Avatar">`;
+        // Profile picture
+        const photoUrl = currentStudentProfile.profilePictureUrl;
+        if (photoUrl && profileAvatar) {
+            profileAvatar.innerHTML = `<img src="${photoUrl}" alt="Avatar">`;
+        }
     }
 }
 

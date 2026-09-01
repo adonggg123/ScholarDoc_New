@@ -37,7 +37,8 @@ function renderDirectory() {
         const fullName = (s.fullName || '').toLowerCase();
         const course = (s.course || '').toLowerCase();
         const scholarship = (s.scholarshipName || '').toLowerCase();
-        return fullName.includes(query) || course.includes(query) || scholarship.includes(query);
+        const section = (s.section || '').toLowerCase();
+        return fullName.includes(query) || course.includes(query) || scholarship.includes(query) || section.includes(query);
     });
 
     if (filtered.length === 0) {
@@ -54,37 +55,33 @@ function renderDirectory() {
         const fullName = s.fullName || 'Anonymous Scholar';
         const course = s.course || 'Unspecified Course';
         const year = s.year || '';
-        const scholarship = s.scholarshipName || 'No Scholarship';
+        const section = s.section ? `• Sec ${s.section}` : '';
+        const scholarship = s.scholarshipName || 'Scholar';
         const photoUrl = s.profilePictureUrl;
         const initial = fullName.charAt(0).toUpperCase() || 'S';
 
         return `
-            <div class="card action-card" style="padding: 16px 20px; transition: all 0.3s; position: relative;">
+            <div class="card" style="padding: 20px 18px; transition: all 0.25s ease;">
                 <div style="display: flex; align-items: center; gap: 14px;">
                     <!-- Avatar Stack with Presence Indicator -->
-                    <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;" class="${isOnline ? 'pulse-glow' : ''}">
-                        <div style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid ${isOnline ? 'var(--success)' : 'transparent'}; padding: 1.5px; overflow: hidden; background-color: rgba(15, 50, 96, 0.06); display: flex; align-items: center; justify-content: center;">
+                    <div style="position: relative; width: 46px; height: 46px; flex-shrink: 0;">
+                        <div style="width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: var(--gradient-primary); color: white; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 800;">
                             ${photoUrl ? `
-                                <img src="${photoUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                <img src="${photoUrl}" alt="${fullName}" style="width: 100%; height: 100%; object-fit: cover;">
                             ` : `
-                                <span style="font-weight: 700; font-size: 15px; color: var(--primary-color);">${initial}</span>
+                                <span>${initial}</span>
                             `}
                         </div>
+                        <div style="position: absolute; bottom: -1px; right: -1px; width: 12px; height: 12px; border-radius: 50%; background: ${isOnline ? 'var(--success)' : 'var(--slate-400)'}; border: 2px solid var(--surface);"></div>
                     </div>
 
                     <!-- Details -->
                     <div style="flex: 1; min-width: 0;">
-                        <div style="font-size: 14px; font-weight: 800; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${fullName}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${course} ${year ? '• ' + year : ''}</div>
+                        <div style="font-family: 'Outfit', sans-serif; font-size: 14.5px; font-weight: 800; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.1px;">${fullName}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${course} ${year ? '• ' + year : ''} ${section}</div>
                         <div style="margin-top: 6px;">
-                            <span style="font-size: 9px; font-weight: 800; color: var(--primary-color); background: rgba(15,50,96,0.06); padding: 3px 8px; border-radius: 6px; text-transform: uppercase;">${scholarship}</span>
+                            <span class="badge badge-info" style="padding: 2px 8px; font-size: 9.5px;">${scholarship}</span>
                         </div>
-                    </div>
-
-                    <!-- Online Status Badge -->
-                    <div style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; background: ${isOnline ? 'rgba(16,185,129,0.08)' : 'rgba(107,114,128,0.05)'}; font-size: 9px; font-weight: 900; color: ${isOnline ? 'var(--success)' : 'var(--text-secondary)'}; letter-spacing: 0.3px; flex-shrink: 0;">
-                        <div style="width: 5px; height: 5px; border-radius: 50%; background-color: ${isOnline ? 'var(--success)' : 'rgba(107,114,128,0.5)'};"></div>
-                        ${isOnline ? 'Online' : 'Offline'}
                     </div>
                 </div>
             </div>
@@ -103,7 +100,7 @@ searchInput?.addEventListener('input', (e) => {
 // Initial load
 loadDirectory();
 
-// Real-time subscription to refresh user status or profile details
+// Real-time subscription
 const channel = sb.channel('directory-view-reload')
     .on('postgres_changes', {
         event: '*',

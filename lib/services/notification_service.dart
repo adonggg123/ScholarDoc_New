@@ -1,4 +1,6 @@
+// ignore_for_file: avoid_print
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 class NotificationService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -57,4 +59,19 @@ class NotificationService {
       print('Error marking all notifications as read: $e');
     }
   }
+
+  // Send a notification specifically for missing requirements
+  Future<void> sendMissingRequirementsNotification({
+    required String studentId,
+    required List<String> missingItems,
+  }) async {
+    final message = 'You have missing requirements: ${missingItems.join(", ")}';
+    await sendNotification(
+      studentId: studentId,
+      title: 'Missing Requirements Notice',
+      message: message,
+      type: 'warning',
+    );
+  }
 }
+

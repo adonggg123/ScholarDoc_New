@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -78,16 +78,10 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                     data['scholarshipName'] ?? 'No Scholarship Assigned';
 
                 Color statusColor = AppTheme.warning;
-                IconData statusIcon = LucideIcons.clock;
-                String statusLabel = 'Under Review';
                 if (status == 'Approved' || status == 'Verified') {
                   statusColor = AppTheme.success;
-                  statusIcon = LucideIcons.checkCircle2;
-                  statusLabel = status;
                 } else if (status == 'Rejected' || status == 'Missing') {
                   statusColor = AppTheme.error;
-                  statusIcon = LucideIcons.xCircle;
-                  statusLabel = status;
                 }
 
                 return FutureBuilder<Scholarship?>(

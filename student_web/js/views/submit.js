@@ -107,7 +107,7 @@ function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, sett
                 `;
             }
             if (badge) {
-                badge.className = 'badge badge-approved';
+                badge.className = 'badge badge-success';
                 badge.innerHTML = '<i data-lucide="check-circle"></i> Ready';
             }
             if (window.lucide) window.lucide.createIcons();
@@ -145,9 +145,9 @@ function resizeCanvas() {
     if (!canvas) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width - 8;
-    canvas.height = 200;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
+    canvas.height = 180;
+    ctx.strokeStyle = '#0F172A';
+    ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 }
@@ -189,7 +189,7 @@ if (canvas) {
             signatureDataUrl = canvas.toDataURL('image/png');
             const sigBadge = document.getElementById('sig-badge');
             if (sigBadge) {
-                sigBadge.className = 'badge badge-approved';
+                sigBadge.className = 'badge badge-success';
                 sigBadge.innerHTML = '<i data-lucide="check-circle"></i> Signed';
                 if (window.lucide) window.lucide.createIcons();
             }

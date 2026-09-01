@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/cloudinary_service.dart';
-import '../auth/welcome_screen.dart';
+import '../auth/login_screen.dart';
 import 'student_activity_log_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -93,22 +93,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
             ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.only(right: 16),
-                child: IconButton(
-                  onPressed: _handleLogout,
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(LucideIcons.logOut, color: Colors.white, size: 18),
-                  ),
-                ),
-              ),
-            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
@@ -434,6 +418,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                     const SizedBox(height: 20),
                     // Activity log tile
                     _buildActivityLogTile(context),
+                    const SizedBox(height: 16),
+                    // Log out tile
+                    _buildLogoutTile(context),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -710,6 +697,63 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildLogoutTile(BuildContext context) {
+    return InkWell(
+      onTap: _handleLogout,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.error.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.error.withOpacity(0.3), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(LucideIcons.logOut, size: 20, color: AppTheme.error),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Log Out',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: AppTheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Sign out of your ScholarDoc account',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.textSec,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: AppTheme.error.withOpacity(0.7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAvatarWidget() {
     final String? url = _profilePictureUrl;
     if (url != null && url.isNotEmpty) {
@@ -861,10 +905,91 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _handleLogout() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: context.surfaceC,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(LucideIcons.logOut, color: AppTheme.error, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Log Out',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to log out of your ScholarDoc account?',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                'No',
+                style: TextStyle(
+                  color: context.textSec,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Yes, Log Out',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
     await _authService.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }

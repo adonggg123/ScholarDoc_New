@@ -2,78 +2,85 @@
 <!-- Mirrors status_tracking_screen.dart -->
 
 <!-- Status Header Banner -->
-<div class="card view-page-header" style="margin-bottom: 24px;">
+<div class="card view-page-header">
     <div class="view-page-header-content">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
             <div>
                 <div class="page-label">DOCUMENT VERIFICATION</div>
-                <div class="page-title" id="status-scholarship-name">Loading...</div>
-                <div class="page-subtitle" style="margin-top: 4px;">Track your requirement status & verification progress</div>
+                <div class="page-title" id="status-scholarship-name">Scholarship Status</div>
+                <div class="page-subtitle">Track your requirement verification progress and administrative evaluation</div>
             </div>
-            <div id="status-overall-badge" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: var(--radius-full); background: rgba(245,158,11,0.15); border: 1.5px solid rgba(245,158,11,0.3); backdrop-filter: blur(8px);">
-                <i data-lucide="hourglass" style="width: 15px; height: 15px; color: #F59E0B;"></i>
-                <span style="font-size: 13px; font-weight: 800; color: #F59E0B; letter-spacing: 0.3px;">Pending</span>
+            <div id="status-overall-badge" class="badge badge-pending" style="padding: 8px 18px; font-size: 13px; font-weight: 800;">
+                <i data-lucide="hourglass"></i>
+                <span>Under Review</span>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Verification Progress Card -->
-<div class="card" style="margin-bottom: 24px;">
+<div class="card mb-lg">
     <div class="card-body" style="padding: 24px 28px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="shield-check" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
-                <span style="font-size: 14px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px;">Verification Progress</span>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-md); background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="shield-check" style="width: 17px; height: 17px; color: var(--primary);"></i>
+                </div>
+                <span style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px;">Verification Progress</span>
             </div>
             <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);" id="progress-label">0 of 0 verified</span>
         </div>
-        <div class="progress-bar-container" style="height: 10px; border-radius: var(--radius-full); background: var(--border-color); overflow: hidden;">
-            <div class="progress-bar-fill" id="progress-bar" style="width: 0%; height: 100%; background: var(--gradient-primary); border-radius: var(--radius-full); transition: width 0.6s ease;"></div>
+        <div style="height: 10px; border-radius: var(--radius-full); background: var(--border); overflow: hidden; position: relative;">
+            <div id="progress-bar" style="width: 0%; height: 100%; background: var(--gradient-primary); border-radius: var(--radius-full); transition: width 0.6s var(--ease-out);"></div>
         </div>
     </div>
 </div>
 
 <!-- Resubmission Required Alert Banner -->
-<div class="card hidden" id="resubmission-alert" style="margin-bottom: 24px; border-left: 5px solid var(--error);">
+<div class="card hidden mb-lg" id="resubmission-alert" style="border-left: 4px solid var(--error); background: rgba(239, 68, 68, 0.03);">
     <div class="card-body" style="padding: 20px 24px; display: flex; align-items: center; gap: 16px;">
-        <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--error-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <div style="width: 44px; height: 44px; border-radius: var(--radius-xl); background: var(--error-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
             <i data-lucide="alert-triangle" style="width: 22px; height: 22px; color: var(--error);"></i>
         </div>
-        <div style="flex: 1;">
-            <div style="font-size: 15px; font-weight: 800; color: var(--error); letter-spacing: -0.2px;">Action Required: Resubmission Needed</div>
-            <div style="font-size: 13px; color: var(--text-secondary); margin-top: 3px;">One or more uploaded requirement files need correction. Please update your submission.</div>
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 800; color: var(--error); letter-spacing: -0.2px;">Action Required: Resubmission Needed</div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-top: 3px;">One or more requirement files require correction. Please update your document submission.</div>
         </div>
-        <button class="btn btn-sm btn-danger" onclick="loadView('submit')" style="flex-shrink: 0; border-radius: var(--radius-full); padding: 8px 18px;">
+        <button class="btn btn-sm btn-danger" onclick="loadView('submit')" style="flex-shrink: 0;">
             <i data-lucide="upload-cloud"></i> Resubmit Now
         </button>
     </div>
 </div>
 
-<!-- Requirements Checklist Timeline -->
-<div style="margin-bottom: 28px;">
-    <div class="section-header">Requirements Checklist</div>
-    <div id="requirements-list" class="status-timeline">
-        <div class="spinner-container"><div class="spinner"></div></div>
+<!-- Requirements Checklist Section -->
+<div class="mb-lg">
+    <div class="section-header">
+        <i data-lucide="list-checks" style="width: 15px; height: 15px; color: var(--primary);"></i>
+        Requirements Checklist
+    </div>
+    <div id="requirements-list" style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="spinner-container">
+            <div class="spinner"></div>
+        </div>
     </div>
 </div>
 
 <!-- Reviewer / Admin Remarks -->
-<div class="card hidden" id="remarks-card" style="margin-bottom: 28px;">
-    <div class="card-header" style="border-bottom: 1px solid var(--border-color); padding: 16px 24px;">
-        <div class="card-title" style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-            <i data-lucide="message-square" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
+<div class="card hidden mb-lg" id="remarks-card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="message-square" style="width: 18px; height: 18px; color: var(--primary);"></i>
             Evaluator Remarks & Feedback
         </div>
     </div>
-    <div class="card-body" style="padding: 20px 24px;">
-        <p style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; font-style: italic; background: rgba(15,50,96,0.03); padding: 14px 18px; border-radius: var(--radius-lg); border-left: 3px solid var(--primary-color);" id="remarks-text"></p>
+    <div class="card-body">
+        <div style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; font-style: italic; background: var(--bg-alt); padding: 16px 20px; border-radius: var(--radius-xl); border-left: 3.5px solid var(--primary);" id="remarks-text"></div>
     </div>
 </div>
 
-<!-- Quick Action Button -->
-<div style="margin-bottom: 32px;">
-    <button class="btn btn-primary-solid btn-block btn-lg" onclick="loadView('submit')" style="height: 52px; border-radius: var(--radius-xl); font-weight: 800; font-size: 15px;">
+<!-- Direct Action CTA Button -->
+<div style="margin-top: 32px; margin-bottom: 24px;">
+    <button class="btn btn-primary-solid btn-block btn-lg" onclick="loadView('submit')">
         <i data-lucide="upload-cloud"></i> Submit / Update Documents
     </button>
 </div>

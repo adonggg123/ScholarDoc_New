@@ -2,34 +2,36 @@
 <!-- Mirrors submission_history_screen.dart -->
 
 <!-- Header Banner -->
-<div class="card view-page-header" style="margin-bottom: 24px;">
+<div class="card view-page-header">
     <div class="view-page-header-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 16px;">
             <div>
                 <div class="page-label">SUBMISSION HISTORY</div>
-                <div class="page-title" id="history-scholarship">Your Document History</div>
-                <div class="page-subtitle" id="history-subtitle">Track all your previous document submissions and receipts</div>
+                <div class="page-title" id="history-scholarship">Document Submission Log</div>
+                <div class="page-subtitle" id="history-subtitle">Track and view all your submitted requirement files and receipts</div>
             </div>
-            <div class="page-icon" style="width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;">
-                <i data-lucide="folder-open" style="width: 26px; height: 26px; color: white;"></i>
+            <div style="width: 48px; height: 48px; border-radius: var(--radius-xl); background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+                <i data-lucide="folder-open" style="width: 24px; height: 24px; color: white;"></i>
             </div>
         </div>
     </div>
 </div>
 
 <!-- History Log List Container -->
-<div id="history-list" style="margin-bottom: 28px;">
-    <div class="spinner-container"><div class="spinner"></div></div>
+<div id="history-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px;">
+    <div class="spinner-container">
+        <div class="spinner"></div>
+    </div>
 </div>
 
 <!-- Empty State -->
-<div class="empty-state hidden" id="history-empty" style="padding: 48px 24px; text-align: center;">
-    <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(15,50,96,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-        <i data-lucide="folder-open" style="width: 32px; height: 32px; color: var(--primary-color);"></i>
+<div class="empty-state hidden" id="history-empty">
+    <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--primary-surface); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+        <i data-lucide="folder-open" style="width: 28px; height: 28px; color: var(--primary);"></i>
     </div>
-    <h3 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">No Submissions Yet</h3>
-    <p style="font-size: 13px; color: var(--text-secondary); max-width: 360px; margin: 0 auto;">You haven't submitted any scholarship requirement files yet. Start by uploading your requirements.</p>
-    <button class="btn btn-primary-solid mt-md" onclick="loadView('submit')" style="border-radius: var(--radius-full); padding: 10px 24px; font-weight: 700;">
-        <i data-lucide="upload-cloud"></i> Submit Documents
+    <h3>No Submission History Found</h3>
+    <p>You haven't submitted any scholarship requirement files yet. Upload your ID cards and bank details to start.</p>
+    <button class="btn btn-primary-solid mt-md" onclick="loadView('submit')">
+        <i data-lucide="upload-cloud"></i> Submit Requirements
     </button>
 </div>

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
-import '../../services/audit_service.dart';
-import '../../services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class IdValidationScreen extends StatefulWidget {
@@ -18,8 +16,6 @@ class IdValidationScreen extends StatefulWidget {
 class _IdValidationScreenState extends State<IdValidationScreen> {
   int _selectedStudentIndex = 0;
   final AuthService _authService = AuthService();
-  final AuditService _auditService = AuditService();
-  final NotificationService _notificationService = NotificationService();
   final TextEditingController _remarksController = TextEditingController();
   late Stream<List<Map<String, dynamic>>> _studentsStream;
 

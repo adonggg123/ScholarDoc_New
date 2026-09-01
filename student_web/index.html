@@ -14,12 +14,15 @@
             window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
         }
     </script>
-    <link rel="stylesheet" href="style.css?v=9">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css?v=11">
 </head>
 
 <body>
@@ -34,31 +37,29 @@
 
                 <div class="login-content">
                     <!-- Brand Header -->
-                    <div class="brand-header" style="display: flex; align-items: center; gap: 1px;">
-                        <img src="app_logo3.png" alt="ScholarDoc Logo"
-                            style="width: 72px; height: 72px; object-fit: contain;">
-                        <div style="margin-left: -10px;">
-                            <div class="desktop-brand-title">
-                                Scholar<span>Doc</span>
+                    <div class="brand-header">
+                        <a href="landing.html" class="desktop-logo-lockup">
+                            <img src="app_logo3.png" alt="ScholarDoc Logo" class="brand-logo-img">
+                            <div class="brand-logo-text-group">
+                                <div class="brand-logo-title">Scholar<span>Doc</span></div>
+                                <div class="brand-logo-subtitle">USTP Oroquieta City Campus</div>
                             </div>
-                            <div
-                                style="font-size: 11px; font-weight: 700; color: white; letter-spacing: 2px; margin-top: 2px;">
-                                USTP Oroquieta City Campus
-                            </div>
-                        </div>
+                        </a>
                     </div>
 
                     <div class="brand-showcase">
-                        <div class="brand-badge">Scholar Access</div>
+                        <div class="brand-badge">
+                            <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--accent);"></i>
+                            Official Student Portal
+                        </div>
                         <h1 class="brand-title">Access Your<br>Scholarship<br><span>Documents.</span></h1>
-                        <p class="brand-desc">Your personal gateway to submit requirements, track verification status,
-                            and manage your scholarship account — all in one place.</p>
+                        <p class="brand-desc">Your personal gateway to submit requirements, track verification status, and manage your scholarship account in real-time.</p>
                     </div>
 
                     <div class="features-row">
-                        <div class="feature-item"><i data-lucide="upload-cloud"></i> Document Submission</div>
-                        <div class="feature-item"><i data-lucide="clipboard-check"></i> Status Tracking</div>
-                        <div class="feature-item"><i data-lucide="refresh-cw"></i> Real-Time Sync</div>
+                        <div class="feature-item"><i data-lucide="upload-cloud"></i> Document Capture</div>
+                        <div class="feature-item"><i data-lucide="clipboard-check"></i> Live Tracking</div>
+                        <div class="feature-item"><i data-lucide="shield-check"></i> Encrypted Sync</div>
                     </div>
                 </div>
             </div>
@@ -73,26 +74,25 @@
                             <div class="logo-subtitle">USTP Oroquieta City Campus</div>
                         </div>
                     </div>
-                    <h2 class="form-title">Welcome Back</h2>
-                    <p class="form-subtitle">Enter your Student ID as your password to access your scholarship portal.
-                    </p>
+
+                    <h2 class="form-title">Student Sign In</h2>
+                    <p class="form-subtitle">Enter your institutional student credentials to access your dashboard.</p>
 
                     <form id="loginForm">
                         <div class="input-group">
-                            <label class="input-label">STUDENT ID</label>
+                            <label class="input-label">STUDENT ID NUMBER</label>
                             <div class="input-wrapper">
                                 <i data-lucide="id-card" class="input-icon"></i>
-                                <input type="text" id="studentId" class="form-input" placeholder="e.g. 2024-00123"
-                                    required>
+                                <input type="text" id="studentId" class="form-input" placeholder="e.g. 2024-00123" required autocomplete="username">
                             </div>
                         </div>
 
                         <div class="input-group">
-                            <label class="input-label">PASSWORD</label>
+                            <label class="input-label">ACCOUNT PASSWORD</label>
                             <div class="input-wrapper">
                                 <i data-lucide="lock" class="input-icon"></i>
-                                <input type="password" id="password" class="form-input" placeholder="••••••••" required>
-                                <button type="button" class="pwd-toggle" id="togglePwd">
+                                <input type="password" id="password" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+                                <button type="button" class="pwd-toggle" id="togglePwd" aria-label="Toggle password visibility">
                                     <i data-lucide="eye"></i>
                                 </button>
                             </div>
@@ -100,20 +100,26 @@
 
                         <button type="submit" class="btn-primary" id="loginBtn">
                             <span id="loginBtnText">SIGN IN TO PORTAL</span>
-                            <i data-lucide="chevron-right" id="loginBtnIcon"></i>
+                            <i data-lucide="arrow-right" id="loginBtnIcon"></i>
                             <div class="spinner hidden" id="loginSpinner"></div>
                         </button>
                     </form>
 
+                    <div class="login-footer-links">
+                        <a href="landing.html" class="back-to-home-link">
+                            <i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i> Back to University Landing Page
+                        </a>
+                    </div>
+
                     <div class="security-badge">
-                        <i data-lucide="shield-check"></i> Secured with end-to-end encryption
+                        <i data-lucide="shield-check"></i> Secured with end-to-end institutional encryption
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=4"></script>
 </body>
 
 </html>

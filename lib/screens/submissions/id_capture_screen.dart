@@ -4,7 +4,7 @@ import 'package:signature/signature.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:typed_data';
 import 'dart:io';
 import '../../theme/app_theme.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,7 +8,6 @@ import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/pdf_generator.dart';
 import '../../utils/excel_generator.dart';
-import 'package:intl/intl.dart';
 import 'billing_autofill_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -22,7 +21,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final AuthService _authService = AuthService();
   final ReportService _reportService = ReportService();
   late Stream<List<Map<String, dynamic>>> _studentsStream;
-  late Stream<List<Map<String, dynamic>>> _reportsHistoryStream;
   final ScrollController _horizontalScrollController = ScrollController();
   final Set<String> _selectedStudentIds = {};
 
@@ -39,7 +37,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _filterMotherEdu = 'All (Mother)';
 
   final List<String> _genderOptions = ['All Genders', 'Male', 'Female'];
-  final List<String> _eduOptions = ['All', 'Graduate', 'Non-graduate'];
   final List<String> _yearOptions = [
     'All Year Levels',
     '1st Year',
@@ -53,7 +50,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     _studentsStream = _authService.getStudentsStream();
-    _reportsHistoryStream = _reportService.getReportsStream();
   }
 
   @override

@@ -19,7 +19,7 @@ class PresenceService {
             // Can be used to sync list of online users locally
           })
           .subscribe((status, [error]) async {
-            if (status == 'SUBSCRIBED') {
+            if (status == RealtimeSubscribeStatus.subscribed) {
               await _presenceChannel!.track({'user_id': uid});
             }
           });

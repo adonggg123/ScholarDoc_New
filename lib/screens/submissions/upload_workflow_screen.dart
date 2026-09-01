@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/storage_service.dart';
@@ -10,7 +10,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:typed_data';
 import 'id_capture_screen.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {

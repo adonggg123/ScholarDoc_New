@@ -3,15 +3,15 @@
 
 <!-- Submission Stepper Header -->
 <div class="mb-lg">
-    <div class="stepper" id="stepper" style="background: var(--surface-color); padding: 18px 24px; border-radius: var(--radius-2xl); border: 1.5px solid var(--border-color); box-shadow: var(--shadow-sm);">
+    <div class="stepper" id="stepper">
         <div class="stepper-step active" data-step="0">
             <div class="stepper-circle">1</div>
-            <div class="stepper-label">SA Number</div>
+            <div class="stepper-label">Bank Details</div>
         </div>
         <div class="stepper-line"></div>
         <div class="stepper-step" data-step="1">
             <div class="stepper-circle">2</div>
-            <div class="stepper-label">Documents</div>
+            <div class="stepper-label">ID & Signature</div>
         </div>
         <div class="stepper-line"></div>
         <div class="stepper-step" data-step="2">
@@ -24,103 +24,112 @@
 <!-- Step 1: SA Number -->
 <div class="step-content" id="step-0">
     <div class="card mb-lg">
-        <div class="card-header" style="padding: 18px 24px; border-bottom: 1px solid var(--border-color);">
-            <div class="card-title" style="font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 10px;">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(15,50,96,0.08); display: flex; align-items: center; justify-content: center;">
-                    <i data-lucide="landmark" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
-                </div>
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="landmark" style="width: 18px; height: 18px; color: var(--primary);"></i>
                 Savings Account (SA) Information
             </div>
         </div>
-        <div class="card-body" style="padding: 24px;">
-            <p style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 22px;">
-                Enter your Savings Account (SA) number for scholarship fund disbursement. Ensure this matches your registered bank account details.
+        <div class="card-body">
+            <p style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">
+                Enter your registered Savings Account (SA) number for scholarship fund disbursement. Ensure this matches your bank passbook/ATM account.
             </p>
-            <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label" style="font-weight: 800; font-size: 11px; letter-spacing: 1px;">SAVINGS ACCOUNT (SA) NUMBER</label>
+            <div class="form-group mb-md">
+                <label class="form-label">SAVINGS ACCOUNT (SA) NUMBER</label>
                 <div class="form-control-icon">
-                    <i data-lucide="credit-card" style="color: var(--primary-color);"></i>
-                    <input type="text" class="form-control" id="sa-input" placeholder="e.g. 1234-5678-9012" style="font-size: 16px; font-weight: 700; letter-spacing: 1px; height: 52px; border-radius: var(--radius-xl);">
+                    <i data-lucide="credit-card"></i>
+                    <input type="text" class="form-control" id="sa-input" placeholder="e.g. 1234-5678-9012" style="font-size: 15px; font-weight: 700; letter-spacing: 0.5px;">
                 </div>
             </div>
-            <button class="btn btn-outline btn-sm" id="save-draft-btn" style="border-radius: var(--radius-full); padding: 7px 16px; font-weight: 700;">
+            <button class="btn btn-outline btn-sm" id="save-draft-btn">
                 <i data-lucide="save"></i> Save Draft
             </button>
         </div>
     </div>
+
     <div class="flex gap-md">
-        <button class="btn btn-primary-solid btn-block btn-lg" id="next-step-0" style="height: 52px; border-radius: var(--radius-xl); font-weight: 800; font-size: 15px;">
+        <button class="btn btn-primary-solid btn-block btn-lg" id="next-step-0">
             Continue to Document Capture <i data-lucide="chevron-right"></i>
         </button>
     </div>
 </div>
 
-<!-- Step 2: Document Upload -->
+<!-- Step 2: Document Upload & Signature -->
 <div class="step-content hidden" id="step-1">
     
-    <!-- ID Front Card -->
-    <div class="card mb-md">
-        <div class="card-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-            <div class="card-title" style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="id-card" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
-                Student ID Front
-            </div>
-            <span class="badge badge-pending" id="front-badge" style="padding: 5px 12px; font-size: 10px; font-weight: 800;"><i data-lucide="clock"></i> Required</span>
-        </div>
-        <div class="card-body" style="padding: 20px 24px;">
-            <div class="upload-zone" id="front-upload-zone" onclick="document.getElementById('front-file-input').click()" style="padding: 32px 20px; border-radius: var(--radius-xl); cursor: pointer; text-align: center; border: 2px dashed var(--border-color); transition: all var(--transition-normal);">
-                <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(15,50,96,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                    <i data-lucide="camera" style="width: 24px; height: 24px; color: var(--primary-color);"></i>
+    <!-- ID Cards Grid -->
+    <div class="grid-2 mb-md">
+        <!-- ID Front Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <i data-lucide="id-card" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                    Student ID (Front)
                 </div>
-                <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">Upload Student ID (Front Side)</h4>
-                <p style="font-size: 12px; color: var(--text-secondary);">Click or drag image file (JPG, PNG, WEBP)</p>
-                <input type="file" id="front-file-input" accept="image/*" style="display: none;">
+                <span class="badge badge-pending" id="front-badge">
+                    <i data-lucide="clock"></i> Required
+                </span>
             </div>
-            <div id="front-preview" class="hidden mt-md text-center">
-                <img id="front-preview-img" style="max-width: 100%; max-height: 240px; border-radius: var(--radius-lg); border: 1.5px solid var(--border-color); box-shadow: var(--shadow-sm);">
+            <div class="card-body">
+                <div class="upload-zone" id="front-upload-zone" onclick="document.getElementById('front-file-input').click()">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; background: var(--primary-surface); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                        <i data-lucide="camera" style="width: 22px; height: 22px; color: var(--primary);"></i>
+                    </div>
+                    <div style="font-family: 'Outfit', sans-serif; font-size: 14.5px; font-weight: 800; color: var(--text-primary); margin-bottom: 3px;">Upload Front Side</div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG, WEBP)</p>
+                    <input type="file" id="front-file-input" accept="image/*" style="display: none;">
+                </div>
+                <div id="front-preview" class="hidden mt-md text-center">
+                    <img id="front-preview-img" style="max-width: 100%; max-height: 200px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- ID Back Card -->
-    <div class="card mb-md">
-        <div class="card-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-            <div class="card-title" style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="id-card" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
-                Student ID Back
-            </div>
-            <span class="badge badge-pending" id="back-badge" style="padding: 5px 12px; font-size: 10px; font-weight: 800;"><i data-lucide="clock"></i> Required</span>
-        </div>
-        <div class="card-body" style="padding: 20px 24px;">
-            <div class="upload-zone" id="back-upload-zone" onclick="document.getElementById('back-file-input').click()" style="padding: 32px 20px; border-radius: var(--radius-xl); cursor: pointer; text-align: center; border: 2px dashed var(--border-color); transition: all var(--transition-normal);">
-                <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(15,50,96,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                    <i data-lucide="camera" style="width: 24px; height: 24px; color: var(--primary-color);"></i>
+        <!-- ID Back Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <i data-lucide="id-card" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                    Student ID (Back)
                 </div>
-                <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">Upload Student ID (Back Side)</h4>
-                <p style="font-size: 12px; color: var(--text-secondary);">Click or drag image file (JPG, PNG, WEBP)</p>
-                <input type="file" id="back-file-input" accept="image/*" style="display: none;">
+                <span class="badge badge-pending" id="back-badge">
+                    <i data-lucide="clock"></i> Required
+                </span>
             </div>
-            <div id="back-preview" class="hidden mt-md text-center">
-                <img id="back-preview-img" style="max-width: 100%; max-height: 240px; border-radius: var(--radius-lg); border: 1.5px solid var(--border-color); box-shadow: var(--shadow-sm);">
+            <div class="card-body">
+                <div class="upload-zone" id="back-upload-zone" onclick="document.getElementById('back-file-input').click()">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; background: var(--primary-surface); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                        <i data-lucide="camera" style="width: 22px; height: 22px; color: var(--primary);"></i>
+                    </div>
+                    <div style="font-family: 'Outfit', sans-serif; font-size: 14.5px; font-weight: 800; color: var(--text-primary); margin-bottom: 3px;">Upload Back Side</div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG, WEBP)</p>
+                    <input type="file" id="back-file-input" accept="image/*" style="display: none;">
+                </div>
+                <div id="back-preview" class="hidden mt-md text-center">
+                    <img id="back-preview-img" style="max-width: 100%; max-height: 200px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Digital Signature Pad -->
     <div class="card mb-md">
-        <div class="card-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-            <div class="card-title" style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="pen-tool" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="pen-tool" style="width: 18px; height: 18px; color: var(--primary);"></i>
                 Digital Specimen Signature
             </div>
-            <span class="badge badge-pending" id="sig-badge" style="padding: 5px 12px; font-size: 10px; font-weight: 800;"><i data-lucide="clock"></i> Required</span>
+            <span class="badge badge-pending" id="sig-badge">
+                <i data-lucide="clock"></i> Required
+            </span>
         </div>
-        <div class="card-body" style="padding: 20px 24px;">
-            <div class="signature-pad-wrapper" style="border: 1.5px solid var(--border-color); border-radius: var(--radius-xl); overflow: hidden; background: #FFFFFF; box-shadow: var(--shadow-xs);">
-                <canvas id="signature-canvas" width="600" height="200" style="width: 100%; height: 200px; cursor: crosshair; touch-action: none; display: block;"></canvas>
+        <div class="card-body">
+            <div class="signature-pad-wrapper">
+                <canvas id="signature-canvas" width="600" height="180" style="width: 100%; height: 180px; cursor: crosshair; touch-action: none; display: block;"></canvas>
             </div>
-            <div class="signature-actions" style="margin-top: 12px; display: flex; justify-content: flex-end;">
-                <button class="btn btn-outline btn-sm" id="clear-signature-btn" style="border-radius: var(--radius-full); padding: 6px 14px; font-weight: 700;">
+            <div class="signature-actions" style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 12px; color: var(--text-tertiary);"><i data-lucide="info" style="width: 13px; height: 13px; vertical-align: middle;"></i> Draw your signature above using mouse or touch</span>
+                <button class="btn btn-outline btn-sm" id="clear-signature-btn">
                     <i data-lucide="eraser"></i> Clear Canvas
                 </button>
             </div>
@@ -129,34 +138,34 @@
 
     <!-- Optional ATM Card Photo -->
     <div class="card mb-lg">
-        <div class="card-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
-            <div class="card-title" style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="credit-card" style="width: 18px; height: 18px; color: var(--primary-color);"></i>
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="credit-card" style="width: 18px; height: 18px; color: var(--primary);"></i>
                 ATM Card Photo
             </div>
-            <span class="badge badge-info" style="padding: 5px 12px; font-size: 10px; font-weight: 800;"><i data-lucide="info"></i> Optional</span>
+            <span class="badge badge-info"><i data-lucide="info"></i> Optional</span>
         </div>
-        <div class="card-body" style="padding: 20px 24px;">
-            <div class="upload-zone" id="atm-upload-zone" onclick="document.getElementById('atm-file-input').click()" style="padding: 28px 20px; border-radius: var(--radius-xl); cursor: pointer; text-align: center; border: 2px dashed var(--border-color); transition: all var(--transition-normal);">
-                <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(59,130,246,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;">
-                    <i data-lucide="credit-card" style="width: 22px; height: 22px; color: var(--info);"></i>
+        <div class="card-body">
+            <div class="upload-zone" id="atm-upload-zone" onclick="document.getElementById('atm-file-input').click()">
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--info-soft); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;">
+                    <i data-lucide="credit-card" style="width: 20px; height: 20px; color: var(--info);"></i>
                 </div>
-                <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">Upload ATM Card Image</h4>
-                <p style="font-size: 12px; color: var(--text-secondary);">Click or drag image file (JPG, PNG)</p>
+                <div style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Upload ATM Card Photo</div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG)</p>
                 <input type="file" id="atm-file-input" accept="image/*" style="display: none;">
             </div>
             <div id="atm-preview" class="hidden mt-md text-center">
-                <img id="atm-preview-img" style="max-width: 100%; max-height: 200px; border-radius: var(--radius-lg); border: 1.5px solid var(--border-color); box-shadow: var(--shadow-sm);">
+                <img id="atm-preview-img" style="max-width: 100%; max-height: 180px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
             </div>
         </div>
     </div>
 
     <!-- Step 2 Navigation -->
-    <div class="flex gap-md" style="margin-bottom: 28px;">
-        <button class="btn btn-outline" id="prev-step-1" style="flex: 1; height: 50px; border-radius: var(--radius-xl); font-weight: 700;">
+    <div class="flex gap-md mb-lg">
+        <button class="btn btn-outline" id="prev-step-1" style="flex: 1; height: 50px;">
             <i data-lucide="chevron-left"></i> Previous
         </button>
-        <button class="btn btn-primary-solid" id="next-step-1" style="flex: 2; height: 50px; border-radius: var(--radius-xl); font-weight: 800; font-size: 15px;">
+        <button class="btn btn-primary-solid" id="next-step-1" style="flex: 2; height: 50px; font-size: 15px;">
             Continue to Review <i data-lucide="chevron-right"></i>
         </button>
     </div>
@@ -165,12 +174,10 @@
 <!-- Step 3: Review & Submit -->
 <div class="step-content hidden" id="step-2">
     <div class="card mb-lg">
-        <div class="card-header" style="padding: 18px 24px; border-bottom: 1px solid var(--border-color);">
-            <div class="card-title" style="font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 10px;">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: var(--success-soft); display: flex; align-items: center; justify-content: center;">
-                    <i data-lucide="check-square" style="width: 18px; height: 18px; color: var(--success);"></i>
-                </div>
-                Review Your Submission Details
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="check-square" style="width: 18px; height: 18px; color: var(--success);"></i>
+                Review Submission Details
             </div>
         </div>
         <div class="card-body" id="review-content" style="padding: 24px;">
@@ -179,13 +186,13 @@
     </div>
 
     <div class="flex gap-md" style="margin-bottom: 36px;">
-        <button class="btn btn-outline" id="prev-step-2" style="flex: 1; height: 52px; border-radius: var(--radius-xl); font-weight: 700;">
+        <button class="btn btn-outline" id="prev-step-2" style="flex: 1; height: 52px;">
             <i data-lucide="chevron-left"></i> Back
         </button>
-        <button class="btn btn-accent" id="submit-btn" style="flex: 2; height: 52px; border-radius: var(--radius-xl); font-weight: 800; font-size: 15px; box-shadow: 0 4px 16px rgba(251,192,45,0.3);">
+        <button class="btn btn-accent" id="submit-btn" style="flex: 2; height: 52px; font-size: 15px;">
             <i data-lucide="send"></i>
             <span id="submit-btn-text">Confirm & Submit Documents</span>
-            <div class="spinner hidden" id="submit-spinner" style="width: 22px; height: 22px; border-width: 2.5px;"></div>
+            <div class="spinner hidden" id="submit-spinner" style="width: 20px; height: 20px; border-width: 2.5px;"></div>
         </button>
     </div>
 </div>

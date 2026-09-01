@@ -2,33 +2,39 @@
 <!-- Mirrors profile_screen.dart -->
 
 <!-- Profile Hero Header -->
-<div class="card view-page-header" style="margin-bottom: 24px; position: relative; overflow: hidden;">
-    <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: var(--accent-color);"></div>
-    <div style="padding: 40px 32px; text-align: center; position: relative; z-index: 2;">
-        <div style="position: relative; display: inline-block; cursor: pointer;" id="avatar-upload-trigger">
-            <div style="width: 96px; height: 96px; border-radius: 50%; border: 3.5px solid var(--accent-color); overflow: hidden; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: 0 8px 24px rgba(251,192,45,0.3);" id="profile-avatar-lg">
-                <i data-lucide="user" style="color: white; width: 44px; height: 44px;"></i>
+<div class="card view-page-header" style="margin-bottom: 24px; position: relative; overflow: hidden; border-radius: var(--radius-2xl);">
+    <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: var(--gradient-accent);"></div>
+    <div style="padding: 40px 28px 36px; text-align: center; position: relative; z-index: 2;">
+        
+        <!-- Avatar with Camera Trigger -->
+        <div style="position: relative; display: inline-block; cursor: pointer;" id="avatar-upload-trigger" title="Click to upload profile photo">
+            <div style="width: 104px; height: 104px; border-radius: 50%; border: 3.5px solid var(--gold); overflow: hidden; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);" id="profile-avatar-lg">
+                <i data-lucide="user" style="color: white; width: 48px; height: 48px;"></i>
             </div>
-            <div style="position: absolute; bottom: 2px; right: 2px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-color); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm);">
-                <i data-lucide="camera" style="width: 15px; height: 15px; color: var(--primary-color);" id="camera-icon"></i>
+            <div style="position: absolute; bottom: 2px; right: 2px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid var(--white);">
+                <i data-lucide="camera" style="width: 16px; height: 16px; color: var(--primary);" id="camera-icon"></i>
             </div>
             <input type="file" id="avatar-file-input" accept="image/*" style="display: none;">
         </div>
-        <div style="margin-top: 18px; font-size: 24px; font-weight: 900; color: white; letter-spacing: -0.4px;" id="profile-fullname">Student Name</div>
-        <div style="margin-top: 4px; font-size: 13.5px; color: rgba(255,255,255,0.75); font-weight: 500;" id="profile-course-year">Course • Year</div>
-        <div style="margin-top: 12px;">
-            <span style="display: inline-block; padding: 6px 16px; border-radius: var(--radius-full); background: rgba(251,192,45,0.18); border: 1.5px solid rgba(251,192,45,0.4); font-size: 11px; font-weight: 800; color: var(--accent-color); letter-spacing: 0.5px; backdrop-filter: blur(8px);" id="profile-scholarship-badge">No Scholarship</span>
+
+        <div style="margin-top: 18px; font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 900; color: white; letter-spacing: -0.4px;" id="profile-fullname">Student Name</div>
+        <div style="margin-top: 4px; font-size: 13.5px; color: rgba(255,255,255,0.8); font-weight: 500;" id="profile-course-year">Course • Year</div>
+        
+        <div style="margin-top: 14px;">
+            <span class="badge" style="background: rgba(251,192,45,0.22); border: 1.5px solid rgba(251,192,45,0.4); color: var(--gold); font-size: 11px; padding: 6px 16px; backdrop-filter: blur(8px);" id="profile-scholarship-badge">
+                Scholar
+            </span>
         </div>
     </div>
 </div>
 
 <!-- Personal Information Collapsible Section -->
-<div class="collapsible open" id="section-personal" style="margin-bottom: 16px;">
+<div class="collapsible open mb-md" id="section-personal">
     <div class="collapsible-header" onclick="toggleSection('personal')">
         <div class="collapsible-icon"><i data-lucide="user"></i></div>
         <div class="collapsible-info">
             <h3>Personal Information</h3>
-            <p id="personal-subtitle">View & edit your personal details</p>
+            <p id="personal-subtitle">View and update your personal contact details</p>
         </div>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
@@ -40,44 +46,50 @@
                 <input type="text" class="form-control" id="input-fullname" placeholder="Enter your full name">
             </div>
         </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Gender</label>
-            <div class="form-control-icon">
-                <i data-lucide="user"></i>
-                <input type="text" class="form-control form-readonly" id="input-gender" readonly value="Not Specified">
+
+        <div class="grid-2 mb-md">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Gender</label>
+                <div class="form-control-icon">
+                    <i data-lucide="user-check"></i>
+                    <input type="text" class="form-control form-readonly" id="input-gender" readonly value="Not Specified">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Birthdate</label>
+                <div class="form-control-icon">
+                    <i data-lucide="calendar"></i>
+                    <input type="date" class="form-control" id="input-birthdate">
+                </div>
             </div>
         </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Birthdate</label>
-            <div class="form-control-icon">
-                <i data-lucide="calendar"></i>
-                <input type="date" class="form-control" id="input-birthdate">
+
+        <div class="grid-2">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Contact Number</label>
+                <div class="form-control-icon">
+                    <i data-lucide="phone"></i>
+                    <input type="tel" class="form-control" id="input-contact" placeholder="e.g. 09123456789">
+                </div>
             </div>
-        </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Contact Number</label>
-            <div class="form-control-icon">
-                <i data-lucide="phone"></i>
-                <input type="tel" class="form-control" id="input-contact" placeholder="Enter contact number">
-            </div>
-        </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Section</label>
-            <div class="form-control-icon">
-                <i data-lucide="layers"></i>
-                <input type="text" class="form-control" id="input-section" placeholder="Enter section">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Section</label>
+                <div class="form-control-icon">
+                    <i data-lucide="layers"></i>
+                    <input type="text" class="form-control" id="input-section" placeholder="e.g. 3A">
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Academic & Program Collapsible Section -->
-<div class="collapsible" id="section-academic" style="margin-bottom: 16px;">
+<!-- Academic & Scholarship Program Collapsible Section -->
+<div class="collapsible mb-md" id="section-academic">
     <div class="collapsible-header" onclick="toggleSection('academic')">
         <div class="collapsible-icon"><i data-lucide="graduation-cap"></i></div>
         <div class="collapsible-info">
-            <h3>Academic & Program</h3>
-            <p id="academic-subtitle">Scholarship program details</p>
+            <h3>Academic & Scholarship Details</h3>
+            <p id="academic-subtitle">Scholarship program and institutional record</p>
         </div>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
@@ -85,110 +97,120 @@
         <div class="form-group mb-md">
             <label class="form-label">Scholarship Program</label>
             <div class="form-control-icon">
-                <i data-lucide="star"></i>
+                <i data-lucide="award"></i>
                 <input type="text" class="form-control form-readonly" id="input-scholarship" readonly>
             </div>
         </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Student ID</label>
-            <div class="form-control-icon">
-                <i data-lucide="badge-check"></i>
-                <input type="text" class="form-control form-readonly" id="input-studentid" readonly>
+
+        <div class="grid-2 mb-md">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Student ID Number</label>
+                <div class="form-control-icon">
+                    <i data-lucide="id-card"></i>
+                    <input type="text" class="form-control form-readonly" id="input-studentid" readonly>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Email Address</label>
+                <div class="form-control-icon">
+                    <i data-lucide="mail"></i>
+                    <input type="text" class="form-control form-readonly" id="input-email" readonly>
+                </div>
             </div>
         </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Email Address</label>
-            <div class="form-control-icon">
-                <i data-lucide="mail"></i>
-                <input type="text" class="form-control form-readonly" id="input-email" readonly>
+
+        <div class="grid-2">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Year Became Scholar</label>
+                <div class="form-control-icon">
+                    <i data-lucide="calendar-check"></i>
+                    <input type="text" class="form-control form-readonly" id="input-scholar-year" readonly>
+                </div>
             </div>
-        </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Year Became Scholar</label>
-            <div class="form-control-icon">
-                <i data-lucide="calendar-check"></i>
-                <input type="text" class="form-control form-readonly" id="input-scholar-year" readonly>
-            </div>
-        </div>
-        <div class="form-group mb-md">
-            <label class="form-label">Payouts Received</label>
-            <div class="form-control-icon">
-                <i data-lucide="wallet"></i>
-                <input type="text" class="form-control form-readonly" id="input-payouts" readonly>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Disbursements Received</label>
+                <div class="form-control-icon">
+                    <i data-lucide="wallet"></i>
+                    <input type="text" class="form-control form-readonly" id="input-payouts" readonly>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Banking Details Collapsible Section -->
-<div class="collapsible" id="section-banking" style="margin-bottom: 16px;">
+<div class="collapsible mb-md" id="section-banking">
     <div class="collapsible-header" onclick="toggleSection('banking')">
         <div class="collapsible-icon"><i data-lucide="landmark"></i></div>
         <div class="collapsible-info">
-            <h3>Banking Details</h3>
-            <p>SA number for disbursement</p>
+            <h3>Banking & Disbursement Details</h3>
+            <p>Registered bank account information</p>
         </div>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
     <div class="collapsible-body">
-        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 18px;">Provide your Savings Account (SA) number for scholarship fund disbursement.</p>
-        <div class="form-group">
-            <label class="form-label">SA NUMBER</label>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 16px;">
+            Your Savings Account (SA) number is used by the university finance office for direct disbursement of scholarship grants.
+        </p>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">SAVINGS ACCOUNT (SA) NUMBER</label>
             <div class="form-control-icon">
                 <i data-lucide="credit-card"></i>
-                <input type="text" class="form-control" id="input-sa" placeholder="xxxx-xxxx-xxxx">
+                <input type="text" class="form-control" id="input-sa" placeholder="e.g. 1234-5678-9012" style="font-size: 15px; font-weight: 700; letter-spacing: 0.5px;">
             </div>
         </div>
     </div>
 </div>
 
 <!-- App Preferences Collapsible Section -->
-<div class="collapsible" id="section-preferences" style="margin-bottom: 24px;">
+<div class="collapsible mb-md" id="section-preferences">
     <div class="collapsible-header" onclick="toggleSection('preferences')">
         <div class="collapsible-icon"><i data-lucide="settings"></i></div>
         <div class="collapsible-info">
             <h3>App Preferences</h3>
-            <p>Theme & display settings</p>
+            <p>Theme and display appearance</p>
         </div>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
     <div class="collapsible-body">
-        <div style="display: flex; align-items: center; gap: 14px;">
-            <div style="padding: 10px; border-radius: 12px; background: rgba(15,50,96,0.06);">
-                <i data-lucide="moon" style="width: 20px; height: 20px; color: var(--primary-color);"></i>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 38px; height: 38px; border-radius: var(--radius-lg); background: var(--bg-alt); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="moon" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                </div>
+                <div>
+                    <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14px; color: var(--text-primary);">Dark Theme Mode</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Toggle high-contrast dark color palette</div>
+                </div>
             </div>
-            <div style="flex: 1;">
-                <div style="font-weight: 800; font-size: 14px; color: var(--text-primary);">Dark Mode</div>
-                <div style="font-size: 12px; color: var(--text-secondary);">Toggle interface color scheme</div>
-            </div>
-            <div class="theme-switch" id="profile-theme-switch" onclick="document.getElementById('theme-toggle')?.click()"></div>
+            <div class="theme-switch" id="profile-theme-switch" onclick="document.getElementById('theme-toggle')?.click()" style="cursor: pointer;"></div>
         </div>
     </div>
 </div>
 
 <!-- Save Profile Changes Button -->
 <div style="margin-top: 24px; margin-bottom: 20px;">
-    <button class="btn btn-primary-solid btn-block btn-lg" id="save-profile-btn" style="height: 54px; border-radius: var(--radius-xl); font-weight: 800; font-size: 15px; box-shadow: 0 4px 16px rgba(15,50,96,0.25);">
+    <button class="btn btn-primary-solid btn-block btn-lg" id="save-profile-btn">
         <span id="save-btn-text">Save Profile Changes</span>
-        <div class="spinner hidden" id="save-spinner" style="width: 22px; height: 22px; border-width: 2.5px;"></div>
+        <div class="spinner hidden" id="save-spinner" style="width: 20px; height: 20px; border-width: 2.5px;"></div>
     </button>
 </div>
 
-<!-- Activity Log Card -->
-<div class="card action-card" style="margin-bottom: 24px;" onclick="loadView('history')">
+<!-- Activity Log Card Link -->
+<div class="card action-card mb-md" onclick="loadView('history')">
     <div class="card-body" style="padding: 18px 24px; display: flex; align-items: center; gap: 16px;">
-        <div style="padding: 10px; border-radius: 12px; background: rgba(15,50,96,0.06);">
-            <i data-lucide="activity" style="width: 20px; height: 20px; color: var(--primary-color);"></i>
+        <div style="width: 42px; height: 42px; border-radius: var(--radius-lg); background: var(--primary-surface); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i data-lucide="activity" style="width: 20px; height: 20px; color: var(--primary);"></i>
         </div>
         <div style="flex: 1;">
-            <div style="font-weight: 800; font-size: 14px; color: var(--text-primary);">Activity Log</div>
-            <div style="font-size: 12px; color: var(--text-secondary);">View your recent activities & submissions</div>
+            <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14.5px; color: var(--text-primary);">Activity & Submission Log</div>
+            <div style="font-size: 12.5px; color: var(--text-secondary);">View receipts, uploads, and timestamp records</div>
         </div>
         <i data-lucide="chevron-right" style="width: 18px; height: 18px; color: var(--text-tertiary);"></i>
     </div>
 </div>
 
 <!-- Logout Action Button -->
-<button class="btn btn-danger btn-block" id="logout-btn" style="padding: 14px; border-radius: var(--radius-xl); margin-bottom: 44px; font-weight: 800;">
-    <i data-lucide="log-out"></i> Sign Out
+<button class="btn btn-danger btn-block" id="logout-btn" style="padding: 14px; margin-bottom: 48px;">
+    <i data-lucide="log-out"></i> Sign Out from Portal
 </button>

@@ -329,19 +329,7 @@ class BillingService {
     }
   }
 
-  /// Sets a value inside a sheet cell with the appropriate CellValue subtype.
-  void _setCellValue(Sheet sheet, int colIdx, int rowIdx, dynamic val) {
-    final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIdx));
-    if (val == null) {
-      cell.value = null;
-    } else if (val is num) {
-      cell.value = DoubleCellValue(val.toDouble());
-    } else if (val is bool) {
-      cell.value = BoolCellValue(val);
-    } else {
-      cell.value = TextCellValue(val.toString());
-    }
-  }
+
 
   // ─── XML helpers ────────────────────────────────────────────────────────────
 
@@ -395,7 +383,7 @@ class BillingService {
     }
   }
 
-  /// Find or create a <row r="[rowNum]"> in sheetData, preserving existing row attrs.
+  /// Find or create a `<row r="[rowNum]">` in sheetData, preserving existing row attrs.
   XmlElement _getOrCreateRow(XmlElement sheetData, int rowNum) {
     final existing = sheetData
         .findElements('row')
@@ -423,11 +411,11 @@ class BillingService {
 
   /// Fill a single cell in-place.
   ///
-  /// Finds the existing <c> by address and updates its content.
+  /// Finds the existing `<c>` by address and updates its content.
   /// Crucially, the existing cell's s="..." (style/border) attribute is
   /// left completely untouched so the template's gridlines stay intact.
   /// If the cell doesn't exist yet (row beyond placeholder range), a new
-  /// <c> is created with the correct default style for that column.
+  /// `<c>` is created with the correct default style for that column.
   void _fillCell(
     XmlElement rowEl,
     String addr,

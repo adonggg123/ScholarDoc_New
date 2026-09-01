@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -113,7 +113,7 @@ class _AnnouncementManagementScreenState extends State<AnnouncementManagementScr
                                       crossAxisAlignment: CrossAxisAlignment.stretch,
                                       children: [
                                         _buildTableHeader(context),
-                                        ...announcements.map((a) => _buildTableRow(context, a)).toList(),
+                                        ...announcements.map((a) => _buildTableRow(context, a)),
                                       ],
                                     ),
                                   ),

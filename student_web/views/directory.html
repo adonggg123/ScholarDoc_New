@@ -2,39 +2,41 @@
 <!-- Mirrors user_directory_screen.dart -->
 
 <!-- Header Banner -->
-<div class="card view-page-header" style="margin-bottom: 24px;">
+<div class="card view-page-header">
     <div class="view-page-header-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 16px;">
             <div>
                 <div class="page-label">SCHOLAR DIRECTORY</div>
-                <div class="page-title">Connect with Scholars</div>
-                <div class="page-subtitle">Search and view profiles of fellow scholars across campus</div>
+                <div class="page-title">Campus Scholar Directory</div>
+                <div class="page-subtitle">Search and connect with fellow scholarship recipients across all university programs</div>
             </div>
-            <div class="page-icon" style="width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;">
-                <i data-lucide="users" style="width: 26px; height: 26px; color: white;"></i>
+            <div style="width: 48px; height: 48px; border-radius: var(--radius-xl); background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+                <i data-lucide="users" style="width: 24px; height: 24px; color: white;"></i>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Search Input Field -->
-<div style="margin-bottom: 24px;">
-    <div class="form-control-icon" style="position: relative;">
-        <i data-lucide="search" style="color: var(--primary-color); width: 20px; height: 20px;"></i>
-        <input type="text" class="form-control" id="search-input" placeholder="Search by name, course, section, or scholarship..." style="height: 52px; border-radius: var(--radius-xl); font-size: 14px; font-weight: 500; box-shadow: var(--shadow-sm); border: 1.5px solid var(--border-color); padding-left: 48px;">
+<div class="mb-lg">
+    <div class="form-control-icon">
+        <i data-lucide="search"></i>
+        <input type="text" class="form-control" id="search-input" placeholder="Search by scholar name, course, section, or scholarship..." style="height: 52px; font-size: 14.5px;">
     </div>
 </div>
 
 <!-- Grid List of Scholars -->
-<div id="scholars-grid" class="grid-3" style="margin-bottom: 28px;">
-    <div class="spinner-container"><div class="spinner"></div></div>
+<div id="scholars-grid" class="grid-3 mb-lg">
+    <div class="spinner-container">
+        <div class="spinner"></div>
+    </div>
 </div>
 
 <!-- Empty State -->
-<div class="empty-state hidden" id="directory-empty" style="padding: 48px 24px; text-align: center;">
-    <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(15,50,96,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-        <i data-lucide="search-x" style="width: 32px; height: 32px; color: var(--text-secondary);"></i>
+<div class="empty-state hidden" id="directory-empty">
+    <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--primary-surface); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+        <i data-lucide="search-x" style="width: 28px; height: 28px; color: var(--primary);"></i>
     </div>
-    <h3 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">No Scholars Found</h3>
-    <p style="font-size: 13px; color: var(--text-secondary);">Try refining your search query or clear keywords.</p>
+    <h3>No Scholars Found</h3>
+    <p>No scholar matches your current search criteria. Try refining your keywords or search query.</p>
 </div>

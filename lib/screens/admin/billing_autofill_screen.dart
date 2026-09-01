@@ -2,7 +2,7 @@ import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../services/billing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -26,6 +26,7 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
   bool _isAnnex5 = false;
   Annex5FillResult? _annex5Result;
 
+  // ignore: unused_element
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -310,71 +311,6 @@ class _BillingAutofillScreenState extends State<BillingAutofillScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Automated Scholarship Billing',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: context.textPri,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Generate the official CHED Annex 5 TES Billing Form using student records from the master list.',
-          style: TextStyle(color: context.textSec),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUploadArea(BuildContext context) {
-    return GestureDetector(
-      onTap: _pickFile,
-      child: Container(
-        width: double.infinity,
-        height: 260,
-        decoration: context.glassDecoration.copyWith(
-          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2), width: 2),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(LucideIcons.uploadCloud, size: 48, color: AppTheme.primaryColor),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Drag and drop your template here',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Supports CSV and Excel files (.xlsx, .xls)',
-              style: TextStyle(color: context.textSec),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _pickFile,
-              icon: const Icon(LucideIcons.fileSearch),
-              label: const Text('Browse Files'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

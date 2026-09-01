@@ -1,151 +1,202 @@
-<!-- ScholarDoc Student Web — Home Dashboard View -->
-<!-- Mirrors home_screen.dart -->
+<!-- ScholarDoc Student Web — Modern Home Dashboard View -->
+<!-- Mirrors home_screen.dart with Desktop 2-Column Balanced Grid -->
 
-<!-- Hero Welcome Banner -->
-<div class="card welcome-banner" style="margin-bottom: 28px;">
-    <div class="welcome-banner-overlay"></div>
-    <div class="welcome-banner-content">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 3;">
-            <div style="flex: 1;">
-                <div class="welcome-greeting" id="home-greeting">GOOD MORNING</div>
-                <div class="welcome-name" id="home-name">Student!</div>
-                <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;" id="home-badge-container">
-                    <span class="badge badge-success" style="padding: 6px 14px; font-size: 11px; letter-spacing: 0.5px;">
-                        <i data-lucide="badge-check" style="width: 14px; height: 14px;"></i> Verified Scholar
-                    </span>
-                </div>
-            </div>
-            <div id="home-avatar" class="welcome-avatar" style="box-shadow: 0 8px 24px rgba(0,0,0,0.25);">
-                <i data-lucide="user" style="color: white; width: 28px; height: 28px;"></i>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Actions Launcher -->
-<div class="mb-lg">
-    <div class="section-header">Quick Actions</div>
-    <div class="grid-2">
-        <div class="card action-card" onclick="loadView('submit')" id="action-upload">
-            <div class="card-body" style="text-align: center; padding: 26px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 14px;">
-                    <i data-lucide="upload-cloud" style="width: 28px; height: 28px; color: var(--primary-color);"></i>
-                </div>
-                <div style="font-weight: 800; font-size: 14px; color: var(--text-primary); letter-spacing: -0.2px;">Upload Docs</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Submit your requirement files</div>
-            </div>
-        </div>
-        <div class="card action-card" onclick="loadView('history')" id="action-history">
-            <div class="card-body" style="text-align: center; padding: 26px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="width: 52px; height: 52px; border-radius: 16px; background: var(--success-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 14px;">
-                    <i data-lucide="history" style="width: 28px; height: 28px; color: var(--success);"></i>
-                </div>
-                <div style="font-weight: 800; font-size: 14px; color: var(--text-primary); letter-spacing: -0.2px;">View History</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Track past submission logs</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- System Feature Carousel -->
-<div class="card" style="margin-bottom: 28px; overflow: hidden; border-radius: var(--radius-2xl);" id="carousel-container">
-    <div style="position: relative; width: 100%; height: 180px; overflow: hidden; border-radius: var(--radius-2xl);" id="carousel-track-wrapper">
-        <div id="carousel-track" style="display: flex; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); height: 100%;">
-            
-            <!-- Slide 1 -->
-            <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
-                <img src="assets/Slide_image1.jpg" alt="Banner 1" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
-                <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(15, 50, 96, 0.88) 0%, rgba(29, 92, 171, 0.7) 100%); z-index: 2;"></div>
-                <div style="position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); right: -30px; top: -30px; z-index: 3;"></div>
-                <div style="position: absolute; width: 100px; height: 100px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); right: 60px; bottom: -40px; z-index: 3;"></div>
-                <div style="position: relative; z-index: 4; padding: 22px 28px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: white;">
-                    <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
-                        <span style="padding: 4px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.2); font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">FAST SUBMISSIONS</span>
-                        <h3 style="font-size: 19px; font-weight: 900; letter-spacing: -0.3px; margin: 10px 0 6px; line-height: 1.15; color: white;">Seamless Doc Submissions</h3>
-                        <p style="font-size: 12.5px; color: rgba(255, 255, 255, 0.85); line-height: 1.35; margin: 0; font-weight: 400;">Capture your ID cards and draw your signature directly in the portal.</p>
+<div class="dashboard-layout">
+    <!-- Main Left Column -->
+    <div class="dashboard-main">
+        
+        <!-- Hero Welcome Banner -->
+        <div class="card welcome-banner">
+            <div class="welcome-banner-overlay"></div>
+            <div class="welcome-banner-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 20px; position: relative; z-index: 3;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="welcome-greeting" id="home-greeting">GOOD DAY</div>
+                        <div class="welcome-name" id="home-name">Student!</div>
+                        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;" id="home-badge-container">
+                            <span class="badge badge-success">
+                                <i data-lucide="badge-check"></i> Verified Scholar
+                            </span>
+                        </div>
                     </div>
-                    <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
-                        <i data-lucide="file-up" style="width: 26px; height: 26px; color: white;"></i>
+                    <div id="home-avatar" class="welcome-avatar">
+                        <i data-lucide="user" style="color: white; width: 32px; height: 32px;"></i>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Slide 2 -->
-            <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
-                <img src="assets/Slide_image2.jpg" alt="Banner 2" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
-                <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(30, 136, 229, 0.88) 0%, rgba(0, 172, 193, 0.7) 100%); z-index: 2;"></div>
-                <div style="position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); right: -30px; top: -30px; z-index: 3;"></div>
-                <div style="position: absolute; width: 100px; height: 100px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); right: 60px; bottom: -40px; z-index: 3;"></div>
-                <div style="position: relative; z-index: 4; padding: 22px 28px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: white;">
-                    <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
-                        <span style="padding: 4px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.2); font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">AI VERIFICATION</span>
-                        <h3 style="font-size: 19px; font-weight: 900; letter-spacing: -0.3px; margin: 10px 0 6px; line-height: 1.15; color: white;">Instant OCR Scanning</h3>
-                        <p style="font-size: 12.5px; color: rgba(255, 255, 255, 0.85); line-height: 1.35; margin: 0; font-weight: 400;">Verify your billing details automatically with integrated text extraction.</p>
+        <!-- Quick Actions Row -->
+        <div>
+            <div class="section-header">
+                <i data-lucide="zap" style="width: 15px; height: 15px; color: var(--gold);"></i>
+                Quick Actions
+            </div>
+            <div class="grid-2">
+                <div class="card action-card" onclick="loadView('submit')" id="action-upload">
+                    <div class="card-body" style="padding: 22px 20px; display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 50px; height: 50px; border-radius: var(--radius-xl); background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i data-lucide="upload-cloud" style="width: 24px; height: 24px; color: var(--primary);"></i>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px; color: var(--text-primary); letter-spacing: -0.2px;">Submit Requirements</div>
+                            <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px;">Upload ID & digital signature</div>
+                        </div>
+                        <i data-lucide="chevron-right" style="width: 18px; height: 18px; color: var(--text-tertiary);"></i>
                     </div>
-                    <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
-                        <i data-lucide="scan-line" style="width: 26px; height: 26px; color: white;"></i>
+                </div>
+
+                <div class="card action-card" onclick="loadView('history')" id="action-history">
+                    <div class="card-body" style="padding: 22px 20px; display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 50px; height: 50px; border-radius: var(--radius-xl); background: var(--success-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i data-lucide="history" style="width: 24px; height: 24px; color: var(--success);"></i>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px; color: var(--text-primary); letter-spacing: -0.2px;">Submission History</div>
+                            <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px;">View receipts & past logs</div>
+                        </div>
+                        <i data-lucide="chevron-right" style="width: 18px; height: 18px; color: var(--text-tertiary);"></i>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Slide 3 -->
-            <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
-                <img src="assets/slide_image3.jpg" alt="Banner 3" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
-                <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(67, 160, 71, 0.88) 0%, rgba(46, 125, 50, 0.7) 100%); z-index: 2;"></div>
-                <div style="position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); right: -30px; top: -30px; z-index: 3;"></div>
-                <div style="position: absolute; width: 100px; height: 100px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); right: 60px; bottom: -40px; z-index: 3;"></div>
-                <div style="position: relative; z-index: 4; padding: 22px 28px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: white;">
-                    <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
-                        <span style="padding: 4px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.2); font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">REAL-TIME TRACKING</span>
-                        <h3 style="font-size: 19px; font-weight: 900; letter-spacing: -0.3px; margin: 10px 0 6px; line-height: 1.15; color: white;">Live Status Monitoring</h3>
-                        <p style="font-size: 12.5px; color: rgba(255, 255, 255, 0.85); line-height: 1.35; margin: 0; font-weight: 400;">Stay updated on your scholarship approval and billing logs instantly.</p>
+        <!-- System Feature Carousel Banner -->
+        <div class="card" style="overflow: hidden; border-radius: var(--radius-2xl);" id="carousel-container">
+            <div style="position: relative; width: 100%; height: 180px; overflow: hidden; border-radius: var(--radius-2xl);" id="carousel-track-wrapper">
+                <div id="carousel-track" style="display: flex; transition: transform 0.5s var(--ease-out); height: 100%;">
+                    
+                    <!-- Slide 1 -->
+                    <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
+                        <img src="assets/Slide_image1.jpg" alt="Banner 1" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
+                        <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(10, 30, 61, 0.90) 0%, rgba(15, 50, 96, 0.75) 100%); z-index: 2;"></div>
+                        <div style="position: relative; z-index: 4; padding: 26px 30px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: white;">
+                            <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
+                                <span style="padding: 4px 12px; border-radius: var(--radius-full); background: rgba(251, 192, 45, 0.22); border: 1px solid rgba(251, 192, 45, 0.4); font-size: 9.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--gold);">FASTER DISBURSEMENT</span>
+                                <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 900; letter-spacing: -0.3px; margin: 8px 0 4px; line-height: 1.2; color: white;">Digital Document Submissions</h3>
+                                <p style="font-size: 13px; color: rgba(255, 255, 255, 0.85); line-height: 1.4; margin: 0;">Capture your ID card photos and sign your documents right from your browser.</p>
+                            </div>
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; backdrop-filter: blur(8px);">
+                                <i data-lucide="file-check" style="width: 24px; height: 24px; color: white;"></i>
+                            </div>
+                        </div>
                     </div>
-                    <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
-                        <i data-lucide="bell" style="width: 26px; height: 26px; color: white;"></i>
+
+                    <!-- Slide 2 -->
+                    <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
+                        <img src="assets/Slide_image2.jpg" alt="Banner 2" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
+                        <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(2, 44, 100, 0.90) 0%, rgba(30, 136, 229, 0.75) 100%); z-index: 2;"></div>
+                        <div style="position: relative; z-index: 4; padding: 26px 30px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: white;">
+                            <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
+                                <span style="padding: 4px 12px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.2); font-size: 9.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: white;">SMART VERIFICATION</span>
+                                <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 900; letter-spacing: -0.3px; margin: 8px 0 4px; line-height: 1.2; color: white;">Automated OCR Validation</h3>
+                                <p style="font-size: 13px; color: rgba(255, 255, 255, 0.85); line-height: 1.4; margin: 0;">Instant text extraction cross-checks your billing details seamlessly.</p>
+                            </div>
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; backdrop-filter: blur(8px);">
+                                <i data-lucide="scan-line" style="width: 24px; height: 24px; color: white;"></i>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Slide 3 -->
+                    <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0;">
+                        <img src="assets/slide_image3.jpg" alt="Banner 3" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1;">
+                        <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(6, 78, 59, 0.90) 0%, rgba(16, 185, 129, 0.75) 100%); z-index: 2;"></div>
+                        <div style="position: relative; z-index: 4; padding: 26px 30px; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: white;">
+                            <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
+                                <span style="padding: 4px 12px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.2); font-size: 9.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: white;">REAL-TIME SYNC</span>
+                                <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 900; letter-spacing: -0.3px; margin: 8px 0 4px; line-height: 1.2; color: white;">Track Approval Status</h3>
+                                <p style="font-size: 13px; color: rgba(255, 255, 255, 0.85); line-height: 1.4; margin: 0;">Get notified immediately when scholarship coordinators review your submission.</p>
+                            </div>
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 1.5px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; backdrop-filter: blur(8px);">
+                                <i data-lucide="bell-ring" style="width: 24px; height: 24px; color: white;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- Carousel Dots -->
+                <div style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 6px 14px; background: rgba(0,0,0,0.35); border-radius: var(--radius-full); backdrop-filter: blur(8px); z-index: 10;" id="carousel-dots">
+                    <div class="carousel-dot active" data-index="0" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 1; cursor: pointer; transition: all 0.3s;"></div>
+                    <div class="carousel-dot" data-index="1" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.4; cursor: pointer; transition: all 0.3s;"></div>
+                    <div class="carousel-dot" data-index="2" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.4; cursor: pointer; transition: all 0.3s;"></div>
                 </div>
             </div>
+        </div>
 
+        <!-- Recent Updates Feed -->
+        <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                <div class="section-header" style="margin-bottom: 0;">
+                    <i data-lucide="bell" style="width: 15px; height: 15px; color: var(--primary);"></i>
+                    Recent Campus Updates
+                </div>
+                <button class="btn btn-sm btn-outline" onclick="loadView('notifications')">
+                    View All <i data-lucide="arrow-right"></i>
+                </button>
+            </div>
+            <div id="announcements-list">
+                <div class="spinner-container">
+                    <div class="spinner"></div>
+                </div>
+            </div>
         </div>
-        <!-- Carousel Navigation Dots -->
-        <div style="position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 6px 14px; background: rgba(0,0,0,0.3); border-radius: var(--radius-full); backdrop-filter: blur(8px);" id="carousel-dots">
-            <div class="carousel-dot active" data-index="0" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 1; cursor: pointer; transition: all 0.3s;"></div>
-            <div class="carousel-dot" data-index="1" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.4; cursor: pointer; transition: all 0.3s;"></div>
-            <div class="carousel-dot" data-index="2" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: 0.4; cursor: pointer; transition: all 0.3s;"></div>
-        </div>
-    </div>
-</div>
 
-<!-- Scholarship Account Status -->
-<div class="mb-lg">
-    <div class="section-header">Scholarship Status</div>
-    <div class="card" id="scholarship-status-card">
-        <div class="spinner-container" id="status-loading">
-            <div class="spinner"></div>
-        </div>
     </div>
-</div>
 
-<!-- Interactive Weekly Schedule Strip -->
-<div class="card" style="margin-bottom: 28px;" id="calendar-card">
-    <div class="calendar-container">
-        <div class="calendar-header-row">
-            <span style="font-size: 15px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px;" id="calendar-month">July 2026</span>
-            <span style="font-size: 10px; font-weight: 800; color: var(--text-tertiary); letter-spacing: 1px; text-transform: uppercase;" id="calendar-year">This Week</span>
+    <!-- Sidebar Right Column -->
+    <div class="dashboard-sidebar">
+        
+        <!-- Scholarship Status Card -->
+        <div>
+            <div class="section-header">
+                <i data-lucide="award" style="width: 15px; height: 15px; color: var(--gold);"></i>
+                Program Status
+            </div>
+            <div class="card" id="scholarship-status-card">
+                <div class="spinner-container" id="status-loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
         </div>
-        <div class="calendar-days-grid" id="calendar-days"></div>
-    </div>
-</div>
 
-<!-- Recent Announcements Feed -->
-<div class="mb-lg">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-        <div class="section-header" style="margin-bottom: 0;">Recent Updates</div>
-        <button class="btn btn-sm btn-outline" style="font-size: 10px; font-weight: 800; letter-spacing: 0.5px; border-radius: var(--radius-full); padding: 5px 14px;" onclick="loadView('notifications')">SEE ALL</button>
-    </div>
-    <div id="announcements-list">
-        <div class="spinner-container">
-            <div class="spinner"></div>
+        <!-- Weekly Schedule Calendar Strip -->
+        <div>
+            <div class="section-header">
+                <i data-lucide="calendar" style="width: 15px; height: 15px; color: var(--primary);"></i>
+                Academic Calendar
+            </div>
+            <div class="card" id="calendar-card">
+                <div class="calendar-container">
+                    <div class="calendar-header-row">
+                        <span style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 800; color: var(--text-primary);" id="calendar-month">Month Year</span>
+                        <span style="font-size: 11px; font-weight: 800; color: var(--text-tertiary); letter-spacing: 0.8px; text-transform: uppercase;">THIS WEEK</span>
+                    </div>
+                    <div class="calendar-days-grid" id="calendar-days"></div>
+                </div>
+            </div>
         </div>
+
+        <!-- Scholar Support Card -->
+        <div class="card" style="background: linear-gradient(135deg, rgba(15, 50, 96, 0.04) 0%, rgba(251, 192, 45, 0.05) 100%);">
+            <div class="card-body" style="padding: 22px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+                    <div style="width: 38px; height: 38px; border-radius: var(--radius-lg); background: var(--primary); color: var(--gold); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i data-lucide="help-circle" style="width: 20px; height: 20px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-family: 'Outfit', sans-serif; font-size: 14.5px; font-weight: 800; color: var(--text-primary);">Need Assistance?</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">Scholarship Coordinator Office</div>
+                    </div>
+                </div>
+                <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
+                    Have questions about document requirements or disbursement schedules? Contact the scholarship office.
+                </p>
+                <button class="btn btn-outline btn-sm btn-block" onclick="loadView('directory')">
+                    <i data-lucide="users"></i> View Scholar Directory
+                </button>
+            </div>
+        </div>
+
     </div>
 </div>

@@ -1,33 +1,16 @@
-// ScholarDoc Student Web — Login Logic
-// Mirrors auth_service.dart loginStudent() flow exactly
-
+// ScholarDoc Unified Web Login Controller
 const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
-const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
 
 // Initialize Lucide Icons
-lucide.createIcons();
-
-// Check if already logged in
-(async () => {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session) {
-        // Verify this is a student (not admin)
-        const { data } = await supabaseClient
-            .from('students')
-            .select('uid')
-            .eq('uid', session.user.id)
-            .limit(1);
-        if (data && data.length > 0) {
-            window.location.href = 'dashboard.html';
-            return;
-        }
-    }
-})();
+if (window.lucide) {
+    lucide.createIcons();
+}
 
 // DOM Elements
 const loginForm = document.getElementById('loginForm');
-const studentIdInput = document.getElementById('studentId');
+const identifierInput = document.getElementById('studentId') || document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const togglePwdBtn = document.getElementById('togglePwd');
 const loginBtn = document.getElementById('loginBtn');
@@ -35,27 +18,22 @@ const loginBtnText = document.getElementById('loginBtnText');
 const loginBtnIcon = document.getElementById('loginBtnIcon');
 const loginSpinner = document.getElementById('loginSpinner');
 
-// Toggle Password Visibility
+// Password toggle
 let obscurePassword = true;
-togglePwdBtn.addEventListener('click', () => {
-    obscurePassword = !obscurePassword;
-    passwordInput.type = obscurePassword ? 'password' : 'text';
-    
-    togglePwdBtn.innerHTML = '';
-    const icon = document.createElement('i');
-    icon.setAttribute('data-lucide', obscurePassword ? 'eye' : 'eye-off');
-    togglePwdBtn.appendChild(icon);
-    lucide.createIcons();
-});
-
-// Helper to construct Auth email (matching Dart _getAuthEmail)
-function getAuthEmail(studentId) {
-    return `${studentId.trim().replaceAll(' ', '_')}@scholardoc.com`;
+if (togglePwdBtn && passwordInput) {
+    togglePwdBtn.addEventListener('click', () => {
+        obscurePassword = !obscurePassword;
+        passwordInput.type = obscurePassword ? 'password' : 'text';
+        togglePwdBtn.innerHTML = '';
+        const icon = document.createElement('i');
+        icon.setAttribute('data-lucide', obscurePassword ? 'eye' : 'eye-off');
+        togglePwdBtn.appendChild(icon);
+        if (window.lucide) lucide.createIcons();
+    });
 }
 
-// Show error toast
+// Toast notification helper
 function showError(message) {
-    // Remove existing toast
     const existing = document.querySelector('.error-toast');
     if (existing) existing.remove();
 
@@ -63,8 +41,8 @@ function showError(message) {
     toast.className = 'error-toast';
     toast.innerHTML = `<i data-lucide="alert-circle"></i><span>${message}</span>`;
     document.body.appendChild(toast);
-    lucide.createIcons();
-    
+    if (window.lucide) lucide.createIcons();
+
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100px)';
@@ -73,119 +51,191 @@ function showError(message) {
     }, 5000);
 }
 
-// Set loading state
 function setLoading(loading) {
-    loginBtn.disabled = loading;
-    loginBtnText.style.display = loading ? 'none' : 'block';
-    loginBtnIcon.style.display = loading ? 'none' : 'block';
-    loginSpinner.classList.toggle('hidden', !loading);
+    if (loginBtn) loginBtn.disabled = loading;
+    if (loginBtnText) loginBtnText.style.display = loading ? 'none' : 'block';
+    if (loginBtnIcon) loginBtnIcon.style.display = loading ? 'none' : 'block';
+    if (loginSpinner) loginSpinner.classList.toggle('hidden', !loading);
 }
 
-// Handle Login — mirrors auth_service.dart loginStudent() exactly
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+// Helper email formatters
+function getAdminEmail(raw) {
+    const clean = raw.trim().toLowerCase();
+    if (clean.includes('@')) return clean;
+    if (clean === 'admin') return 'admin@scholardoc.com';
+    return `${clean}@scholardoc.com`;
+}
+
+function getStudentEmail(raw) {
+    const clean = raw.trim();
+    if (clean.includes('@')) return clean;
+    return `${clean.replaceAll(' ', '_')}@scholardoc.com`;
+}
+
+// Automatic Routing Helper based on Database Role
+async function routeUserByRole(authUser, rawIdentifier, authSession) {
+    const uid = authUser.id;
     
-    const studentId = studentIdInput.value.trim();
-    const password = passwordInput.value.trim();
-    
-    if (!studentId || !password) return;
+    // Check if student record exists in DB by uid or studentId or email
+    let studentData = null;
+    const { data: byUid } = await supabaseClient
+        .from('students')
+        .select('*')
+        .eq('uid', uid)
+        .limit(1);
 
-    setLoading(true);
-
-    try {
-        const authEmail = getAuthEmail(studentId);
-        let authResponse = null;
-
-        // --- Step 1: Try ID-based email (new accounts) ---
-        try {
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: authEmail,
-                password: password,
-            });
-            if (error) throw error;
-            authResponse = data;
-        } catch (err) {
-            const msg = (err.message || '').toLowerCase();
-            if (!msg.includes('invalid login') && !msg.includes('not found')) {
-                throw err;
-            }
-            // Fall through to Step 2
+    if (byUid && byUid.length > 0) {
+        studentData = byUid[0];
+    } else {
+        const cleanId = rawIdentifier.trim();
+        const { data: byId } = await supabaseClient
+            .from('students')
+            .select('*')
+            .or(`studentId.eq.${cleanId},authEmail.eq.${cleanId},email.eq.${cleanId}`)
+            .limit(1);
+        if (byId && byId.length > 0) {
+            studentData = byId[0];
         }
-
-        // --- Step 2: Fallback — look up student by ID and try their Gmail ---
-        if (!authResponse) {
-            const { data: studentRecords, error: queryError } = await supabaseClient
-                .from('students')
-                .select()
-                .eq('studentId', studentId)
-                .limit(1);
-
-            if (queryError) throw queryError;
-
-            if (!studentRecords || studentRecords.length === 0) {
-                throw new Error(`No account found for Student ID "${studentId}". Please register first using the mobile app.`);
-            }
-
-            const studentData = studentRecords[0];
-            const gmail = studentData.email;
-
-            if (!gmail) {
-                throw new Error('Account data is incomplete. Please contact your administrator.');
-            }
-
-            try {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({
-                    email: gmail,
-                    password: password,
-                });
-                if (error) throw error;
-                authResponse = data;
-            } catch (err) {
-                throw new Error('Login failed. Please verify your Student ID and password.');
-            }
-        }
-
-        // --- Step 3: Verify student record exists ---
-        if (authResponse && authResponse.user) {
-            const uid = authResponse.user.id;
-            const { data: doc, error: docErr } = await supabaseClient
-                .from('students')
-                .select()
-                .eq('uid', uid);
-
-            if (docErr || !doc || doc.length === 0) {
-                await supabaseClient.auth.signOut();
-                throw new Error('Student record not found. Please register first using the mobile app.');
-            }
-
-            // Log activity
-            try {
-                await supabaseClient.from('audit_logs').insert({
-                    action: 'Logged in via Student Web Portal',
-                    userName: doc[0].fullName || 'Student',
-                    role: 'Student',
-                    studentId: studentId,
-                });
-            } catch (_) { /* non-critical */ }
-
-            // Set presence
-            try {
-                await supabaseClient.from('presence').upsert({
-                    uid: uid,
-                    isOnline: true,
-                    lastSeen: new Date().toISOString(),
-                });
-            } catch (_) { /* non-critical */ }
-
-            // Visual feedback before redirect
-            await new Promise(r => setTimeout(r, 400));
-            window.location.href = 'dashboard.html';
-        }
-
-    } catch (err) {
-        showError(err.message || 'Failed to login. Please check your credentials.');
-    } finally {
-        setLoading(false);
     }
-});
 
+    const isStudent = !!studentData || (authUser.email && authUser.email.includes('@scholardoc.com') && !authUser.email.includes('admin'));
+
+    if (isStudent) {
+        // Log student activity & presence
+        try {
+            await supabaseClient.from('audit_logs').insert({
+                action: 'Logged in via Portal',
+                userName: studentData?.fullName || 'Student',
+                role: 'Student',
+                studentId: studentData?.studentId || rawIdentifier,
+            });
+            await supabaseClient.from('presence').upsert({
+                uid: uid,
+                isOnline: true,
+                lastSeen: new Date().toISOString(),
+            });
+        } catch (_) {}
+
+        await new Promise(r => setTimeout(r, 300));
+
+        // Route to Student Dashboard with session tokens in hash
+        const tokenHash = authSession ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}&student_id=${encodeURIComponent(studentData?.studentId || rawIdentifier)}` : '';
+
+        if (window.location.port === '8080') {
+            window.location.href = `http://localhost:8081/dashboard.html${tokenHash}`;
+        } else if (window.location.protocol === 'file:') {
+            window.location.href = `../student_web/dashboard.html${tokenHash}`;
+        } else {
+            window.location.href = `dashboard.html${tokenHash}`;
+        }
+    } else {
+        // User is Admin!
+        await new Promise(r => setTimeout(r, 300));
+        
+        // Route to Admin Dashboard
+        if (window.location.port === '8081') {
+            window.location.href = 'http://localhost:8080/admin.html';
+        } else if (window.location.protocol === 'file:') {
+            window.location.href = '../admin_web/admin.html';
+        } else {
+            window.location.href = 'admin.html';
+        }
+    }
+}
+
+// Handle Form Submission
+if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const rawIdentifier = identifierInput ? identifierInput.value.trim() : '';
+        const password = passwordInput ? passwordInput.value.trim() : '';
+
+        if (!rawIdentifier || !password) return;
+
+        setLoading(true);
+
+        try {
+            let authResponse = null;
+
+            // Strategy 1: Attempt Student login via ID email (e.g. 2023305311@scholardoc.com)
+            if (!rawIdentifier.includes('@')) {
+                const studentEmail = getStudentEmail(rawIdentifier);
+                try {
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: studentEmail,
+                        password: password,
+                    });
+                    if (!error && data.user) {
+                        authResponse = data;
+                    }
+                } catch (_) {}
+            }
+
+            // Strategy 2: Attempt Admin login (e.g. admin@scholardoc.com)
+            if (!authResponse) {
+                const adminEmail = getAdminEmail(rawIdentifier);
+                try {
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: adminEmail,
+                        password: password,
+                    });
+                    if (!error && data.user) {
+                        authResponse = data;
+                    }
+                } catch (_) {}
+            }
+
+            // Strategy 3: Lookup student by studentId to get Gmail / authEmail
+            if (!authResponse && !rawIdentifier.includes('@')) {
+                const { data: studentRecords } = await supabaseClient
+                    .from('students')
+                    .select('*')
+                    .eq('studentId', rawIdentifier)
+                    .limit(1);
+
+                if (studentRecords && studentRecords.length > 0) {
+                    const s = studentRecords[0];
+                    const emailsToTry = [s.authEmail, s.email].filter(Boolean);
+                    for (const em of emailsToTry) {
+                        try {
+                            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                                email: em,
+                                password: password,
+                            });
+                            if (!error && data.user) {
+                                authResponse = data;
+                                break;
+                            }
+                        } catch (_) {}
+                    }
+                }
+            }
+
+            // Strategy 4: Direct email login fallback
+            if (!authResponse && rawIdentifier.includes('@')) {
+                try {
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: rawIdentifier.toLowerCase(),
+                        password: password,
+                    });
+                    if (!error && data.user) {
+                        authResponse = data;
+                    }
+                } catch (_) {}
+            }
+
+            if (!authResponse || !authResponse.user) {
+                throw new Error('Invalid credentials. Please verify your Student ID/Username and password.');
+            }
+
+            // Automatically route user to the appropriate dashboard based on their account role
+            await routeUserByRole(authResponse.user, rawIdentifier, authResponse.session);
+
+        } catch (err) {
+            showError(err.message || 'Failed to sign in. Please check your credentials.');
+        } finally {
+            setLoading(false);
+        }
+    });
+}
