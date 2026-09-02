@@ -43,8 +43,13 @@ function applyFilters() {
     
     const filtered = allLogs.filter(log => {
         // 1. Role Filter
-        const r = log.role || 'Admin';
-        if (roleFilter !== 'All' && r !== roleFilter) return false;
+        const rawRole = log.role || 'Admin';
+        const normalizedRole = (rawRole === 'SuperAdmin' || rawRole === 'Super Admin') ? 'Super Admin' : rawRole;
+        if (roleFilter !== 'All') {
+            if (roleFilter === 'Super Admin' && normalizedRole !== 'Super Admin') return false;
+            if (roleFilter === 'Admin' && normalizedRole !== 'Admin') return false;
+            if (roleFilter === 'Student' && normalizedRole !== 'Student') return false;
+        }
 
         // 2. Search Filter
         if (searchVal) {
@@ -97,16 +102,23 @@ function renderList(logs) {
     container.innerHTML = logs.map(log => {
         const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A';
         const name = log.userName || log.adminName || 'Admin User';
-        const role = log.role || 'Admin';
+        const rawRole = log.role || 'Admin';
+        const role = (rawRole === 'SuperAdmin' || rawRole === 'Super Admin') ? 'Super Admin' : rawRole;
         const action = log.action || 'Performed an action';
+
+        const isSuper = role === 'Super Admin';
+        const isAdmin = role === 'Admin';
+        const iconName = isSuper ? 'icon-shield-check' : (isAdmin ? 'icon-shield' : 'icon-user');
+        const iconColor = isSuper ? 'var(--gold-color, #D4AF37)' : (isAdmin ? 'var(--primary-color)' : 'var(--text-secondary)');
+        const badgeBg = isSuper ? 'rgba(212, 175, 55, 0.12)' : (isAdmin ? 'rgba(15, 50, 96, 0.08)' : 'rgba(0,0,0,0.05)');
 
         return `
             <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: flex-start;">
-                <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(15, 50, 96, 0.05); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="${role === 'Admin' ? 'icon-shield-check' : 'icon-user'}" style="font-size: 20px; color: var(--primary-color);"></i>
+                <div style="width: 40px; height: 40px; border-radius: 12px; background: ${badgeBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="${iconName}" style="font-size: 20px; color: ${iconColor};"></i>
                 </div>
                 <div>
-                    <div style="font-size: 14px; font-weight: 700;">${name} <span style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">(${role})</span></div>
+                    <div style="font-size: 14px; font-weight: 700;">${name} <span style="font-size: 12px; color: ${iconColor}; font-weight: 600;">(${role})</span></div>
                     <div style="font-size: 13px; margin: 4px 0;">${action}</div>
                     <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 6px;">
                         <i class="icon-clock" style="font-size: 12px;"></i> ${time}

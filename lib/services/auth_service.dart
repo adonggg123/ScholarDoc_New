@@ -242,11 +242,17 @@ class AuthService {
     required String username,
     required String password,
   }) async {
-    final String adminEmail = username.contains('@') 
-        ? username.toLowerCase() 
-        : (username.toLowerCase() == 'admin'
-            ? 'admin@scholardoc.com'
-            : '${username.toLowerCase()}@scholardoc.com');
+    final String clean = username.trim().toLowerCase();
+    final String adminEmail = clean.contains('@') 
+        ? clean 
+        : (clean == 'superadmin'
+            ? 'superadmin@scholardoc.com'
+            : (clean == 'admin'
+                ? 'admin@scholardoc.com'
+                : '$clean@scholardoc.com'));
+
+    final bool isSuper = adminEmail.contains('superadmin');
+    final String defaultRole = isSuper ? 'Super Admin' : 'Admin';
 
     debugPrint('AuthService: Attempting Admin Login for $adminEmail');
 
@@ -264,7 +270,7 @@ class AuthService {
           'uid': _supabase.auth.currentUser!.id,
           'email': adminEmail,
           'username': username,
-          'role': 'Admin',
+          'role': defaultRole,
         });
       } catch (e) {
         debugPrint(
@@ -276,7 +282,7 @@ class AuthService {
       await _auditService.logActivity(
         action: 'Logged into Admin Dashboard',
         userName: username,
-        role: 'Admin',
+        role: defaultRole,
       );
 
       return true;
@@ -285,7 +291,7 @@ class AuthService {
 
       // 2. If user doesn't exist, create the admin account (Auto-Provisioning)
       if (e.message.toLowerCase().contains('invalid login') || e.message.toLowerCase().contains('not found')) {
-        if (username.toLowerCase() == 'admin' && password.length >= 6) { // Supabase min is usually 6
+        if ((clean == 'admin' || clean == 'superadmin') && password.length >= 6) { // Supabase min is usually 6
           debugPrint(
             'AuthService: Auto-provisioning admin account ($adminEmail)...',
           );
@@ -301,7 +307,7 @@ class AuthService {
                 'uid': _supabase.auth.currentUser!.id,
                 'email': adminEmail,
                 'username': username,
-                'role': 'Admin',
+                'role': defaultRole,
               });
             } catch (e) {
               debugPrint(
@@ -317,7 +323,7 @@ class AuthService {
             await _auditService.logActivity(
               action: 'Provisioned and Logged into Admin Dashboard',
               userName: username,
-              role: 'Admin',
+              role: defaultRole,
             );
             return true;
           } on AuthException catch (createErr) {
@@ -333,7 +339,7 @@ class AuthService {
           } catch (e) {
             debugPrint('AuthService: Unexpected provisioning error: $e');
           }
-        } else if (username.toLowerCase() == 'admin' && password.length < 6) {
+        } else if ((clean == 'admin' || clean == 'superadmin') && password.length < 6) {
           throw Exception('The Admin password must be at least 6 characters.');
         }
       }

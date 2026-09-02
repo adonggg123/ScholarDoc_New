@@ -96,11 +96,33 @@ body {
 
 .sidebar-nav {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.sidebar-menu-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+}
+
+.sidebar-menu-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-menu-list::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.sidebar-bottom-section {
+    margin-top: auto;
+    width: 100%;
+    flex-shrink: 0;
 }
 
 .nav-item {
@@ -753,8 +775,120 @@ body.dark .id-list-item.selected {
 
 body.dark .top-toast-notification {
     background: var(--surface-color) !important;
-    color: var(--text-primary) !important;
-    border-color: var(--border-color) !important;
+}
+
+/* Annex 5 Tab Section Styles */
+.annex-tabs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 12px 0 0;
+    background: rgba(0, 0, 0, 0.015);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.annex-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2.5px solid transparent;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.annex-tab-btn:hover {
+    color: var(--primary-color);
+    background: rgba(15, 50, 96, 0.03);
+}
+
+.annex-tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 700;
+}
+
+body.dark .annex-tab-btn.active {
+    color: #60a5fa;
+    border-bottom-color: #60a5fa;
+}
+
+.annex-tab-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: rgba(15, 50, 96, 0.1);
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+body.dark .annex-tab-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+}
+
+.annex-tab-btn.active .annex-tab-badge {
+    background: var(--primary-color);
+    color: white;
+}
+
+body.dark .annex-tab-btn.active .annex-tab-badge {
+    background: #3b82f6;
+    color: white;
+}
+
+.annex-table-wrap {
+    overflow-x: auto;
+    max-height: 520px;
+    position: relative;
+}
+
+.annex-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1300px;
+    text-align: left;
+    font-size: 12px;
+}
+
+.annex-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 10;
+    padding: 12px 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+body.dark .annex-table thead th {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+.annex-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.annex-table tbody tr:hover {
+    background: rgba(15, 50, 96, 0.02);
+}
+
+body.dark .annex-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
 }
 
 /* Custom Scrollbar for Dark Mode */

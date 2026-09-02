@@ -1,11 +1,12 @@
 // js/views/masterlist_import.js
+import { BillingService } from '../services/billing_service.js';
+import { VerificationService } from '../services/verification_service.js';
 
-// Dynamically load document parsing libraries
+// Dynamically load document parsing libraries if needed
 if (!window.pdfjsLib) {
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
     document.head.appendChild(script);
-    // Also load worker
     const workerScript = document.createElement('script');
     workerScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     document.head.appendChild(workerScript);
@@ -18,9 +19,13 @@ if (!window.mammoth) {
 }
 
 // State
-let currentImportType = 'qualified'; // 'qualified' | 'non_qualified'
 let currentFile = null;
 let extractedRecords = [];
+let schoolStudents = [];
+
+let verifiedForm2List = [];
+let verifiedForm3List = [];
+let needsReviewList = [];
 
 // Elements
 const dropZone = document.getElementById('drop-zone');
@@ -36,12 +41,6 @@ const extractedTableBody = document.getElementById('extracted-table-body');
 const btnSaveRecords = document.getElementById('btn-save-records');
 const filterBatch = document.getElementById('filter-batch');
 
-// Tab Elements
-const tabQualified = document.getElementById('tab-qualified');
-const tabNonQualified = document.getElementById('tab-non-qualified');
-const viewMainTitle = document.getElementById('view-main-title');
-const viewMainDesc = document.getElementById('view-main-desc');
-
 // Summary Metrics Elements
 const importSummaryCard = document.getElementById('import-summary-card');
 const summaryExtracted = document.getElementById('summary-extracted');
@@ -49,12 +48,10 @@ const summaryImported = document.getElementById('summary-imported');
 const summarySkipped = document.getElementById('summary-skipped');
 const summaryErrors = document.getElementById('summary-errors');
 
-// Helper to get active Supabase table name
 function getTableName() {
-    return currentImportType === 'qualified' ? 'scholar_masterlist' : 'non_qualified_masterlist';
+    return 'scholar_masterlist';
 }
 
-// Utility to format file size
 function formatBytes(bytes, decimals = 2) {
     if (!+bytes) return '0 Bytes';
     const k = 1024;
@@ -64,52 +61,9 @@ function formatBytes(bytes, decimals = 2) {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-// Utility to normalize names for deduplication
 function normalizeName(lastName, firstName, middleName) {
     const full = `${lastName || ''} ${firstName || ''} ${middleName || ''}`;
     return full.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-// Tab Switching Handler
-if (tabQualified && tabNonQualified) {
-    tabQualified.addEventListener('click', () => switchTab('qualified'));
-    tabNonQualified.addEventListener('click', () => switchTab('non_qualified'));
-}
-
-function switchTab(type) {
-    currentImportType = type;
-
-    if (type === 'qualified') {
-        tabQualified.classList.add('active');
-        tabQualified.style.background = 'white';
-        tabQualified.style.color = 'var(--primary-color)';
-        tabQualified.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
-
-        tabNonQualified.classList.remove('active');
-        tabNonQualified.style.background = 'transparent';
-        tabNonQualified.style.color = '#64748b';
-        tabNonQualified.style.boxShadow = 'none';
-
-        if (viewMainTitle) viewMainTitle.textContent = 'Scholar Masterlist Import';
-        if (viewMainDesc) viewMainDesc.textContent = 'Upload masterlist document (PDF or DOCX) to automatically extract and register qualified scholar records.';
-    } else {
-        tabNonQualified.classList.add('active');
-        tabNonQualified.style.background = 'white';
-        tabNonQualified.style.color = '#ef4444';
-        tabNonQualified.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
-
-        tabQualified.classList.remove('active');
-        tabQualified.style.background = 'transparent';
-        tabQualified.style.color = '#64748b';
-        tabQualified.style.boxShadow = 'none';
-
-        if (viewMainTitle) viewMainTitle.textContent = 'Non-Qualified Students Import';
-        if (viewMainDesc) viewMainDesc.textContent = 'Upload non-qualified document (PDF or DOCX) to extract and register non-qualified student records.';
-    }
-
-    // Reset current file and state
-    clearFileState();
-    fetchExistingMasterlist();
 }
 
 function clearFileState() {
@@ -121,10 +75,7 @@ function clearFileState() {
     if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
     if (importSummaryCard) importSummaryCard.classList.add('hidden');
 
-    extractedRecords = [];
-    populateBatchFilter();
-    renderTable();
-    if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
+    fetchExistingMasterlist();
 }
 
 // Drag and Drop Events
@@ -145,7 +96,6 @@ if (dropZone) {
         e.preventDefault();
         dropZone.style.borderColor = 'var(--border-color)';
         dropZone.style.background = 'rgba(0,0,0,0.01)';
-        
         if (e.dataTransfer.files.length > 0) {
             handleFile(e.dataTransfer.files[0]);
         }
@@ -169,11 +119,11 @@ if (btnClearFile) {
 }
 
 function handleFile(file) {
-    const validExtensions = ['pdf', 'doc', 'docx'];
+    const validExtensions = ['pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
     const ext = file.name.split('.').pop().toLowerCase();
     
     if (!validExtensions.includes(ext)) {
-        alert('Please upload a valid document file (PDF, DOC, DOCX).');
+        alert('Please upload a valid masterlist file (PDF, DOCX, XLSX, CSV).');
         return;
     }
     
@@ -207,19 +157,23 @@ if (btnExtract) {
         
         try {
             const ext = currentFile.name.split('.').pop().toLowerCase();
-            let extractedText = '';
             
-            if (ext === 'pdf') {
-                extractedText = await extractPdfText(currentFile);
-            } else if (ext === 'docx' || ext === 'doc') {
-                extractedText = await extractDocxText(currentFile);
+            if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+                const rawRecords = await extractExcelOrCsv(currentFile);
+                await checkAndFlagDuplicates(rawRecords);
+            } else {
+                let extractedText = '';
+                if (ext === 'pdf') {
+                    extractedText = await extractPdfText(currentFile);
+                } else if (ext === 'docx' || ext === 'doc') {
+                    extractedText = await extractDocxText(currentFile);
+                }
+                await parseDocumentText(extractedText);
             }
-            
-            await parseDocumentText(extractedText);
             
         } catch (err) {
             console.error('Extraction Error:', err);
-            alert('Error extracting text from document. Make sure it is a valid text-based file.');
+            alert('Error extracting text from document: ' + err.message);
         } finally {
             btnExtract.disabled = false;
             ocrStatusText.textContent = 'Complete';
@@ -227,6 +181,93 @@ if (btnExtract) {
                 ocrProgressContainer.classList.add('hidden');
             }, 2000);
         }
+    });
+}
+
+async function extractExcelOrCsv(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                const rawRecords = [];
+                let currentBatch = 'Batch 1';
+
+                for (let r = 0; r < jsonData.length; r++) {
+                    const row = jsonData[r];
+                    if (!row || row.length === 0) continue;
+
+                    const rowStr = row.join(' ').toLowerCase();
+                    if (rowStr.includes('batch')) {
+                        const match = rowStr.match(/batch\s*(\d+|[a-z0-9]+)/i);
+                        if (match) currentBatch = `Batch ${match[1]}`;
+                    }
+
+                    if (rowStr.includes('last name') || rowStr.includes('student name') || rowStr.includes('control no') || rowStr.includes('given name')) {
+                        continue;
+                    }
+
+                    const cleanCells = row.map(c => String(c || '').trim()).filter(c => c.length > 0);
+                    if (cleanCells.length === 0) continue;
+
+                    let cellIdx = 0;
+                    if (/^\d+$/.test(cleanCells[0]) && cleanCells.length > 1) {
+                        cellIdx = 1;
+                    }
+
+                    let studentId = '';
+                    if (cleanCells[cellIdx] && (/^\d{6,15}$/.test(cleanCells[cellIdx]) || /^[0-9-]+$/.test(cleanCells[cellIdx]))) {
+                        studentId = cleanCells[cellIdx];
+                        cellIdx++;
+                    }
+
+                    let lastName = '';
+                    let firstName = '';
+                    let middleName = '';
+                    let course = 'BSIT';
+
+                    if (cleanCells.length >= cellIdx + 3) {
+                        lastName = cleanCells[cellIdx];
+                        firstName = cleanCells[cellIdx + 1];
+                        middleName = cleanCells[cellIdx + 2];
+                        if (cleanCells[cellIdx + 3]) course = cleanCells[cellIdx + 3];
+                    } else if (cleanCells.length >= cellIdx + 2) {
+                        lastName = cleanCells[cellIdx];
+                        firstName = cleanCells[cellIdx + 1];
+                    } else if (cleanCells[cellIdx]) {
+                        const parts = cleanCells[cellIdx].split(/[,\s]+/);
+                        if (parts.length >= 2) {
+                            lastName = parts[0];
+                            firstName = parts.slice(1).join(' ');
+                        } else {
+                            lastName = parts[0];
+                        }
+                    }
+
+                    if (lastName && firstName) {
+                        rawRecords.push({
+                            lastName: lastName.toUpperCase(),
+                            firstName: firstName.toUpperCase(),
+                            middleName: (middleName || '').toUpperCase(),
+                            batch: currentBatch,
+                            studentId: studentId,
+                            course: course
+                        });
+                    }
+                }
+
+                resolve(rawRecords);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
     });
 }
 
@@ -288,11 +329,10 @@ async function extractDocxText(file) {
 
 async function parseDocumentText(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let currentBatch = 'Batch 1'; // Default
+    let currentBatch = 'Batch 1';
     const rawRecords = [];
     let tempNameParts = [];
 
-    // Heuristic Document Line Parser
     for (const line of lines) {
         if (line.toLowerCase().includes('batch')) {
             const batchMatch = line.match(/batch\s*\d+/i);
@@ -318,7 +358,9 @@ async function parseDocumentText(text) {
                 lastName: parts[0] || '',
                 firstName: parts[1] || '',
                 middleName: parts[2] || '',
-                batch: currentBatch
+                batch: currentBatch,
+                studentId: '',
+                course: 'BSIT'
             });
             tempNameParts = [];
         } else {
@@ -328,7 +370,9 @@ async function parseDocumentText(text) {
                     lastName: tempNameParts[0],
                     firstName: tempNameParts[1],
                     middleName: tempNameParts[2],
-                    batch: currentBatch
+                    batch: currentBatch,
+                    studentId: '',
+                    course: 'BSIT'
                 });
                 tempNameParts = [];
             }
@@ -340,20 +384,21 @@ async function parseDocumentText(text) {
             lastName: tempNameParts[0] || '',
             firstName: tempNameParts[1] || '',
             middleName: tempNameParts[2] || '',
-            batch: currentBatch
+            batch: currentBatch,
+            studentId: '',
+            course: 'BSIT'
         });
     }
 
     if (rawRecords.length === 0) {
-        alert('No student names could be clearly extracted from this document.');
+        alert('No grantee names could be clearly extracted from this document.');
         return;
     }
 
-    // Perform Deduplication Check against database & internal records
     await checkAndFlagDuplicates(rawRecords);
 }
 
-// Deduplication and Summary Statistics Calculator
+// Deduplication check
 async function checkAndFlagDuplicates(records) {
     let existingDbNames = new Set();
     
@@ -370,7 +415,7 @@ async function checkAndFlagDuplicates(records) {
             });
         }
     } catch (e) {
-        console.warn(`Could not query ${getTableName()} for duplicate check:`, e);
+        console.warn('Could not query scholar_masterlist for duplicate check:', e);
     }
 
     const seenInFile = new Set();
@@ -387,7 +432,7 @@ async function checkAndFlagDuplicates(records) {
             duplicateReason = 'Empty name';
         } else if (existingDbNames.has(normKey)) {
             isDuplicate = true;
-            duplicateReason = 'Already exists in database';
+            duplicateReason = 'Already in masterlist';
         } else if (seenInFile.has(normKey)) {
             isDuplicate = true;
             duplicateReason = 'Duplicate in document';
@@ -408,7 +453,6 @@ async function checkAndFlagDuplicates(records) {
         };
     });
 
-    // Update Import Summary Metrics Card
     if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
     if (summaryImported) summaryImported.textContent = importedCount;
     if (summarySkipped) summarySkipped.textContent = skippedCount;
@@ -421,7 +465,7 @@ async function checkAndFlagDuplicates(records) {
     if (extractedRecords.length > 0) {
         btnSaveRecords.classList.remove('hidden');
         btnSaveRecords.disabled = importedCount === 0;
-        btnSaveRecords.innerHTML = `<i class="icon-save" style="font-size: 16px;"></i> Save (${importedCount} New Records)`;
+        btnSaveRecords.innerHTML = `<i class="icon-save" style="font-size: 16px;"></i> Save (${importedCount} New Grantees)`;
         btnSaveRecords.classList.add('btn-gradient-save');
         btnSaveRecords.style.background = '';
     } else {
@@ -460,10 +504,10 @@ function renderTable() {
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="8" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-file-search" style="font-size: 40px; color: #cbd5e1;"></i>
-                        <span>Upload a document and extract data to see results here.</span>
+                        <span>Upload a document and extract data to see new grantees listed here.</span>
                     </div>
                 </td>
             </tr>`;
@@ -478,7 +522,7 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="8" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>No records match the selected batch.</span>
@@ -496,10 +540,13 @@ function renderTable() {
         }
 
         const statusBadge = record.isDuplicate
-            ? `<span title="${record.duplicateReason}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate (Skipped)</span>`
-            : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> New</span>`;
+            ? `<span title="${record.duplicateReason}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
+            : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> New Grantee</span>`;
 
         tr.innerHTML = `
+            <td style="padding: 6px 12px;">
+                <input type="text" class="input-clean edit-student-id" data-index="${index}" value="${record.studentId || ''}" placeholder="Student ID" style="width: 100px;">
+            </td>
             <td style="padding: 6px 12px;">
                 <input type="text" class="input-clean edit-last-name" data-index="${index}" value="${record.lastName}">
             </td>
@@ -510,7 +557,10 @@ function renderTable() {
                 <input type="text" class="input-clean edit-middle-name" data-index="${index}" value="${record.middleName}">
             </td>
             <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-batch" data-index="${index}" value="${record.batch}" style="width: 100px;">
+                <input type="text" class="input-clean edit-course" data-index="${index}" value="${record.course || 'BSIT'}" style="width: 90px;">
+            </td>
+            <td style="padding: 6px 12px;">
+                <input type="text" class="input-clean edit-batch" data-index="${index}" value="${record.batch}" style="width: 90px;">
             </td>
             <td style="padding: 6px 12px; font-size: 12px;">
                 ${statusBadge}
@@ -524,7 +574,14 @@ function renderTable() {
         extractedTableBody.appendChild(tr);
     });
     
-    // Add event listeners for edits
+    // Listeners for inline edits
+    document.querySelectorAll('.edit-student-id').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const idx = e.target.getAttribute('data-index');
+            extractedRecords[idx].studentId = e.target.value.trim();
+        });
+    });
+
     document.querySelectorAll('.edit-last-name').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = e.target.getAttribute('data-index');
@@ -545,6 +602,13 @@ function renderTable() {
             extractedRecords[idx].middleName = e.target.value.trim();
         });
     });
+
+    document.querySelectorAll('.edit-course').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const idx = e.target.getAttribute('data-index');
+            extractedRecords[idx].course = e.target.value.trim();
+        });
+    });
     
     document.querySelectorAll('.edit-batch').forEach(input => {
         input.addEventListener('change', (e) => {
@@ -558,7 +622,6 @@ function renderTable() {
             const idx = e.currentTarget.getAttribute('data-index');
             extractedRecords.splice(idx, 1);
             
-            // Recalculate summary metrics
             const skipped = extractedRecords.filter(r => r.isDuplicate).length;
             const imported = extractedRecords.filter(r => !r.isDuplicate).length;
             if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
@@ -581,7 +644,7 @@ async function saveRecordsToDatabase() {
     const validToInsert = extractedRecords.filter(r => !r.isDuplicate);
 
     if (validToInsert.length === 0) {
-        alert('No new unique records to save. All extracted records are marked as duplicates or already exist in the database.');
+        alert('No new unique grantee records to save.');
         return;
     }
     
@@ -591,38 +654,27 @@ async function saveRecordsToDatabase() {
     
     try {
         const tableName = getTableName();
-        const toInsert = validToInsert.map(r => {
-            const item = {
-                last_name: r.lastName,
-                first_name: r.firstName,
-                middle_name: r.middleName,
-                name: `${r.lastName}, ${r.firstName} ${r.middleName}`.trim(),
-                batch: r.batch
-            };
-            if (currentImportType === 'non_qualified') {
-                item.reason = 'Non-Qualified';
-            }
-            return item;
-        });
+        const toInsert = validToInsert.map(r => ({
+            student_id: r.studentId || '',
+            last_name: r.lastName,
+            first_name: r.firstName,
+            middle_name: r.middleName,
+            name: `${r.lastName}, ${r.firstName} ${r.middleName}`.trim(),
+            course: r.course || 'BSIT',
+            batch: r.batch
+        }));
         
         const { error } = await window.supabaseClient
             .from(tableName)
             .insert(toInsert);
             
-        if (error) {
-            if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('does not exist')) {
-                throw new Error(`Table '${tableName}' does not exist in Supabase database yet. Please run scratch/sql_setup.sql in your Supabase SQL editor.`);
-            }
-            throw error;
-        }
+        if (error) throw error;
         
-        // Show success state
-        btnSaveRecords.innerHTML = `<i class="icon-check" style="color: white;"></i> Saved ${validToInsert.length} Records to Database`;
+        btnSaveRecords.innerHTML = `<i class="icon-check" style="color: white;"></i> Saved ${validToInsert.length} Grantees to Masterlist`;
         btnSaveRecords.classList.remove('btn-gradient-save');
         btnSaveRecords.style.background = '#10b981';
         
-        // Update records state to show all as saved in DB
-        fetchExistingMasterlist();
+        await fetchExistingMasterlist();
 
     } catch (err) {
         console.error('Error saving masterlist:', err);
@@ -632,12 +684,290 @@ async function saveRecordsToDatabase() {
     }
 }
 
-// Save records button listener
 if (btnSaveRecords) {
     btnSaveRecords.addEventListener('click', saveRecordsToDatabase);
 }
 
-// Fetch existing records when viewing a tab
+// ── Annex 5 TES Verification & Dual Form Table Logic ────────────────
+async function loadSchoolStudentsAndVerify(grantees) {
+    try {
+        const { data: dbStudents } = await window.supabaseClient.from('students').select('*');
+        schoolStudents = dbStudents || [];
+
+        const result = VerificationService.runBatchVerification(grantees, schoolStudents);
+        verifiedForm2List = result.form2List;
+        verifiedForm3List = result.form3List;
+        needsReviewList = result.needsReviewList;
+
+        updateAnnexKPIs();
+        renderAnnexForm2Table(verifiedForm2List);
+        renderAnnexForm3Table(verifiedForm3List);
+        renderAnnexReviewQueue(needsReviewList);
+
+    } catch (err) {
+        console.warn('Error verifying Annex 5 tables in masterlist_import:', err);
+    }
+}
+
+function updateAnnexKPIs() {
+    const f2Count = verifiedForm2List.length;
+    const f3Count = verifiedForm3List.length;
+    const revCount = needsReviewList.length;
+    const totalBilling = f2Count * 10000;
+
+    const b2 = document.getElementById('sa-badge-form2-count');
+    const b3 = document.getElementById('sa-badge-form3-count');
+    const bRev = document.getElementById('sa-badge-review-count');
+
+    if (b2) b2.textContent = f2Count;
+    if (b3) b3.textContent = f3Count;
+    if (bRev) bRev.textContent = revCount;
+
+    const countF2 = document.getElementById('sa-stat-form2-count');
+    const amtF2 = document.getElementById('sa-stat-form2-amount');
+    const countF3 = document.getElementById('sa-stat-form3-count');
+
+    if (countF2) countF2.textContent = `${f2Count} Enrolled Grantees`;
+    if (amtF2) amtF2.textContent = `₱${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
+    if (countF3) countF3.textContent = `${f3Count} Not Included Grantees`;
+}
+
+function renderAnnexForm2Table(items) {
+    const tbody = document.getElementById('sa-tbody-form2');
+    if (!tbody) return;
+
+    if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">No verified enrolled grantees for Form 2.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = items.map((item, idx) => {
+        const ctrl = String(idx + 1).padStart(5, '0');
+        const grantee = item.grantee;
+        const student = item.matchedStudent || {};
+        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
+        const bdate = student.birthdate || student.birthday || '01/01/2000';
+        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const email = student.email || student.authEmail || 'N/A';
+        const phone = student.contactNumber || student.phone || 'N/A';
+
+        return `
+            <tr>
+                <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
+                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">${sa}</span></td>
+                <td>${name.lastName}</td>
+                <td>${name.firstName}</td>
+                <td>${name.mi}</td>
+                <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
+                <td>${bdate}</td>
+                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td style="text-align: center;">${year}</td>
+                <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
+                <td><span style="font-size: 11px;">${phone}</span></td>
+                <td style="text-align: center;">${grantee.batch || '1'}</td>
+                <td style="font-weight: 600; color: #2E7D32;">₱10,000.00</td>
+                <td style="text-align: center; color: var(--text-secondary);">₱0.00</td>
+                <td style="font-weight: 700; color: #2E7D32;">₱10,000.00</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAnnexForm3Table(items) {
+    const tbody = document.getElementById('sa-tbody-form3');
+    if (!tbody) return;
+
+    if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">No Form 3 special status records.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = items.map((item, idx) => {
+        const ctrl = String(idx + 1).padStart(5, '0');
+        const grantee = item.grantee;
+        const student = item.matchedStudent || {};
+        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
+        const bdate = student.birthdate || student.birthday || '01/01/2000';
+        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const reason = item.specialStatusReason || 'Not enrolled';
+        const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
+
+        let badgeStyle = 'background: rgba(255,152,0,0.12); color: #E65100;';
+        if (reason === 'Dropped' || reason === 'Waived') badgeStyle = 'background: rgba(244,67,54,0.12); color: #D32F2F;';
+        if (reason === 'Graduated') badgeStyle = 'background: rgba(76,175,80,0.12); color: #2E7D32;';
+
+        return `
+            <tr>
+                <td style="font-weight: 700; color: #E65100;">${ctrl}</td>
+                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(255,143,0,0.08); font-family: monospace; font-size: 11px;">${sa}</span></td>
+                <td>${name.lastName}</td>
+                <td>${name.firstName}</td>
+                <td>${name.mi}</td>
+                <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
+                <td>${bdate}</td>
+                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td style="text-align: center;">${year}</td>
+                <td>
+                    <span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; ${badgeStyle}">
+                        ${reason}
+                    </span>
+                </td>
+                <td style="color: var(--text-secondary); font-size: 11px;">${remarks}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAnnexReviewQueue(items) {
+    const container = document.getElementById('sa-review-items-container');
+    if (!container) return;
+
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 36px; background: rgba(16,185,129,0.04); border: 1.5px dashed rgba(16,185,129,0.3); border-radius: 16px;">
+                <i class="icon-check-circle-2" style="font-size: 32px; color: #10b981; margin-bottom: 6px;"></i>
+                <h4 style="margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #065f46;">All Records Categorized & Verified</h4>
+                <p style="margin: 0; font-size: 12px; color: #047857;">All scholarship grantees have been verified into Form 2 or Form 3.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = items.map((item, idx) => {
+        const grantee = item.grantee;
+        const student = item.matchedStudent;
+        const confidence = item.confidence;
+        const discrepancies = item.discrepancies || [];
+
+        const granteeName = grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''}`;
+        const studentName = student ? (student.fullName || student.name) : 'No Matching Record in School Database';
+
+        return `
+            <div class="card" style="padding: 16px 20px; border-left: 4px solid #E53935; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-secondary);">
+                            ID: <strong>${grantee.student_id || 'Unassigned'}</strong> • Program: <strong>${grantee.course || 'BSIT'}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
+                        </p>
+                    </div>
+                    <span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: rgba(229,57,53,0.1); color: #D32F2F;">
+                        Match Confidence: ${confidence}%
+                    </span>
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    ${discrepancies.map(d => `
+                        <span style="padding: 2px 8px; border-radius: 6px; background: rgba(229,57,53,0.08); color: #C62828; font-size: 10px; font-weight: 600;">
+                            ${d}
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Annex Tab Switching
+const saTabBtn2 = document.getElementById('sa-tab-btn-form2');
+const saTabBtn3 = document.getElementById('sa-tab-btn-form3');
+const saTabBtnRev = document.getElementById('sa-tab-btn-review');
+
+const saTabPane2 = document.getElementById('sa-tab-pane-form2');
+const saTabPane3 = document.getElementById('sa-tab-pane-form3');
+const saTabPaneRev = document.getElementById('sa-tab-pane-review');
+
+function activateSATab(activeBtn, activePane) {
+    [saTabBtn2, saTabBtn3, saTabBtnRev].forEach(b => b && b.classList.remove('active'));
+    [saTabPane2, saTabPane3, saTabPaneRev].forEach(p => p && (p.style.display = 'none'));
+
+    if (activeBtn) activeBtn.classList.add('active');
+    if (activePane) activePane.style.display = 'block';
+}
+
+if (saTabBtn2) saTabBtn2.addEventListener('click', () => activateSATab(saTabBtn2, saTabPane2));
+if (saTabBtn3) saTabBtn3.addEventListener('click', () => activateSATab(saTabBtn3, saTabPane3));
+if (saTabBtnRev) saTabBtnRev.addEventListener('click', () => activateSATab(saTabBtnRev, saTabPaneRev));
+
+// Annex Auto-Fill Excel Exports
+const btnExportF2 = document.getElementById('sa-btn-export-form2-top');
+if (btnExportF2) {
+    btnExportF2.addEventListener('click', async () => {
+        try {
+            btnExportF2.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+            const resp = await fetch('/assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
+            const blob = await resp.blob();
+
+            const studentsToFill = verifiedForm2List.map(item => item.matchedStudent || item.grantee);
+            const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
+            saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
+        } catch (err) {
+            console.error('Form 2 export error:', err);
+            alert('Failed to generate Form 2: ' + err.message);
+        } finally {
+            btnExportF2.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)';
+        }
+    });
+}
+
+const btnExportF3 = document.getElementById('sa-btn-export-form3-top');
+if (btnExportF3) {
+    btnExportF3.addEventListener('click', async () => {
+        try {
+            btnExportF3.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+            const resp = await fetch('/assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
+            const blob = await resp.blob();
+
+            const studentsToFill = verifiedForm3List.map(item => ({
+                ...(item.matchedStudent || item.grantee),
+                status: item.specialStatusReason || 'Not enrolled',
+                remarks: item.remarks || `Categorized: ${item.specialStatusReason || 'Not enrolled'}`
+            }));
+
+            const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
+            saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
+        } catch (err) {
+            console.error('Form 3 export error:', err);
+            alert('Failed to generate Form 3: ' + err.message);
+        } finally {
+            btnExportF3.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)';
+        }
+    });
+}
+
+// Search listeners for Super Admin Annex Tables
+const saSearchF2 = document.getElementById('sa-search-form2');
+if (saSearchF2) {
+    saSearchF2.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        const filtered = verifiedForm2List.filter(item => {
+            const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
+            const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
+            return !q || name.includes(q) || id.includes(q);
+        });
+        renderAnnexForm2Table(filtered);
+    });
+}
+
+const saSearchF3 = document.getElementById('sa-search-form3');
+if (saSearchF3) {
+    saSearchF3.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        const filtered = verifiedForm3List.filter(item => {
+            const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
+            const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
+            return !q || name.includes(q) || id.includes(q);
+        });
+        renderAnnexForm3Table(filtered);
+    });
+}
+
+// Fetch existing masterlist
 async function fetchExistingMasterlist() {
     try {
         const tableName = getTableName();
@@ -647,36 +977,46 @@ async function fetchExistingMasterlist() {
             .order('created_at', { ascending: false });
             
         if (error) {
-            if (error.code === '42P01' || error.message.includes('does not exist')) {
-                console.warn(`Table '${tableName}' not created yet.`);
-                extractedRecords = [];
-                renderTable();
-                return;
-            }
-            throw error;
+            console.warn('Error fetching scholar_masterlist:', error);
+            return;
         }
         
         if (data && data.length > 0) {
             extractedRecords = data.map(row => ({
                 id: row.id,
+                studentId: row.student_id || '',
                 lastName: row.last_name,
                 firstName: row.first_name,
                 middleName: row.middle_name,
+                course: row.course || 'BSIT',
                 batch: row.batch,
                 isDuplicate: false
             }));
 
-            // Hide import summary card when viewing existing saved records
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
-
             populateBatchFilter();
             renderTable();
             
             btnSaveRecords.classList.remove('hidden');
-            btnSaveRecords.innerHTML = '<i class="icon-check" style="color: white;"></i> Saved to Database';
+            btnSaveRecords.innerHTML = '<i class="icon-check" style="color: white;"></i> Saved in Masterlist';
             btnSaveRecords.classList.remove('btn-gradient-save');
             btnSaveRecords.style.background = '#10b981';
             btnSaveRecords.disabled = true;
+
+            // Trigger Annex 5 verification in Super Admin view
+            const granteesForVerification = data.map(m => ({
+                id: m.id,
+                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
+                last_name: m.last_name,
+                first_name: m.first_name,
+                middle_name: m.middle_name,
+                batch: m.batch || 'Batch 1',
+                student_id: m.student_id || '',
+                course: m.course || 'BSIT',
+                year: m.year || '1'
+            }));
+            await loadSchoolStudentsAndVerify(granteesForVerification);
+
         } else {
             extractedRecords = [];
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
@@ -688,5 +1028,5 @@ async function fetchExistingMasterlist() {
     }
 }
 
-// Initialize on page load
+// Init
 fetchExistingMasterlist();

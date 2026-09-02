@@ -5,12 +5,94 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // Initialize global supabase client
 window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+// Global Current Admin State
+window.currentAdmin = null;
+
+// Load Admin Profile Details
+async function loadAdminProfile(user) {
+    try {
+        let adminDoc = null;
+        if (user) {
+            const { data } = await window.supabaseClient
+                .from('admins')
+                .select('*')
+                .or(`uid.eq.${user.id},email.eq.${user.email}`)
+                .limit(1);
+
+            if (data && data.length > 0) {
+                adminDoc = data[0];
+            }
+        }
+
+        const email = user?.email || adminDoc?.email || '';
+        const isSuper = (adminDoc?.role === 'Super Admin' || adminDoc?.role === 'SuperAdmin' || email.toLowerCase().includes('superadmin'));
+        const displayRole = isSuper ? 'Super Admin' : (adminDoc?.role || 'Admin');
+        const username = adminDoc?.username || (isSuper ? 'superadmin' : 'admin');
+
+        window.currentAdmin = {
+            uid: user?.id || adminDoc?.uid,
+            email: email,
+            username: username,
+            role: adminDoc?.role || (isSuper ? 'Super Admin' : 'Admin'),
+            displayRole: displayRole
+        };
+
+        // Update UI Elements
+        const profileNameEl = document.getElementById('profile-name');
+        const profileRoleEl = document.getElementById('profile-role');
+        const profileEmailEl = document.getElementById('profile-email');
+
+        if (profileNameEl) profileNameEl.textContent = displayRole;
+        if (profileRoleEl) profileRoleEl.textContent = displayRole;
+        if (profileEmailEl) profileEmailEl.textContent = email || (isSuper ? 'superadmin@scholardoc.com' : 'admin@scholardoc.com');
+
+    } catch (e) {
+        console.error('Error loading admin profile:', e);
+    }
+}
+
+// Role-Based Navigation & View Access Controls
+function applyRoleAccessControls() {
+    const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+    
+    // Hide or show superadmin-only feature items in sidebar
+    const superAdminItems = document.querySelectorAll('[data-role-req="superadmin"]');
+    superAdminItems.forEach(el => {
+        el.style.display = isSuperAdmin ? '' : 'none';
+    });
+
+    // Hide or show admin-only feature items in sidebar
+    const adminItems = document.querySelectorAll('[data-role-req="admin"]');
+    adminItems.forEach(el => {
+        el.style.display = isSuperAdmin ? 'none' : '';
+    });
+
+    const divider = document.getElementById('sidebar-divider');
+    if (divider) {
+        divider.style.display = '';
+    }
+
+    // Determine initial view based on role
+    const initialView = isSuperAdmin ? 'dashboard' : 'annex5_generator';
+    
+    // Set active nav item
+    navItems.forEach(nav => nav.classList.remove('active'));
+    const targetNav = document.querySelector(`.nav-item[data-view="${initialView}"]`);
+    if (targetNav) targetNav.classList.add('active');
+
+    // Load initial view
+    loadView(initialView);
+}
+
 // Check Authentication Session
 async function checkSession() {
     const { data: { session } } = await window.supabaseClient.auth.getSession();
     if (!session) {
         window.location.href = 'login.html'; // Redirect to login if not authenticated
+        return;
     }
+    await loadAdminProfile(session.user);
+    applyRoleAccessControls();
 }
 
 // Elements
@@ -37,7 +119,8 @@ const viewTitles = {
     'audit_logs': 'Activity Logs',
     'reports': 'Reports & Analytics',
     'settings': 'System Settings',
-    'masterlist_import': 'Scholar Masterlist Import'
+    'masterlist_import': 'Scholar Masterlist Import',
+    'annex5_generator': 'CHED Annex 5 TES Generator'
 };
 
 // Icon class map matching Flutter's _getPageIcon()
@@ -51,7 +134,8 @@ const viewIcons = {
     'audit_logs': 'icon-history',
     'reports': 'icon-bar-chart-4',
     'settings': 'icon-settings',
-    'masterlist_import': 'icon-file-text'
+    'masterlist_import': 'icon-file-text',
+    'annex5_generator': 'icon-file-spreadsheet'
 };
 
 // Track current view for sync
@@ -63,6 +147,13 @@ let currentScript = null;
 // Load a View
 async function loadView(viewName) {
     try {
+        const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+
+        // Restrict standard Admin to annex5_generator and settings
+        if (window.currentAdmin && !isSuperAdmin && viewName !== 'settings' && viewName !== 'annex5_generator') {
+            viewName = 'annex5_generator';
+        }
+
         // Fetch HTML partial
         const response = await fetch(`views/${viewName}.html`);
         if (!response.ok) throw new Error('View not found');
@@ -223,6 +314,11 @@ const notificationDropdown = document.getElementById('notification-dropdown');
 const markAllReadBtn = document.getElementById('mark-all-read-btn');
 
 window.navigateToView = function(viewName) {
+    const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+    if (!isSuperAdmin && viewName !== 'settings' && viewName !== 'annex5_generator') {
+        viewName = 'annex5_generator';
+    }
+
     // Find the nav item
     const targetNav = document.querySelector(`.nav-item[data-view="${viewName}"]`);
     if (targetNav) {
@@ -245,7 +341,7 @@ async function loadNotifications() {
         const { data, error } = await window.supabaseClient
             .from('notifications')
             .select('*')
-            .eq('studentId', 'admin')
+            .or('studentId.eq.admin,studentId.eq.superadmin')
             .order('timestamp', { ascending: false })
             .limit(20);
         if (error) throw error;
@@ -394,13 +490,15 @@ function setupRealtimeNotifications() {
             {
                 event: '*',
                 schema: 'public',
-                table: 'notifications',
-                filter: 'studentId=eq.admin'
+                table: 'notifications'
             },
             (payload) => {
-                loadNotifications();
-                if (payload.eventType === 'INSERT') {
-                    window.showWebPopupNotification(payload.new.title, payload.new.message, payload.new.id);
+                const target = payload.new?.studentId || payload.old?.studentId;
+                if (target === 'admin' || target === 'superadmin') {
+                    loadNotifications();
+                    if (payload.eventType === 'INSERT') {
+                        window.showWebPopupNotification(payload.new.title, payload.new.message, payload.new.id);
+                    }
                 }
             }
         )
@@ -474,11 +572,6 @@ if (validationMenuBtn) {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
-    // Load default view (dashboard)
-    const initialView = 'dashboard';
-    const initialNav = document.querySelector(`.nav-item[data-view="${initialView}"]`);
-    if (initialNav) initialNav.classList.add('active');
-    loadView(initialView);
     
     // Init notifications
     loadNotifications();

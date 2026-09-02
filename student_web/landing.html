@@ -1612,6 +1612,12 @@
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
             }
 
+            .nav-links.show .mobile-nav-auth {
+                display: flex !important;
+                align-items: center;
+                gap: 8px;
+            }
+
             body.dark .nav-links.show {
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
             }
@@ -1621,8 +1627,9 @@
                 align-items: center;
             }
 
-            .nav-actions .btn {
-                display: none;
+            .nav-actions .btn,
+            .nav-actions .nav-link {
+                display: none !important;
             }
 
             .section-title {
@@ -1720,12 +1727,18 @@
                 <a href="#workflow" class="nav-link">How It Works</a>
                 <a href="#portals" class="nav-link">Portals</a>
                 <a href="#contact" class="nav-link">Contact</a>
+                <a href="/login.html" class="nav-link mobile-nav-auth" style="display: none;">Login</a>
+                <a href="#contact" class="nav-link mobile-nav-auth" style="display: none;">Register</a>
             </div>
 
             <div class="nav-actions">
-                <a href="http://localhost:8080/login.html" class="btn btn-primary"
-                    style="padding: 9px 24px; font-size: 13.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
-                    <i data-lucide="log-in" style="width: 16px; height: 16px;"></i> Login
+                <a href="/login.html" class="nav-link"
+                    style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i data-lucide="log-in" style="width: 15px; height: 15px;"></i> Login
+                </a>
+                <a href="#contact" class="nav-link"
+                    style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i data-lucide="user-plus" style="width: 15px; height: 15px;"></i> Register
                 </a>
                 <button class="mobile-menu-btn" onclick="document.getElementById('navLinks').classList.toggle('show')"
                     aria-label="Menu">
@@ -1754,7 +1767,7 @@
                     document capture, real-time OCR verification, digital signatures, and transparent billing tracking.
                 </p>
                 <div class="hero-buttons">
-                    <a href="http://localhost:8080/login.html" class="btn btn-gold" style="font-size: 15px; padding: 14px 28px;">
+                    <a href="/login.html" class="btn btn-gold" style="font-size: 15px; padding: 14px 28px;">
                         <i data-lucide="log-in"></i> Sign In to Portal <i data-lucide="arrow-right"></i>
                     </a>
                     <a href="#features" class="btn btn-ghost" style="font-size: 15px; padding: 14px 24px;">
@@ -1968,7 +1981,7 @@
                             <li><i data-lucide="check-circle-2"></i> Track Document Approval</li>
                             <li><i data-lucide="check-circle-2"></i> Connect with Fellow Scholars</li>
                         </ul>
-                        <a href="http://localhost:8080/login.html" class="btn btn-primary">
+                        <a href="/login.html" class="btn btn-primary">
                             Login to Portal <i data-lucide="arrow-right"></i>
                         </a>
                     </div>
@@ -1988,7 +2001,7 @@
                             <li><i data-lucide="check-circle-2"></i> Batch Approval & Remarks</li>
                             <li><i data-lucide="check-circle-2"></i> Export Compliance Logs</li>
                         </ul>
-                        <a href="http://localhost:8080/login.html" class="btn btn-gold">
+                        <a href="/login.html" class="btn btn-gold">
                             Access Admin Portal <i data-lucide="arrow-right"></i>
                         </a>
                     </div>
@@ -2072,7 +2085,8 @@
                     </div>
                 </div>
                 <div class="footer-links">
-                    <a href="http://localhost:8080/login.html">Portal Login</a>
+                    <a href="/login.html">Portal Login</a>
+                    <a href="#contact">Register</a>
                     <a href="#about">About</a>
                     <a href="#features">Features</a>
                     <a href="#contact">Contact</a>

@@ -29,8 +29,12 @@ const server = http.createServer((req, res) => {
     let urlPath = req.url.split('?')[0];
     
     // Default routing
-    if (urlPath === '/') urlPath = '/landing.html';
-    if (urlPath === '/login' || urlPath === '/login.html') urlPath = '/index.html';
+    if (urlPath === '/' || urlPath === '/index.html') urlPath = '/landing.html';
+    if (urlPath === '/login' || urlPath === '/login.html') {
+        res.writeHead(302, { 'Location': 'http://localhost:8080/login.html' });
+        res.end();
+        return;
+    }
     
     // Resolve file path
     const filePath = path.join(ROOT, urlPath);

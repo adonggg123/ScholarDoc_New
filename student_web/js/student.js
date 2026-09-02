@@ -10,7 +10,7 @@ window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 async function checkSession() {
     const { data: { session } } = await window.supabaseClient.auth.getSession();
     if (!session) {
-        window.location.href = 'index.html';
+        window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
         return null;
     }
     return session;
@@ -181,7 +181,7 @@ async function handleLogout() {
         }
         await window.supabaseClient.auth.signOut();
     } catch (_) { }
-    window.location.href = 'http://localhost:8080/login.html';
+    window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
 }
 
 dropdownLogoutBtn?.addEventListener('click', handleLogout);

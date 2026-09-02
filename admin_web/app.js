@@ -62,6 +62,7 @@ function setLoading(loading) {
 function getAdminEmail(raw) {
     const clean = raw.trim().toLowerCase();
     if (clean.includes('@')) return clean;
+    if (clean === 'superadmin') return 'superadmin@scholardoc.com';
     if (clean === 'admin') return 'admin@scholardoc.com';
     return `${clean}@scholardoc.com`;
 }
@@ -75,44 +76,53 @@ function getStudentEmail(raw) {
 // Automatic Routing Helper based on Database Role
 async function routeUserByRole(authUser, rawIdentifier, authSession) {
     const uid = authUser.id;
+    const userEmail = (authUser.email || '').toLowerCase();
     
-    // Check if student record exists in DB by uid or studentId or email
-    let studentData = null;
-    const { data: byUid } = await supabaseClient
-        .from('students')
-        .select('*')
-        .eq('uid', uid)
-        .limit(1);
+    // Check if user exists in admins table
+    let adminData = null;
+    try {
+        const { data: adminRows } = await supabaseClient
+            .from('admins')
+            .select('*')
+            .or(`uid.eq.${uid},email.eq.${userEmail}`)
+            .limit(1);
+        if (adminRows && adminRows.length > 0) {
+            adminData = adminRows[0];
+        }
+    } catch (_) {}
 
-    if (byUid && byUid.length > 0) {
-        studentData = byUid[0];
-    } else {
-        const cleanId = rawIdentifier.trim();
-        const { data: byId } = await supabaseClient
+    const isAdminAccount = !!adminData || userEmail.includes('admin') || userEmail.includes('superadmin');
+
+    if (!isAdminAccount) {
+        // Check if student record exists in DB by uid or studentId or email
+        let studentData = null;
+        const { data: byUid } = await supabaseClient
             .from('students')
             .select('*')
-            .or(`studentId.eq.${cleanId},authEmail.eq.${cleanId},email.eq.${cleanId}`)
+            .eq('uid', uid)
             .limit(1);
-        if (byId && byId.length > 0) {
-            studentData = byId[0];
+
+        if (byUid && byUid.length > 0) {
+            studentData = byUid[0];
+        } else {
+            const cleanId = rawIdentifier.trim();
+            const { data: byId } = await supabaseClient
+                .from('students')
+                .select('*')
+                .or(`studentId.eq.${cleanId},authEmail.eq.${cleanId},email.eq.${cleanId}`)
+                .limit(1);
+            if (byId && byId.length > 0) {
+                studentData = byId[0];
+            }
         }
-    }
 
-    const isStudent = !!studentData || (authUser.email && authUser.email.includes('@scholardoc.com') && !authUser.email.includes('admin'));
-
-    if (isStudent) {
-        // Log student activity & presence
+        // Log student activity
         try {
             await supabaseClient.from('audit_logs').insert({
                 action: 'Logged in via Portal',
                 userName: studentData?.fullName || 'Student',
                 role: 'Student',
                 studentId: studentData?.studentId || rawIdentifier,
-            });
-            await supabaseClient.from('presence').upsert({
-                uid: uid,
-                isOnline: true,
-                lastSeen: new Date().toISOString(),
             });
         } catch (_) {}
 
@@ -121,24 +131,33 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
         // Route to Student Dashboard with session tokens in hash
         const tokenHash = authSession ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}&student_id=${encodeURIComponent(studentData?.studentId || rawIdentifier)}` : '';
 
-        if (window.location.port === '8080') {
-            window.location.href = `http://localhost:8081/dashboard.html${tokenHash}`;
-        } else if (window.location.protocol === 'file:') {
+        if (window.location.protocol === 'file:') {
             window.location.href = `../student_web/dashboard.html${tokenHash}`;
         } else {
-            window.location.href = `dashboard.html${tokenHash}`;
+            window.location.href = `/student_web/dashboard.html${tokenHash}`;
         }
     } else {
-        // User is Admin!
+        // User is Admin / Super Admin!
+        const isSuper = (adminData?.role === 'Super Admin' || adminData?.role === 'SuperAdmin' || userEmail.includes('superadmin'));
+        const roleLabel = isSuper ? 'Super Admin' : (adminData?.role || 'Admin');
+        const adminName = adminData?.username || (isSuper ? 'Super Admin' : 'Admin');
+
+        try {
+            await supabaseClient.from('audit_logs').insert({
+                action: 'Logged in via Admin Portal',
+                userName: adminName,
+                role: roleLabel,
+                studentId: isSuper ? 'superadmin' : 'admin',
+            });
+        } catch (_) {}
+
         await new Promise(r => setTimeout(r, 300));
         
         // Route to Admin Dashboard
-        if (window.location.port === '8081') {
-            window.location.href = 'http://localhost:8080/admin.html';
-        } else if (window.location.protocol === 'file:') {
+        if (window.location.protocol === 'file:') {
             window.location.href = '../admin_web/admin.html';
         } else {
-            window.location.href = 'admin.html';
+            window.location.href = '/admin_web/admin.html';
         }
     }
 }
@@ -157,9 +176,10 @@ if (loginForm) {
 
         try {
             let authResponse = null;
+            const lowerId = rawIdentifier.toLowerCase();
 
             // Strategy 1: Attempt Student login via ID email (e.g. 2023305311@scholardoc.com)
-            if (!rawIdentifier.includes('@')) {
+            if (!rawIdentifier.includes('@') && lowerId !== 'admin' && lowerId !== 'superadmin') {
                 const studentEmail = getStudentEmail(rawIdentifier);
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -172,7 +192,7 @@ if (loginForm) {
                 } catch (_) {}
             }
 
-            // Strategy 2: Attempt Admin login (e.g. admin@scholardoc.com)
+            // Strategy 2: Attempt Admin / Super Admin login (e.g. superadmin@scholardoc.com or admin@scholardoc.com)
             if (!authResponse) {
                 const adminEmail = getAdminEmail(rawIdentifier);
                 try {

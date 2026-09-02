@@ -355,10 +355,11 @@ export class BillingService {
         }
     }
 
-    static _injectStudentRows(xmlStr, students, startRow, isForm2) {
+    static _injectForm2Rows(xmlStr, students) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlStr, "application/xml");
         const sheetData = doc.getElementsByTagName("sheetData")[0];
+        const startRow = 42;
 
         for (let i = 0; i < students.length; i++) {
             const s = students[i];
@@ -369,7 +370,7 @@ export class BillingService {
             let gender = String(s.gender || 'M').toUpperCase();
             gender = gender.startsWith('F') ? 'F' : 'M';
             
-            let rawYear = String(s.year || s.scholarYearLevel || '');
+            let rawYear = String(s.year || s.scholarYearLevel || '1');
             let year = rawYear.includes('1') ? '1' :
                        rawYear.includes('2') ? '2' :
                        rawYear.includes('3') ? '3' :
@@ -381,39 +382,87 @@ export class BillingService {
             let bdate = String(s.birthdate || s.birthday || '').trim();
             if (bdate === '' || bdate.toUpperCase() === 'N/A') bdate = '01/01/2000';
             const studId = String(s.studentId || '');
+            const email = String(s.email || s.authEmail || '');
+            const phone = String(s.contactNumber || s.phone || '');
 
             const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
-
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
 
-            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, isForm2));
-            const num_ = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, true, this._defaultStyle(colIdx, isForm2));
+            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, true));
+            const num_ = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, true, this._defaultStyle(colIdx, true));
 
-            str(1, ctrl);
-            str(2, studId);
-            str(3, sa !== '' ? sa : 'N/A');
-            str(4, name.lastName);
-            str(5, name.givenName);
-            str(6, name.middleInitial);
-            str(7, gender);
-            str(8, bdate);
-            str(9, course);
-            str(10, year);
+            str(1, ctrl);                    // A: Control No
+            str(2, studId);                  // B: Student No
+            str(3, studId);                  // C: Student No
+            str(4, sa !== '' ? sa : 'N/A');  // D: TES App No
+            str(5, name.lastName);           // E: Last Name
+            str(6, name.givenName);          // F: Given Name
+            str(7, name.middleInitial);       // G: Middle Initial
+            str(8, gender);                  // H: Sex
+            str(9, bdate);                   // I: Birthdate
+            str(10, course);                 // J: Degree Program
+            str(11, year);                   // K: Year Level
+            str(12, email);                  // L: Email
+            str(13, phone);                  // M: Phone
+            num_(14, 1);                     // N: TES Batch
+            num_(15, 10000);                 // O: TES Amount
+            num_(16, 0);                     // P: PWD Amount
+            num_(17, 10000);                 // Q: Total Amount
+        }
 
-            if (isForm2) {
-                const email = String(s.email || '');
-                const phone = String(s.contactNumber || s.phone || '');
-                str(11, email);
-                str(12, phone);
-                num_(13, 1);
-                num_(14, 10000);
-                num_(15, 0);
-                num_(16, 10000);
-            } else {
-                const status = String(s.status || 'Approved');
-                str(11, status);
-                str(12, 'Active');
-            }
+        const serializer = new XMLSerializer();
+        return serializer.serializeToString(doc);
+    }
+
+    static _injectForm3Rows(xmlStr, students) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlStr, "application/xml");
+        const sheetData = doc.getElementsByTagName("sheetData")[0];
+        const startRow = 34;
+
+        for (let i = 0; i < students.length; i++) {
+            const s = students[i];
+            const rowNum = startRow + i;
+            const ctrl = String(i + 1).padStart(5, '0');
+
+            const name = this._splitFullName(s.fullName || '');
+            let gender = String(s.gender || 'M').toUpperCase();
+            gender = gender.startsWith('F') ? 'F' : 'M';
+            
+            let rawYear = String(s.year || s.scholarYearLevel || '1');
+            let year = rawYear.includes('1') ? '1' :
+                       rawYear.includes('2') ? '2' :
+                       rawYear.includes('3') ? '3' :
+                       rawYear.includes('4') ? '4' : rawYear;
+                       
+            const family = s.familyDetails || {};
+            const sa = String(s.saNumber || family.saNumber || '');
+            const course = String(s.course || '');
+            let bdate = String(s.birthdate || s.birthday || '').trim();
+            if (bdate === '' || bdate.toUpperCase() === 'N/A') bdate = '01/01/2000';
+            const studId = String(s.studentId || '');
+            
+            const rawStatus = String(s.status || s.submissionStatus || 'Not enrolled');
+            const status = rawStatus;
+            const remarks = String(s.adminRemarks || s.remarks || (status === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${status}`));
+
+            const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
+            const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
+
+            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, '1');
+
+            str(1, ctrl);                    // A: Control No
+            str(3, studId);                  // C: Student Number
+            str(4, sa !== '' ? sa : 'N/A');  // D: TES Application Number
+            str(5, name.lastName);           // E: Last Name
+            str(6, name.givenName);          // F: Given Name
+            str(7, name.middleInitial);       // G: Middle Initial
+            str(8, gender);                  // H: Sex
+            str(9, bdate);                   // I: Birthdate
+            str(10, course);                 // J: Degree Program
+            str(11, year);                   // K: Year Level
+            str(12, status);                 // L: Status
+            str(13, remarks);                // M: Remarks
         }
 
         const serializer = new XMLSerializer();
@@ -421,38 +470,37 @@ export class BillingService {
     }
 
     /**
-     * Fills the Annex 5 template with student data.
+     * Fills Annex 5 - Form 2 template (.xlsx)
      */
-    static async fillAnnex5Template(templateBytes, students) {
-        const tesScholars = students.filter(s => {
-            const sc = String(s.scholarshipName || s.scholarshipType || '').toLowerCase();
-            return sc.includes('tes');
-        }).sort((a, b) => String(a.fullName || '').toLowerCase().localeCompare(String(b.fullName || '').toLowerCase()));
-
-        const continuingScholars = [];
-        const newScholars = [];
-        
-        // The user explicitly requested all scholars to fill Form 2.
-        for (const s of tesScholars) {
-            continuingScholars.push(s);
-        }
-
+    static async fillAnnex5Form2(templateBytes, students) {
         const zip = await JSZip.loadAsync(templateBytes);
-
-        // The user's new template is a single Form 2 file, so the target sheet is sheet1.xml
         if (zip.file('xl/worksheets/sheet1.xml')) {
             let sheet1Xml = await zip.file('xl/worksheets/sheet1.xml').async("string");
-            sheet1Xml = this._injectStudentRows(sheet1Xml, continuingScholars, 42, true);
+            sheet1Xml = this._injectForm2Rows(sheet1Xml, students);
             zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
         }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        return { blob, count: students.length };
+    }
 
-        const outputBytes = await zip.generateAsync({ type: 'blob' });
+    /**
+     * Fills Annex 5 - Form 3 template (.xlsx)
+     */
+    static async fillAnnex5Form3(templateBytes, students) {
+        const zip = await JSZip.loadAsync(templateBytes);
+        if (zip.file('xl/worksheets/sheet1.xml')) {
+            let sheet1Xml = await zip.file('xl/worksheets/sheet1.xml').async("string");
+            sheet1Xml = this._injectForm3Rows(sheet1Xml, students);
+            zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        return { blob, count: students.length };
+    }
 
-        return {
-            blob: outputBytes,
-            continuingCount: continuingScholars.length,
-            newCount: newScholars.length,
-            totalCount: tesScholars.length
-        };
+    /**
+     * Legacy / Direct Annex 5 Template filler
+     */
+    static async fillAnnex5Template(templateBytes, students) {
+        return this.fillAnnex5Form2(templateBytes, students);
     }
 }

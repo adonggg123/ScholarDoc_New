@@ -206,7 +206,7 @@ document.getElementById('logout-btn')?.addEventListener('click', async () => {
             await sb.auth.signOut();
         }
     } catch (_) {}
-    window.location.href = 'http://localhost:8080/login.html';
+    window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
 });
 
 if (window.lucide) window.lucide.createIcons();
