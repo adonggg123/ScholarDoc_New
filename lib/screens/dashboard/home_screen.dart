@@ -274,32 +274,48 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        toolbarHeight: 52,
+        toolbarHeight: 56,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
             SizedBox(
-              width: 50,
-              height: 50,
+              width: 48,
+              height: 48,
               child: Image.asset('assets/app_logo3.png', fit: BoxFit.contain),
             ),
             Transform.translate(
-              offset: const Offset(-8, 0),
-              child: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
-                ).createShader(bounds),
-                blendMode: BlendMode.srcIn,
-                child: const Text(
-                  'ScholarDoc',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 21,
-                    letterSpacing: 0.3,
+              offset: const Offset(-6, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Color(0xFF0F3260), Color(0xFFFBC02D)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: const Text(
+                      'ScholarDoc',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        letterSpacing: 0.3,
+                        height: 1.1,
+                      ),
+                    ),
                   ),
-                ),
+                  const Text(
+                    'USTP Oroquieta City Campus',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0F3260),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

@@ -334,6 +334,29 @@ body {
     height: 16px;
 }
 
+/* Default state for mobile-only and desktop-only elements */
+.mobile-brand-header,
+.mobile-instruction,
+.label-mobile,
+.mobile-only-icon,
+.btn-text-mobile,
+.sec-mobile,
+.mobile-register-footer {
+    display: none !important;
+}
+
+.desktop-form-header,
+.label-desktop,
+.desktop-only-icon,
+.btn-text-desktop,
+.sec-desktop {
+    display: initial;
+}
+
+.desktop-form-header {
+    display: block;
+}
+
 /* Spinner */
 .spinner {
     width: 24px;
@@ -350,104 +373,251 @@ body {
     }
 }
 
-@media (max-width: 1024px) {
+/* ─────────────────────────────────────────────────────────────
+   MOBILE RESPONSIVE LOGIN LAYOUT (<= 768px)
+   Matches the exact mobile UI/UX design requested
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        background-color: #F8FAFC;
+        padding: 24px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
     .login-wrapper {
-        flex-direction: column;
-        overflow-y: auto;
+        width: 100%;
+        height: auto;
+        min-height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: transparent;
     }
 
+    /* Hide desktop left column completely */
     .login-left {
-        flex: none;
-        padding: 40px 24px;
-        align-items: center;
-        text-align: center;
-        min-height: 350px;
+        display: none !important;
     }
 
-    .login-content {
-        align-items: center;
+    /* Switch desktop-only elements off, and mobile-only elements on */
+    .desktop-form-header,
+    .label-desktop,
+    .desktop-only-icon,
+    .btn-text-desktop,
+    .sec-desktop {
+        display: none !important;
     }
 
-    .brand-header {
-        margin-bottom: 32px;
-        flex-direction: column;
-        text-align: center;
+    .label-mobile,
+    .mobile-only-icon,
+    .btn-text-mobile,
+    .sec-mobile {
+        display: inline !important;
     }
 
-    .brand-desc,
-    .features-row {
-        display: none;
+    .mobile-only-icon {
+        display: block !important;
     }
 
-    .brand-title {
-        font-size: 36px;
-        margin-bottom: 0;
-    }
-
+    /* Right side container becomes the centered clean white card */
     .login-right {
-        flex: 1;
-        padding: 40px 24px;
-        background-color: var(--bg);
-        align-items: flex-start;
+        flex: none;
+        width: 100%;
+        max-width: 440px;
+        padding: 0;
+        background: transparent;
         box-shadow: none;
-        border-radius: 32px 32px 0 0;
-        margin-top: -32px;
-        z-index: 10;
+        display: flex;
+        justify-content: center;
     }
 
     .login-form-container {
-        padding: 40px 32px;
-        background: white;
+        background: #ffffff;
         border-radius: 24px;
-        box-shadow: 0 10px 40px rgba(10, 25, 49, 0.08);
+        padding: 44px 32px 36px 32px;
         width: 100%;
-        max-width: 480px;
+        max-width: 440px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+        border: 1px solid #EEF2F6;
         margin: 0 auto;
     }
-}
 
-/* Role Toggle Tabs for Unified Login */
-.role-toggle-container {
-    display: flex;
-    background-color: #F1F5F9;
-    padding: 4px;
-    border-radius: 14px;
-    margin-bottom: 28px;
-    gap: 4px;
-    border: 1px solid var(--border);
-}
+    /* Mobile Brand Header in Card */
+    .mobile-brand-header {
+        display: flex !important;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 24px;
+    }
 
-.role-tab {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border: none;
-    background: transparent;
-    border-radius: 10px;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
+    .mobile-logo-flex {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
 
-.role-tab i {
-    width: 16px;
-    height: 16px;
-    transition: color 0.25s ease;
-}
+    .mobile-logo-img {
+        width: 65px;
+        height: 65px;
+        object-fit: contain;
+        margin-left: -15px;
+    }
 
-.role-tab.active {
-    background-color: white;
-    color: var(--primary);
-    box-shadow: 0 2px 8px rgba(10, 25, 49, 0.1);
-    font-weight: 700;
-}
+    .mobile-brand-title {
+        font-family: 'Inter', sans-serif;
+        font-size: 24px;
+        font-weight: 800;
+        color: #0F3260;
+        letter-spacing: -0.5px;
+        line-height: 1.1;
+    }
 
-.role-tab.active i {
-    color: var(--accent);
+    .mobile-brand-title span {
+        color: #F5B025;
+    }
+
+    .mobile-brand-subtitle {
+        font-family: 'Inter', sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        color: #0F3260;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-top: 3px;
+    }
+
+    /* Mobile Instruction Text */
+    .mobile-instruction {
+        display: block !important;
+        text-align: center;
+        font-size: 14px;
+        color: #64748B;
+        line-height: 1.5;
+        font-weight: 500;
+        max-width: 320px;
+        margin: 0 auto 30px auto;
+    }
+
+    .input-group {
+        margin-bottom: 22px;
+    }
+
+    .input-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: #64748B;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+    }
+
+    .input-wrapper {
+        position: relative;
+    }
+
+    .input-icon {
+        left: 18px;
+        color: #94A3B8;
+        width: 18px;
+        height: 18px;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 15px 18px 15px 48px;
+        background-color: #F8FAFC;
+        border: 1.5px solid #F1F5F9;
+        border-radius: 14px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #1E293B;
+        transition: all 0.25s ease;
+    }
+
+    .form-input:focus {
+        border-color: #F5B025;
+        background-color: #ffffff;
+        box-shadow: 0 0 0 4px rgba(245, 176, 37, 0.12);
+    }
+
+    .form-input::placeholder {
+        color: #94A3B8;
+        font-weight: 400;
+    }
+
+    .pwd-toggle {
+        right: 18px;
+        color: #94A3B8;
+    }
+
+    /* Mobile Button - Golden Amber with Glow */
+    .btn-primary {
+        background: linear-gradient(180deg, #FDC036 0%, #F5A623 100%);
+        color: #0F2444;
+        font-weight: 800;
+        font-size: 14px;
+        letter-spacing: 0.5px;
+        border-radius: 14px;
+        height: 52px;
+        box-shadow: 0 8px 24px rgba(245, 166, 35, 0.35);
+        margin-top: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(180deg, #FDD056 0%, #F5A623 100%);
+        box-shadow: 0 10px 28px rgba(245, 166, 35, 0.45);
+        transform: translateY(-1px);
+    }
+
+    .btn-primary i {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* Mobile Security Badge */
+    .security-badge {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 24px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #94A3B8;
+    }
+
+    .security-badge i {
+        color: #94A3B8;
+        width: 15px;
+        height: 15px;
+    }
+
+    /* Mobile Register Footer */
+    .mobile-register-footer {
+        display: block !important;
+        text-align: center;
+        margin-top: 20px;
+        font-size: 13px;
+        color: #64748B;
+        font-weight: 500;
+    }
+
+    .mobile-register-footer a {
+        color: #0F3260;
+        font-weight: 700;
+        text-decoration: none;
+        margin-left: 4px;
+    }
+
+    .mobile-register-footer a:hover {
+        text-decoration: underline;
+    }
 }

@@ -259,3 +259,17 @@ if (loginForm) {
         }
     });
 }
+
+// Adjust input placeholder dynamically according to viewport size
+function updateResponsivePlaceholder() {
+    if (identifierInput) {
+        if (window.innerWidth <= 768) {
+            identifierInput.placeholder = 'e.g. 2024-00123';
+        } else {
+            identifierInput.placeholder = 'e.g. superadmin, admin, or 2024-00123';
+        }
+    }
+}
+window.addEventListener('resize', updateResponsivePlaceholder);
+updateResponsivePlaceholder();
+
