@@ -1,7 +1,9 @@
 :root {
-    --primary: #0A1931; /* Deep Navy Blue */
+    --primary: #0A1931;
+    /* Deep Navy Blue */
     --primary-light: #152D54;
-    --accent: #FFC107; /* Golden Yellow */
+    --accent: #FFC107;
+    /* Golden Yellow */
     --accent-hover: #FFD54F;
     --bg: #F3F4F6;
     --surface: #ffffff;
@@ -28,7 +30,9 @@ body {
 }
 
 /* Utilities */
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 
 /* Desktop Login Layout */
 .login-wrapper {
@@ -41,9 +45,9 @@ body {
 .login-left {
     flex: 5;
     background-color: var(--primary);
-    background-image: 
+    background-image:
         linear-gradient(135deg, rgba(10, 25, 49, 0.95) 0%, rgba(10, 25, 49, 0.75) 100%),
-        url('campus_bg.jpg');
+        url('ustp_imag.jpg');
     background-size: cover;
     background-position: center;
     position: relative;
@@ -175,7 +179,7 @@ body {
     align-items: center;
     justify-content: center;
     padding: 40px;
-    box-shadow: -20px 0 40px rgba(0,0,0,0.05);
+    box-shadow: -20px 0 40px rgba(0, 0, 0, 0.05);
     z-index: 5;
 }
 
@@ -248,7 +252,7 @@ body {
     box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.1);
 }
 
-.form-input:focus + .input-icon,
+.form-input:focus+.input-icon,
 .input-wrapper:focus-within .input-icon {
     color: var(--primary);
 }
@@ -341,7 +345,9 @@ body {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @media (max-width: 1024px) {
@@ -349,6 +355,7 @@ body {
         flex-direction: column;
         overflow-y: auto;
     }
+
     .login-left {
         flex: none;
         padding: 40px 24px;
@@ -356,21 +363,27 @@ body {
         text-align: center;
         min-height: 350px;
     }
+
     .login-content {
         align-items: center;
     }
+
     .brand-header {
         margin-bottom: 32px;
         flex-direction: column;
         text-align: center;
     }
-    .brand-desc, .features-row {
+
+    .brand-desc,
+    .features-row {
         display: none;
     }
+
     .brand-title {
         font-size: 36px;
         margin-bottom: 0;
     }
+
     .login-right {
         flex: 1;
         padding: 40px 24px;
@@ -381,6 +394,7 @@ body {
         margin-top: -32px;
         z-index: 10;
     }
+
     .login-form-container {
         padding: 40px 32px;
         background: white;
@@ -437,4 +451,3 @@ body {
 .role-tab.active i {
     color: var(--accent);
 }
-
