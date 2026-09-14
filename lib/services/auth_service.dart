@@ -156,7 +156,7 @@ class AuthService {
             'AuthService: Step 2 FAILED - No record found for ID: $trimmedId',
           );
           throw Exception(
-            'No account found for Student ID "$trimmedId". Please register first.',
+            'No account found for Student ID "$trimmedId". Please contact your administrator.',
           );
         }
 
@@ -207,7 +207,7 @@ class AuthService {
         if (doc.isEmpty) {
           debugPrint('AuthService: Step 3 FAILED - No document for UID: $uid');
           await _supabase.auth.signOut();
-          throw Exception('Student record not found. Please register first.');
+          throw Exception('Student record not found. Please contact your administrator.');
         }
 
         final studentData = doc.first;

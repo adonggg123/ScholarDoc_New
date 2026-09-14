@@ -1,45 +1,203 @@
-<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%; overflow-y: auto;">
+<div class="view-content" style="display: flex; flex-direction: column; gap: 20px; height: 100%;">
+
+    <!-- Top Header & Actions -->
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-        <div>
-            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Verification Queue</h2>
-            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Verify accuracy of submitted accounts.</p>
+        <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #0F3260, #1E3A8A, #D4AF37); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(15, 50, 96, 0.25); flex-shrink: 0;">
+                <i class="icon-landmark" style="font-size: 22px; color: white;"></i>
+            </div>
+            <div>
+                <h2 style="margin: 0 0 4px 0; font-size: 22px; font-weight: 800; letter-spacing: -0.4px; color: var(--text-primary);">SA Account Verification</h2>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Review and authenticate Land Bank Statement of Account numbers and ATM card submissions.</p>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div id="sa-sync-badge" style="padding: 6px 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; display: inline-flex; align-items: center; gap: 6px;">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981;"></span>
+                <span style="font-size: 11px; font-weight: 700; color: #10B981;">Live Synced</span>
+            </div>
+            <button id="sa-refresh-btn" class="btn" style="background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onclick="loadSaQueue()">
+                <i class="icon-refresh-cw" style="font-size: 14px; color: var(--primary-color);"></i>
+                <span>Refresh Queue</span>
+            </button>
         </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 24px; align-items: start;" id="sa-grid">
+    <!-- Search & Filter Controls Toolbar -->
+    <div class="card" style="padding: 12px 16px; border-radius: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+        <!-- Search Box -->
+        <div style="flex: 1; min-width: 260px; position: relative;">
+            <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
+            <input type="text" id="sa-search-input" placeholder="Search by student name, ID number, or SA number..." 
+                   style="width: 100%; padding: 10px 14px 10px 38px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.2s;"
+                   onfocus="this.style.borderColor='var(--primary-color)'" onblur="this.style.borderColor='var(--border-color)'" oninput="filterSaQueue()">
+        </div>
+
+        <!-- Filter: Status -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-filter" style="font-size: 13px; margin-right: 4px;"></i>Status:</span>
+            <select id="sa-filter-status" onchange="filterSaQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Statuses</option>
+                <option value="Pending">Pending Review</option>
+                <option value="Verified">Verified</option>
+                <option value="Missing">Action Required (Missing)</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Duplicate">Duplicate SA Conflicts</option>
+            </select>
+        </div>
+
+        <!-- Filter: Course -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-graduation-cap" style="font-size: 13px; margin-right: 4px;"></i>Program:</span>
+            <select id="sa-filter-course" onchange="filterSaQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Programs</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BTLED">BTLED</option>
+                <option value="BFPT">BFPT</option>
+            </select>
+        </div>
+
+        <!-- Sort By -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-arrow-up-down" style="font-size: 13px; margin-right: 4px;"></i>Sort:</span>
+            <select id="sa-sort-by" onchange="filterSaQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="latest">Latest Submission</option>
+                <option value="name_asc">Name (A-Z)</option>
+                <option value="name_desc">Name (Z-A)</option>
+                <option value="sa_num">SA Number</option>
+            </select>
+        </div>
+
+        <!-- Result count -->
+        <div id="sa-results-badge" style="padding: 6px 12px; background: rgba(15, 50, 96, 0.05); border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--primary-color); white-space: nowrap; margin-left: auto;">
+            Showing <span id="sa-matched-count">0</span> of <span id="sa-total-count">0</span>
+        </div>
+    </div>
+
+    <!-- Main Workspace Grid (Left: Queue List, Right: Verification Station) -->
+    <div style="display: grid; grid-template-columns: 3fr 2.5fr; gap: 20px; align-items: start; min-height: 550px;" id="sa-grid">
         
-        <!-- Left: Queue List -->
-        <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
-            <div id="sa-list-container" style="display: flex; flex-direction: column; max-height: 700px; overflow-y: auto;">
-                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading verification queue...</div>
+        <!-- Left: Queue List Card -->
+        <div class="card" style="padding: 0; overflow: hidden; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.03); display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div style="padding: 14px 18px; border-bottom: 1px solid var(--border-color); background: rgba(15, 50, 96, 0.02); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="icon-list-ordered" style="font-size: 16px; color: var(--primary-color);"></i>
+                    <span style="font-size: 13px; font-weight: 800; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px;">Applicants in Queue</span>
+                </div>
+                <span id="sa-queue-count-pill" style="padding: 3px 10px; background: var(--primary-color); color: white; border-radius: 20px; font-size: 11px; font-weight: 800;">0</span>
+            </div>
+
+            <!-- Student List Container -->
+            <div id="sa-list-container" style="display: flex; flex-direction: column; max-height: 720px; overflow-y: auto;">
+                <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; border: 3px solid rgba(15, 50, 96, 0.1); border-top-color: var(--primary-color); animation: spin 0.8s linear infinite; margin: 0 auto 16px;"></div>
+                    <div style="font-weight: 600; font-size: 14px;">Loading SA Verification queue...</div>
+                </div>
             </div>
         </div>
 
-        <!-- Right: Verification Panel -->
-        <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.03); position: sticky; top: 0;" id="sa-panel-container">
-            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Select a student to view details.</div>
+        <!-- Right: Verification Station Panel -->
+        <div class="card" style="padding: 0; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); position: sticky; top: 16px; overflow: hidden;" id="sa-panel-container">
+            <div style="text-align: center; padding: 60px 24px; color: var(--text-secondary);">
+                <i class="icon-user-search" style="font-size: 48px; color: rgba(15, 50, 96, 0.2); margin-bottom: 14px; display: block;"></i>
+                <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">No Student Selected</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Choose an applicant from the verification queue on the left to inspect SA details and ATM proof.</p>
+            </div>
         </div>
 
     </div>
+
+    <!-- Image Lightbox Modal -->
+    <div id="sa-lightbox-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 25, 49, 0.88); backdrop-filter: blur(8px); z-index: 100000; align-items: center; justify-content: center; padding: 24px;">
+        <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center;">
+            <button onclick="closeSaLightbox()" style="position: absolute; top: -46px; right: 0; background: rgba(255,255,255,0.2); border: none; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s;">
+                <i class="icon-x"></i>
+            </button>
+            <img id="sa-lightbox-img" src="" alt="ATM Proof Fullscreen" style="max-width: 85vw; max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.1);">
+            <div id="sa-lightbox-caption" style="color: white; margin-top: 14px; font-size: 13px; font-weight: 600; text-align: center; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">ATM Card Proof Image</div>
+        </div>
+    </div>
+
 </div>
 
 <style>
-    @media (max-width: 900px) {
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    @media (max-width: 960px) {
         #sa-grid {
             grid-template-columns: 1fr !important;
         }
         #sa-panel-container {
-            position: relative;
+            position: relative !important;
+            top: 0 !important;
         }
     }
     .sa-list-item {
-        transition: background 0.2s;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
+        border-left: 3px solid transparent;
     }
     .sa-list-item:hover {
-        background: rgba(0,0,0,0.02);
+        background: rgba(15, 50, 96, 0.03);
     }
     .sa-list-item.selected {
-        background: rgba(15, 50, 96, 0.04);
+        background: rgba(15, 50, 96, 0.06);
+        border-left: 3px solid var(--primary-color);
+    }
+    .sa-preset-chip {
+        padding: 5px 10px;
+        background: rgba(15, 50, 96, 0.05);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        user-select: none;
+    }
+    .sa-preset-chip:hover {
+        background: rgba(15, 50, 96, 0.12);
+        color: var(--primary-color);
+        border-color: var(--primary-color);
+        transform: translateY(-1px);
+    }
+    .sa-action-btn {
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    .sa-action-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .sa-action-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    body.dark .sa-list-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+    body.dark .sa-list-item.selected {
+        background: rgba(37, 99, 235, 0.15);
+        border-left-color: #60A5FA;
+    }
+    body.dark .sa-preset-chip {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: #94A3B8;
+    }
+    body.dark .sa-preset-chip:hover {
+        background: rgba(59, 130, 246, 0.2);
+        color: #93C5FD;
+        border-color: #3B82F6;
     }
 </style>

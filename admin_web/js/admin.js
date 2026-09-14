@@ -154,6 +154,12 @@ async function loadView(viewName) {
             viewName = 'annex5_generator';
         }
 
+        // Redirect masterlist_import to reports view with import tab selected
+        if (viewName === 'masterlist_import') {
+            window.requestedReportTab = 'import';
+            viewName = 'reports';
+        }
+
         // Fetch HTML partial
         const response = await fetch(`views/${viewName}.html`);
         if (!response.ok) throw new Error('View not found');
@@ -313,10 +319,17 @@ let systemNotifications = [];
 const notificationDropdown = document.getElementById('notification-dropdown');
 const markAllReadBtn = document.getElementById('mark-all-read-btn');
 
-window.navigateToView = function(viewName) {
+window.navigateToView = function(viewName, tabName) {
     const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
     if (!isSuperAdmin && viewName !== 'settings' && viewName !== 'annex5_generator') {
         viewName = 'annex5_generator';
+    }
+
+    if (viewName === 'masterlist_import') {
+        window.requestedReportTab = 'import';
+        viewName = 'reports';
+    } else if (tabName) {
+        window.requestedReportTab = tabName;
     }
 
     // Find the nav item
@@ -334,6 +347,15 @@ window.navigateToView = function(viewName) {
         }
     }
     loadView(viewName);
+};
+
+window.navigateToReportsTab = function(tabName) {
+    window.requestedReportTab = tabName;
+    if (currentViewName === 'reports' && window.switchReportTab) {
+        window.switchReportTab(tabName);
+    } else {
+        window.navigateToView('reports', tabName);
+    }
 };
 
 async function loadNotifications() {

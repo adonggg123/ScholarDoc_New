@@ -254,9 +254,6 @@ export class VerificationService {
             }
         } else if (highestConfidence >= 65 && !isEnrolled && discrepancies.length === 1) {
             classification = 'INACTIVE_FORM3';
-        } else if (!bestMatch || highestConfidence < 40) {
-            classification = 'INACTIVE_FORM3'; // Not found in school records
-            specialStatusReason = 'Not enrolled';
         } else {
             classification = 'NEEDS_REVIEW';
         }
@@ -280,6 +277,16 @@ export class VerificationService {
         const form2List = [];
         const form3List = [];
         const needsReviewList = [];
+
+        if (!schoolStudents || schoolStudents.length === 0) {
+            return {
+                total: grantees ? grantees.length : 0,
+                form2List,
+                form3List,
+                needsReviewList,
+                accuracyRate: 0
+            };
+        }
 
         grantees.forEach((grantee, idx) => {
             const verification = this.verifyGrantee(grantee, schoolStudents);

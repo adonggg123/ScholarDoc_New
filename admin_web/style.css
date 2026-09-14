@@ -340,8 +340,7 @@ body {
 .label-mobile,
 .mobile-only-icon,
 .btn-text-mobile,
-.sec-mobile,
-.mobile-register-footer {
+.sec-mobile {
     display: none !important;
 }
 
@@ -598,26 +597,5 @@ body {
         color: #94A3B8;
         width: 15px;
         height: 15px;
-    }
-
-    /* Mobile Register Footer */
-    .mobile-register-footer {
-        display: block !important;
-        text-align: center;
-        margin-top: 20px;
-        font-size: 13px;
-        color: #64748B;
-        font-weight: 500;
-    }
-
-    .mobile-register-footer a {
-        color: #0F3260;
-        font-weight: 700;
-        text-decoration: none;
-        margin-left: 4px;
-    }
-
-    .mobile-register-footer a:hover {
-        text-decoration: underline;
     }
 }

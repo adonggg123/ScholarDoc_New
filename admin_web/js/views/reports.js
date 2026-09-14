@@ -1,11 +1,51 @@
 // js/views/reports.js
 import { BillingService } from '../services/billing_service.js';
+import { initMasterlistImport } from './masterlist_import.js';
 const supabase = window.supabaseClient;
+
+window.__reportsHostingImport = true;
 
 let allStudents = [];
 let selectedStudentIds = new Set();
 let throughputChart = null;
 let deptChart = null;
+
+// ── Segmented Control / Tab Switching ──────────────────────────────
+window.switchReportTab = function(tabName) {
+    const btnMasterlist = document.getElementById('seg-btn-masterlist');
+    const btnImport = document.getElementById('seg-btn-import');
+    const paneMasterlist = document.getElementById('report-pane-masterlist');
+    const paneImport = document.getElementById('report-pane-import');
+    const title = document.getElementById('reports-section-title');
+    const subtitle = document.getElementById('reports-section-subtitle');
+    const btnExportExcel = document.getElementById('btn-export-excel');
+    const portalBadge = document.getElementById('import-portal-badge');
+
+    if (tabName === 'import') {
+        if (btnMasterlist) btnMasterlist.classList.remove('active');
+        if (btnImport) btnImport.classList.add('active');
+        if (paneMasterlist) paneMasterlist.style.display = 'none';
+        if (paneImport) paneImport.style.display = 'flex';
+        if (title) title.textContent = 'New Grantees Masterlist Import';
+        if (subtitle) subtitle.textContent = 'Upload new scholarship grantee lists (PDF, DOCX, XLSX, CSV) to register them in the masterlist table for Admin verification and Annex 5 TES generation.';
+        if (btnExportExcel) btnExportExcel.style.display = 'none';
+        if (portalBadge) portalBadge.style.display = 'inline-flex';
+    } else {
+        if (btnImport) btnImport.classList.remove('active');
+        if (btnMasterlist) btnMasterlist.classList.add('active');
+        if (paneImport) paneImport.style.display = 'none';
+        if (paneMasterlist) paneMasterlist.style.display = 'flex';
+        if (title) title.textContent = 'Student Master List Records';
+        if (subtitle) subtitle.textContent = 'Comprehensive institutional database of all verified and registered students.';
+        if (btnExportExcel) btnExportExcel.style.display = 'inline-flex';
+        if (portalBadge) portalBadge.style.display = 'none';
+    }
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
+
 
 // ── Load All Data ───────────────────────────────────────────────────
 async function loadAllData() {
@@ -489,6 +529,25 @@ document.getElementById('rpt-select-all').addEventListener('change', function() 
     updateExcelBtnLabel();
 });
 
-// Init
+const rptRefreshBtn = document.getElementById('rpt-refresh');
+if (rptRefreshBtn) {
+    rptRefreshBtn.addEventListener('click', () => {
+        loadAllData();
+        if (window.showToast) window.showToast('Student master list refreshed', 'refresh-cw');
+    });
+}
+
+// ── Initialization ──────────────────────────────────────────────────
+initMasterlistImport();
 loadAllData();
+
+// Check if a specific tab was requested (e.g. from Dashboard or link), otherwise default to 'import'
+if (window.requestedReportTab === 'masterlist') {
+    window.switchReportTab('masterlist');
+    window.requestedReportTab = null;
+} else {
+    window.switchReportTab('import');
+    window.requestedReportTab = null;
+}
+
 

@@ -2741,3 +2741,25 @@ body.dark .dash-module-card:hover {
     border-color: #3B82F6;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
+
+/* ── SA Verification & ID Validation Custom Scrollbars & Styles ── */
+#sa-list-container::-webkit-scrollbar,
+#id-list-container::-webkit-scrollbar {
+    width: 5px;
+}
+
+#sa-list-container::-webkit-scrollbar-track,
+#id-list-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+#sa-list-container::-webkit-scrollbar-thumb,
+#id-list-container::-webkit-scrollbar-thumb {
+    background: rgba(15, 50, 96, 0.15);
+    border-radius: 4px;
+}
+
+body.dark #sa-list-container::-webkit-scrollbar-thumb,
+body.dark #id-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+}

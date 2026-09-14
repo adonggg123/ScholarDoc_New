@@ -46,7 +46,7 @@
                     <i class="icon-megaphone"></i>
                     <span>Broadcast Notice</span>
                 </button>
-                <button class="dash-hero-btn" onclick="document.querySelector('.nav-item[data-view=\'masterlist_import\']')?.click()">
+                <button class="dash-hero-btn" onclick="window.navigateToReportsTab ? window.navigateToReportsTab('import') : document.querySelector('.nav-item[data-view=\'masterlist_import\']')?.click()">
                     <i class="icon-upload-cloud"></i>
                     <span>Import Masterlist</span>
                 </button>
@@ -288,7 +288,7 @@
                 <i class="icon-chevron-right" style="font-size: 14px; color: var(--text-secondary);"></i>
             </div>
 
-            <div class="dash-module-card" onclick="document.querySelector('.nav-item[data-view=\'masterlist_import\']')?.click()">
+            <div class="dash-module-card" onclick="window.navigateToReportsTab ? window.navigateToReportsTab('import') : document.querySelector('.nav-item[data-view=\'masterlist_import\']')?.click()">
                 <div style="display: flex; align-items: center; gap: 14px;">
                     <div class="dash-mod-icon-box" style="background: rgba(16, 185, 129, 0.1); color: #10B981;">
                         <i class="icon-file-spreadsheet"></i>

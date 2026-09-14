@@ -2,30 +2,49 @@
     <!-- Dual Masterlist Source & File Upload Panel -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
         <!-- Left: Super Admin Grantee Master List Table (Auto-Loaded) -->
-        <div class="card" style="padding: 24px; border-radius: 20px; border-top: 4px solid var(--primary-color); display: flex; flex-direction: column; gap: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+        <div class="card"
+            style="padding: 24px; border-radius: 20px; border-top: 4px solid var(--primary-color); display: flex; flex-direction: column; gap: 14px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
                 <div>
-                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(15,50,96,0.1); color: var(--primary-color);">
+                    <span
+                        style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(15,50,96,0.1); color: var(--primary-color);">
                         <i class="icon-shield-check" style="font-size: 12px;"></i> SOURCE 1 • SUPER ADMIN
                     </span>
-                    <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">Grantee Master List Table</h3>
-                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Auto-loaded live from Super Admin Masterlist Import.</p>
+                    <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">
+                        Grantee Master List Table</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Auto-loaded live from Super
+                        Admin Masterlist Import.</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span id="superadmin-sync-status" style="font-weight: 700; font-size: 11px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; background: rgba(16,185,129,0.08);">
-                        <i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced (<span id="superadmin-grantee-count">0</span> Grantees)
+                    <span id="superadmin-sync-status"
+                        style="font-weight: 700; font-size: 11px; color: #10b981; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; background: rgba(16,185,129,0.08);">
+                        <i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced (<span
+                            id="superadmin-grantee-count">0</span> Grantees)
                     </span>
                 </div>
             </div>
 
-            <!-- Search input for Super Admin Grantees Table -->
-            <div style="position: relative;">
-                <i class="icon-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 14px;"></i>
-                <input type="text" id="search-superadmin-grantees" placeholder="Search imported grantees by name, ID, or course..." style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; outline: none; background: rgba(0,0,0,0.01);">
+            <!-- Search & Batch Filter for Super Admin Grantees Table -->
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div style="position: relative; flex: 1;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 14px;"></i>
+                    <input type="text" id="search-superadmin-grantees"
+                        placeholder="Search grantees by name, ID, course..."
+                        style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; outline: none; background: rgba(0,0,0,0.01);">
+                </div>
+                <div style="position: relative; min-width: 125px;">
+                    <select id="filter-superadmin-batch"
+                        style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text-primary); background: var(--surface-color, #ffffff); cursor: pointer; outline: none;">
+                        <option value="All Batches">All Batches</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Scrollable Table of Super Admin Grantees -->
-            <div class="annex-table-wrap" style="max-height: 240px; border: 1px solid var(--border-color); border-radius: 12px; overflow-y: auto;">
+            <div class="annex-table-wrap"
+                style="max-height: 240px; border: 1px solid var(--border-color); border-radius: 12px; overflow-y: auto;">
                 <table class="annex-table" style="min-width: 500px;">
                     <thead>
                         <tr>
@@ -37,113 +56,211 @@
                         </tr>
                     </thead>
                     <tbody id="tbody-superadmin-grantees">
-                        <tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-secondary);">Loading Super Admin imported grantees...</td></tr>
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-secondary);">
+                                Loading Super Admin imported grantees...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Right: Official School Student Master List (Admin File Upload) -->
-        <div class="card" style="padding: 24px; border-radius: 20px; border-top: 4px solid #1E88E5; display: flex; flex-direction: column; gap: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <!-- Right: Official School Student Master List (Admin File Upload & Table) -->
+        <div class="card" id="card-source-school"
+            style="padding: 24px; border-radius: 20px; border-top: 4px solid #1E88E5; display: flex; flex-direction: column; gap: 14px; transition: all 0.3s ease;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
                 <div>
-                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(30,136,229,0.1); color: #1E88E5;">
+                    <span
+                        style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(30,136,229,0.1); color: #1E88E5;">
                         <i class="icon-school" style="font-size: 12px;"></i> SOURCE 2 • SCHOOL REGISTRAR
                     </span>
-                    <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">School Student Master List</h3>
-                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Upload official school file or use institutional records.</p>
+                    <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">School
+                        Student Records</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Upload official school Excel (.xlsx, .xls) or CSV (.csv) file or use institutional records.</p>
                 </div>
-                <div style="text-align: right;">
-                    <span id="school-students-count" style="font-size: 24px; font-weight: 800; color: #1E88E5;">0</span>
-                    <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">School Records</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="text-align: right;">
+                        <span id="school-students-count"
+                            style="font-size: 20px; font-weight: 800; color: #1E88E5;">0</span>
+                        <div style="font-size: 10px; color: var(--text-secondary); font-weight: 600;">School Records
+                        </div>
+                    </div>
+                    <button id="btn-toggle-school-expand" class="icon-btn" title="Toggle Full Width"
+                        style="background: rgba(30,136,229,0.08); color: #1E88E5; border-radius: 10px; padding: 6px 10px; border: 1px solid rgba(30,136,229,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; transition: all 0.2s ease;">
+                        <i id="icon-school-expand" class="icon-maximize-2" style="font-size: 13px;"></i>
+                        <span id="text-school-expand">Expand</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Upload Drop Area / Loaded File Box -->
-            <div id="school-file-dropzone" style="border: 2px dashed rgba(30,136,229,0.3); border-radius: 12px; padding: 14px; text-align: center; cursor: pointer; background: rgba(30,136,229,0.02); transition: all 0.2s;">
-                <input type="file" id="school-file-input" accept=".xlsx, .xls, .csv, .pdf, .doc, .docx" style="display: none;">
-                <div id="school-upload-prompt" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                    <i class="icon-upload-cloud" style="font-size: 22px; color: #1E88E5;"></i>
+            <!-- Upload Drop Area / Loaded File Box (Compact) -->
+            <div id="school-file-dropzone"
+                style="border: 2px dashed rgba(30,136,229,0.3); border-radius: 12px; padding: 10px 14px; text-align: center; cursor: pointer; background: rgba(30,136,229,0.02); transition: all 0.2s;">
+                <input type="file" id="school-file-input" accept=".xlsx, .xls, .csv"
+                    style="display: none;">
+                <div id="school-upload-prompt"
+                    style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <i class="icon-upload-cloud" style="font-size: 18px; color: #1E88E5;"></i>
                     <div style="text-align: left;">
-                        <span style="font-size: 12px; font-weight: 700; color: #1E88E5;">Upload Official School Students File</span>
-                        <span style="display: block; font-size: 11px; color: var(--text-secondary);">Click to browse (.xlsx, .csv, .pdf, .docx)</span>
+                        <span style="font-size: 12px; font-weight: 700; color: #1E88E5;">Upload School Student Records (Excel / CSV)</span>
+                        <span
+                            style="display: inline-block; margin-left: 6px; font-size: 11px; color: var(--text-secondary);">(Click
+                            to browse .xlsx, .xls, .csv)</span>
                     </div>
                 </div>
-                <div id="school-file-info" style="display: none; align-items: center; justify-content: space-between; text-align: left;">
+                <div id="school-file-info"
+                    style="display: none; align-items: center; justify-content: space-between; text-align: left;">
                     <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
-                        <i class="icon-file-text" style="font-size: 20px; color: #1E88E5;"></i>
+                        <i class="icon-file-text" style="font-size: 18px; color: #1E88E5;"></i>
                         <div>
-                            <span id="school-file-name" style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</span>
+                            <span id="school-file-name"
+                                style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</span>
                             <span id="school-file-size" style="font-size: 11px; color: var(--text-secondary);">--</span>
                         </div>
                     </div>
-                    <button id="btn-clear-school-file" style="background: rgba(244,67,54,0.1); border: none; color: #F44336; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">Clear</button>
+                    <button id="btn-clear-school-file"
+                        style="background: rgba(244,67,54,0.1); border: none; color: #F44336; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">Clear
+                        File</button>
                 </div>
+            </div>
+
+            <!-- Search input for School Students Table -->
+            <div style="position: relative;">
+                <i class="icon-search"
+                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 14px;"></i>
+                <input type="text" id="search-school-students"
+                    placeholder="Search school students by name, ID, course, status..."
+                    style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; outline: none; background: rgba(0,0,0,0.01);">
+            </div>
+
+            <!-- Scrollable Table of School Students (Exact Super Admin School Student List Template) -->
+            <div class="annex-table-wrap" id="wrap-school-students"
+                style="max-height: 240px; border: 1px solid var(--border-color); border-radius: 12px; overflow: auto;">
+                <table class="annex-table" style="min-width: 1500px; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border-color);">
+                            <th style="padding: 10px 14px; width: 40px; text-align: center;">
+                                <input type="checkbox" id="school-select-all"
+                                    style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
+                            </th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Student ID</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Last Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">First Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">M.I.</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Email</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Birthdate</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Gender</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Course</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Yr & Sec</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Scholarship</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Scholar Year</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Payouts</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Contact</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Status</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Father's Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Father's Edu</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Mother's Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Mother's Edu</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Yearly Income</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Religion</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Tribe</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-school-students">
+                        <tr>
+                            <td colspan="22" style="text-align: center; padding: 24px; color: var(--text-secondary);">
+                                Loading school student records...</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <!-- Cross-Verification Control Bar -->
-    <div class="card" style="padding: 16px 24px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,50,96,0.03), rgba(30,136,229,0.03)); border: 1.5px solid rgba(15,50,96,0.1); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+    <div class="card"
+        style="padding: 16px 24px; border-radius: 16px; background: linear-gradient(135deg, rgba(15,50,96,0.03), rgba(30,136,229,0.03)); border: 1.5px solid rgba(15,50,96,0.1); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; align-items: center; justify-content: center; color: white;">
+            <div
+                style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; align-items: center; justify-content: center; color: white;">
                 <i class="icon-sparkles" style="font-size: 18px;"></i>
             </div>
             <div>
-                <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Intelligent Cross-Matching Engine</h4>
-                <p id="comparison-status-text" style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">Ready to cross-reference Super Admin Grantees against School Student records.</p>
+                <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Intelligent
+                    Cross-Matching Engine</h4>
+                <p id="comparison-status-text" style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
+                    Ready to cross-reference Super Admin Grantees against School Student records.</p>
             </div>
         </div>
-        <button id="btn-run-smart-match" style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+        <button id="btn-run-smart-match"
+            style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(15,50,96,0.25); transition: all 0.2s ease;">
             <i class="icon-refresh-cw" style="font-size: 16px;"></i> Run Automated Cross-Verification
         </button>
     </div>
 
     <!-- Verification KPI Metrics Row -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-        <div class="card" style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid var(--primary-color);">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(15,50,96,0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color);">
+        <div class="card"
+            style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid var(--primary-color);">
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(15,50,96,0.1); display: flex; align-items: center; justify-content: center; color: var(--primary-color);">
                 <i class="icon-file-spreadsheet" style="font-size: 22px;"></i>
             </div>
             <div>
-                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Total Grantees Compared</p>
-                <h3 id="stat-kpi-total" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: var(--text-primary);">0</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Total Grantees
+                    Compared</p>
+                <h3 id="stat-kpi-total"
+                    style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: var(--text-primary);">0</h3>
             </div>
         </div>
 
-        <div class="card" style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #10b981;">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; color: #10b981;">
+        <div class="card"
+            style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #10b981;">
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; color: #10b981;">
                 <i class="icon-check-circle-2" style="font-size: 22px;"></i>
             </div>
             <div>
-                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Form 2 (Included / Enrolled)</p>
-                <h3 id="stat-kpi-form2" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #10b981;">0</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Form 2 (Included
+                    / Enrolled)</p>
+                <h3 id="stat-kpi-form2" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #10b981;">0
+                </h3>
             </div>
         </div>
 
-        <div class="card" style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #FF8F00;">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,143,0,0.1); display: flex; align-items: center; justify-content: center; color: #FF8F00;">
+        <div class="card"
+            style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #FF8F00;">
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,143,0,0.1); display: flex; align-items: center; justify-content: center; color: #FF8F00;">
                 <i class="icon-user-x" style="font-size: 22px;"></i>
             </div>
             <div>
-                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Form 3 (Not Included / Special)</p>
-                <h3 id="stat-kpi-form3" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #FF8F00;">0</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Form 3 (Not
+                    Included / Special)</p>
+                <h3 id="stat-kpi-form3" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #FF8F00;">0
+                </h3>
             </div>
         </div>
 
-        <div class="card" style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #E53935;">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(229,57,53,0.1); display: flex; align-items: center; justify-content: center; color: #E53935;">
+        <div class="card"
+            style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; border-left: 4px solid #E53935;">
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(229,57,53,0.1); display: flex; align-items: center; justify-content: center; color: #E53935;">
                 <i class="icon-alert-triangle" style="font-size: 22px;"></i>
             </div>
             <div>
-                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Needs Manual Review</p>
-                <h3 id="stat-kpi-review" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #E53935;">0</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary); font-weight: 600;">Needs Manual
+                    Review</p>
+                <h3 id="stat-kpi-review" style="margin: 2px 0 0; font-size: 22px; font-weight: 800; color: #E53935;">0
+                </h3>
             </div>
         </div>
     </div>
 
     <!-- Dual Tabbed Table & Review Section -->
-    <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color);">
+    <div class="card"
+        style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color);">
         <!-- Tab Switcher & Upper Table Action Bar -->
         <div class="annex-tabs-header">
             <!-- Left: Tab Buttons -->
@@ -158,16 +275,19 @@
                 </button>
                 <button id="tab-btn-review" class="annex-tab-btn" style="color: #E53935;">
                     <i class="icon-alert-circle"></i> Needs Review Queue
-                    <span id="badge-review-count" class="annex-tab-badge" style="background: rgba(229,57,53,0.12); color: #E53935;">0</span>
+                    <span id="badge-review-count" class="annex-tab-badge"
+                        style="background: rgba(229,57,53,0.12); color: #E53935;">0</span>
                 </button>
             </div>
 
             <!-- Right: Upper Table Two Auto-Fill Buttons -->
             <div style="display: flex; gap: 10px; align-items: center; padding: 8px 16px; flex-wrap: wrap;">
-                <button id="btn-export-form2-top" style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+                <button id="btn-export-form2-top"
+                    style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
                     <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
                 </button>
-                <button id="btn-export-form3-top" style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                <button id="btn-export-form3-top"
+                    style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
                     <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
                 </button>
             </div>
@@ -176,17 +296,26 @@
         <!-- Tab 1: Annex 5 - Form 2 Content -->
         <div id="tab-pane-form2" style="display: block; padding: 20px 24px;">
             <!-- Form 2 Control Bar -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
-                    <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
-                    <input type="text" id="search-form2" placeholder="Search Form 2 verified scholars by name, ID, or SA..." style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                <div
+                    style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
+                    <input type="text" id="search-form2"
+                        placeholder="Search Form 2 verified scholars by name, ID, or SA..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16,185,129,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: #10b981;">
-                        <i class="icon-users" style="font-size: 14px;"></i> <span id="stat-form2-count">0 Enrolled Grantees</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16,185,129,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: #10b981;">
+                        <i class="icon-users" style="font-size: 14px;"></i> <span id="stat-form2-count">0 Enrolled
+                            Grantees</span>
                     </div>
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
-                        <i class="icon-coins" style="font-size: 14px;"></i> <span id="stat-form2-amount">₱0.00 Total Billing</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
+                        <i class="icon-coins" style="font-size: 14px;"></i> <span id="stat-form2-amount">₱0.00 Total
+                            Billing</span>
                     </div>
                 </div>
             </div>
@@ -215,7 +344,10 @@
                         </tr>
                     </thead>
                     <tbody id="tbody-form2">
-                        <tr><td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading verified Form 2 records...</td></tr>
+                        <tr>
+                            <td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                                Loading verified Form 2 records...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -224,15 +356,26 @@
         <!-- Tab 2: Annex 5 - Form 3 Content -->
         <div id="tab-pane-form3" style="display: none; padding: 20px 24px;">
             <!-- Form 3 Control Bar -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
-                    <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #FF8F00; font-size: 15px;"></i>
-                    <input type="text" id="search-form3" placeholder="Search Form 3 applicants by name, ID, reason..." style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                <div
+                    style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #FF8F00; font-size: 15px;"></i>
+                    <input type="text" id="search-form3" placeholder="Search Form 3 applicants by name, ID, reason..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
-                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="stat-form3-count">0 Not Included Grantees</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
+                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="stat-form3-count">0 Not Included
+                            Grantees</span>
                     </div>
+                    <button id="btn-clear-form3-data"
+                        style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Remove all records from Annex Form 3 table">
+                        <i class="icon-trash-2" style="font-size: 13px;"></i> Clear Form 3 Data
+                    </button>
                 </div>
             </div>
 
@@ -256,7 +399,10 @@
                         </tr>
                     </thead>
                     <tbody id="tbody-form3">
-                        <tr><td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading Form 3 records...</td></tr>
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                                Loading Form 3 records...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -264,13 +410,17 @@
 
         <!-- Tab 3: Needs Review Queue Content -->
         <div id="tab-pane-review" style="display: none; padding: 20px 24px;">
-            <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div
+                style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
-                    <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">AI Assisted Discrepancy Resolution Queue</h4>
-                    <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">These imported grantees have data discrepancies or require manual categorization by the Admin.</p>
+                    <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">AI Assisted
+                        Discrepancy Resolution Queue</h4>
+                    <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">These imported grantees
+                        have data discrepancies or require manual categorization by the Admin.</p>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button id="btn-auto-resolve-all" style="background: rgba(15,50,96,0.08); color: var(--primary-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <button id="btn-auto-resolve-all"
+                        style="background: rgba(15,50,96,0.08); color: var(--primary-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                         <i class="icon-sparkles"></i> Auto-Categorize All to Form 3
                     </button>
                 </div>
@@ -280,36 +430,50 @@
             <div id="review-items-container" style="display: flex; flex-direction: column; gap: 14px;">
                 <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
                     <i class="icon-check-circle" style="font-size: 32px; color: #10b981; margin-bottom: 8px;"></i>
-                    <p style="margin: 0; font-weight: 600;">No items pending review. All imported records have been categorized.</p>
+                    <p style="margin: 0; font-weight: 600;">No items pending review. All imported records have been
+                        categorized.</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Review Resolution Modal -->
-    <div id="resolution-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-        <div style="background: var(--surface-color, white); width: 100%; max-width: 520px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column;">
-            <div style="padding: 18px 24px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; justify-content: space-between; align-items: center; color: white;">
+    <div id="resolution-modal"
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div
+            style="background: var(--surface-color, white); width: 100%; max-width: 520px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column;">
+            <div
+                style="padding: 18px 24px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; justify-content: space-between; align-items: center; color: white;">
                 <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Manual Grantee Categorization</h3>
-                <button id="btn-close-resolution" style="background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                <button id="btn-close-resolution"
+                    style="background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                     <i class="icon-x" style="font-size: 16px;"></i>
                 </button>
             </div>
             <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee Name</label>
-                    <div id="modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee
+                        Name</label>
+                    <div id="modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">
+                        --</div>
                 </div>
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize Target Form</label>
-                    <select id="modal-target-form" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize
+                        Target Form</label>
+                    <select id="modal-target-form"
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
                         <option value="form3" selected>Form 3 – Not Included Student (Special Status)</option>
                     </select>
                 </div>
                 <div id="modal-form3-reason-group">
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form 3 Status Reason</label>
-                    <select id="modal-form3-reason" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form
+                        3 Status Reason</label>
+                    <select id="modal-form3-reason"
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="Not enrolled">Not enrolled in current term</option>
                         <option value="Dropped">Dropped / Inactive</option>
                         <option value="Waived">Waived scholarship benefits</option>
@@ -319,12 +483,18 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative Remarks</label>
-                    <input type="text" id="modal-remarks" placeholder="Optional notes for CHED billing sheet..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative
+                        Remarks</label>
+                    <input type="text" id="modal-remarks" placeholder="Optional notes for CHED billing sheet..."
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
-                    <button id="btn-cancel-resolution" style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
-                    <button id="btn-confirm-resolution" style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save & Categorize</button>
+                    <button id="btn-cancel-resolution"
+                        style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
+                    <button id="btn-confirm-resolution"
+                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save
+                        & Categorize</button>
                 </div>
             </div>
         </div>

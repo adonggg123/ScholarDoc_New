@@ -1,20 +1,280 @@
+<style>
+    /* Segmented Control Styles */
+    .reports-segmented-container {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        width: 100%;
+        margin: -4px 0 4px 0;
+    }
+
+    .reports-segmented-control {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(15, 50, 96, 0.08);
+        padding: 5px;
+        border-radius: 18px;
+        border: 1.5px solid var(--border-color);
+        gap: 6px;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.03);
+    }
+
+    .reports-segment-btn {
+        padding: 10px 26px;
+        border: none;
+        border-radius: 14px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: transparent;
+        color: var(--text-secondary);
+        user-select: none;
+    }
+
+    .reports-segment-btn:hover:not(.active) {
+        background: rgba(255, 255, 255, 0.5);
+        color: var(--text-primary);
+    }
+
+    .reports-segment-btn.active {
+        background: var(--surface-color, #ffffff);
+        color: var(--primary-color, #0F3260);
+        box-shadow: 0 4px 14px rgba(15, 50, 96, 0.15);
+    }
+
+    body.dark .reports-segmented-control {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    body.dark .reports-segment-btn {
+        color: #94A3B8;
+    }
+
+    body.dark .reports-segment-btn:hover:not(.active) {
+        background: rgba(255, 255, 255, 0.08);
+        color: #F1F5F9;
+    }
+
+    body.dark .reports-segment-btn.active {
+        background: #1E293B;
+        color: #60A5FA;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Masterlist Import Styles */
+    .import-drop-zone {
+        border: 2px dashed rgba(var(--primary-rgb), 0.3);
+        border-radius: 20px;
+        padding: 40px 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.01) 0%, rgba(var(--primary-rgb), 0.04) 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .import-drop-zone::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at center, rgba(var(--primary-rgb), 0.08) 0%, transparent 70%);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .import-drop-zone:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px -8px rgba(var(--primary-rgb), 0.15);
+    }
+
+    .import-drop-zone:hover::before {
+        opacity: 1;
+    }
+
+    .import-drop-zone i {
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+        z-index: 1;
+    }
+
+    .import-drop-zone:hover i {
+        transform: scale(1.15) translateY(-4px);
+        color: var(--primary-color) !important;
+        filter: drop-shadow(0 4px 6px rgba(var(--primary-rgb), 0.2));
+    }
+
+    .import-drop-zone p {
+        position: relative;
+        z-index: 1;
+    }
+
+    .step-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--primary-color) 0%, #0a1e3f 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 14px;
+        box-shadow: 0 4px 10px rgba(var(--primary-rgb), 0.25);
+    }
+
+    .import-table th {
+        position: sticky;
+        top: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(8px);
+        z-index: 10;
+        padding: 16px;
+        font-weight: 700;
+        font-size: 11px;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .import-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f8fafc;
+        color: #1e293b;
+        font-size: 13px;
+        font-weight: 500;
+        vertical-align: middle;
+    }
+
+    .import-table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .import-table tbody tr:hover {
+        background: #f8fafc;
+        transform: scale(1.002);
+    }
+
+    .glass-filter {
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #334155;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+        cursor: pointer;
+        outline: none;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-filter:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+    }
+
+    .btn-gradient-save {
+        background: linear-gradient(135deg, var(--primary-color) 0%, #1e40af 100%);
+        color: white;
+        border: none;
+        box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.25);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-gradient-save:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.35);
+    }
+
+    .btn-gradient-save:active {
+        transform: translateY(1px);
+    }
+
+    .input-clean {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid transparent;
+        background: rgba(0, 0, 0, 0.02);
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .input-clean:hover {
+        background: rgba(0, 0, 0, 0.04);
+    }
+
+    .input-clean:focus {
+        background: white;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+        outline: none;
+    }
+
+    .table-container::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .table-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .table-container::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+
+    .table-container::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+</style>
+
 <div class="view-content" style="display: flex; flex-direction: column; gap: 24px; overflow-y: auto;">
     <!-- Premium Header Banner -->
-    <div style="width: 100%; border-radius: 24px; overflow: hidden; box-shadow: 0 8px 20px rgba(10, 30, 63, 0.25); position: relative;">
-        <img src="campus_bg.jpg" alt="Background" style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.6;">
-        <div style="position: absolute; width: 100%; height: 100%; background: linear-gradient(135deg, rgba(10,30,63,0.95), rgba(30,53,90,0.95), rgba(122,107,67,0.85), rgba(212,175,55,0.80)); z-index: 2;"></div>
-        
+    <div
+        style="width: 100%; border-radius: 24px; overflow: hidden; box-shadow: 0 8px 20px rgba(10, 30, 63, 0.25); position: relative;">
+        <img src="campus_bg.jpg" alt="Background"
+            style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.6;">
+        <div
+            style="position: absolute; width: 100%; height: 100%; background: linear-gradient(135deg, rgba(10,30,63,0.95), rgba(30,53,90,0.95), rgba(122,107,67,0.85), rgba(212,175,55,0.80)); z-index: 2;">
+        </div>
+
         <div style="position: relative; z-index: 3; padding: 28px 32px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <div>
-                    <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.18); padding: 5px 12px; border-radius: 20px; font-size: 11px; color: white; font-weight: 700; letter-spacing: 1px; margin-bottom: 16px;">
-                        <i class="icon-bar-chart-4" style="font-size: 13px;"></i> INSTITUTIONAL METRICS
+                    <span
+                        style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.18); padding: 5px 12px; border-radius: 20px; font-size: 11px; color: white; font-weight: 700; letter-spacing: 1px; margin-bottom: 16px;">
+                        <i class="icon-bar-chart-4" style="font-size: 13px;"></i> INSTITUTIONAL METRICS & REGISTRY
                     </span>
-                    <h2 style="margin: 0; font-size: 28px; font-weight: 800; color: white; letter-spacing: -0.5px;">Analytics & Reports</h2>
-                    <p style="margin: 6px 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">Deep-dive institutional metrics and formal printable exports.</p>
+                    <h2 style="margin: 0; font-size: 28px; font-weight: 800; color: white; letter-spacing: -0.5px;">
+                        Analytics & Masterlist Reports</h2>
+                    <p style="margin: 6px 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">Institutional metrics,
+                        student masterlist records, and new grantee imports.</p>
                 </div>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <button id="btn-export-pdf" style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 12px 20px; border-radius: 14px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(15,50,96,0.3);">
+                    <button id="btn-export-pdf"
+                        style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 12px 20px; border-radius: 14px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(15,50,96,0.3);">
                         <i class="icon-printer" style="font-size: 16px;"></i> Export PDF Report
                     </button>
                 </div>
@@ -22,28 +282,36 @@
         </div>
     </div>
 
-    <!-- Charts Row -->
-    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 32px;">
+    <!-- Persistent Institutional Charts Row -->
+    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 24px;" class="reports-charts-row">
         <!-- Application Throughput -->
         <div class="card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Application Throughput</h3>
-                <select id="throughput-timeframe" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                <select id="throughput-timeframe"
+                    style="border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
                     <option>This Year</option>
                     <option>This Month</option>
                     <option>This Week</option>
                 </select>
             </div>
-            <p style="margin: 0 0 32px; font-size: 12px; color: var(--text-secondary);">Total documents scanned vs. approved over time.</p>
+            <p style="margin: 0 0 32px; font-size: 12px; color: var(--text-secondary);">Total documents scanned vs.
+                approved over time.</p>
             <div style="position: relative; height: 250px; width: 100%;">
                 <canvas id="throughputChart"></canvas>
             </div>
             <div style="display: flex; justify-content: center; gap: 16px; margin-top: 16px;">
-                <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary);">
-                    <span style="width: 12px; height: 12px; border-radius: 50%; background: rgba(15,50,96,0.3); display: inline-block;"></span> Total Submissions
+                <span
+                    style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary);">
+                    <span
+                        style="width: 12px; height: 12px; border-radius: 50%; background: rgba(15,50,96,0.3); display: inline-block;"></span>
+                    Total Submissions
                 </span>
-                <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary);">
-                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #0F3260; display: inline-block;"></span> Approved
+                <span
+                    style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary);">
+                    <span
+                        style="width: 12px; height: 12px; border-radius: 50%; background: #0F3260; display: inline-block;"></span>
+                    Approved
                 </span>
             </div>
         </div>
@@ -51,103 +319,542 @@
         <!-- Demographic Breakdown -->
         <div class="card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Approval by Department</h3>
-            <p style="margin: 4px 0 32px; font-size: 12px; color: var(--text-secondary);">Program-specific performance analytics.</p>
+            <p style="margin: 4px 0 32px; font-size: 12px; color: var(--text-secondary);">Program-specific performance
+                analytics.</p>
             <div style="position: relative; height: 200px; width: 100%;">
                 <canvas id="deptChart"></canvas>
             </div>
-            <div id="dept-legend" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 16px;">
+            <div id="dept-legend"
+                style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 16px;">
             </div>
         </div>
     </div>
 
-    <!-- Student Master List -->
-    <div style="margin-top: 8px;">
-        <h3 style="margin: 0 0 16px; font-size: 18px; font-weight: 700;">Student Master List</h3>
-        
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
-            <button id="btn-export-excel" style="background: linear-gradient(135deg, #2E7D32, #4CAF50); color: white; border: none; padding: 12px 20px; border-radius: 14px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(46,125,50,0.3);">
-                <i class="icon-file-spreadsheet" style="font-size: 16px;"></i> Export Excel Masterlist
-            </button>
+    <!-- Masterlist & Import Workspace Section Header -->
+    <div
+        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 6px 0 2px 0;">
+        <div style="flex: 1; min-width: 280px;">
+            <h3 id="reports-section-title"
+                style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary);">New Grantees
+                Masterlist Import</h3>
+            <p id="reports-section-subtitle" style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
+                Upload new scholarship grantee lists (PDF, DOCX, XLSX, CSV) to register them in the masterlist table for
+                Admin verification and Annex 5 TES generation.</p>
         </div>
-
-        <!-- Filter Bar Card -->
-        <div class="card" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 16px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="flex: 1; position: relative;">
-                    <i class="icon-search" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
-                    <input type="text" id="rpt-search" placeholder="Search by Name or Student ID..." style="width: 100%; padding: 12px 16px 12px 42px; border: 1px solid var(--border-color); border-radius: 20px; outline: none; background: rgba(0,0,0,0.01); font-family: inherit; font-size: 13px;">
-                </div>
-                <button class="icon-btn" style="background: rgba(15, 50, 96, 0.05); color: var(--primary-color); border-radius: 12px; padding: 10px;" id="rpt-refresh">
-                    <i class="icon-refresh-cw" style="font-size: 18px;"></i>
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end;">
+            <!-- Segmented Control at the right side -->
+            <div class="reports-segmented-control">
+                <button id="seg-btn-masterlist" class="reports-segment-btn" onclick="switchReportTab('masterlist')">
+                    <i class="icon-users" style="font-size: 14px;"></i>
+                    <span>School Student List</span>
+                </button>
+                <button id="seg-btn-import" class="reports-segment-btn active" onclick="switchReportTab('import')">
+                    <i class="icon-upload-cloud" style="font-size: 14px;"></i>
+                    <span>Master List New Grantees Import</span>
                 </button>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <i class="icon-filter" style="color: var(--text-secondary); font-size: 16px; margin-right: 4px;"></i>
-                <select id="rpt-filter-scholarship" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
-                    <option>All Scholarships</option>
-                </select>
-                <select id="rpt-filter-gender" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
-                    <option>All Genders</option>
-                    <option>Male</option>
-                    <option>Female</option>
-                </select>
-                <select id="rpt-filter-year" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
-                    <option>All Year Levels</option>
-                    <option>1st Year</option>
-                    <option>2nd Year</option>
-                    <option>3rd Year</option>
-                    <option>4th Year</option>
-                    <option>5th Year</option>
-                </select>
-                <select id="rpt-filter-father" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
-                    <option>All (Father)</option>
-                    <option>Graduate</option>
-                    <option>Non-graduate</option>
-                </select>
-                <select id="rpt-filter-mother" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
-                    <option>All (Mother)</option>
-                    <option>Graduate</option>
-                    <option>Non-graduate</option>
-                </select>
+            <button id="btn-export-excel"
+                style="display: none; background: linear-gradient(135deg, #2E7D32, #4CAF50); color: white; border: none; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(46,125,50,0.25);">
+                <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Export Excel Masterlist
+            </button>
+            <span id="import-portal-badge"
+                style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: rgba(15,50,96,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: var(--primary-color);">
+                <i class="icon-shield-check"></i> Super Admin Portal
+            </span>
+        </div>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- SECTION 1: Student Master List Tab Pane                       -->
+    <!-- ============================================================= -->
+    <div id="report-pane-masterlist" style="display: none; flex-direction: column; gap: 16px;">
+        <!-- Student Master List Data Section -->
+        <div>
+
+            <!-- Filter Bar Card -->
+            <div class="card"
+                style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 16px; border-radius: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="flex: 1; position: relative;">
+                        <i class="icon-search"
+                            style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 16px;"></i>
+                        <input type="text" id="rpt-search" placeholder="Search by Name or Student ID..."
+                            style="width: 100%; padding: 12px 16px 12px 42px; border: 1px solid var(--border-color); border-radius: 20px; outline: none; background: rgba(0,0,0,0.01); font-family: inherit; font-size: 13px;">
+                    </div>
+                    <button class="icon-btn"
+                        style="background: rgba(15, 50, 96, 0.05); color: var(--primary-color); border-radius: 12px; padding: 10px;"
+                        id="rpt-refresh">
+                        <i class="icon-refresh-cw" style="font-size: 18px;"></i>
+                    </button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <i class="icon-filter"
+                        style="color: var(--text-secondary); font-size: 16px; margin-right: 4px;"></i>
+                    <select id="rpt-filter-scholarship"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option>All Scholarships</option>
+                    </select>
+                    <select id="rpt-filter-gender"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option>All Genders</option>
+                        <option>Male</option>
+                        <option>Female</option>
+                    </select>
+                    <select id="rpt-filter-year"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option>All Year Levels</option>
+                        <option>1st Year</option>
+                        <option>2nd Year</option>
+                        <option>3rd Year</option>
+                        <option>4th Year</option>
+                        <option>5th Year</option>
+                    </select>
+                    <select id="rpt-filter-father"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option>All (Father)</option>
+                        <option>Graduate</option>
+                        <option>Non-graduate</option>
+                    </select>
+                    <select id="rpt-filter-mother"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option>All (Mother)</option>
+                        <option>Graduate</option>
+                        <option>Non-graduate</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card" style="padding: 0; overflow: hidden; border-radius: 16px;">
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; min-width: 1500px; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.02);">
+                                <th style="padding: 14px; width: 40px;">
+                                    <input type="checkbox" id="rpt-select-all"
+                                        style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
+                                </th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Student ID</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Last Name</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    First Name</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    M.I.</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Email</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Birthdate</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Gender</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Course</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Yr & Sec</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Scholarship</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Scholar Year</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Payouts</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Contact</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Status</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Father's Name</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Father's Edu</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Mother's Name</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Mother's Edu</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Yearly Income</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Religion</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Tribe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpt-master-body">
+                            <tr>
+                                <td colspan="22"
+                                    style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading
+                                    students...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- SECTION 2: Master List Import Tab Pane                        -->
+    <!-- ============================================================= -->
+    <div id="report-pane-import" style="display: none; flex-direction: column; gap: 24px;">
+        <!-- Summary Metrics Card -->
+        <div id="import-summary-card" class="card hidden"
+            style="border-radius: 20px; padding: 20px 24px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);">
+            <div
+                style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div
+                        style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                        <i class="icon-bar-chart-2" style="font-size: 20px; color: #38bdf8;"></i>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 800; color: white;">Import Summary</h4>
+                        <p id="summary-subtitle" style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Extraction
+                            results & duplicate filter status</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <div style="text-align: center;">
+                        <div id="summary-extracted" style="font-size: 20px; font-weight: 800; color: #38bdf8;">0</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Total
+                            Extracted</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div id="summary-imported" style="font-size: 20px; font-weight: 800; color: #4ade80;">0</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Ready
+                            to Save</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div id="summary-skipped" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
+                            Duplicates (Skipped)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div id="summary-errors" style="font-size: 20px; font-weight: 800; color: #f87171;">0</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
+                            Errors</div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Data Table -->
-        <div class="card" style="padding: 0; overflow: hidden;">
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; min-width: 1500px; text-align: left;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.02);">
-                            <th style="padding: 14px; width: 40px;">
-                                <input type="checkbox" id="rpt-select-all" style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
-                            </th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Student ID</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Last Name</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">First Name</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">M.I.</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Email</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Birthdate</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Gender</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Course</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Yr & Sec</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Scholarship</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Scholar Year</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Payouts</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Contact</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Status</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Father's Name</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Father's Edu</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Mother's Name</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Mother's Edu</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Yearly Income</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Religion</th>
-                            <th style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">Tribe</th>
-                        </tr>
-                    </thead>
-                    <tbody id="rpt-master-body">
-                        <tr><td colspan="20" style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading students...</td></tr>
-                    </tbody>
-                </table>
+        <!-- Step 1 & Step 2: Upload & Extracted Masterlist Table -->
+        <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <!-- Upload Card -->
+            <div class="card"
+                style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 20px; align-self: flex-start; padding: 28px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color);">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 2px;">
+                    <div class="step-badge">1</div>
+                    <h3
+                        style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                        Upload New Grantees</h3>
+                </div>
+
+                <div id="drop-zone" class="import-drop-zone">
+                    <i class="icon-file-up" style="font-size: 40px; color: #94a3b8; margin-bottom: 12px;"></i>
+                    <p style="margin: 0; font-weight: 700; font-size: 14px; color: var(--text-primary);">Drag & drop new
+                        grantee list here</p>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;">or
+                        click to browse (PDF, DOCX, XLSX, CSV)</p>
+                    <input type="file" id="file-input" accept=".pdf, .doc, .docx, .xlsx, .xls, .csv"
+                        style="display: none;">
+                </div>
+
+                <div id="file-info-container" class="hidden"
+                    style="position: relative; border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); background: var(--surface-color); display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div
+                        style="width: 42px; height: 42px; border-radius: 10px; background: rgba(15, 50, 96, 0.1); color: var(--primary-color); display: flex; align-items: center; justify-content: center;">
+                        <i class="icon-file-text" style="font-size: 20px;"></i>
+                    </div>
+                    <div style="flex: 1; overflow: hidden;">
+                        <p id="file-name-display"
+                            style="margin: 0; font-weight: 700; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        </p>
+                        <p id="file-size-display"
+                            style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;">
+                        </p>
+                    </div>
+                    <button id="btn-clear-file" class="icon-btn"
+                        style="color: #94a3b8; background: rgba(0,0,0,0.05); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
+                        <i class="icon-x" style="font-size: 13px;"></i>
+                    </button>
+                </div>
+
+                <button class="btn btn-primary" id="btn-extract" disabled
+                    style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; font-size: 13px; border-radius: 12px;">
+                    <i class="icon-settings" style="font-size: 16px;"></i> Extract Grantees Data
+                </button>
+                <div id="ocr-progress-container" class="hidden" style="margin-top: 2px;">
+                    <div
+                        style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">
+                        <span id="ocr-status-text">Processing Document...</span>
+                        <span id="ocr-progress-text"></span>
+                    </div>
+                    <div style="height: 6px; background: rgba(0,0,0,0.05); border-radius: 3px; overflow: hidden;">
+                        <div id="ocr-progress-bar"
+                            style="height: 100%; width: 100%; background: var(--primary-color); transition: width 0.2s; animation: pulse 1.5s infinite; border-radius: 3px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extraction Results Card -->
+            <div class="card table-container"
+                style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 0; padding: 0; align-self: flex-start; max-height: 420px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); overflow: hidden;">
+                <div
+                    style="padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-color); background: var(--surface-color); z-index: 11;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div class="step-badge">2</div>
+                        <h3
+                            style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                            New Grantees Masterlist</h3>
+                        <select id="filter-batch" class="hidden glass-filter">
+                            <option value="All Batches">All Batches</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-gradient-save hidden" id="btn-save-records"
+                        style="padding: 9px 18px; font-weight: 700; font-size: 13px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="icon-save" style="font-size: 15px;"></i> Save to Masterlist
+                    </button>
+                </div>
+
+                <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: var(--surface-color);">
+                    <table class="import-table"
+                        style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 650px; text-align: left;">
+                        <thead>
+                            <tr>
+                                <th>Student ID</th>
+                                <th>Last Name</th>
+                                <th>First Name</th>
+                                <th>Middle Name</th>
+                                <th>Course</th>
+                                <th>Batch</th>
+                                <th>Status</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="extracted-table-body">
+                            <tr>
+                                <td colspan="8"
+                                    style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                        <div style="position: relative;">
+                                            <i class="icon-file-search"
+                                                style="font-size: 48px; color: #cbd5e1; opacity: 0.5;"></i>
+                                            <i class="icon-sparkles"
+                                                style="font-size: 20px; color: var(--primary-color); position: absolute; top: -6px; right: -6px;"></i>
+                                        </div>
+                                        <span
+                                            style="font-size: 14px; max-width: 280px; line-height: 1.5; color: var(--text-secondary);">Upload
+                                            a document and extract data to see the new grantees listed here.</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Annex 5 TES Verification & Dual Form Tables Section -->
+        <div class="card"
+            style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color); border-radius: 20px; margin-top: 10px;">
+            <!-- Tab Switcher & Upper Table Action Bar -->
+            <div class="annex-tabs-header">
+                <!-- Left: Tab Buttons -->
+                <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                    <button id="sa-tab-btn-form2" class="annex-tab-btn active">
+                        <i class="icon-file-spreadsheet"></i> Annex 5 - Form 2 (Enrolled Grantees & Billing)
+                        <span id="sa-badge-form2-count" class="annex-tab-badge">0</span>
+                    </button>
+                    <button id="sa-tab-btn-form3" class="annex-tab-btn">
+                        <i class="icon-file-text"></i> Annex 5 - Form 3 (Not Included Students)
+                        <span id="sa-badge-form3-count" class="annex-tab-badge">0</span>
+                    </button>
+                    <button id="sa-tab-btn-review" class="annex-tab-btn" style="color: #E53935;">
+                        <i class="icon-alert-circle"></i> Needs Review Queue
+                        <span id="sa-badge-review-count" class="annex-tab-badge"
+                            style="background: rgba(229,57,53,0.12); color: #E53935;">0</span>
+                    </button>
+                </div>
+
+                <!-- Right: Upper Table Two Auto-Fill Buttons -->
+                <div style="display: flex; gap: 10px; align-items: center; padding: 8px 16px; flex-wrap: wrap;">
+                    <button id="sa-btn-export-form2-top"
+                        style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
+                    </button>
+                    <button id="sa-btn-export-form3-top"
+                        style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 1: Annex 5 - Form 2 Content -->
+            <div id="sa-tab-pane-form2" style="display: block; padding: 20px 24px;">
+                <!-- Form 2 Control Bar -->
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                    <div
+                        style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                        <i class="icon-search"
+                            style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
+                        <input type="text" id="sa-search-form2"
+                            placeholder="Search Form 2 verified scholars by name, ID, or SA..."
+                            style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <div
+                            style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16,185,129,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: #10b981;">
+                            <i class="icon-users" style="font-size: 14px;"></i> <span id="sa-stat-form2-count">0
+                                Enrolled Grantees</span>
+                        </div>
+                        <div
+                            style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
+                            <i class="icon-coins" style="font-size: 14px;"></i> <span id="sa-stat-form2-amount">₱0.00
+                                Total Billing</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form 2 Table -->
+                <div class="annex-table-wrap"
+                    style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
+                    <table class="annex-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">Control No.</th>
+                                <th>Student ID</th>
+                                <th>TES App No. (SA)</th>
+                                <th>Last Name</th>
+                                <th>Given Name</th>
+                                <th>M.I.</th>
+                                <th>Sex</th>
+                                <th>Birthdate</th>
+                                <th>Degree Program</th>
+                                <th>Year Level</th>
+                                <th>Email Address</th>
+                                <th>Phone Number</th>
+                                <th>Batch</th>
+                                <th>TES Amount</th>
+                                <th>PWD (3A)</th>
+                                <th>Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sa-tbody-form2">
+                            <tr>
+                                <td colspan="16"
+                                    style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading
+                                    verified Form 2 records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 2: Annex 5 - Form 3 Content -->
+            <div id="sa-tab-pane-form3" style="display: none; padding: 20px 24px;">
+                <!-- Form 3 Control Bar -->
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                    <div
+                        style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                        <i class="icon-search"
+                            style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #FF8F00; font-size: 15px;"></i>
+                        <input type="text" id="sa-search-form3"
+                            placeholder="Search Form 3 applicants by name, ID, reason..."
+                            style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <div
+                            style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
+                            <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not
+                                Included Grantees</span>
+                        </div>
+                        <button id="sa-btn-clear-form3-data"
+                            style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                            title="Remove all records from Annex Form 3 table">
+                            <i class="icon-trash-2" style="font-size: 13px;"></i> Clear Form 3 Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form 3 Table -->
+                <div class="annex-table-wrap"
+                    style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
+                    <table class="annex-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">Control No.</th>
+                                <th>Student ID</th>
+                                <th>TES App No. (SA)</th>
+                                <th>Last Name</th>
+                                <th>Given Name</th>
+                                <th>M.I.</th>
+                                <th>Sex</th>
+                                <th>Birthdate</th>
+                                <th>Degree Program</th>
+                                <th>Year Level</th>
+                                <th>Status Reason</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sa-tbody-form3">
+                            <tr>
+                                <td colspan="12"
+                                    style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading
+                                    Form 3 records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 3: Needs Review Queue Content -->
+            <div id="sa-tab-pane-review" style="display: none; padding: 20px 24px;">
+                <div
+                    style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">AI
+                            Assisted Discrepancy Resolution Queue</h4>
+                        <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">These imported
+                            grantees have data discrepancies or require verification.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="sa-btn-auto-resolve-all"
+                            style="background: rgba(15,50,96,0.08); color: var(--primary-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <i class="icon-sparkles"></i> Auto-Categorize All to Form 3
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Review Items Container -->
+                <div id="sa-review-items-container" style="display: flex; flex-direction: column; gap: 14px;">
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <i class="icon-check-circle" style="font-size: 32px; color: #10b981; margin-bottom: 8px;"></i>
+                        <p style="margin: 0; font-weight: 600;">No items pending review.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

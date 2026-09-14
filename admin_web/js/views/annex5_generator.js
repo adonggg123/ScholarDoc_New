@@ -9,6 +9,9 @@ let rawSuperAdminGrantees = [];
 let rawSchoolStudents = [];
 let uploadedSchoolFile = null;
 
+let selectedSchoolStudentIds = new Set();
+let isSchoolTableExpanded = false;
+
 let verifiedForm2List = [];
 let verifiedForm3List = [];
 let needsReviewList = [];
@@ -69,7 +72,9 @@ async function loadInitialData() {
         }
 
         updateSourceCounts();
+        populateSuperAdminBatchFilter();
         renderSuperAdminGranteesTable(rawSuperAdminGrantees);
+        renderSchoolStudentsTable(rawSchoolStudents);
         runCrossVerification();
 
     } catch (e) {
@@ -116,19 +121,210 @@ function renderSuperAdminGranteesTable(items) {
     }).join('');
 }
 
-// Search filter for Super Admin Grantees Table
+// ── Batch Filter Population & Filtering (Source 1) ─────────────────
+function populateSuperAdminBatchFilter() {
+    const sel = document.getElementById('filter-superadmin-batch');
+    if (!sel) return;
+
+    const uniqueBatches = new Set();
+    rawSuperAdminGrantees.forEach(g => {
+        if (g.batch && g.batch.trim().length > 0) {
+            uniqueBatches.add(g.batch.trim());
+        }
+    });
+
+    if (uniqueBatches.size === 0) {
+        uniqueBatches.add('Batch 1');
+    }
+
+    const sortedBatches = Array.from(uniqueBatches).sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    const currentVal = sel.value || 'All Batches';
+    sel.innerHTML = '<option value="All Batches">All Batches</option>' + 
+        sortedBatches.map(b => `<option value="${b}" ${b === currentVal ? 'selected' : ''}>${b}</option>`).join('');
+}
+
+function filterSuperAdminGrantees() {
+    const q = (document.getElementById('search-superadmin-grantees')?.value || '').toLowerCase().trim();
+    const batchSel = document.getElementById('filter-superadmin-batch')?.value || 'All Batches';
+
+    const filtered = rawSuperAdminGrantees.filter(g => {
+        const name = (g.name || `${g.last_name || ''} ${g.first_name || ''}`).toLowerCase();
+        const id = (g.student_id || g.studentId || '').toLowerCase();
+        const course = (g.course || '').toLowerCase();
+        const batch = (g.batch || 'Batch 1').trim();
+
+        const matchQuery = !q || name.includes(q) || id.includes(q) || course.includes(q);
+        const matchBatch = batchSel === 'All Batches' || batch.toLowerCase() === batchSel.toLowerCase();
+
+        return matchQuery && matchBatch;
+    });
+
+    renderSuperAdminGranteesTable(filtered);
+}
+
+// Search & Batch filter listeners for Super Admin Grantees Table
 const searchSAGrantees = document.getElementById('search-superadmin-grantees');
 if (searchSAGrantees) {
-    searchSAGrantees.addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase().trim();
-        const filtered = rawSuperAdminGrantees.filter(g => {
-            const name = (g.name || `${g.last_name || ''} ${g.first_name || ''}`).toLowerCase();
-            const id = (g.student_id || g.studentId || '').toLowerCase();
-            const course = (g.course || '').toLowerCase();
-            const batch = (g.batch || '').toLowerCase();
-            return !q || name.includes(q) || id.includes(q) || course.includes(q) || batch.includes(q);
+    searchSAGrantees.addEventListener('input', filterSuperAdminGrantees);
+}
+
+const filterSABatch = document.getElementById('filter-superadmin-batch');
+if (filterSABatch) {
+    filterSABatch.addEventListener('change', filterSuperAdminGrantees);
+}
+
+// ── Render School Student Master List Table (Source 2) ──────────────
+function renderSchoolStudentsTable(students) {
+    const tbody = document.getElementById('tbody-school-students');
+    if (!tbody) return;
+
+    if (!students || students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = students.map((s) => {
+        let nameParts = { last: 'N/A', first: 'N/A', mi: '' };
+        if (s.fullName) {
+            const fn = s.fullName.trim();
+            if (fn.includes(',')) {
+                const parts = fn.split(',');
+                const last = parts[0].trim();
+                const restParts = parts.slice(1).join(',').trim().split(/\s+/);
+                if (restParts.length > 1) {
+                    const miPart = restParts.pop();
+                    nameParts = { last, first: restParts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                } else {
+                    nameParts = { last, first: restParts.join(' '), mi: '' };
+                }
+            } else {
+                const parts = fn.split(/\s+/);
+                if (parts.length === 1) {
+                    nameParts = { last: parts[0], first: '', mi: '' };
+                } else if (parts.length === 2) {
+                    nameParts = { last: parts[1], first: parts[0], mi: '' };
+                } else {
+                    const last = parts.pop();
+                    const miPart = parts.pop();
+                    nameParts = { last, first: parts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
+                }
+            }
+        } else if (s.last_name || s.first_name) {
+            nameParts = {
+                last: s.last_name || 'N/A',
+                first: s.first_name || 'N/A',
+                mi: s.middle_name ? s.middle_name.charAt(0).toUpperCase() : ''
+            };
+        }
+
+        const family = s.familyDetails || {};
+        const uid = s.uid || s.studentId || s.student_id || s.id || Math.random().toString(36).substring(2);
+        const isChecked = selectedSchoolStudentIds.has(uid) ? 'checked' : '';
+        const statusLower = (s.status || s.enrollmentStatus || '').toLowerCase();
+        const statusColor = statusLower === 'verified' || statusLower === 'approved' || statusLower === 'enrolled' || statusLower === 'active' ? 'var(--success, #10b981)' :
+                            statusLower === 'pending' ? '#FBC02D' : 'var(--error, #ef4444)';
+
+        return `
+            <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
+                <td style="padding: 10px 14px; text-align: center;">
+                    <input type="checkbox" class="school-row-checkbox" data-uid="${uid}" ${isChecked} style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
+                </td>
+                <td style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">${s.studentId || s.student_id || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; white-space: nowrap;">${nameParts.last}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${nameParts.first}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${nameParts.mi}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.email || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.birthdate || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.gender || s.sex || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.course || s.program || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${(s.year || '').toString().split(' ')[0] || ''}${s.section ? ' - ' + s.section : ''}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.scholarYearLevel || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.payoutsReceived || 0}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.contactNumber || s.phone || 'N/A'}</td>
+                <td style="padding: 10px 14px; white-space: nowrap;">
+                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 3px 8px; border-radius: 12px;">${s.status || s.enrollmentStatus || 'Active'}</span>
+                </td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.fatherName || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.fatherEduStatus || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.motherName || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.motherEduStatus || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.yearlyIncome || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.religion || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.tribe || 'N/A'}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // Bind row checkboxes
+    tbody.querySelectorAll('.school-row-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const uid = e.target.dataset.uid;
+            if (e.target.checked) selectedSchoolStudentIds.add(uid);
+            else selectedSchoolStudentIds.delete(uid);
         });
-        renderSuperAdminGranteesTable(filtered);
+    });
+}
+
+// Search filter for School Students Table
+const searchSchoolStudents = document.getElementById('search-school-students');
+if (searchSchoolStudents) {
+    searchSchoolStudents.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        if (!q) {
+            renderSchoolStudentsTable(rawSchoolStudents);
+            return;
+        }
+        const filtered = rawSchoolStudents.filter(s => {
+            const name = (s.fullName || `${s.first_name || ''} ${s.last_name || ''}`).toLowerCase();
+            const id = (s.studentId || s.student_id || '').toLowerCase();
+            const course = (s.course || s.program || '').toLowerCase();
+            const email = (s.email || '').toLowerCase();
+            const status = (s.status || s.enrollmentStatus || '').toLowerCase();
+            return name.includes(q) || id.includes(q) || course.includes(q) || email.includes(q) || status.includes(q);
+        });
+        renderSchoolStudentsTable(filtered);
+    });
+}
+
+// Select-all checkbox for School Students Table
+const selectAllSchool = document.getElementById('school-select-all');
+if (selectAllSchool) {
+    selectAllSchool.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('.school-row-checkbox').forEach(cb => {
+            cb.checked = isChecked;
+            const uid = cb.dataset.uid;
+            if (isChecked && uid) selectedSchoolStudentIds.add(uid);
+            else if (uid) selectedSchoolStudentIds.delete(uid);
+        });
+    });
+}
+
+// Toggle Expand / Full Width for School Students Card
+const btnToggleExpand = document.getElementById('btn-toggle-school-expand');
+const cardSchool = document.getElementById('card-source-school');
+const wrapSchoolStudents = document.getElementById('wrap-school-students');
+const iconExpand = document.getElementById('icon-school-expand');
+const textExpand = document.getElementById('text-school-expand');
+
+if (btnToggleExpand && cardSchool) {
+    btnToggleExpand.addEventListener('click', () => {
+        isSchoolTableExpanded = !isSchoolTableExpanded;
+        if (isSchoolTableExpanded) {
+            cardSchool.style.gridColumn = '1 / -1';
+            if (wrapSchoolStudents) wrapSchoolStudents.style.maxHeight = '480px';
+            if (iconExpand) iconExpand.className = 'icon-minimize-2';
+            if (textExpand) textExpand.textContent = 'Collapse';
+        } else {
+            cardSchool.style.gridColumn = 'auto';
+            if (wrapSchoolStudents) wrapSchoolStudents.style.maxHeight = '240px';
+            if (iconExpand) iconExpand.className = 'icon-maximize-2';
+            if (textExpand) textExpand.textContent = 'Expand';
+        }
     });
 }
 
@@ -188,12 +384,21 @@ if (btnClearFile) {
         const { data: dbStudents } = await supabase.from('students').select('*');
         rawSchoolStudents = dbStudents || [];
         updateSourceCounts();
+        renderSchoolStudentsTable(rawSchoolStudents);
         runCrossVerification();
         showToast('Reverted to default school database records.', 'info');
     });
 }
 
 async function handleSchoolFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+        alert('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
+        showToast('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.', 'alert-triangle');
+        if (fileInput) fileInput.value = '';
+        return;
+    }
+
     uploadedSchoolFile = file;
     if (fileNameDisplay) fileNameDisplay.textContent = file.name;
     if (fileSizeDisplay) fileSizeDisplay.textContent = `${(file.size / 1024).toFixed(1)} KB`;
@@ -202,20 +407,12 @@ async function handleSchoolFile(file) {
     if (fileInfo) fileInfo.style.display = 'flex';
 
     try {
-        const ext = file.name.split('.').pop().toLowerCase();
-        let parsedStudents = [];
-
-        if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-            parsedStudents = await parseSchoolExcelOrCsv(file);
-        } else if (ext === 'pdf') {
-            parsedStudents = await parseSchoolPdf(file);
-        } else if (ext === 'docx' || ext === 'doc') {
-            parsedStudents = await parseSchoolDocx(file);
-        }
+        const parsedStudents = await parseSchoolExcelOrCsv(file);
 
         if (parsedStudents.length > 0) {
             rawSchoolStudents = parsedStudents;
             updateSourceCounts();
+            renderSchoolStudentsTable(rawSchoolStudents);
             runCrossVerification();
             showToast(`Loaded ${parsedStudents.length} school student records from ${file.name}!`, 'check-circle');
         } else {
@@ -236,55 +433,178 @@ async function parseSchoolExcelOrCsv(file) {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
 
                 const students = [];
-                for (let r = 0; r < rows.length; r++) {
+                let headerRowIndex = -1;
+                const colMap = {};
+
+                // 1. Detect Header Row
+                for (let r = 0; r < Math.min(10, rows.length); r++) {
+                    const row = rows[r];
+                    if (!row || row.length === 0) continue;
+                    const lowerRow = row.map(c => String(c || '').trim().toLowerCase());
+                    const hasId = lowerRow.some(c => c.includes('student id') || c.includes('student no') || c.includes('id number') || c.includes('control no'));
+                    const hasName = lowerRow.some(c => c.includes('name') || c.includes('last name') || c.includes('first name'));
+
+                    if (hasId || hasName) {
+                        headerRowIndex = r;
+                        lowerRow.forEach((colName, idx) => {
+                            if (!colName) return;
+                            if (colName.includes('student id') || colName.includes('student no') || colName.includes('id number')) colMap.studentId = idx;
+                            else if (colName.includes('last name') || colName.includes('surname')) colMap.lastName = idx;
+                            else if (colName.includes('first name') || colName.includes('given name')) colMap.firstName = idx;
+                            else if (colName.includes('m.i') || colName.includes('middle initial') || colName.includes('middle name')) colMap.middleName = idx;
+                            else if (colName.includes('full name') || colName === 'name') colMap.fullName = idx;
+                            else if (colName.includes('email')) colMap.email = idx;
+                            else if (colName.includes('birth') || colName.includes('dob')) colMap.birthdate = idx;
+                            else if (colName.includes('gender') || colName.includes('sex')) colMap.gender = idx;
+                            else if (colName.includes('course') || colName.includes('program') || colName.includes('degree')) colMap.course = idx;
+                            else if (colName.includes('yr') || colName.includes('year') || colName.includes('level')) colMap.year = idx;
+                            else if (colName.includes('sec')) colMap.section = idx;
+                            else if (colName.includes('scholarship')) colMap.scholarship = idx;
+                            else if (colName.includes('scholar year')) colMap.scholarYearLevel = idx;
+                            else if (colName.includes('payout')) colMap.payoutsReceived = idx;
+                            else if (colName.includes('contact') || colName.includes('phone') || colName.includes('mobile')) colMap.contactNumber = idx;
+                            else if (colName.includes('status') || colName.includes('enrollment')) colMap.status = idx;
+                            else if (colName.includes('father') && colName.includes('name')) colMap.fatherName = idx;
+                            else if (colName.includes('father') && (colName.includes('edu') || colName.includes('status'))) colMap.fatherEduStatus = idx;
+                            else if (colName.includes('mother') && colName.includes('name')) colMap.motherName = idx;
+                            else if (colName.includes('mother') && (colName.includes('edu') || colName.includes('status'))) colMap.motherEduStatus = idx;
+                            else if (colName.includes('income')) colMap.yearlyIncome = idx;
+                            else if (colName.includes('religion')) colMap.religion = idx;
+                            else if (colName.includes('tribe')) colMap.tribe = idx;
+                        });
+                        break;
+                    }
+                }
+
+                // 2. Parse data rows
+                const startRow = headerRowIndex !== -1 ? headerRowIndex + 1 : 0;
+                for (let r = startRow; r < rows.length; r++) {
                     const row = rows[r];
                     if (!row || row.length === 0) continue;
 
                     const rowStr = row.join(' ').toLowerCase();
                     if (rowStr.includes('control no') || rowStr.includes('student no') || (rowStr.includes('last name') && rowStr.includes('first name'))) {
-                        continue; // Skip header
+                        continue; // Skip any duplicate header
                     }
 
-                    const cleanCells = row.map(c => String(c || '').trim()).filter(c => c.length > 0);
-                    if (cleanCells.length === 0) continue;
+                    if (headerRowIndex !== -1 && (colMap.studentId !== undefined || colMap.fullName !== undefined || colMap.lastName !== undefined)) {
+                        // Header mapped extraction
+                        let studentId = colMap.studentId !== undefined ? String(row[colMap.studentId] || '').trim() : '';
+                        let lastName = colMap.lastName !== undefined ? String(row[colMap.lastName] || '').trim() : '';
+                        let firstName = colMap.firstName !== undefined ? String(row[colMap.firstName] || '').trim() : '';
+                        let mi = colMap.middleName !== undefined ? String(row[colMap.middleName] || '').trim() : '';
+                        let fullName = colMap.fullName !== undefined ? String(row[colMap.fullName] || '').trim() : '';
 
-                    let studentId = '';
-                    let fullName = '';
-                    let course = 'BSIT';
-                    let year = '1';
-                    let status = 'Enrolled';
-
-                    // Extract fields heuristically
-                    cleanCells.forEach(cell => {
-                        if (/^\d{6,15}$/.test(cell) || /^\d{4}-\d{4,6}$/.test(cell)) {
-                            studentId = cell;
-                        } else if (cell.toLowerCase().includes('enrolled') || cell.toLowerCase().includes('active') || cell.toLowerCase().includes('drop') || cell.toLowerCase().includes('loa') || cell.toLowerCase().includes('graduat') || cell.toLowerCase().includes('waiv')) {
-                            status = cell;
-                        } else if (cell.toUpperCase().startsWith('BS') || cell.toLowerCase().includes('bachelor') || cell.toLowerCase().includes('tech')) {
-                            course = cell;
-                        } else if (/^[1-5]$/.test(cell) || cell.toLowerCase().includes('year')) {
-                            year = cell.replace(/[^0-9]/g, '') || '1';
-                        } else if (cell.includes(' ') && cell.length > 4 && !fullName) {
-                            fullName = cell;
+                        if (!fullName && (lastName || firstName)) {
+                            fullName = [lastName, firstName, mi].filter(Boolean).join(', ');
                         }
-                    });
 
-                    if (!fullName && cleanCells.length >= 2) {
-                        fullName = cleanCells.slice(0, 2).join(' ');
-                    }
+                        if (!fullName && !studentId) continue;
 
-                    if (fullName) {
+                        const course = colMap.course !== undefined ? String(row[colMap.course] || 'BSIT').trim() : 'BSIT';
+                        const year = colMap.year !== undefined ? String(row[colMap.year] || '1').trim() : '1';
+                        const section = colMap.section !== undefined ? String(row[colMap.section] || '').trim() : '';
+                        const email = colMap.email !== undefined ? String(row[colMap.email] || '').trim() : '';
+                        const gender = colMap.gender !== undefined ? String(row[colMap.gender] || '').trim() : '';
+                        const birthdate = colMap.birthdate !== undefined ? String(row[colMap.birthdate] || '').trim() : '';
+                        const contactNumber = colMap.contactNumber !== undefined ? String(row[colMap.contactNumber] || '').trim() : '';
+                        const status = colMap.status !== undefined ? String(row[colMap.status] || 'Enrolled').trim() : 'Enrolled';
+                        const scholarshipProgram = colMap.scholarship !== undefined ? String(row[colMap.scholarship] || '').trim() : '';
+                        const scholarYearLevel = colMap.scholarYearLevel !== undefined ? String(row[colMap.scholarYearLevel] || '').trim() : '';
+                        const payoutsReceived = colMap.payoutsReceived !== undefined ? parseInt(row[colMap.payoutsReceived]) || 0 : 0;
+
+                        const familyDetails = {
+                            fatherName: colMap.fatherName !== undefined ? String(row[colMap.fatherName] || '').trim() : '',
+                            fatherEduStatus: colMap.fatherEduStatus !== undefined ? String(row[colMap.fatherEduStatus] || '').trim() : '',
+                            motherName: colMap.motherName !== undefined ? String(row[colMap.motherName] || '').trim() : '',
+                            motherEduStatus: colMap.motherEduStatus !== undefined ? String(row[colMap.motherEduStatus] || '').trim() : '',
+                            yearlyIncome: colMap.yearlyIncome !== undefined ? String(row[colMap.yearlyIncome] || '').trim() : '',
+                            religion: colMap.religion !== undefined ? String(row[colMap.religion] || '').trim() : '',
+                            tribe: colMap.tribe !== undefined ? String(row[colMap.tribe] || '').trim() : ''
+                        };
+
                         students.push({
-                            fullName,
-                            studentId,
-                            course,
-                            year,
-                            status,
-                            enrollmentStatus: status
+                            fullName: fullName || `${lastName} ${firstName}`.trim(),
+                            first_name: firstName,
+                            last_name: lastName,
+                            middle_name: mi,
+                            studentId: studentId || '',
+                            course: course || 'BSIT',
+                            year: year || '1',
+                            section,
+                            email,
+                            gender,
+                            birthdate,
+                            contactNumber,
+                            status: status || 'Enrolled',
+                            enrollmentStatus: status || 'Enrolled',
+                            scholarshipProgram,
+                            scholarYearLevel,
+                            payoutsReceived,
+                            familyDetails
                         });
+                    } else {
+                        // Heuristic Fallback Extraction
+                        const cleanCells = row.map(c => String(c || '').trim()).filter(c => c.length > 0);
+                        if (cleanCells.length === 0) continue;
+
+                        let studentId = '';
+                        let fullName = '';
+                        let course = 'BSIT';
+                        let year = '1';
+                        let section = '';
+                        let email = '';
+                        let gender = '';
+                        let birthdate = '';
+                        let contactNumber = '';
+                        let status = 'Enrolled';
+
+                        cleanCells.forEach(cell => {
+                            if (/^\d{6,15}$/.test(cell) || /^\d{4}-\d{4,6}$/.test(cell)) {
+                                studentId = cell;
+                            } else if (cell.includes('@') && cell.includes('.')) {
+                                email = cell;
+                            } else if (cell.toLowerCase() === 'male' || cell.toLowerCase() === 'female') {
+                                gender = cell.charAt(0).toUpperCase() + cell.slice(1).toLowerCase();
+                            } else if (/^(09|\+639)\d{9}$/.test(cell.replace(/[-\s]/g, ''))) {
+                                contactNumber = cell;
+                            } else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(cell) || /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(cell)) {
+                                birthdate = cell;
+                            } else if (cell.toLowerCase().includes('enrolled') || cell.toLowerCase().includes('active') || cell.toLowerCase().includes('drop') || cell.toLowerCase().includes('loa') || cell.toLowerCase().includes('graduat') || cell.toLowerCase().includes('waiv')) {
+                                status = cell;
+                            } else if (cell.toUpperCase().startsWith('BS') || cell.toLowerCase().includes('bachelor') || cell.toLowerCase().includes('tech')) {
+                                course = cell;
+                            } else if (/^[1-5]$/.test(cell) || cell.toLowerCase().includes('year')) {
+                                year = cell.replace(/[^0-9]/g, '') || '1';
+                            } else if (/^[A-Za-z0-9]-[1-9]$/.test(cell) || /^[1-4][A-Za-z]$/.test(cell)) {
+                                section = cell;
+                            } else if (cell.includes(' ') && cell.length > 4 && !fullName) {
+                                fullName = cell;
+                            }
+                        });
+
+                        if (!fullName && cleanCells.length >= 2) {
+                            fullName = cleanCells.slice(0, 2).join(' ');
+                        }
+
+                        if (fullName) {
+                            students.push({
+                                fullName,
+                                studentId,
+                                course,
+                                year,
+                                section,
+                                email,
+                                gender,
+                                birthdate,
+                                contactNumber,
+                                status,
+                                enrollmentStatus: status
+                            });
+                        }
                     }
                 }
                 resolve(students);
@@ -717,6 +1037,22 @@ if (searchF3) {
             return !q || name.includes(q) || id.includes(q) || reason.includes(q);
         });
         renderForm3Table(filtered);
+    });
+}
+
+const btnClearForm3 = document.getElementById('btn-clear-form3-data');
+if (btnClearForm3) {
+    btnClearForm3.addEventListener('click', () => {
+        if (verifiedForm3List.length === 0) {
+            showToast('Form 3 table is already empty.', 'info');
+            return;
+        }
+        if (confirm('Are you sure you want to remove all records from the Annex Form 3 table?')) {
+            verifiedForm3List = [];
+            updateKPIMetrics();
+            renderForm3Table(verifiedForm3List);
+            showToast('Annex Form 3 table data removed.', 'check-circle');
+        }
     });
 }
 

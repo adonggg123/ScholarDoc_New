@@ -28,25 +28,40 @@ let verifiedForm3List = [];
 let needsReviewList = [];
 
 // Elements
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const fileInfoContainer = document.getElementById('file-info-container');
-const fileNameDisplay = document.getElementById('file-name-display');
-const fileSizeDisplay = document.getElementById('file-size-display');
-const btnClearFile = document.getElementById('btn-clear-file');
-const btnExtract = document.getElementById('btn-extract');
-const ocrProgressContainer = document.getElementById('ocr-progress-container');
-const ocrStatusText = document.getElementById('ocr-status-text');
-const extractedTableBody = document.getElementById('extracted-table-body');
-const btnSaveRecords = document.getElementById('btn-save-records');
-const filterBatch = document.getElementById('filter-batch');
+let dropZone = null;
+let fileInput = null;
+let fileInfoContainer = null;
+let fileNameDisplay = null;
+let fileSizeDisplay = null;
+let btnClearFile = null;
+let btnExtract = null;
+let ocrProgressContainer = null;
+let ocrStatusText = null;
+let ocrProgressBar = null;
+let extractedTableBody = null;
+let btnSaveRecords = null;
+let filterBatch = null;
 
 // Summary Metrics Elements
-const importSummaryCard = document.getElementById('import-summary-card');
-const summaryExtracted = document.getElementById('summary-extracted');
-const summaryImported = document.getElementById('summary-imported');
-const summarySkipped = document.getElementById('summary-skipped');
-const summaryErrors = document.getElementById('summary-errors');
+let importSummaryCard = null;
+let summaryExtracted = null;
+let summaryImported = null;
+let summarySkipped = null;
+let summaryErrors = null;
+
+// Annex Tabs Elements
+let saTabBtn2 = null;
+let saTabBtn3 = null;
+let saTabBtnRev = null;
+let saTabPane2 = null;
+let saTabPane3 = null;
+let saTabPaneRev = null;
+
+let btnExportF2 = null;
+let btnExportF3 = null;
+let saSearchF2 = null;
+let saSearchF3 = null;
+let btnAutoResolveAll = null;
 
 function getTableName() {
     return 'scholar_masterlist';
@@ -78,46 +93,6 @@ function clearFileState() {
     fetchExistingMasterlist();
 }
 
-// Drag and Drop Events
-if (dropZone) {
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = 'var(--primary-color)';
-        dropZone.style.background = 'rgba(var(--primary-rgb), 0.05)';
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = 'var(--border-color)';
-        dropZone.style.background = 'rgba(0,0,0,0.01)';
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = 'var(--border-color)';
-        dropZone.style.background = 'rgba(0,0,0,0.01)';
-        if (e.dataTransfer.files.length > 0) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    });
-
-    dropZone.addEventListener('click', () => {
-        if (fileInput) fileInput.click();
-    });
-}
-
-if (fileInput) {
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
-}
-
-if (btnClearFile) {
-    btnClearFile.addEventListener('click', clearFileState);
-}
-
 function handleFile(file) {
     const validExtensions = ['pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
     const ext = file.name.split('.').pop().toLowerCase();
@@ -128,60 +103,18 @@ function handleFile(file) {
     }
     
     currentFile = file;
-    fileNameDisplay.textContent = file.name;
-    fileSizeDisplay.textContent = formatBytes(file.size);
+    if (fileNameDisplay) fileNameDisplay.textContent = file.name;
+    if (fileSizeDisplay) fileSizeDisplay.textContent = formatBytes(file.size);
     
-    dropZone.classList.add('hidden');
-    fileInfoContainer.classList.remove('hidden');
-    btnExtract.disabled = false;
+    if (dropZone) dropZone.classList.add('hidden');
+    if (fileInfoContainer) fileInfoContainer.classList.remove('hidden');
+    if (btnExtract) btnExtract.disabled = false;
     
     extractedRecords = [];
     if (importSummaryCard) importSummaryCard.classList.add('hidden');
     populateBatchFilter();
     renderTable();
-    btnSaveRecords.classList.add('hidden');
-}
-
-// Extraction Logic
-if (btnExtract) {
-    btnExtract.addEventListener('click', async () => {
-        if (!currentFile) return;
-        
-        btnExtract.disabled = true;
-        ocrProgressContainer.classList.remove('hidden');
-        extractedRecords = [];
-        if (importSummaryCard) importSummaryCard.classList.add('hidden');
-        populateBatchFilter();
-        renderTable();
-        btnSaveRecords.classList.add('hidden');
-        
-        try {
-            const ext = currentFile.name.split('.').pop().toLowerCase();
-            
-            if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-                const rawRecords = await extractExcelOrCsv(currentFile);
-                await checkAndFlagDuplicates(rawRecords);
-            } else {
-                let extractedText = '';
-                if (ext === 'pdf') {
-                    extractedText = await extractPdfText(currentFile);
-                } else if (ext === 'docx' || ext === 'doc') {
-                    extractedText = await extractDocxText(currentFile);
-                }
-                await parseDocumentText(extractedText);
-            }
-            
-        } catch (err) {
-            console.error('Extraction Error:', err);
-            alert('Error extracting text from document: ' + err.message);
-        } finally {
-            btnExtract.disabled = false;
-            ocrStatusText.textContent = 'Complete';
-            setTimeout(() => {
-                ocrProgressContainer.classList.add('hidden');
-            }, 2000);
-        }
-    });
+    if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
 }
 
 async function extractExcelOrCsv(file) {
@@ -398,7 +331,6 @@ async function parseDocumentText(text) {
     await checkAndFlagDuplicates(rawRecords);
 }
 
-// Deduplication check
 async function checkAndFlagDuplicates(records) {
     let existingDbNames = new Set();
     
@@ -462,13 +394,13 @@ async function checkAndFlagDuplicates(records) {
     populateBatchFilter();
     renderTable();
 
-    if (extractedRecords.length > 0) {
+    if (extractedRecords.length > 0 && btnSaveRecords) {
         btnSaveRecords.classList.remove('hidden');
         btnSaveRecords.disabled = importedCount === 0;
         btnSaveRecords.innerHTML = `<i class="icon-save" style="font-size: 16px;"></i> Save (${importedCount} New Grantees)`;
         btnSaveRecords.classList.add('btn-gradient-save');
         btnSaveRecords.style.background = '';
-    } else {
+    } else if (btnSaveRecords) {
         btnSaveRecords.classList.add('hidden');
     }
 }
@@ -494,13 +426,9 @@ function populateBatchFilter() {
     filterBatch.classList.remove('hidden');
 }
 
-if (filterBatch) {
-    filterBatch.addEventListener('change', () => {
-        renderTable();
-    });
-}
-
 function renderTable() {
+    if (!extractedTableBody) return;
+
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
@@ -630,7 +558,7 @@ function renderTable() {
 
             renderTable();
             if (extractedRecords.length === 0) {
-                btnSaveRecords.classList.add('hidden');
+                if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
                 if (importSummaryCard) importSummaryCard.classList.add('hidden');
             }
         });
@@ -639,7 +567,6 @@ function renderTable() {
     if (window.lucide) window.lucide.createIcons();
 }
 
-// Database Insertion
 async function saveRecordsToDatabase() {
     const validToInsert = extractedRecords.filter(r => !r.isDuplicate);
 
@@ -684,11 +611,6 @@ async function saveRecordsToDatabase() {
     }
 }
 
-if (btnSaveRecords) {
-    btnSaveRecords.addEventListener('click', saveRecordsToDatabase);
-}
-
-// ── Annex 5 TES Verification & Dual Form Table Logic ────────────────
 async function loadSchoolStudentsAndVerify(grantees) {
     try {
         const { data: dbStudents } = await window.supabaseClient.from('students').select('*');
@@ -844,7 +766,6 @@ function renderAnnexReviewQueue(items) {
         const discrepancies = item.discrepancies || [];
 
         const granteeName = grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''}`;
-        const studentName = student ? (student.fullName || student.name) : 'No Matching Record in School Database';
 
         return `
             <div class="card" style="padding: 16px 20px; border-left: 4px solid #E53935; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 10px;">
@@ -871,100 +792,12 @@ function renderAnnexReviewQueue(items) {
     }).join('');
 }
 
-// Annex Tab Switching
-const saTabBtn2 = document.getElementById('sa-tab-btn-form2');
-const saTabBtn3 = document.getElementById('sa-tab-btn-form3');
-const saTabBtnRev = document.getElementById('sa-tab-btn-review');
-
-const saTabPane2 = document.getElementById('sa-tab-pane-form2');
-const saTabPane3 = document.getElementById('sa-tab-pane-form3');
-const saTabPaneRev = document.getElementById('sa-tab-pane-review');
-
 function activateSATab(activeBtn, activePane) {
     [saTabBtn2, saTabBtn3, saTabBtnRev].forEach(b => b && b.classList.remove('active'));
     [saTabPane2, saTabPane3, saTabPaneRev].forEach(p => p && (p.style.display = 'none'));
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.style.display = 'block';
-}
-
-if (saTabBtn2) saTabBtn2.addEventListener('click', () => activateSATab(saTabBtn2, saTabPane2));
-if (saTabBtn3) saTabBtn3.addEventListener('click', () => activateSATab(saTabBtn3, saTabPane3));
-if (saTabBtnRev) saTabBtnRev.addEventListener('click', () => activateSATab(saTabBtnRev, saTabPaneRev));
-
-// Annex Auto-Fill Excel Exports
-const btnExportF2 = document.getElementById('sa-btn-export-form2-top');
-if (btnExportF2) {
-    btnExportF2.addEventListener('click', async () => {
-        try {
-            btnExportF2.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
-            const resp = await fetch('/assets/Annex 5-TES New Form 2.xlsx');
-            if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
-            const blob = await resp.blob();
-
-            const studentsToFill = verifiedForm2List.map(item => item.matchedStudent || item.grantee);
-            const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-            saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
-        } catch (err) {
-            console.error('Form 2 export error:', err);
-            alert('Failed to generate Form 2: ' + err.message);
-        } finally {
-            btnExportF2.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)';
-        }
-    });
-}
-
-const btnExportF3 = document.getElementById('sa-btn-export-form3-top');
-if (btnExportF3) {
-    btnExportF3.addEventListener('click', async () => {
-        try {
-            btnExportF3.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
-            const resp = await fetch('/assets/Annex 5-TES New Form 3.xlsx');
-            if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
-            const blob = await resp.blob();
-
-            const studentsToFill = verifiedForm3List.map(item => ({
-                ...(item.matchedStudent || item.grantee),
-                status: item.specialStatusReason || 'Not enrolled',
-                remarks: item.remarks || `Categorized: ${item.specialStatusReason || 'Not enrolled'}`
-            }));
-
-            const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-            saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
-        } catch (err) {
-            console.error('Form 3 export error:', err);
-            alert('Failed to generate Form 3: ' + err.message);
-        } finally {
-            btnExportF3.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)';
-        }
-    });
-}
-
-// Search listeners for Super Admin Annex Tables
-const saSearchF2 = document.getElementById('sa-search-form2');
-if (saSearchF2) {
-    saSearchF2.addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase().trim();
-        const filtered = verifiedForm2List.filter(item => {
-            const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
-            const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
-            return !q || name.includes(q) || id.includes(q);
-        });
-        renderAnnexForm2Table(filtered);
-    });
-}
-
-const saSearchF3 = document.getElementById('sa-search-form3');
-if (saSearchF3) {
-    saSearchF3.addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase().trim();
-        const filtered = verifiedForm3List.filter(item => {
-            const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
-            const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
-            return !q || name.includes(q) || id.includes(q);
-        });
-        renderAnnexForm3Table(filtered);
-    });
 }
 
 // Fetch existing masterlist
@@ -997,11 +830,13 @@ async function fetchExistingMasterlist() {
             populateBatchFilter();
             renderTable();
             
-            btnSaveRecords.classList.remove('hidden');
-            btnSaveRecords.innerHTML = '<i class="icon-check" style="color: white;"></i> Saved in Masterlist';
-            btnSaveRecords.classList.remove('btn-gradient-save');
-            btnSaveRecords.style.background = '#10b981';
-            btnSaveRecords.disabled = true;
+            if (btnSaveRecords) {
+                btnSaveRecords.classList.remove('hidden');
+                btnSaveRecords.innerHTML = '<i class="icon-check" style="color: white;"></i> Saved in Masterlist';
+                btnSaveRecords.classList.remove('btn-gradient-save');
+                btnSaveRecords.style.background = '#10b981';
+                btnSaveRecords.disabled = true;
+            }
 
             // Trigger Annex 5 verification in Super Admin view
             const granteesForVerification = data.map(m => ({
@@ -1028,5 +863,249 @@ async function fetchExistingMasterlist() {
     }
 }
 
-// Init
-fetchExistingMasterlist();
+// ── Exported Initialization Function ────────────────────────────────
+export function initMasterlistImport() {
+    dropZone = document.getElementById('drop-zone');
+    fileInput = document.getElementById('file-input');
+    fileInfoContainer = document.getElementById('file-info-container');
+    fileNameDisplay = document.getElementById('file-name-display');
+    fileSizeDisplay = document.getElementById('file-size-display');
+    btnClearFile = document.getElementById('btn-clear-file');
+    btnExtract = document.getElementById('btn-extract');
+    ocrProgressContainer = document.getElementById('ocr-progress-container');
+    ocrStatusText = document.getElementById('ocr-status-text');
+    ocrProgressBar = document.getElementById('ocr-progress-bar');
+    extractedTableBody = document.getElementById('extracted-table-body');
+    btnSaveRecords = document.getElementById('btn-save-records');
+    filterBatch = document.getElementById('filter-batch');
+
+    importSummaryCard = document.getElementById('import-summary-card');
+    summaryExtracted = document.getElementById('summary-extracted');
+    summaryImported = document.getElementById('summary-imported');
+    summarySkipped = document.getElementById('summary-skipped');
+    summaryErrors = document.getElementById('summary-errors');
+
+    saTabBtn2 = document.getElementById('sa-tab-btn-form2');
+    saTabBtn3 = document.getElementById('sa-tab-btn-form3');
+    saTabBtnRev = document.getElementById('sa-tab-btn-review');
+
+    saTabPane2 = document.getElementById('sa-tab-pane-form2');
+    saTabPane3 = document.getElementById('sa-tab-pane-form3');
+    saTabPaneRev = document.getElementById('sa-tab-pane-review');
+
+    btnExportF2 = document.getElementById('sa-btn-export-form2-top');
+    btnExportF3 = document.getElementById('sa-btn-export-form3-top');
+    saSearchF2 = document.getElementById('sa-search-form2');
+    saSearchF3 = document.getElementById('sa-search-form3');
+    btnAutoResolveAll = document.getElementById('sa-btn-auto-resolve-all');
+
+    // Drag and drop events
+    if (dropZone) {
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--primary-color)';
+            dropZone.style.background = 'rgba(var(--primary-rgb), 0.05)';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--border-color)';
+            dropZone.style.background = 'rgba(0,0,0,0.01)';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--border-color)';
+            dropZone.style.background = 'rgba(0,0,0,0.01)';
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        dropZone.addEventListener('click', () => {
+            if (fileInput) fileInput.click();
+        });
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+    }
+
+    if (btnClearFile) {
+        btnClearFile.addEventListener('click', clearFileState);
+    }
+
+    if (btnExtract) {
+        btnExtract.addEventListener('click', async () => {
+            if (!currentFile) return;
+            
+            btnExtract.disabled = true;
+            if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
+            extractedRecords = [];
+            if (importSummaryCard) importSummaryCard.classList.add('hidden');
+            populateBatchFilter();
+            renderTable();
+            if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
+            
+            try {
+                const ext = currentFile.name.split('.').pop().toLowerCase();
+                
+                if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+                    const rawRecords = await extractExcelOrCsv(currentFile);
+                    await checkAndFlagDuplicates(rawRecords);
+                } else {
+                    let extractedText = '';
+                    if (ext === 'pdf') {
+                        extractedText = await extractPdfText(currentFile);
+                    } else if (ext === 'docx' || ext === 'doc') {
+                        extractedText = await extractDocxText(currentFile);
+                    }
+                    await parseDocumentText(extractedText);
+                }
+                
+            } catch (err) {
+                console.error('Extraction Error:', err);
+                alert('Error extracting text from document: ' + err.message);
+            } finally {
+                btnExtract.disabled = false;
+                if (ocrStatusText) ocrStatusText.textContent = 'Complete';
+                setTimeout(() => {
+                    if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
+                }, 2000);
+            }
+        });
+    }
+
+    if (filterBatch) {
+        filterBatch.addEventListener('change', () => {
+            renderTable();
+        });
+    }
+
+    if (btnSaveRecords) {
+        btnSaveRecords.addEventListener('click', saveRecordsToDatabase);
+    }
+
+    // Annex Tab Switching
+    if (saTabBtn2) saTabBtn2.addEventListener('click', () => activateSATab(saTabBtn2, saTabPane2));
+    if (saTabBtn3) saTabBtn3.addEventListener('click', () => activateSATab(saTabBtn3, saTabPane3));
+    if (saTabBtnRev) saTabBtnRev.addEventListener('click', () => activateSATab(saTabBtnRev, saTabPaneRev));
+
+    // Annex Auto-Fill Excel Exports
+    if (btnExportF2) {
+        btnExportF2.addEventListener('click', async () => {
+            try {
+                btnExportF2.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+                const resp = await fetch('/assets/Annex 5-TES New Form 2.xlsx');
+                if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
+                const blob = await resp.blob();
+
+                const studentsToFill = verifiedForm2List.map(item => item.matchedStudent || item.grantee);
+                const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
+                saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
+            } catch (err) {
+                console.error('Form 2 export error:', err);
+                alert('Failed to generate Form 2: ' + err.message);
+            } finally {
+                btnExportF2.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)';
+            }
+        });
+    }
+
+    if (btnExportF3) {
+        btnExportF3.addEventListener('click', async () => {
+            try {
+                btnExportF3.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+                const resp = await fetch('/assets/Annex 5-TES New Form 3.xlsx');
+                if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
+                const blob = await resp.blob();
+
+                const studentsToFill = verifiedForm3List.map(item => ({
+                    ...(item.matchedStudent || item.grantee),
+                    status: item.specialStatusReason || 'Not enrolled',
+                    remarks: item.remarks || `Categorized: ${item.specialStatusReason || 'Not enrolled'}`
+                }));
+
+                const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
+                saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
+            } catch (err) {
+                console.error('Form 3 export error:', err);
+                alert('Failed to generate Form 3: ' + err.message);
+            } finally {
+                btnExportF3.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)';
+            }
+        });
+    }
+
+    // Annex Search Inputs
+    if (saSearchF2) {
+        saSearchF2.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            const filtered = verifiedForm2List.filter(item => {
+                const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
+                const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
+                return !q || name.includes(q) || id.includes(q);
+            });
+            renderAnnexForm2Table(filtered);
+        });
+    }
+
+    if (saSearchF3) {
+        saSearchF3.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            const filtered = verifiedForm3List.filter(item => {
+                const name = (item.matchedStudent?.fullName || item.grantee.name || '').toLowerCase();
+                const id = (item.matchedStudent?.studentId || item.grantee.student_id || '').toLowerCase();
+                return !q || name.includes(q) || id.includes(q);
+            });
+            renderAnnexForm3Table(filtered);
+        });
+    }
+
+    const saBtnClearForm3 = document.getElementById('sa-btn-clear-form3-data');
+    if (saBtnClearForm3) {
+        saBtnClearForm3.addEventListener('click', () => {
+            if (verifiedForm3List.length === 0) {
+                alert('Form 3 table is already empty.');
+                return;
+            }
+            if (confirm('Are you sure you want to remove all records from the Annex Form 3 table?')) {
+                verifiedForm3List = [];
+                updateAnnexKPIs();
+                renderAnnexForm3Table(verifiedForm3List);
+            }
+        });
+    }
+
+    // Auto-Categorize All to Form 3
+    if (btnAutoResolveAll) {
+        btnAutoResolveAll.addEventListener('click', () => {
+            if (needsReviewList.length === 0) return;
+            const count = needsReviewList.length;
+            while (needsReviewList.length > 0) {
+                const item = needsReviewList.shift();
+                verifiedForm3List.push({
+                    ...item,
+                    specialStatusReason: 'Not enrolled',
+                    remarks: 'Batch categorized to Form 3 by Super Admin'
+                });
+            }
+            updateAnnexKPIs();
+            renderAnnexForm3Table(verifiedForm3List);
+            renderAnnexReviewQueue(needsReviewList);
+            if (window.showToast) window.showToast(`Auto-categorized ${count} records to Form 3`, 'check-circle');
+        });
+    }
+
+    // Initial fetch of masterlist data
+    fetchExistingMasterlist();
+}
+
+// Auto-run if loaded directly in standalone view
+if (!window.__reportsHostingImport && document.getElementById('drop-zone')) {
+    initMasterlistImport();
+}

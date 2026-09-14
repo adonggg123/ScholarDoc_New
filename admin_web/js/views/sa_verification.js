@@ -2,13 +2,23 @@
 const supabase = window.supabaseClient;
 
 let saStudents = [];
+let filteredSaStudents = [];
 let selectedIndex = 0;
 let isUpdating = false;
 
 // ── Load Data ───────────────────────────────────────────────────────
 async function loadSaQueue() {
+    const refreshBtn = document.getElementById('sa-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.innerHTML = `<i class="icon-refresh-cw" style="font-size: 14px; animation: spin 0.8s linear infinite;"></i> <span>Syncing...</span>`;
+    }
+
     try {
-        const { data, error } = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        const { data, error } = await supabase
+            .from('students')
+            .select('*')
+            .order('createdAt', { ascending: false });
+
         if (error) throw error;
 
         // Filter students who have submitted SA number
@@ -17,59 +27,274 @@ async function loadSaQueue() {
             return sa && sa.toString().trim() !== '' && sa.toString().trim() !== 'N/A';
         });
 
-        if (selectedIndex >= saStudents.length) selectedIndex = 0;
+        // Compute duplicate mapping across the whole pool
+        computeDuplicateMap();
 
-        renderQueue();
-        renderPanel();
+        // Update KPI summary cards
+        updateKpis();
+
+        // Apply filters
+        filterSaQueue();
+
     } catch (e) {
         console.error('Error loading SA queue:', e);
-        document.getElementById('sa-list-container').innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading data.</div>`;
+        const container = document.getElementById('sa-list-container');
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: var(--error);">
+                    <i class="icon-alert-triangle" style="font-size: 36px; margin-bottom: 12px; display: block;"></i>
+                    <div style="font-weight: 700; font-size: 14px;">Error Loading Verification Queue</div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${e.message || 'Could not connect to database.'}</p>
+                    <button class="btn" style="margin-top: 14px; background: var(--primary-color); color: white; padding: 6px 16px; border-radius: 8px; font-size: 12px;" onclick="loadSaQueue()">Retry</button>
+                </div>
+            `;
+        }
+    } finally {
+        if (refreshBtn) {
+            refreshBtn.innerHTML = `<i class="icon-refresh-cw" style="font-size: 14px; color: var(--primary-color);"></i> <span>Refresh Queue</span>`;
+        }
     }
+}
+
+// ── Duplicate SA Hash Mapping ─────────────────────────────────────────
+const duplicateSaMap = new Map(); // saNumber -> Array of students
+
+function computeDuplicateMap() {
+    duplicateSaMap.clear();
+    saStudents.forEach(s => {
+        const sa = (s.saNumber || s.familyDetails?.saNumber || '').toString().trim();
+        if (sa) {
+            if (!duplicateSaMap.has(sa)) {
+                duplicateSaMap.set(sa, []);
+            }
+            duplicateSaMap.get(sa).push(s);
+        }
+    });
+}
+
+function isStudentDuplicate(student) {
+    const sa = (student.saNumber || student.familyDetails?.saNumber || '').toString().trim();
+    if (!sa) return false;
+    const list = duplicateSaMap.get(sa);
+    return list && list.length > 1;
+}
+
+function getDuplicateConflicts(student) {
+    const sa = (student.saNumber || student.familyDetails?.saNumber || '').toString().trim();
+    if (!sa) return [];
+    const list = duplicateSaMap.get(sa) || [];
+    return list.filter(s => s.uid !== student.uid && s.id !== student.id);
+}
+
+// ── Update KPI Summary Cards ─────────────────────────────────────────
+function updateKpis() {
+    const total = saStudents.length;
+    let pending = 0;
+    let verified = 0;
+    let missing = 0;
+    let duplicates = 0;
+
+    saStudents.forEach(s => {
+        const status = s.documents?.saVerificationStatus || 'Pending';
+        if (status === 'Verified' || status === 'Approved') {
+            verified++;
+        } else if (status === 'Missing') {
+            missing++;
+        } else {
+            pending++;
+        }
+
+        if (isStudentDuplicate(s)) {
+            duplicates++;
+        }
+    });
+
+    const setKpi = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
+
+    setKpi('kpi-sa-total', total);
+    setKpi('kpi-sa-pending', pending);
+    setKpi('kpi-sa-verified', verified);
+    setKpi('kpi-sa-missing', missing);
+    setKpi('kpi-sa-duplicates', duplicates);
+}
+
+// ── Search & Filter Logic ────────────────────────────────────────────
+function filterSaQueue() {
+    const searchInput = document.getElementById('sa-search-input');
+    const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+    const statusFilter = document.getElementById('sa-filter-status')?.value || 'All';
+    const courseFilter = document.getElementById('sa-filter-course')?.value || 'All';
+    const sortBy = document.getElementById('sa-sort-by')?.value || 'latest';
+
+    filteredSaStudents = saStudents.filter(s => {
+        const name = (s.fullName || '').toLowerCase();
+        const studentId = (s.studentId || s.id || '').toLowerCase();
+        const sa = (s.saNumber || s.familyDetails?.saNumber || '').toString().toLowerCase();
+        const course = (s.course || '').toUpperCase();
+        const status = s.documents?.saVerificationStatus || 'Pending';
+        const isDup = isStudentDuplicate(s);
+
+        // Search Match
+        const matchQuery = !query || name.includes(query) || studentId.includes(query) || sa.includes(query) || course.toLowerCase().includes(query);
+
+        // Status Match
+        let matchStatus = true;
+        if (statusFilter === 'Pending') {
+            matchStatus = status === 'Pending' || (!s.documents?.saVerificationStatus);
+        } else if (statusFilter === 'Verified') {
+            matchStatus = status === 'Verified' || status === 'Approved';
+        } else if (statusFilter === 'Missing') {
+            matchStatus = status === 'Missing';
+        } else if (statusFilter === 'Rejected') {
+            matchStatus = status === 'Rejected';
+        } else if (statusFilter === 'Duplicate') {
+            matchStatus = isDup;
+        }
+
+        // Course Match
+        let matchCourse = true;
+        if (courseFilter !== 'All') {
+            matchCourse = course.includes(courseFilter.toUpperCase());
+        }
+
+        return matchQuery && matchStatus && matchCourse;
+    });
+
+    // Sorting
+    filteredSaStudents.sort((a, b) => {
+        if (sortBy === 'name_asc') {
+            return (a.fullName || '').localeCompare(b.fullName || '');
+        } else if (sortBy === 'name_desc') {
+            return (b.fullName || '').localeCompare(a.fullName || '');
+        } else if (sortBy === 'sa_num') {
+            const saA = (a.saNumber || a.familyDetails?.saNumber || '').toString();
+            const saB = (b.saNumber || b.familyDetails?.saNumber || '').toString();
+            return saA.localeCompare(saB);
+        } else {
+            // Latest First by createdAt or updatedAt
+            const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return dateB - dateA;
+        }
+    });
+
+    // Update Counts UI
+    const matchedCountEl = document.getElementById('sa-matched-count');
+    const totalCountEl = document.getElementById('sa-total-count');
+    const queuePillEl = document.getElementById('sa-queue-count-pill');
+    if (matchedCountEl) matchedCountEl.textContent = filteredSaStudents.length;
+    if (totalCountEl) totalCountEl.textContent = saStudents.length;
+    if (queuePillEl) queuePillEl.textContent = filteredSaStudents.length;
+
+    if (selectedIndex >= filteredSaStudents.length) {
+        selectedIndex = Math.max(0, filteredSaStudents.length - 1);
+    }
+
+    renderQueue();
+    renderPanel();
 }
 
 // ── Render Queue (Left) ─────────────────────────────────────────────
 function renderQueue() {
     const container = document.getElementById('sa-list-container');
-    
-    if (saStudents.length === 0) {
+    if (!container) return;
+
+    if (filteredSaStudents.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <i class="icon-user-x" style="font-size: 48px; color: #ccc; margin-bottom: 16px; display: block;"></i>
-                <div style="color: var(--text-secondary);">No SA verification submissions found.</div>
+            <div style="text-align: center; padding: 50px 20px; color: var(--text-secondary);">
+                <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(15, 50, 96, 0.05); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                    <i class="icon-user-x" style="font-size: 24px; color: var(--text-secondary);"></i>
+                </div>
+                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">No Applicants Found</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Try clearing or changing your search filters.</div>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = saStudents.map((s, index) => {
+    container.innerHTML = filteredSaStudents.map((s, index) => {
         const isSelected = index === selectedIndex;
-        const name = s.fullName || 'N/A';
+        const name = s.fullName || 'Unnamed Student';
+        const studentId = s.studentId || s.id || 'N/A';
+        const course = s.course || 'N/A';
         const sa = s.saNumber || s.familyDetails?.saNumber || 'N/A';
         const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
+        const status = s.documents?.saVerificationStatus || 'Pending';
+        const isDup = isStudentDuplicate(s);
 
+        // Status Badge Chip
+        let statusBadgeHtml = '';
+        if (isDup) {
+            statusBadgeHtml = `
+                <span style="padding: 2px 7px; border-radius: 6px; background: rgba(239, 68, 68, 0.12); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                    <i class="icon-alert-triangle" style="font-size: 10px;"></i> DUPLICATE
+                </span>
+            `;
+        } else if (status === 'Verified' || status === 'Approved') {
+            statusBadgeHtml = `
+                <span style="padding: 2px 7px; border-radius: 6px; background: rgba(16, 185, 129, 0.12); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                    <i class="icon-check" style="font-size: 10px;"></i> VERIFIED
+                </span>
+            `;
+        } else if (status === 'Missing') {
+            statusBadgeHtml = `
+                <span style="padding: 2px 7px; border-radius: 6px; background: rgba(249, 115, 22, 0.12); color: #F97316; border: 1px solid rgba(249, 115, 22, 0.3); font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                    <i class="icon-alert-circle" style="font-size: 10px;"></i> MISSING
+                </span>
+            `;
+        } else if (status === 'Rejected') {
+            statusBadgeHtml = `
+                <span style="padding: 2px 7px; border-radius: 6px; background: rgba(107, 114, 128, 0.12); color: #6B7280; border: 1px solid rgba(107, 114, 128, 0.3); font-size: 9px; font-weight: 800;">
+                    REJECTED
+                </span>
+            `;
+        } else {
+            statusBadgeHtml = `
+                <span style="padding: 2px 7px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); color: #D97706; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                    <i class="icon-clock" style="font-size: 10px;"></i> PENDING
+                </span>
+            `;
+        }
+
+        // Avatar
         let avatarHtml = '';
         if (photo) {
             avatarHtml = `
-                <div style="padding: 2px; border-radius: 50%; border: 2px solid #FBC02D; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex;">
-                    <img src="${photo}" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;">
+                <div style="padding: 2px; border-radius: 50%; border: 1.5px solid #FBC02D; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: flex; flex-shrink: 0;">
+                    <img src="${photo}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;">
                 </div>
             `;
         } else {
+            const initials = name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'ST';
             avatarHtml = `
-                <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(15, 50, 96, 0.05); display: flex; align-items: center; justify-content: center;">
-                    <i class="icon-user" style="font-size: 16px; color: var(--primary-color);"></i>
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, rgba(15, 50, 96, 0.1), rgba(212, 175, 55, 0.2)); border: 1.5px solid rgba(212, 175, 55, 0.4); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; color: var(--primary-color); flex-shrink: 0;">
+                    ${initials}
                 </div>
             `;
         }
 
         return `
-            <div class="sa-list-item ${isSelected ? 'selected' : ''}" style="padding: 12px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border-color);" onclick="selectSaStudent(${index})">
+            <div class="sa-list-item ${isSelected ? 'selected' : ''}" 
+                 style="padding: 14px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border-color); user-select: none;"
+                 onclick="selectSaStudent(${index})">
                 ${avatarHtml}
-                <div style="flex: 1; overflow: hidden;">
-                    <div style="font-weight: 800; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--text-primary);">${name}</div>
-                    <div style="font-size: 10px; color: var(--text-secondary); font-weight: 600; margin-top: 2px;">SA: ${sa}</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px;">
+                        <div style="font-weight: 800; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</div>
+                        ${statusBadgeHtml}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px;">
+                        <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">ID: ${studentId}</span>
+                        <span style="color: var(--border-color); font-size: 10px;">•</span>
+                        <span style="font-size: 11px; color: var(--primary-color); font-weight: 700; font-family: monospace; background: rgba(15, 50, 96, 0.06); padding: 1px 6px; border-radius: 4px;">SA: ${sa}</span>
+                        <span style="font-size: 10px; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 1px 5px; border-radius: 4px;">${course}</span>
+                    </div>
                 </div>
-                <i class="icon-chevron-right" style="font-size: 18px; color: ${isSelected ? 'var(--primary-color)' : 'rgba(0,0,0,0.2)'};"></i>
+                <i class="icon-chevron-right" style="font-size: 16px; color: ${isSelected ? 'var(--primary-color)' : 'rgba(150,150,150,0.4)'}; flex-shrink: 0;"></i>
             </div>
         `;
     }).join('');
@@ -80,138 +305,291 @@ function renderQueue() {
 // ── Render Panel (Right) ────────────────────────────────────────────
 function renderPanel() {
     const container = document.getElementById('sa-panel-container');
+    if (!container) return;
 
-    if (saStudents.length === 0) {
-        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-secondary);">Select a student to view details.</div>`;
+    if (filteredSaStudents.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 24px; color: var(--text-secondary);">
+                <i class="icon-user-x" style="font-size: 48px; color: rgba(15, 50, 96, 0.2); margin-bottom: 14px; display: block;"></i>
+                <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">No Student Selected</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Select an applicant from the list to review their SA Number details.</p>
+            </div>
+        `;
         return;
     }
 
-    const s = saStudents[selectedIndex];
+    const s = filteredSaStudents[selectedIndex];
     if (!s) return;
 
-    const name = s.fullName || 'N/A';
-    const sa = s.saNumber || s.familyDetails?.saNumber || 'Not Submitted';
-    const studentId = s.studentId || 'N/A';
+    const name = s.fullName || 'Unnamed Student';
+    const sa = (s.saNumber || s.familyDetails?.saNumber || 'Not Submitted').toString();
+    const studentId = s.studentId || s.id || 'N/A';
     const course = s.course || 'N/A';
     const year = s.year || 'N/A';
     const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
+    const currentRemarks = s.adminRemarks || '';
+    const status = s.documents?.saVerificationStatus || 'Pending';
 
+    // Queue Navigation Counts
+    const currentPos = selectedIndex + 1;
+    const totalPos = filteredSaStudents.length;
+
+    // Avatar
     let avatarHtml = '';
     if (photo) {
         avatarHtml = `
-            <div style="padding: 4px; border-radius: 50%; border: 1.5px solid #FBC02D; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-flex;">
-                <img src="${photo}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover;">
+            <div style="padding: 3px; border-radius: 50%; border: 2px solid #FBC02D; box-shadow: 0 4px 14px rgba(0,0,0,0.12); display: inline-flex;">
+                <img src="${photo}" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover;">
             </div>
         `;
     } else {
+        const initials = name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'ST';
         avatarHtml = `
-            <div style="padding: 4px; border-radius: 50%; border: 1.5px solid #FBC02D; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-flex;">
-                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(212, 175, 55, 0.1); display: flex; align-items: center; justify-content: center;">
-                    <i class="icon-user" style="font-size: 24px; color: #D4AF37;"></i>
-                </div>
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, rgba(15, 50, 96, 0.15), rgba(212, 175, 55, 0.25)); border: 2px solid #FBC02D; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: var(--primary-color);">
+                ${initials}
             </div>
         `;
     }
 
-    // Duplicate check logic
-    let isDuplicate = false;
-    for (let i = 0; i < saStudents.length; i++) {
-        if (i !== selectedIndex && (saStudents[i].saNumber || saStudents[i].familyDetails?.saNumber) === sa) {
-            isDuplicate = true;
-            break;
-        }
-    }
+    // Duplicate Check Banner
+    const isDup = isStudentDuplicate(s);
+    const conflicts = getDuplicateConflicts(s);
 
-    let duplicateBadge = '';
-    if (isDuplicate) {
-        duplicateBadge = `
-            <div style="padding: 4px 8px; border-radius: 6px; background: rgba(239, 83, 80, 0.1); border: 1px solid rgba(239, 83, 80, 0.3); display: inline-flex; align-items: center; gap: 6px;">
-                <i class="icon-alert-triangle" style="font-size: 12px; color: var(--error);"></i>
-                <span style="font-size: 10px; font-weight: 700; color: var(--error);">Duplicate Hash Network Check: FAILED</span>
-            </div>
-        `;
-    } else {
-        duplicateBadge = `
-            <div style="padding: 4px 8px; border-radius: 6px; background: rgba(67, 160, 71, 0.1); border: 1px solid rgba(67, 160, 71, 0.3); display: inline-flex; align-items: center; gap: 6px;">
-                <i class="icon-file-check-2" style="font-size: 12px; color: var(--success);"></i>
-                <span style="font-size: 10px; font-weight: 700; color: var(--success);">Duplicate Hash Network Check: PASSED</span>
-            </div>
-        `;
-    }
-
-    let atmCardHtml = '';
-    const atmCardUrl = s.atmCardUrl || (s.documents && s.documents.atmCardUrl);
-    const atmCardFileName = s.atmCardFileName || (s.documents && s.documents.atmCardFileName);
-    if (atmCardUrl) {
-        atmCardHtml = `
-            <div style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02);">
-                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 8px;"><i class="icon-credit-card" style="font-size: 12px; margin-right: 4px;"></i>ATM Card Proof</div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <img src="${atmCardUrl}" style="height: 50px; width: 80px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer;" onclick="window.open('${atmCardUrl}', '_blank')" title="Click to view full size">
-                    <div style="flex: 1;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${atmCardFileName || 'ATM_Card_Image'}</div>
-                        <button style="margin-top: 4px; background: none; border: none; padding: 0; color: var(--primary-color); font-size: 10px; font-weight: 700; cursor: pointer;" onclick="window.open('${atmCardUrl}', '_blank')">VIEW IMAGE <i class="icon-external-link" style="font-size: 10px;"></i></button>
+    let duplicateBannerHtml = '';
+    if (isDup) {
+        const conflictNames = conflicts.map(c => `${c.fullName || 'Student'} (${c.studentId || 'No ID'})`).join(', ');
+        duplicateBannerHtml = `
+            <div style="padding: 12px 14px; border-radius: 10px; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.35); margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px;">
+                <i class="icon-alert-triangle" style="font-size: 18px; color: #EF4444; flex-shrink: 0; margin-top: 1px;"></i>
+                <div style="flex: 1;">
+                    <div style="font-size: 12px; font-weight: 800; color: #DC2626;">DUPLICATE SA CONFLICT DETECTED</div>
+                    <div style="font-size: 11px; color: var(--text-primary); margin-top: 3px; line-height: 1.4;">
+                        This exact SA number (<span style="font-family: monospace; font-weight: 700;">${sa}</span>) is also submitted by: <strong>${conflictNames || 'another student'}</strong>.
                     </div>
                 </div>
+            </div>
+        `;
+    } else {
+        duplicateBannerHtml = `
+            <div style="padding: 10px 14px; border-radius: 10px; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.25); margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+                <i class="icon-shield-check" style="font-size: 18px; color: #10B981; flex-shrink: 0;"></i>
+                <div style="flex: 1;">
+                    <span style="font-size: 11px; font-weight: 800; color: #059669;">Security Hash Check: PASSED</span>
+                    <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">(Unique SA Number in registry)</span>
+                </div>
+            </div>
+        `;
+    }
+
+    // ATM Card Proof Box
+    let atmCardHtml = '';
+    const atmCardUrl = s.atmCardUrl || (s.documents && s.documents.atmCardUrl);
+    const atmCardFileName = s.atmCardFileName || (s.documents && s.documents.atmCardFileName) || 'ATM_Proof_Image.jpg';
+
+    if (atmCardUrl) {
+        atmCardHtml = `
+            <div style="margin-bottom: 16px; padding: 14px; border: 1px solid var(--border-color); border-radius: 12px; background: rgba(15, 50, 96, 0.02);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <div style="font-size: 12px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                        <i class="icon-credit-card" style="font-size: 14px; color: var(--primary-color);"></i> ATM Card Document Proof
+                    </div>
+                    <span style="font-size: 10px; font-weight: 700; color: #10B981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 12px;">ATTACHED</span>
+                </div>
+
+                <div style="display: flex; gap: 14px; align-items: center; background: var(--surface-color); padding: 10px; border-radius: 10px; border: 1px solid var(--border-color);">
+                    <div style="position: relative; width: 100px; height: 65px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); flex-shrink: 0; cursor: pointer;"
+                         onclick="openSaLightbox('${atmCardUrl}', '${name} - ATM Card Proof')">
+                        <img src="${atmCardUrl}" alt="ATM Card" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                            <i class="icon-zoom-in" style="color: white; font-size: 18px;"></i>
+                        </div>
+                    </div>
+
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${atmCardFileName}">${atmCardFileName}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Land Bank ATM Card Image</div>
+                        
+                        <div style="display: flex; gap: 8px; margin-top: 6px;">
+                            <button onclick="openSaLightbox('${atmCardUrl}', '${name} - ATM Card Proof')" style="padding: 4px 10px; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 6px; font-size: 11px; font-weight: 700; color: var(--primary-color); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-maximize-2" style="font-size: 11px;"></i> Lightbox
+                            </button>
+                            <a href="${atmCardUrl}" target="_blank" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-external-link" style="font-size: 11px;"></i> Full Tab
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        atmCardHtml = `
+            <div style="margin-bottom: 16px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 12px; text-align: center; background: rgba(0,0,0,0.01);">
+                <i class="icon-credit-card" style="font-size: 24px; color: var(--text-secondary); margin-bottom: 6px; display: block;"></i>
+                <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">No ATM Card Proof Uploaded</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Student provided Land Bank SA number without photo attachment.</div>
             </div>
         `;
     }
 
     container.innerHTML = `
-        <div style="padding: 16px;">
-            <div style="text-align: center;">
+        <!-- Sticky Navigation Bar -->
+        <div style="padding: 12px 18px; border-bottom: 1px solid var(--border-color); background: rgba(15, 50, 96, 0.03); display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <i class="icon-shield" style="font-size: 14px; color: var(--primary-color);"></i>
+                <span style="font-size: 12px; font-weight: 800; color: var(--primary-color); text-transform: uppercase; letter-spacing: 0.5px;">Verification Station</span>
+            </div>
+
+            <!-- Previous / Next Navigator -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn" style="padding: 4px 8px; border-radius: 6px; background: var(--surface-color); border: 1px solid var(--border-color); font-size: 11px; font-weight: 700; color: var(--text-primary); cursor: pointer;" 
+                        onclick="navigateSaQueue(-1)" ${selectedIndex === 0 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+                    <i class="icon-chevron-left" style="font-size: 12px;"></i> Prev
+                </button>
+                <span style="font-size: 11px; font-weight: 800; color: var(--text-secondary);">${currentPos} / ${totalPos}</span>
+                <button class="btn" style="padding: 4px 8px; border-radius: 6px; background: var(--surface-color); border: 1px solid var(--border-color); font-size: 11px; font-weight: 700; color: var(--text-primary); cursor: pointer;" 
+                        onclick="navigateSaQueue(1)" ${selectedIndex === totalPos - 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+                    Next <i class="icon-chevron-right" style="font-size: 12px;"></i>
+                </button>
+            </div>
+        </div>
+
+        <div style="padding: 20px; max-height: 720px; overflow-y: auto;">
+            <!-- Student Header Dossier -->
+            <div style="text-align: center; margin-bottom: 16px;">
                 ${avatarHtml}
-                <div style="margin-top: 12px; font-size: 16px; font-weight: 900; letter-spacing: -0.5px;">${name}</div>
-                <div style="margin-top: 2px; display: inline-block; padding: 4px 10px; background: rgba(15, 50, 96, 0.06); border-radius: 20px; color: var(--primary-color); font-size: 10px; font-weight: 700;">
-                    ${course} - ${year}
+                <div style="margin-top: 10px; font-size: 17px; font-weight: 900; color: var(--text-primary); letter-spacing: -0.3px;">${name}</div>
+                <div style="margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                    <span style="padding: 3px 10px; background: rgba(15, 50, 96, 0.08); border-radius: 20px; color: var(--primary-color); font-size: 11px; font-weight: 800;">
+                        ID: ${studentId}
+                    </span>
+                    <span style="padding: 3px 10px; background: rgba(212, 175, 55, 0.15); border-radius: 20px; color: #B45309; font-size: 11px; font-weight: 800;">
+                        ${course} - ${year}
+                    </span>
                 </div>
             </div>
-            
-            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
-            
-            <div style="margin-bottom: 10px;">
-                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Student ID</div>
-                <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">${studentId}</div>
+
+            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 16px 0;">
+
+            <!-- Land Bank SA Number Card -->
+            <div style="padding: 14px; border-radius: 12px; background: linear-gradient(135deg, rgba(15, 50, 96, 0.04), rgba(212, 175, 55, 0.06)); border: 1px solid var(--border-color); margin-bottom: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Submitted Statement of Account (SA)</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <div style="font-family: monospace; font-size: 18px; font-weight: 900; color: var(--primary-color); letter-spacing: 1px;">${sa}</div>
+                    <button id="copy-sa-btn" onclick="copySaNumber('${sa}')" style="padding: 6px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;">
+                        <i class="icon-copy" style="font-size: 12px;"></i> <span id="copy-sa-text">Copy</span>
+                    </button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--text-secondary); font-weight: 600;">
+                    <i class="icon-landmark" style="font-size: 12px; color: #10B981;"></i> Servicing Bank: <strong>Land Bank of the Philippines</strong>
+                </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Submitted SA Number</div>
-                <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">${sa}</div>
-            </div>
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Bank Branch</div>
-                <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">Land Bank</div>
-            </div>
-            
+
+            <!-- Duplicate Security Integrity Status -->
+            ${duplicateBannerHtml}
+
+            <!-- ATM Card Document Proof Preview -->
             ${atmCardHtml}
 
-            <div style="margin-bottom: 16px;">
-                ${duplicateBadge}
+            <!-- Quick Remarks Preset Chips -->
+            <div style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">Admin Remarks & Feedback</span>
+                <span style="font-size: 10px; color: var(--text-secondary); font-weight: 600;">Quick Presets:</span>
+            </div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;">
+                <span class="sa-preset-chip" onclick="applySaPreset('SA Account and name match ATM card proof.')">✓ SA Matches Card</span>
+                <span class="sa-preset-chip" onclick="applySaPreset('Submitted SA Number is blurred or unreadable. Please re-upload a clear copy.')">⚠ Blurred SA Image</span>
+                <span class="sa-preset-chip" onclick="applySaPreset('SA format appears incorrect. Please provide the official 10-digit Land Bank account number.')">⚠ Format Error</span>
+                <span class="sa-preset-chip" onclick="applySaPreset('Name on ATM proof does not match applicant record.')">✖ Name Mismatch</span>
             </div>
 
-            <div style="margin-bottom: 6px; font-size: 13px; font-weight: 700;">Admin Remarks</div>
-            <textarea id="sa-remarks" placeholder="e.g. Please re-upload your SA number, current one is blurred." style="width: 100%; height: 60px; padding: 12px 14px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); font-family: inherit; font-size: 13px; font-weight: 500; resize: none; margin-bottom: 12px;"></textarea>
+            <textarea id="sa-remarks" placeholder="Enter custom administrative notes or student resubmission instructions here..." 
+                      style="width: 100%; height: 75px; padding: 12px 14px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 500; resize: none; margin-bottom: 16px; outline: none; transition: border-color 0.2s;"
+                      onfocus="this.style.borderColor='var(--primary-color)'" onblur="this.style.borderColor='var(--border-color)'">${currentRemarks}</textarea>
 
-            <button class="btn" style="width: 100%; background: var(--success); color: white; border: none; padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 8px; cursor: pointer;" onclick="updateSaStatus('Verified')">Mark as Verified</button>
-            <button class="btn btn-outline" style="width: 100%; border: 1.5px solid var(--error); color: var(--error); padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 2px; cursor: pointer;" onclick="updateSaStatus('Missing')">Mark as Missing Documents</button>
-            <button class="btn" style="width: 100%; background: transparent; color: var(--text-secondary); border: none; padding: 6px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="updateSaStatus('Rejected', true)">Permanent Rejection</button>
+            <!-- Verification Action Buttons -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Mark Verified Button -->
+                <button class="btn sa-action-btn" 
+                        style="width: 100%; background: linear-gradient(135deg, #10B981, #059669); color: white; border: none; padding: 11px; border-radius: 10px; font-size: 13px; font-weight: 800;" 
+                        onclick="updateSaStatus('Verified')">
+                    <i class="icon-check-circle" style="font-size: 16px;"></i> Mark as Verified
+                </button>
+
+                <!-- Mark Missing Button -->
+                <button class="btn btn-outline sa-action-btn" 
+                        style="width: 100%; border: 1.5px solid #F97316; color: #EA580C; background: rgba(249, 115, 22, 0.05); padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 800;" 
+                        onclick="updateSaStatus('Missing')">
+                    <i class="icon-alert-circle" style="font-size: 15px;"></i> Request Resubmission (Missing)
+                </button>
+            </div>
         </div>
     `;
 
     if (window.lucide) window.lucide.createIcons();
 }
 
+// ── Queue Navigation ────────────────────────────────────────────────
 window.selectSaStudent = function(index) {
     selectedIndex = index;
     renderQueue();
     renderPanel();
 };
 
+window.navigateSaQueue = function(direction) {
+    const nextIndex = selectedIndex + direction;
+    if (nextIndex >= 0 && nextIndex < filteredSaStudents.length) {
+        selectSaStudent(nextIndex);
+    }
+};
+
+window.applySaPreset = function(presetText) {
+    const textarea = document.getElementById('sa-remarks');
+    if (textarea) {
+        textarea.value = presetText;
+        textarea.focus();
+    }
+};
+
+window.copySaNumber = function(saNum) {
+    navigator.clipboard.writeText(saNum).then(() => {
+        const textEl = document.getElementById('copy-sa-text');
+        const btn = document.getElementById('copy-sa-btn');
+        if (textEl) textEl.textContent = 'Copied!';
+        if (btn) btn.style.background = 'rgba(16, 185, 129, 0.15)';
+        setTimeout(() => {
+            if (textEl) textEl.textContent = 'Copy';
+            if (btn) btn.style.background = 'var(--surface-color)';
+        }, 2000);
+    }).catch(err => {
+        console.error('Copy failed:', err);
+    });
+};
+
+// ── Image Lightbox ──────────────────────────────────────────────────
+window.openSaLightbox = function(url, caption = '') {
+    const modal = document.getElementById('sa-lightbox-modal');
+    const img = document.getElementById('sa-lightbox-img');
+    const cap = document.getElementById('sa-lightbox-caption');
+    if (modal && img) {
+        img.src = url;
+        if (cap) cap.textContent = caption || 'ATM Card Proof Image';
+        modal.style.display = 'flex';
+    }
+};
+
+window.closeSaLightbox = function() {
+    const modal = document.getElementById('sa-lightbox-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── Update SA Status ────────────────────────────────────────────────
 window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
     if (isUpdating) return;
-    const s = saStudents[selectedIndex];
+    const s = filteredSaStudents[selectedIndex];
     if (!s || !s.uid) return;
 
-    const remarks = document.getElementById('sa-remarks').value.trim();
+    const remarks = (document.getElementById('sa-remarks')?.value || '').trim();
 
     isUpdating = true;
     try {
@@ -254,7 +632,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
 
         if (newStatus === 'Verified') {
             title = 'SA Number Verified';
-            message = 'Your SA Number has been verified by the administrator.';
+            message = 'Your Land Bank SA Number has been verified by the administrator.';
             type = 'success';
         } else if (newStatus === 'Missing') {
             title = 'SA Number Missing';
@@ -279,17 +657,26 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
             timestamp: new Date().toISOString()
         }]);
 
-        alert(`Student ${s.fullName} status updated to ${newStatus}.`);
+        if (window.showToast) {
+            window.showToast(`Updated ${s.fullName || 'student'} to ${newStatus}.`, 'check-circle');
+        } else {
+            alert(`Student ${s.fullName} status updated to ${newStatus}.`);
+        }
         
-        // Remove from local queue instead of full reload to save time, or just reload
-        loadSaQueue();
+        // Reload SA Queue
+        await loadSaQueue();
+
     } catch (e) {
         console.error('Error updating status:', e);
-        alert('Failed to update student verification.');
+        alert('Failed to update student verification: ' + (e.message || e));
     } finally {
         isUpdating = false;
     }
 };
+
+// Global Exposure for admin router
+window.loadSaQueue = loadSaQueue;
+window.filterSaQueue = filterSaQueue;
 
 // Init
 loadSaQueue();

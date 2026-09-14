@@ -1,71 +1,237 @@
-<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%; overflow-y: auto;">
+<div class="view-content" style="display: flex; flex-direction: column; gap: 20px; height: 100%;">
+
+    <!-- Top Header & Actions -->
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-        <div>
-            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">ID Validation Queue</h2>
-            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Validate student IDs and signatures for application finalization.</p>
+        <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #0F3260, #1E3A8A, #D4AF37); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(15, 50, 96, 0.25); flex-shrink: 0;">
+                <i class="icon-badge-check" style="font-size: 22px; color: white;"></i>
+            </div>
+            <div>
+                <h2 style="margin: 0 0 4px 0; font-size: 22px; font-weight: 800; letter-spacing: -0.4px; color: var(--text-primary);">Student ID & Signature Validation</h2>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Authenticate student ID cards (Front & Back), signatures, and compiled PDF requirement dossiers.</p>
+            </div>
         </div>
-        <button id="bulk-download-btn" class="btn" style="background: var(--primary-color, #0F3260); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(15, 50, 96, 0.2); transition: all 0.2s;" onclick="downloadAllIdDocuments()">
-            <i class="icon-download" style="font-size: 16px;"></i>
-            <span>Download All Documents</span>
-        </button>
+        
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button id="bulk-download-btn" class="btn" style="background: linear-gradient(135deg, #0F3260, #1E3A8A); color: white; border: none; padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(15, 50, 96, 0.25); transition: all 0.2s;" onclick="downloadAllIdDocuments()">
+                <i class="icon-file-archive" style="font-size: 16px; color: #FBC02D;"></i>
+                <span>Download All Documents (ZIP)</span>
+                <span id="bulk-count-badge" style="padding: 2px 7px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 11px; font-weight: 800;">0</span>
+            </button>
+            <button id="id-refresh-btn" class="btn" style="background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onclick="loadIdQueue()">
+                <i class="icon-refresh-cw" style="font-size: 14px; color: var(--primary-color);"></i>
+                <span>Refresh</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Search & Filter Controls Toolbar -->
+    <div class="card" style="padding: 12px 16px; border-radius: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+        <!-- Search Box -->
+        <div style="flex: 1; min-width: 260px; position: relative;">
+            <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
+            <input type="text" id="id-search-input" placeholder="Search by student name, ID number, or course..." 
+                   style="width: 100%; padding: 10px 14px 10px 38px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.2s;"
+                   onfocus="this.style.borderColor='var(--primary-color)'" onblur="this.style.borderColor='var(--border-color)'" oninput="filterIdQueue()">
+        </div>
+
+        <!-- Filter: Status -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-filter" style="font-size: 13px; margin-right: 4px;"></i>Status:</span>
+            <select id="id-filter-status" onchange="filterIdQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Statuses</option>
+                <option value="Pending">Pending Review</option>
+                <option value="Verified">Approved & Valid</option>
+                <option value="Missing">Action Required (Missing)</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+        </div>
+
+        <!-- Filter: Document Type -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-files" style="font-size: 13px; margin-right: 4px;"></i>Doc Type:</span>
+            <select id="id-filter-doc" onchange="filterIdQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Documents</option>
+                <option value="front_back">Front & Back ID Uploaded</option>
+                <option value="pdf">PDF Dossier Uploaded</option>
+            </select>
+        </div>
+
+        <!-- Filter: Course -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-graduation-cap" style="font-size: 13px; margin-right: 4px;"></i>Program:</span>
+            <select id="id-filter-course" onchange="filterIdQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Programs</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BTLED">BTLED</option>
+                <option value="BFPT">BFPT</option>
+            </select>
+        </div>
+
+        <!-- Sort By -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-arrow-up-down" style="font-size: 13px; margin-right: 4px;"></i>Sort:</span>
+            <select id="id-sort-by" onchange="filterIdQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="latest">Latest Submission</option>
+                <option value="name_asc">Name (A-Z)</option>
+                <option value="name_desc">Name (Z-A)</option>
+                <option value="id_num">Student ID</option>
+            </select>
+        </div>
+
+        <!-- Result count -->
+        <div id="id-results-badge" style="padding: 6px 12px; background: rgba(15, 50, 96, 0.05); border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--primary-color); white-space: nowrap; margin-left: auto;">
+            Showing <span id="id-matched-count">0</span> of <span id="id-total-count">0</span>
+        </div>
+    </div>
+
+    <!-- Main Workspace Grid (Left: Queue List, Right: Validation Station) -->
+    <div style="display: grid; grid-template-columns: 3fr 2.5fr; gap: 20px; align-items: start; min-height: 550px;" id="id-grid">
+        
+        <!-- Left: Queue List Card -->
+        <div class="card" style="padding: 0; overflow: hidden; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.03); display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div style="padding: 14px 18px; border-bottom: 1px solid var(--border-color); background: rgba(15, 50, 96, 0.02); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="icon-list-ordered" style="font-size: 16px; color: var(--primary-color);"></i>
+                    <span style="font-size: 13px; font-weight: 800; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px;">ID Submissions in Queue</span>
+                </div>
+                <span id="id-queue-count-pill" style="padding: 3px 10px; background: var(--primary-color); color: white; border-radius: 20px; font-size: 11px; font-weight: 800;">0</span>
+            </div>
+
+            <!-- Student List Container -->
+            <div id="id-list-container" style="display: flex; flex-direction: column; max-height: 720px; overflow-y: auto;">
+                <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; border: 3px solid rgba(15, 50, 96, 0.1); border-top-color: var(--primary-color); animation: spin 0.8s linear infinite; margin: 0 auto 16px;"></div>
+                    <div style="font-weight: 600; font-size: 14px;">Loading ID Validation queue...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Validation Station Panel -->
+        <div class="card" style="padding: 0; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); position: sticky; top: 16px; overflow: hidden;" id="id-panel-container">
+            <div style="text-align: center; padding: 60px 24px; color: var(--text-secondary);">
+                <i class="icon-badge-check" style="font-size: 48px; color: rgba(15, 50, 96, 0.2); margin-bottom: 14px; display: block;"></i>
+                <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">No Student Selected</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Choose an applicant from the queue on the left to inspect ID cards, signatures, and document requirements.</p>
+            </div>
+        </div>
+
     </div>
 
     <!-- Bulk Download Progress Modal -->
-    <div id="bulk-download-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center;">
-        <div style="background: var(--surface-color, #fff); width: 90%; max-width: 440px; border-radius: 16px; padding: 28px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; border: 1px solid var(--border-color);">
-            <div id="modal-icon-container" style="width: 56px; height: 56px; border-radius: 50%; background: rgba(15, 50, 96, 0.08); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
-                <i id="modal-icon" class="icon-file-archive" style="font-size: 28px; color: var(--primary-color, #0F3260);"></i>
+    <div id="bulk-download-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 25, 49, 0.75); backdrop-filter: blur(8px); z-index: 100000; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: var(--surface-color, #fff); width: 100%; max-width: 460px; border-radius: 20px; padding: 32px 28px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); text-align: center; border: 1px solid var(--border-color); animation: fadeIn 0.25s ease forwards;">
+            <div id="modal-icon-container" style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, rgba(15, 50, 96, 0.1), rgba(212, 175, 55, 0.2)); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 1.5px solid rgba(212, 175, 55, 0.4);">
+                <i id="modal-icon" class="icon-file-archive" style="font-size: 30px; color: var(--primary-color, #0F3260);"></i>
             </div>
-            <h3 id="modal-title" style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800; color: var(--text-primary);">Generating ZIP Archive...</h3>
-            <p id="modal-subtitle" style="margin: 0 0 20px 0; font-size: 13px; color: var(--text-secondary); line-height: 1.4;">Collecting student PDF requirements from database...</p>
+            
+            <h3 id="modal-title" style="margin: 0 0 6px 0; font-size: 19px; font-weight: 900; color: var(--text-primary); letter-spacing: -0.3px;">Compiling ZIP Archive</h3>
+            <p id="modal-subtitle" style="margin: 0 0 22px 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">Collecting student PDF requirement files from storage...</p>
 
             <!-- Progress Bar Container -->
-            <div style="width: 100%; background: rgba(0,0,0,0.06); height: 10px; border-radius: 20px; overflow: hidden; margin-bottom: 12px; position: relative;">
-                <div id="modal-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0F3260, #D4AF37); border-radius: 20px; transition: width 0.25s ease-out;"></div>
+            <div style="width: 100%; background: rgba(0,0,0,0.06); height: 10px; border-radius: 20px; overflow: hidden; margin-bottom: 10px; position: relative;">
+                <div id="modal-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0F3260, #2563EB, #D4AF37); border-radius: 20px; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);"></div>
             </div>
-            <div id="modal-percentage" style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 16px;">0%</div>
+            
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 20px;">
+                <span id="modal-stage-text">Initializing batch...</span>
+                <span id="modal-percentage" style="color: var(--primary-color); font-weight: 900;">0%</span>
+            </div>
 
-            <div id="modal-actions" style="display: none; justify-content: center; gap: 12px; margin-top: 16px;">
-                <button id="modal-close-btn" class="btn" style="background: var(--primary-color, #0F3260); color: white; border: none; padding: 8px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;" onclick="closeBulkDownloadModal()">Close</button>
+            <div id="modal-actions" style="display: none; justify-content: center; gap: 12px; margin-top: 10px;">
+                <button id="modal-close-btn" class="btn" style="background: var(--primary-color, #0F3260); color: white; border: none; padding: 10px 28px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(15, 50, 96, 0.2);" onclick="closeBulkDownloadModal()">Close</button>
             </div>
         </div>
     </div>
 
-
-    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 24px; align-items: start;" id="id-grid">
-        
-        <!-- Left: Queue List -->
-        <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
-            <div id="id-list-container" style="display: flex; flex-direction: column; max-height: 700px; overflow-y: auto;">
-                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading ID validation queue...</div>
-            </div>
+    <!-- Image Lightbox Modal -->
+    <div id="id-lightbox-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 25, 49, 0.88); backdrop-filter: blur(8px); z-index: 100000; align-items: center; justify-content: center; padding: 24px;">
+        <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center;">
+            <button onclick="closeIdLightbox()" style="position: absolute; top: -46px; right: 0; background: rgba(255,255,255,0.2); border: none; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s;">
+                <i class="icon-x"></i>
+            </button>
+            <img id="id-lightbox-img" src="" alt="ID Document Fullscreen" style="max-width: 85vw; max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.1);">
+            <div id="id-lightbox-caption" style="color: white; margin-top: 14px; font-size: 13px; font-weight: 600; text-align: center; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">Student ID Card Preview</div>
         </div>
-
-        <!-- Right: Validation Panel -->
-        <div class="card" style="box-shadow: 0 2px 8px rgba(0,0,0,0.03); position: sticky; top: 0;" id="id-panel-container">
-            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Select a student to view details.</div>
-        </div>
-
     </div>
+
 </div>
 
 <style>
-    @media (max-width: 900px) {
+    @media (max-width: 960px) {
         #id-grid {
             grid-template-columns: 1fr !important;
         }
         #id-panel-container {
-            position: relative;
+            position: relative !important;
+            top: 0 !important;
         }
     }
     .id-list-item {
-        transition: background 0.2s;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
+        border-left: 3px solid transparent;
     }
     .id-list-item:hover {
-        background: rgba(0,0,0,0.02);
+        background: rgba(15, 50, 96, 0.03);
     }
     .id-list-item.selected {
-        background: rgba(15, 50, 96, 0.04);
+        background: rgba(15, 50, 96, 0.06);
+        border-left: 3px solid var(--primary-color);
+    }
+    .id-preset-chip {
+        padding: 5px 10px;
+        background: rgba(15, 50, 96, 0.05);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        user-select: none;
+    }
+    .id-preset-chip:hover {
+        background: rgba(15, 50, 96, 0.12);
+        color: var(--primary-color);
+        border-color: var(--primary-color);
+        transform: translateY(-1px);
+    }
+    .id-action-btn {
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    .id-action-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .id-action-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    body.dark .id-list-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+    body.dark .id-list-item.selected {
+        background: rgba(37, 99, 235, 0.15);
+        border-left-color: #60A5FA;
+    }
+    body.dark .id-preset-chip {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: #94A3B8;
+    }
+    body.dark .id-preset-chip:hover {
+        background: rgba(59, 130, 246, 0.2);
+        color: #93C5FD;
+        border-color: #3B82F6;
     }
 </style>
