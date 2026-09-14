@@ -86,6 +86,11 @@
                         <div style="font-size: 10px; color: var(--text-secondary); font-weight: 600;">School Records
                         </div>
                     </div>
+                    <button id="btn-download-school-template" class="icon-btn" title="Download Excel Template"
+                        style="background: rgba(30,136,229,0.08); color: #1E88E5; border-radius: 10px; padding: 6px 10px; border: 1px solid rgba(30,136,229,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; transition: all 0.2s ease;">
+                        <i class="icon-download" style="font-size: 13px;"></i>
+                        <span>Template</span>
+                    </button>
                     <button id="btn-toggle-school-expand" class="icon-btn" title="Toggle Full Width"
                         style="background: rgba(30,136,229,0.08); color: #1E88E5; border-radius: 10px; padding: 6px 10px; border: 1px solid rgba(30,136,229,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; transition: all 0.2s ease;">
                         <i id="icon-school-expand" class="icon-maximize-2" style="font-size: 13px;"></i>
@@ -130,46 +135,40 @@
                 <i class="icon-search"
                     style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 14px;"></i>
                 <input type="text" id="search-school-students"
-                    placeholder="Search school students by name, ID, course, status..."
+                    placeholder="Search school students by student no, name, program, email, parents..."
                     style="width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; outline: none; background: rgba(0,0,0,0.01);">
             </div>
 
-            <!-- Scrollable Table of School Students (Exact Super Admin School Student List Template) -->
+            <!-- Scrollable Table of School Students -->
             <div class="annex-table-wrap" id="wrap-school-students"
                 style="max-height: 240px; border: 1px solid var(--border-color); border-radius: 12px; overflow: auto;">
-                <table class="annex-table" style="min-width: 1500px; text-align: left;">
+                <table class="annex-table" style="min-width: 1700px; text-align: left;">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border-color);">
                             <th style="padding: 10px 14px; width: 40px; text-align: center;">
                                 <input type="checkbox" id="school-select-all"
                                     style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
                             </th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Student ID</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Last Name</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">First Name</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">M.I.</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Email</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Birthdate</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Gender</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Course</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Yr & Sec</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Scholarship</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Scholar Year</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Payouts</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Contact</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Status</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Father's Name</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Father's Edu</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Mother's Name</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Mother's Edu</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Yearly Income</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Religion</th>
-                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px;">Tribe</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Student No.</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Full Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Program Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">Year Level</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Date of Birth</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">Age</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Gender</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Civil Status</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Religion</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mobile Number</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Email Address</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s Full Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s Occupation</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s Full Name</th>
+                            <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s Occupation</th>
                         </tr>
                     </thead>
                     <tbody id="tbody-school-students">
                         <tr>
-                            <td colspan="22" style="text-align: center; padding: 24px; color: var(--text-secondary);">
+                            <td colspan="16" style="text-align: center; padding: 24px; color: var(--text-secondary);">
                                 Loading school student records...</td>
                         </tr>
                     </tbody>

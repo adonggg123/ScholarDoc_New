@@ -109,7 +109,7 @@ function filterIdQueue() {
         const studentId = (s.studentId || s.id || '').toLowerCase();
         const course = (s.course || '').toUpperCase();
         const status = s.documents?.idValidationStatus || 'Pending';
-        
+
         const hasFront = !!(s.idFrontUrl || s.documents?.idFrontUrl);
         const hasBack = !!(s.idBackUrl || s.documents?.idBackUrl);
         const hasPdf = !!(s.submissionPdfUrl || s.documents?.submissionPdfUrl);
@@ -537,20 +537,20 @@ function renderPanel() {
 }
 
 // ── Queue Navigation & Presets ──────────────────────────────────────
-window.selectIdStudent = function(index) {
+window.selectIdStudent = function (index) {
     selectedIndex = index;
     renderQueue();
     renderPanel();
 };
 
-window.navigateIdQueue = function(direction) {
+window.navigateIdQueue = function (direction) {
     const nextIndex = selectedIndex + direction;
     if (nextIndex >= 0 && nextIndex < filteredIdStudents.length) {
         selectIdStudent(nextIndex);
     }
 };
 
-window.applyIdPreset = function(presetText) {
+window.applyIdPreset = function (presetText) {
     const textarea = document.getElementById('id-remarks');
     if (textarea) {
         textarea.value = presetText;
@@ -559,7 +559,7 @@ window.applyIdPreset = function(presetText) {
 };
 
 // ── Lightbox Preview ────────────────────────────────────────────────
-window.openIdLightbox = function(url, caption = '') {
+window.openIdLightbox = function (url, caption = '') {
     const modal = document.getElementById('id-lightbox-modal');
     const img = document.getElementById('id-lightbox-img');
     const cap = document.getElementById('id-lightbox-caption');
@@ -570,13 +570,13 @@ window.openIdLightbox = function(url, caption = '') {
     }
 };
 
-window.closeIdLightbox = function() {
+window.closeIdLightbox = function () {
     const modal = document.getElementById('id-lightbox-modal');
     if (modal) modal.style.display = 'none';
 };
 
 // ── Update ID Validation Status ─────────────────────────────────────
-window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
+window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
     if (isUpdating) return;
     const s = filteredIdStudents[selectedIndex];
     if (!s || !s.uid) return;
@@ -628,7 +628,7 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
             type = 'success';
         } else if (newStatus === 'Missing') {
             title = 'ID Validation Missing';
-            message = remarks 
+            message = remarks
                 ? `Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator: ${remarks}`
                 : 'Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator.';
             type = 'warning';
@@ -639,7 +639,7 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
                 : 'Your ID Front & Back + Signature document has been rejected.';
             type = 'error';
         }
-        
+
         await supabase.from('notifications').insert([{
             studentId: s.uid,
             title: title,
@@ -654,7 +654,7 @@ window.updateIdStatus = async function(newStatus, isFinalRejection = false) {
         } else {
             alert(`Student ${s.fullName} status updated to ${newStatus}.`);
         }
-        
+
         await loadIdQueue();
 
     } catch (e) {
@@ -704,12 +704,12 @@ function updateBulkDownloadProgress(percent, subtitleText, titleText = 'Compilin
     if (actionsEl) actionsEl.style.display = percent >= 100 ? 'flex' : 'none';
 }
 
-window.closeBulkDownloadModal = function() {
+window.closeBulkDownloadModal = function () {
     const modal = document.getElementById('bulk-download-modal');
     if (modal) modal.style.display = 'none';
 };
 
-window.downloadAllIdDocuments = async function() {
+window.downloadAllIdDocuments = async function () {
     const btn = document.getElementById('bulk-download-btn');
     const JSZip = window.JSZip;
     const saveAs = window.saveAs || window.FileSaver?.saveAs;
@@ -822,7 +822,7 @@ window.downloadAllIdDocuments = async function() {
                 action: `Bulk downloaded ${successCount} student ID validation documents ZIP`,
                 timestamp: new Date().toISOString()
             }]);
-        } catch (_) {}
+        } catch (_) { }
 
     } catch (err) {
         console.error('Bulk download error:', err);

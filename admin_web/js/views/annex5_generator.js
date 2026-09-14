@@ -176,85 +176,221 @@ if (filterSABatch) {
     filterSABatch.addEventListener('change', filterSuperAdminGrantees);
 }
 
-// ── Render School Student Master List Table (Source 2) ──────────────
+// Helper: Parse and format any Date representation into standard YYYY-MM-DD
+function parseAndFormatDate(raw) {
+    if (raw === null || raw === undefined || raw === '') return '';
+
+    // 1. If it's a JavaScript Date object (use local date components to avoid UTC offset shifts)
+    if (raw instanceof Date && !isNaN(raw.getTime())) {
+        const y = raw.getFullYear();
+        const m = String(raw.getMonth() + 1).padStart(2, '0');
+        const d = String(raw.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // 2. If it's an Excel numeric serial date (e.g. 39363 or '39363')
+    const num = Number(raw);
+    if (!isNaN(num) && num > 1000 && num < 75000) {
+        if (typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) {
+            const dateObj = XLSX.SSF.parse_date_code(num);
+            if (dateObj && dateObj.y) {
+                const y = dateObj.y;
+                const m = String(dateObj.m).padStart(2, '0');
+                const d = String(dateObj.d).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+        }
+        // Accurate integer formula without timezone drift
+        const totalDays = Math.round(num);
+        const adjustedDays = totalDays > 60 ? totalDays - 1 : totalDays;
+        const epochDays = adjustedDays - 1;
+        const dt = new Date(Date.UTC(1900, 0, 1 + epochDays));
+        if (!isNaN(dt.getTime())) {
+            const y = dt.getUTCFullYear();
+            const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+            const d = String(dt.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+    }
+
+    const s = String(raw).trim();
+    if (!s || s.toLowerCase() === 'n/a') return '';
+
+    // 3. If ISO: YYYY-MM-DD or YYYY/MM/DD
+    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+        const y = isoMatch[1];
+        const m = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
+        const d = String(parseInt(isoMatch[3], 10)).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // 4. MM/DD/YYYY or DD/MM/YYYY or MM/DD/YY (including corrupted years like 0003, 0007, 0004)
+    const slashMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+    if (slashMatch) {
+        let p1 = parseInt(slashMatch[1], 10);
+        let p2 = parseInt(slashMatch[2], 10);
+        let rawY = parseInt(slashMatch[3], 10);
+
+        let y = rawY;
+        if (y < 100) {
+            y = (y <= 30 ? 2000 : 1900) + y;
+        }
+
+        let m, d;
+        if (p1 > 12 && p2 <= 12) {
+            // DD/MM/YYYY
+            d = String(p1).padStart(2, '0');
+            m = String(p2).padStart(2, '0');
+        } else {
+            // MM/DD/YYYY (standard in Philippine school enrollment records)
+            m = String(p1).padStart(2, '0');
+            d = String(p2).padStart(2, '0');
+        }
+        return `${y}-${m}-${d}`;
+    }
+
+    // 5. Textual dates with month names (e.g. "October 8, 2007", "8-Oct-2007", "Oct 8 2007")
+    const monthMap = {
+        jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+        jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+        january: 1, february: 2, march: 3, april: 4, june: 6,
+        july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
+    };
+
+    const textMatch = s.toLowerCase().match(/([a-z]+)[,\s\-]+(\d{1,2})[,\s\-]+(\d{2,4})/) ||
+                      s.toLowerCase().match(/(\d{1,2})[,\s\-]+([a-z]+)[,\s\-]+(\d{2,4})/);
+    if (textMatch) {
+        let monthStr = isNaN(textMatch[1]) ? textMatch[1] : textMatch[2];
+        let dayNum = isNaN(textMatch[1]) ? parseInt(textMatch[2], 10) : parseInt(textMatch[1], 10);
+        let yearNum = parseInt(textMatch[3], 10);
+        if (yearNum < 100) yearNum = (yearNum <= 30 ? 2000 : 1900) + yearNum;
+        const prefix = monthStr.substring(0, 3);
+        if (monthMap[prefix]) {
+            const m = String(monthMap[prefix]).padStart(2, '0');
+            const d = String(dayNum).padStart(2, '0');
+            return `${yearNum}-${m}-${d}`;
+        }
+    }
+
+    return s;
+}
+
+// Helper: Calculate Age from Date of Birth string or Excel date
+function calculateAge(birthdateStr) {
+    if (!birthdateStr || birthdateStr === 'N/A') return 'N/A';
+    const cleanDate = parseAndFormatDate(birthdateStr);
+    if (!cleanDate) return 'N/A';
+    const parts = cleanDate.split('-');
+    if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        const birth = new Date(y, m, d);
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        return (age >= 0 && age < 125) ? String(age) : 'N/A';
+    }
+    return 'N/A';
+}
+
+// ── Render School Student Records Table (Source 2) ──────────────
 function renderSchoolStudentsTable(students) {
     const tbody = document.getElementById('tbody-school-students');
     if (!tbody) return;
 
     if (!students || students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = students.map((s) => {
-        let nameParts = { last: 'N/A', first: 'N/A', mi: '' };
-        if (s.fullName) {
-            const fn = s.fullName.trim();
-            if (fn.includes(',')) {
-                const parts = fn.split(',');
-                const last = parts[0].trim();
-                const restParts = parts.slice(1).join(',').trim().split(/\s+/);
-                if (restParts.length > 1) {
-                    const miPart = restParts.pop();
-                    nameParts = { last, first: restParts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
-                } else {
-                    nameParts = { last, first: restParts.join(' '), mi: '' };
-                }
+        const family = s.familyDetails || {};
+        const uid = s.uid || s.studentNo || s.studentId || s.student_id || s.id || Math.random().toString(36).substring(2);
+        const isChecked = selectedSchoolStudentIds.has(uid) ? 'checked' : '';
+
+        // 1. Student No.
+        const studentNo = s.studentNo || s.studentId || s.student_id || 'N/A';
+
+        // 2. Full Name
+        let fullName = s.fullName || '';
+        if (!fullName) {
+            if (s.last_name || s.first_name) {
+                fullName = [s.last_name, s.first_name, s.middle_name].filter(Boolean).join(', ');
+            } else if (s.name) {
+                fullName = s.name;
             } else {
-                const parts = fn.split(/\s+/);
-                if (parts.length === 1) {
-                    nameParts = { last: parts[0], first: '', mi: '' };
-                } else if (parts.length === 2) {
-                    nameParts = { last: parts[1], first: parts[0], mi: '' };
-                } else {
-                    const last = parts.pop();
-                    const miPart = parts.pop();
-                    nameParts = { last, first: parts.join(' ').trim(), mi: miPart.charAt(0).toUpperCase() };
-                }
+                fullName = 'N/A';
             }
-        } else if (s.last_name || s.first_name) {
-            nameParts = {
-                last: s.last_name || 'N/A',
-                first: s.first_name || 'N/A',
-                mi: s.middle_name ? s.middle_name.charAt(0).toUpperCase() : ''
-            };
         }
 
-        const family = s.familyDetails || {};
-        const uid = s.uid || s.studentId || s.student_id || s.id || Math.random().toString(36).substring(2);
-        const isChecked = selectedSchoolStudentIds.has(uid) ? 'checked' : '';
-        const statusLower = (s.status || s.enrollmentStatus || '').toLowerCase();
-        const statusColor = statusLower === 'verified' || statusLower === 'approved' || statusLower === 'enrolled' || statusLower === 'active' ? 'var(--success, #10b981)' :
-                            statusLower === 'pending' ? '#FBC02D' : 'var(--error, #ef4444)';
+        // 3. Program Name
+        const programName = s.programName || s.program || s.course || 'N/A';
+
+        // 4. Year Level
+        const yearLevel = s.yearLevel || s.year || 'N/A';
+
+        // 5. Date of Birth
+        const rawDob = s.dateOfBirth || s.birthdate || s.birthday || s.dob || '';
+        const dob = rawDob ? (parseAndFormatDate(rawDob) || rawDob) : 'N/A';
+
+        // 6. Age
+        let age = s.age;
+        if (!age || age === 'N/A' || isNaN(age)) {
+            age = calculateAge(dob !== 'N/A' ? dob : rawDob);
+        }
+
+        // 7. Gender
+        const gender = (s.gender || s.sex || '').trim() || 'N/A';
+
+        // 8. Civil Status
+        const civilStatus = (s.civilStatus || s.maritalStatus || family.civilStatus || '').trim() || 'Single';
+
+        // 9. Religion
+        const religion = (s.religion || family.religion || '').trim() || 'N/A';
+
+        // 10. Mobile Number
+        const mobileNumber = (s.mobileNumber || s.contactNumber || s.phone || '').trim() || 'N/A';
+
+        // 11. Email Address
+        const emailAddress = (s.emailAddress || s.email || s.authEmail || '').trim() || 'N/A';
+
+        // 12. Father's Full Name
+        const fatherFullName = (s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').trim() || 'N/A';
+
+        // 13. Father's Occupation
+        const fatherOccupation = (s.fatherOccupation || s.fatherEduStatus || family.fatherOccupation || family.fatherEduStatus || '').trim() || 'N/A';
+
+        // 14. Mother's Full Name
+        const motherFullName = (s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').trim() || 'N/A';
+
+        // 15. Mother's Occupation
+        const motherOccupation = (s.motherOccupation || s.motherEduStatus || family.motherOccupation || family.motherEduStatus || '').trim() || 'N/A';
 
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 10px 14px; text-align: center;">
                     <input type="checkbox" class="school-row-checkbox" data-uid="${uid}" ${isChecked} style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
                 </td>
-                <td style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">${s.studentId || s.student_id || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; white-space: nowrap;">${nameParts.last}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${nameParts.first}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${nameParts.mi}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.email || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.birthdate || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.gender || s.sex || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.course || s.program || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${(s.year || '').toString().split(' ')[0] || ''}${s.section ? ' - ' + s.section : ''}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.scholarYearLevel || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.payoutsReceived || 0}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${s.contactNumber || s.phone || 'N/A'}</td>
-                <td style="padding: 10px 14px; white-space: nowrap;">
-                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 3px 8px; border-radius: 12px;">${s.status || s.enrollmentStatus || 'Active'}</span>
-                </td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.fatherName || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.fatherEduStatus || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.motherName || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.motherEduStatus || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.yearlyIncome || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.religion || 'N/A'}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${family.tribe || 'N/A'}</td>
+                <td style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">${studentNo}</td>
+                <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; white-space: nowrap; color: var(--text-primary);">${fullName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${programName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap; text-align: center;">${yearLevel}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${dob}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap; text-align: center;">${age}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${gender}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${civilStatus}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${religion}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${mobileNumber}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap; color: var(--text-secondary);">${emailAddress}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${fatherFullName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${fatherOccupation}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${motherFullName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${motherOccupation}</td>
             </tr>
         `;
     }).join('');
@@ -279,12 +415,16 @@ if (searchSchoolStudents) {
             return;
         }
         const filtered = rawSchoolStudents.filter(s => {
-            const name = (s.fullName || `${s.first_name || ''} ${s.last_name || ''}`).toLowerCase();
-            const id = (s.studentId || s.student_id || '').toLowerCase();
-            const course = (s.course || s.program || '').toLowerCase();
-            const email = (s.email || '').toLowerCase();
-            const status = (s.status || s.enrollmentStatus || '').toLowerCase();
-            return name.includes(q) || id.includes(q) || course.includes(q) || email.includes(q) || status.includes(q);
+            const family = s.familyDetails || {};
+            const studentNo = (s.studentNo || s.studentId || s.student_id || '').toLowerCase();
+            const name = (s.fullName || `${s.last_name || ''} ${s.first_name || ''}`).toLowerCase();
+            const prog = (s.programName || s.program || s.course || '').toLowerCase();
+            const email = (s.emailAddress || s.email || '').toLowerCase();
+            const father = (s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').toLowerCase();
+            const mother = (s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').toLowerCase();
+            const religion = (s.religion || family.religion || '').toLowerCase();
+            const dob = (s.dateOfBirth || s.birthdate || '').toLowerCase();
+            return studentNo.includes(q) || name.includes(q) || prog.includes(q) || email.includes(q) || father.includes(q) || mother.includes(q) || religion.includes(q) || dob.includes(q);
         });
         renderSchoolStudentsTable(filtered);
     });
@@ -326,6 +466,99 @@ if (btnToggleExpand && cardSchool) {
             if (textExpand) textExpand.textContent = 'Expand';
         }
     });
+}
+
+// Download School Student Records Excel Template
+const btnDownloadTemplate = document.getElementById('btn-download-school-template');
+if (btnDownloadTemplate) {
+    btnDownloadTemplate.addEventListener('click', () => {
+        downloadSchoolStudentTemplate();
+    });
+}
+
+function downloadSchoolStudentTemplate() {
+    const headers = [
+        'Student No.',
+        'Full Name',
+        'Program Name',
+        'Year Level',
+        'Date of Birth',
+        'Age',
+        'Gender',
+        'Civil Status',
+        'Religion',
+        'Mobile Number',
+        'Email Address',
+        'Father’s Full Name',
+        'Father’s Occupation',
+        'Mother’s Full Name',
+        'Mother’s Occupation'
+    ];
+
+    const sampleData = [
+        [
+            '2024-00101',
+            'DELA CRUZ, JUAN PEDRO M.',
+            'Bachelor of Science in Information Technology',
+            '1st Year',
+            '2004-05-15',
+            '20',
+            'Male',
+            'Single',
+            'Roman Catholic',
+            '09123456789',
+            'juan.delacruz@school.edu.ph',
+            'Pedro Dela Cruz',
+            'Farmer',
+            'Maria Dela Cruz',
+            'Housewife'
+        ],
+        [
+            '2024-00102',
+            'SANTOS, MARIA CLARA S.',
+            'Bachelor of Science in Computer Science',
+            '2nd Year',
+            '2003-08-22',
+            '21',
+            'Female',
+            'Single',
+            'Christian',
+            '09987654321',
+            'maria.santos@school.edu.ph',
+            'Roberto Santos',
+            'Government Employee',
+            'Elena Santos',
+            'Public School Teacher'
+        ]
+    ];
+
+    const wsData = [headers, ...sampleData];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = [
+        { wch: 15 }, // Student No.
+        { wch: 28 }, // Full Name
+        { wch: 35 }, // Program Name
+        { wch: 12 }, // Year Level
+        { wch: 15 }, // Date of Birth
+        { wch: 8 },  // Age
+        { wch: 10 }, // Gender
+        { wch: 14 }, // Civil Status
+        { wch: 18 }, // Religion
+        { wch: 16 }, // Mobile Number
+        { wch: 28 }, // Email Address
+        { wch: 24 }, // Father's Full Name
+        { wch: 22 }, // Father's Occupation
+        { wch: 24 }, // Mother's Full Name
+        { wch: 22 }  // Mother's Occupation
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'School Student Records');
+    XLSX.writeFile(wb, 'School_Student_Records_Template.xlsx');
+    if (typeof showToast === 'function') {
+        showToast('School Student Records template downloaded!', 'download');
+    }
 }
 
 // ── 3. School File Upload & Parsing Logic ────────────────────────────
@@ -431,6 +664,7 @@ async function parseSchoolExcelOrCsv(file) {
         reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target.result);
+                // Read workbook without cellDates: true to preserve exact serial dates without timezone distortion
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                 const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
@@ -443,40 +677,112 @@ async function parseSchoolExcelOrCsv(file) {
                 for (let r = 0; r < Math.min(10, rows.length); r++) {
                     const row = rows[r];
                     if (!row || row.length === 0) continue;
-                    const lowerRow = row.map(c => String(c || '').trim().toLowerCase());
-                    const hasId = lowerRow.some(c => c.includes('student id') || c.includes('student no') || c.includes('id number') || c.includes('control no'));
-                    const hasName = lowerRow.some(c => c.includes('name') || c.includes('last name') || c.includes('first name'));
+                    const normalizedRow = row.map(c => String(c || '').toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\.\,\_\-]/g, ' ').replace(/\s+/g, ' ').trim());
+                    
+                    const hasId = normalizedRow.some(c => c.includes('student no') || c.includes('student id') || c.includes('id number') || c.includes('control no') || c === 'id');
+                    const hasName = normalizedRow.some(c => c.includes('full name') || c.includes('student name') || (c.includes('name') && !c.includes('father') && !c.includes('mother')));
+                    const hasTemplate = normalizedRow.some(c => c.includes('father') || c.includes('mother') || c.includes('date of birth') || c.includes('program'));
 
-                    if (hasId || hasName) {
+                    if (hasId || hasName || hasTemplate) {
                         headerRowIndex = r;
-                        lowerRow.forEach((colName, idx) => {
-                            if (!colName) return;
-                            if (colName.includes('student id') || colName.includes('student no') || colName.includes('id number')) colMap.studentId = idx;
-                            else if (colName.includes('last name') || colName.includes('surname')) colMap.lastName = idx;
-                            else if (colName.includes('first name') || colName.includes('given name')) colMap.firstName = idx;
-                            else if (colName.includes('m.i') || colName.includes('middle initial') || colName.includes('middle name')) colMap.middleName = idx;
-                            else if (colName.includes('full name') || colName === 'name') colMap.fullName = idx;
-                            else if (colName.includes('email')) colMap.email = idx;
-                            else if (colName.includes('birth') || colName.includes('dob')) colMap.birthdate = idx;
-                            else if (colName.includes('gender') || colName.includes('sex')) colMap.gender = idx;
-                            else if (colName.includes('course') || colName.includes('program') || colName.includes('degree')) colMap.course = idx;
-                            else if (colName.includes('yr') || colName.includes('year') || colName.includes('level')) colMap.year = idx;
-                            else if (colName.includes('sec')) colMap.section = idx;
-                            else if (colName.includes('scholarship')) colMap.scholarship = idx;
-                            else if (colName.includes('scholar year')) colMap.scholarYearLevel = idx;
-                            else if (colName.includes('payout')) colMap.payoutsReceived = idx;
-                            else if (colName.includes('contact') || colName.includes('phone') || colName.includes('mobile')) colMap.contactNumber = idx;
-                            else if (colName.includes('status') || colName.includes('enrollment')) colMap.status = idx;
-                            else if (colName.includes('father') && colName.includes('name')) colMap.fatherName = idx;
-                            else if (colName.includes('father') && (colName.includes('edu') || colName.includes('status'))) colMap.fatherEduStatus = idx;
-                            else if (colName.includes('mother') && colName.includes('name')) colMap.motherName = idx;
-                            else if (colName.includes('mother') && (colName.includes('edu') || colName.includes('status'))) colMap.motherEduStatus = idx;
-                            else if (colName.includes('income')) colMap.yearlyIncome = idx;
-                            else if (colName.includes('religion')) colMap.religion = idx;
-                            else if (colName.includes('tribe')) colMap.tribe = idx;
+                        normalizedRow.forEach((col, idx) => {
+                            if (!col) return;
+                            
+                            // 1. Father fields FIRST (before generic 'full name', 'name', or 'status')
+                            if (col.includes('father') || col.includes('tatay') || col.includes('ama')) {
+                                if (col.includes('occ') || col.includes('work') || col.includes('job') || col.includes('profess') || col.includes('edu') || col.includes('status')) {
+                                    colMap.fatherOccupation = idx;
+                                } else {
+                                    colMap.fatherFullName = idx;
+                                }
+                            }
+                            // 2. Mother fields FIRST (before generic 'full name', 'name', or 'status')
+                            else if (col.includes('mother') || col.includes('nanay') || col.includes('ina')) {
+                                if (col.includes('occ') || col.includes('work') || col.includes('job') || col.includes('profess') || col.includes('edu') || col.includes('status')) {
+                                    colMap.motherOccupation = idx;
+                                } else {
+                                    colMap.motherFullName = idx;
+                                }
+                            }
+                            // 3. Student Identification
+                            else if (col.includes('student no') || col.includes('student id') || col.includes('student number') || col.includes('id number') || col.includes('control no') || col === 'id' || col === 'student_no' || col === 'student_id') {
+                                colMap.studentNo = idx;
+                            }
+                            // 4. Student Name (strictly non-parent)
+                            else if (col.includes('full name') || col.includes('student name') || col === 'name' || col === 'student' || col === 'student_name') {
+                                colMap.fullName = idx;
+                            }
+                            else if (col.includes('last name') || col.includes('lastname') || col.includes('surname') || col === 'lname') {
+                                colMap.lastName = idx;
+                            }
+                            else if (col.includes('first name') || col.includes('firstname') || col.includes('given name') || col === 'fname') {
+                                colMap.firstName = idx;
+                            }
+                            else if (col.includes('middle name') || col.includes('middlename') || col.includes('middle initial') || col.includes('m i') || col === 'mi' || col === 'mname') {
+                                colMap.middleName = idx;
+                            }
+                            // 5. Academic Program
+                            else if (col.includes('program') || col.includes('course') || col.includes('degree') || col.includes('curriculum')) {
+                                colMap.programName = idx;
+                            }
+                            // 6. Year Level
+                            else if (col.includes('year level') || col.includes('year') || col.includes('level') || col === 'yr' || col.includes('yr level') || col.startsWith('yr')) {
+                                colMap.yearLevel = idx;
+                            }
+                            // 7. Date of Birth
+                            else if (col.includes('date of birth') || col.includes('birth date') || col.includes('birthdate') || col.includes('dob') || col.includes('birthday') || col === 'bday') {
+                                colMap.dateOfBirth = idx;
+                            }
+                            // 8. Age
+                            else if (col === 'age' || col.startsWith('age ') || col.endsWith(' age') || col.includes('years old')) {
+                                colMap.age = idx;
+                            }
+                            // 9. Gender / Sex
+                            else if (col.includes('gender') || col.includes('sex')) {
+                                colMap.gender = idx;
+                            }
+                            // 10. Civil Status
+                            else if (col.includes('civil status') || col.includes('marital status') || col === 'civil_status' || col === 'marital_status' || col.includes('civil')) {
+                                colMap.civilStatus = idx;
+                            }
+                            // 11. Religion
+                            else if (col.includes('religion') || col.includes('faith') || col.includes('sect')) {
+                                colMap.religion = idx;
+                            }
+                            // 12. Mobile / Contact
+                            else if (col.includes('mobile') || col.includes('contact') || col.includes('phone') || col.includes('cellphone') || col.includes('tel')) {
+                                colMap.mobileNumber = idx;
+                            }
+                            // 13. Email Address
+                            else if (col.includes('email') || col.includes('e mail') || col.includes('mail')) {
+                                colMap.emailAddress = idx;
+                            }
+                            // 14. Status
+                            else if (col.includes('status') || col.includes('enrollment') || col.includes('remarks')) {
+                                colMap.status = idx;
+                            }
                         });
                         break;
                     }
+                }
+
+                // If no header found, but first row has 15 columns matching standard template layout
+                if (headerRowIndex === -1 && rows.length > 0 && rows[0].length >= 14) {
+                    colMap.studentNo = 0;
+                    colMap.fullName = 1;
+                    colMap.programName = 2;
+                    colMap.yearLevel = 3;
+                    colMap.dateOfBirth = 4;
+                    colMap.age = 5;
+                    colMap.gender = 6;
+                    colMap.civilStatus = 7;
+                    colMap.religion = 8;
+                    colMap.mobileNumber = 9;
+                    colMap.emailAddress = 10;
+                    colMap.fatherFullName = 11;
+                    colMap.fatherOccupation = 12;
+                    colMap.motherFullName = 13;
+                    colMap.motherOccupation = 14;
                 }
 
                 // 2. Parse data rows
@@ -486,101 +792,138 @@ async function parseSchoolExcelOrCsv(file) {
                     if (!row || row.length === 0) continue;
 
                     const rowStr = row.join(' ').toLowerCase();
-                    if (rowStr.includes('control no') || rowStr.includes('student no') || (rowStr.includes('last name') && rowStr.includes('first name'))) {
-                        continue; // Skip any duplicate header
+                    if (rowStr.includes('control no') || rowStr.includes('student no') || (rowStr.includes('last name') && rowStr.includes('first name')) || (rowStr.includes('student no') && rowStr.includes('full name'))) {
+                        continue; // Skip any repeated header
                     }
 
-                    if (headerRowIndex !== -1 && (colMap.studentId !== undefined || colMap.fullName !== undefined || colMap.lastName !== undefined)) {
+                    if (colMap.studentNo !== undefined || colMap.fullName !== undefined || colMap.lastName !== undefined) {
                         // Header mapped extraction
-                        let studentId = colMap.studentId !== undefined ? String(row[colMap.studentId] || '').trim() : '';
+                        let studentNo = colMap.studentNo !== undefined ? String(row[colMap.studentNo] || '').trim() : '';
+                        let fullName = colMap.fullName !== undefined ? String(row[colMap.fullName] || '').trim() : '';
                         let lastName = colMap.lastName !== undefined ? String(row[colMap.lastName] || '').trim() : '';
                         let firstName = colMap.firstName !== undefined ? String(row[colMap.firstName] || '').trim() : '';
                         let mi = colMap.middleName !== undefined ? String(row[colMap.middleName] || '').trim() : '';
-                        let fullName = colMap.fullName !== undefined ? String(row[colMap.fullName] || '').trim() : '';
+                        let programName = colMap.programName !== undefined ? String(row[colMap.programName] || 'BSIT').trim() : 'BSIT';
+                        let yearLevel = colMap.yearLevel !== undefined ? String(row[colMap.yearLevel] || '1').trim() : '1';
+                        
+                        // Date of Birth & Age
+                        const rawDob = colMap.dateOfBirth !== undefined ? row[colMap.dateOfBirth] : '';
+                        const formattedDob = parseAndFormatDate(rawDob);
+                        let ageVal = colMap.age !== undefined ? String(row[colMap.age] || '').trim() : '';
+                        if (!ageVal || isNaN(ageVal)) {
+                            ageVal = formattedDob ? calculateAge(formattedDob) : '';
+                        }
+
+                        let gender = colMap.gender !== undefined ? String(row[colMap.gender] || '').trim() : '';
+                        let civilStatus = colMap.civilStatus !== undefined ? String(row[colMap.civilStatus] || 'Single').trim() : 'Single';
+                        let religion = colMap.religion !== undefined ? String(row[colMap.religion] || '').trim() : '';
+                        let mobileNumber = colMap.mobileNumber !== undefined ? String(row[colMap.mobileNumber] || '').trim() : '';
+                        let emailAddress = colMap.emailAddress !== undefined ? String(row[colMap.emailAddress] || '').trim() : '';
+                        
+                        // Parents information (trim to avoid whitespace-only values)
+                        let fatherFullName = colMap.fatherFullName !== undefined ? String(row[colMap.fatherFullName] || '').trim() : '';
+                        let fatherOccupation = colMap.fatherOccupation !== undefined ? String(row[colMap.fatherOccupation] || '').trim() : '';
+                        let motherFullName = colMap.motherFullName !== undefined ? String(row[colMap.motherFullName] || '').trim() : '';
+                        let motherOccupation = colMap.motherOccupation !== undefined ? String(row[colMap.motherOccupation] || '').trim() : '';
+                        let status = colMap.status !== undefined ? String(row[colMap.status] || 'Enrolled').trim() : 'Enrolled';
 
                         if (!fullName && (lastName || firstName)) {
                             fullName = [lastName, firstName, mi].filter(Boolean).join(', ');
                         }
 
-                        if (!fullName && !studentId) continue;
-
-                        const course = colMap.course !== undefined ? String(row[colMap.course] || 'BSIT').trim() : 'BSIT';
-                        const year = colMap.year !== undefined ? String(row[colMap.year] || '1').trim() : '1';
-                        const section = colMap.section !== undefined ? String(row[colMap.section] || '').trim() : '';
-                        const email = colMap.email !== undefined ? String(row[colMap.email] || '').trim() : '';
-                        const gender = colMap.gender !== undefined ? String(row[colMap.gender] || '').trim() : '';
-                        const birthdate = colMap.birthdate !== undefined ? String(row[colMap.birthdate] || '').trim() : '';
-                        const contactNumber = colMap.contactNumber !== undefined ? String(row[colMap.contactNumber] || '').trim() : '';
-                        const status = colMap.status !== undefined ? String(row[colMap.status] || 'Enrolled').trim() : 'Enrolled';
-                        const scholarshipProgram = colMap.scholarship !== undefined ? String(row[colMap.scholarship] || '').trim() : '';
-                        const scholarYearLevel = colMap.scholarYearLevel !== undefined ? String(row[colMap.scholarYearLevel] || '').trim() : '';
-                        const payoutsReceived = colMap.payoutsReceived !== undefined ? parseInt(row[colMap.payoutsReceived]) || 0 : 0;
-
-                        const familyDetails = {
-                            fatherName: colMap.fatherName !== undefined ? String(row[colMap.fatherName] || '').trim() : '',
-                            fatherEduStatus: colMap.fatherEduStatus !== undefined ? String(row[colMap.fatherEduStatus] || '').trim() : '',
-                            motherName: colMap.motherName !== undefined ? String(row[colMap.motherName] || '').trim() : '',
-                            motherEduStatus: colMap.motherEduStatus !== undefined ? String(row[colMap.motherEduStatus] || '').trim() : '',
-                            yearlyIncome: colMap.yearlyIncome !== undefined ? String(row[colMap.yearlyIncome] || '').trim() : '',
-                            religion: colMap.religion !== undefined ? String(row[colMap.religion] || '').trim() : '',
-                            tribe: colMap.tribe !== undefined ? String(row[colMap.tribe] || '').trim() : ''
-                        };
+                        if (!fullName && !studentNo) continue;
 
                         students.push({
+                            studentNo: studentNo,
+                            studentId: studentNo,
                             fullName: fullName || `${lastName} ${firstName}`.trim(),
                             first_name: firstName,
                             last_name: lastName,
                             middle_name: mi,
-                            studentId: studentId || '',
-                            course: course || 'BSIT',
-                            year: year || '1',
-                            section,
-                            email,
-                            gender,
-                            birthdate,
-                            contactNumber,
-                            status: status || 'Enrolled',
-                            enrollmentStatus: status || 'Enrolled',
-                            scholarshipProgram,
-                            scholarYearLevel,
-                            payoutsReceived,
-                            familyDetails
+                            programName: programName,
+                            course: programName,
+                            yearLevel: yearLevel,
+                            year: yearLevel,
+                            dateOfBirth: formattedDob,
+                            birthdate: formattedDob,
+                            dob: formattedDob,
+                            age: ageVal,
+                            gender: gender,
+                            civilStatus: civilStatus,
+                            maritalStatus: civilStatus,
+                            religion: religion,
+                            mobileNumber: mobileNumber,
+                            contactNumber: mobileNumber,
+                            phone: mobileNumber,
+                            emailAddress: emailAddress,
+                            email: emailAddress,
+                            authEmail: emailAddress,
+                            fatherFullName: fatherFullName,
+                            fatherName: fatherFullName,
+                            fatherOccupation: fatherOccupation,
+                            fatherEduStatus: fatherOccupation,
+                            motherFullName: motherFullName,
+                            motherName: motherFullName,
+                            motherOccupation: motherOccupation,
+                            motherEduStatus: motherOccupation,
+                            familyDetails: {
+                                fatherFullName: fatherFullName,
+                                fatherName: fatherFullName,
+                                fatherOccupation: fatherOccupation,
+                                fatherEduStatus: fatherOccupation,
+                                motherFullName: motherFullName,
+                                motherName: motherFullName,
+                                motherOccupation: motherOccupation,
+                                motherEduStatus: motherOccupation,
+                                religion: religion,
+                                civilStatus: civilStatus
+                            },
+                            status: status,
+                            enrollmentStatus: status
                         });
                     } else {
                         // Heuristic Fallback Extraction
                         const cleanCells = row.map(c => String(c || '').trim()).filter(c => c.length > 0);
                         if (cleanCells.length === 0) continue;
 
-                        let studentId = '';
+                        let studentNo = '';
                         let fullName = '';
-                        let course = 'BSIT';
-                        let year = '1';
-                        let section = '';
-                        let email = '';
+                        let programName = 'BSIT';
+                        let yearLevel = '1';
+                        let rawDob = '';
+                        let ageVal = '';
                         let gender = '';
-                        let birthdate = '';
-                        let contactNumber = '';
+                        let civilStatus = 'Single';
+                        let religion = '';
+                        let mobileNumber = '';
+                        let emailAddress = '';
+                        let fatherFullName = '';
+                        let fatherOccupation = '';
+                        let motherFullName = '';
+                        let motherOccupation = '';
                         let status = 'Enrolled';
 
                         cleanCells.forEach(cell => {
                             if (/^\d{6,15}$/.test(cell) || /^\d{4}-\d{4,6}$/.test(cell)) {
-                                studentId = cell;
+                                studentNo = cell;
                             } else if (cell.includes('@') && cell.includes('.')) {
-                                email = cell;
+                                emailAddress = cell;
                             } else if (cell.toLowerCase() === 'male' || cell.toLowerCase() === 'female') {
                                 gender = cell.charAt(0).toUpperCase() + cell.slice(1).toLowerCase();
+                            } else if (/^(single|married|widowed|separated)$/i.test(cell)) {
+                                civilStatus = cell.charAt(0).toUpperCase() + cell.slice(1).toLowerCase();
                             } else if (/^(09|\+639)\d{9}$/.test(cell.replace(/[-\s]/g, ''))) {
-                                contactNumber = cell;
-                            } else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(cell) || /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(cell)) {
-                                birthdate = cell;
+                                mobileNumber = cell;
+                            } else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(cell) || /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(cell) || (Number(cell) > 1000 && Number(cell) < 75000)) {
+                                rawDob = cell;
+                            } else if (/^\d{1,2}$/.test(cell) && parseInt(cell) >= 15 && parseInt(cell) <= 80 && !ageVal) {
+                                ageVal = cell;
                             } else if (cell.toLowerCase().includes('enrolled') || cell.toLowerCase().includes('active') || cell.toLowerCase().includes('drop') || cell.toLowerCase().includes('loa') || cell.toLowerCase().includes('graduat') || cell.toLowerCase().includes('waiv')) {
                                 status = cell;
                             } else if (cell.toUpperCase().startsWith('BS') || cell.toLowerCase().includes('bachelor') || cell.toLowerCase().includes('tech')) {
-                                course = cell;
+                                programName = cell;
                             } else if (/^[1-5]$/.test(cell) || cell.toLowerCase().includes('year')) {
-                                year = cell.replace(/[^0-9]/g, '') || '1';
-                            } else if (/^[A-Za-z0-9]-[1-9]$/.test(cell) || /^[1-4][A-Za-z]$/.test(cell)) {
-                                section = cell;
+                                yearLevel = cell.replace(/[^0-9]/g, '') || '1';
                             } else if (cell.includes(' ') && cell.length > 4 && !fullName) {
                                 fullName = cell;
                             }
@@ -590,18 +933,53 @@ async function parseSchoolExcelOrCsv(file) {
                             fullName = cleanCells.slice(0, 2).join(' ');
                         }
 
-                        if (fullName) {
+                        const formattedDob = parseAndFormatDate(rawDob);
+                        const calculatedAge = ageVal || (formattedDob ? calculateAge(formattedDob) : '');
+
+                        if (fullName || studentNo) {
                             students.push({
-                                fullName,
-                                studentId,
-                                course,
-                                year,
-                                section,
-                                email,
-                                gender,
-                                birthdate,
-                                contactNumber,
-                                status,
+                                studentNo: studentNo,
+                                studentId: studentNo,
+                                fullName: fullName || 'N/A',
+                                programName: programName,
+                                course: programName,
+                                yearLevel: yearLevel,
+                                year: yearLevel,
+                                dateOfBirth: formattedDob,
+                                birthdate: formattedDob,
+                                dob: formattedDob,
+                                age: calculatedAge,
+                                gender: gender,
+                                civilStatus: civilStatus,
+                                maritalStatus: civilStatus,
+                                religion: religion,
+                                mobileNumber: mobileNumber,
+                                contactNumber: mobileNumber,
+                                phone: mobileNumber,
+                                emailAddress: emailAddress,
+                                email: emailAddress,
+                                authEmail: emailAddress,
+                                fatherFullName: fatherFullName,
+                                fatherName: fatherFullName,
+                                fatherOccupation: fatherOccupation,
+                                fatherEduStatus: fatherOccupation,
+                                motherFullName: motherFullName,
+                                motherName: motherFullName,
+                                motherOccupation: motherOccupation,
+                                motherEduStatus: motherOccupation,
+                                familyDetails: {
+                                    fatherFullName: fatherFullName,
+                                    fatherName: fatherFullName,
+                                    fatherOccupation: fatherOccupation,
+                                    fatherEduStatus: fatherOccupation,
+                                    motherFullName: motherFullName,
+                                    motherName: motherFullName,
+                                    motherOccupation: motherOccupation,
+                                    motherEduStatus: motherOccupation,
+                                    religion: religion,
+                                    civilStatus: civilStatus
+                                },
+                                status: status,
                                 enrollmentStatus: status
                             });
                         }
