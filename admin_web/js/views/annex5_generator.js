@@ -63,13 +63,48 @@ async function loadInitialData() {
         }
 
         // 2. Fetch Default School Student Records (Institutional DB)
-        const { data: schoolDbData, error: errSchool } = await supabase
-            .from('students')
+        let { data: schoolDbData, error: errSchool } = await supabase
+            .from('school_students')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('created_at', { ascending: false });
 
-        if (!errSchool && schoolDbData) {
-            rawSchoolStudents = schoolDbData;
+        if (!errSchool && schoolDbData && schoolDbData.length > 0) {
+            rawSchoolStudents = schoolDbData.map(s => ({
+                id: s.id,
+                uid: s.student_no || s.id,
+                studentNo: s.student_no || '',
+                studentId: s.student_no || '',
+                fullName: s.full_name || '',
+                name: s.full_name || '',
+                programName: s.program_name || '',
+                course: s.program_name || '',
+                yearLevel: s.year_level || '',
+                year: s.year_level || '',
+                dateOfBirth: s.date_of_birth || '',
+                birthdate: s.date_of_birth || '',
+                age: s.age || '',
+                gender: s.gender || '',
+                civilStatus: s.civil_status || 'Single',
+                religion: s.religion || '',
+                mobileNumber: s.mobile_number || '',
+                phone: s.mobile_number || '',
+                emailAddress: s.email_address || '',
+                email: s.email_address || '',
+                fatherFullName: s.father_full_name || '',
+                fatherOccupation: s.father_occupation || '',
+                motherFullName: s.mother_full_name || '',
+                motherOccupation: s.mother_occupation || '',
+                status: 'Enrolled'
+            }));
+        } else {
+            // Fallback to legacy students table if school_students is not yet populated
+            const { data: legacyStudents } = await supabase
+                .from('students')
+                .select('*')
+                .order('createdAt', { ascending: false });
+            if (legacyStudents && legacyStudents.length > 0) {
+                rawSchoolStudents = legacyStudents;
+            }
         }
 
         updateSourceCounts();
@@ -614,9 +649,45 @@ if (btnClearFile) {
         if (uploadPrompt) uploadPrompt.style.display = 'flex';
         if (fileInfo) fileInfo.style.display = 'none';
 
-        // Revert to database students
-        const { data: dbStudents } = await supabase.from('students').select('*');
-        rawSchoolStudents = dbStudents || [];
+        // Revert to database students (from school_students or legacy students)
+        let { data: dbStudents } = await supabase
+            .from('school_students')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (dbStudents && dbStudents.length > 0) {
+            rawSchoolStudents = dbStudents.map(s => ({
+                id: s.id,
+                uid: s.student_no || s.id,
+                studentNo: s.student_no || '',
+                studentId: s.student_no || '',
+                fullName: s.full_name || '',
+                name: s.full_name || '',
+                programName: s.program_name || '',
+                course: s.program_name || '',
+                yearLevel: s.year_level || '',
+                year: s.year_level || '',
+                dateOfBirth: s.date_of_birth || '',
+                birthdate: s.date_of_birth || '',
+                age: s.age || '',
+                gender: s.gender || '',
+                civilStatus: s.civil_status || 'Single',
+                religion: s.religion || '',
+                mobileNumber: s.mobile_number || '',
+                phone: s.mobile_number || '',
+                emailAddress: s.email_address || '',
+                email: s.email_address || '',
+                fatherFullName: s.father_full_name || '',
+                fatherOccupation: s.father_occupation || '',
+                motherFullName: s.mother_full_name || '',
+                motherOccupation: s.mother_occupation || '',
+                status: 'Enrolled'
+            }));
+        } else {
+            const { data: fallbackStudents } = await supabase.from('students').select('*');
+            rawSchoolStudents = fallbackStudents || [];
+        }
+
         updateSourceCounts();
         renderSchoolStudentsTable(rawSchoolStudents);
         runCrossVerification();
@@ -648,7 +719,70 @@ async function handleSchoolFile(file) {
             updateSourceCounts();
             renderSchoolStudentsTable(rawSchoolStudents);
             runCrossVerification();
-            showToast(`Loaded ${parsedStudents.length} school student records from ${file.name}!`, 'check-circle');
+
+            // Prepare records for database table 'school_students'
+            const dbRecords = parsedStudents.map(s => {
+                const ageNum = parseInt(s.age, 10);
+                return {
+                    student_no: s.studentNo || s.studentId || null,
+                    full_name: s.fullName || `${s.last_name || ''} ${s.first_name || ''}`.trim() || 'Unknown',
+                    program_name: s.programName || s.course || null,
+                    year_level: s.yearLevel || s.year || null,
+                    date_of_birth: s.dateOfBirth || s.birthdate || null,
+                    age: !isNaN(ageNum) ? ageNum : null,
+                    gender: s.gender || null,
+                    civil_status: s.civilStatus || 'Single',
+                    religion: s.religion || null,
+                    mobile_number: s.mobileNumber || s.phone || null,
+                    email_address: s.emailAddress || s.email || null,
+                    father_full_name: s.fatherFullName || null,
+                    father_occupation: s.fatherOccupation || null,
+                    mother_full_name: s.motherFullName || null,
+                    mother_occupation: s.motherOccupation || null,
+                    updated_at: new Date().toISOString()
+                };
+            }).filter(r => r.full_name && r.full_name !== 'Unknown');
+
+            try {
+                // Upsert in batches of 100
+                const batchSize = 100;
+                let storedCount = 0;
+                for (let i = 0; i < dbRecords.length; i += batchSize) {
+                    const batch = dbRecords.slice(i, i + batchSize);
+                    const { error: upsertErr } = await supabase
+                        .from('school_students')
+                        .upsert(batch, { onConflict: 'student_no' });
+
+                    if (upsertErr) {
+                        console.warn('Upsert on school_students failed, falling back to insert:', upsertErr);
+                        const { error: insertErr } = await supabase
+                            .from('school_students')
+                            .insert(batch);
+                        if (insertErr) {
+                            console.error('Insert error to school_students:', insertErr);
+                            throw insertErr;
+                        }
+                    }
+                    storedCount += batch.length;
+                }
+
+                // Log in audit_logs
+                try {
+                    await supabase.from('audit_logs').insert([{
+                        userName: window.currentAdmin?.username || 'Admin',
+                        role: window.currentAdmin?.role || 'Admin',
+                        action: `Imported and stored ${storedCount} school student records from ${file.name} into school_students database`,
+                        studentId: 'BATCH_IMPORT'
+                    }]);
+                } catch (e) {
+                    console.warn('Could not write audit log:', e);
+                }
+
+                showToast(`Loaded and stored ${storedCount} records in school_students database!`, 'check-circle');
+            } catch (dbErr) {
+                console.error('Database store error:', dbErr);
+                showToast(`Parsed ${parsedStudents.length} records. (Database: ${dbErr.message || 'Check school_students table'})`, 'alert-triangle');
+            }
         } else {
             alert('Could not extract student records from the file. Make sure it has student names and IDs.');
         }

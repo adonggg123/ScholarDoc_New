@@ -1266,9 +1266,20 @@ body.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 @keyframes statusPulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.2); opacity: 1; }
-    100% { transform: scale(0.95); opacity: 0.8; }
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
 }
 
 /* Card Body */
@@ -1455,15 +1466,20 @@ body.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .sch-shimmer {
-    background: linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.04) 75%);
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.04) 25%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.04) 75%);
     background-size: 200% 100%;
     animation: schShimmer 1.5s infinite;
     border-radius: 8px;
 }
 
 @keyframes schShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* Empty State */
@@ -1624,7 +1640,7 @@ body.dark .sch-empty-icon {
 }
 
 body.dark .sch-shimmer {
-    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
 }
 
 /* ==========================================================================
@@ -2092,21 +2108,21 @@ body.dark .sch-shimmer {
     font-size: 18px;
 }
 
-.ann-type-option input[type="radio"]:checked + .ann-type-box.type-general {
+.ann-type-option input[type="radio"]:checked+.ann-type-box.type-general {
     border-color: #2563EB;
     background: rgba(37, 99, 235, 0.08);
     color: #2563EB;
     box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
 }
 
-.ann-type-option input[type="radio"]:checked + .ann-type-box.type-update {
+.ann-type-option input[type="radio"]:checked+.ann-type-box.type-update {
     border-color: #059669;
     background: rgba(16, 185, 129, 0.08);
     color: #059669;
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
 }
 
-.ann-type-option input[type="radio"]:checked + .ann-type-box.type-deadline {
+.ann-type-option input[type="radio"]:checked+.ann-type-box.type-deadline {
     border-color: #DC2626;
     background: rgba(239, 68, 68, 0.08);
     color: #DC2626;
@@ -2642,12 +2658,16 @@ body.dark .ann-type-box {
 
 /* Responsive Dashboard Rules */
 @media (max-width: 1024px) {
-    .dashboard-grid, .dashboard-grid-bottom {
+
+    .dashboard-grid,
+    .dashboard-grid-bottom {
         grid-template-columns: 1fr !important;
     }
+
     .dash-stats-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
+
     .dash-modules-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
@@ -2657,12 +2677,15 @@ body.dark .ann-type-box {
     .dash-stats-grid {
         grid-template-columns: 1fr !important;
     }
+
     .dash-modules-grid {
         grid-template-columns: 1fr !important;
     }
+
     .dash-hero-actions {
         width: 100%;
     }
+
     .dash-hero-btn {
         flex: 1;
         justify-content: center;
