@@ -17,6 +17,7 @@ analyzer:
     - macos/**
     - scratch/**
     - admin_web/**
+    - superadmin_web/**
     - student_web/**
     - linux/**
   errors:

@@ -54,9 +54,21 @@ async function loadAdminProfile(user) {
 // Role-Based Navigation & View Access Controls
 function applyRoleAccessControls() {
     const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+    if (!isSuperAdmin) {
+        // Not a superadmin, redirect to admin portal
+        window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
+        return;
+    }
+
+    const divider = document.getElementById('sidebar-divider');
+    if (divider) {
+        divider.style.display = '';
+    }
+
+    // Determine initial view
+    const initialView = 'dashboard';
     
     // Set active nav item
-    const initialView = 'annex5_generator';
     navItems.forEach(nav => nav.classList.remove('active'));
     const targetNav = document.querySelector(`.nav-item[data-view="${initialView}"]`);
     if (targetNav) targetNav.classList.add('active');
@@ -120,7 +132,7 @@ const viewIcons = {
 };
 
 // Track current view for sync
-let currentViewName = 'annex5_generator';
+let currentViewName = 'dashboard';
 
 // Current loaded script to clean up
 let currentScript = null;
@@ -128,8 +140,16 @@ let currentScript = null;
 // Load a View
 async function loadView(viewName) {
     try {
-        if (viewName !== 'settings' && viewName !== 'annex5_generator') {
-            viewName = 'annex5_generator';
+        const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+        if (window.currentAdmin && !isSuperAdmin) {
+            window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
+            return;
+        }
+
+        // Redirect masterlist_import to reports view with import tab selected
+        if (viewName === 'masterlist_import') {
+            window.requestedReportTab = 'import';
+            viewName = 'reports';
         }
 
         // Fetch HTML partial
@@ -292,8 +312,17 @@ const notificationDropdown = document.getElementById('notification-dropdown');
 const markAllReadBtn = document.getElementById('mark-all-read-btn');
 
 window.navigateToView = function(viewName, tabName) {
-    if (viewName !== 'settings' && viewName !== 'annex5_generator') {
-        viewName = 'annex5_generator';
+    const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
+    if (!isSuperAdmin) {
+        window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
+        return;
+    }
+
+    if (viewName === 'masterlist_import') {
+        window.requestedReportTab = 'import';
+        viewName = 'reports';
+    } else if (tabName) {
+        window.requestedReportTab = tabName;
     }
 
     // Find the nav item

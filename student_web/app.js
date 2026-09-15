@@ -153,11 +153,19 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
 
         await new Promise(r => setTimeout(r, 300));
         
-        // Route to Admin Dashboard
-        if (window.location.protocol === 'file:') {
-            window.location.href = '../admin_web/admin.html';
+        // Route to respective portal
+        if (isSuper) {
+            if (window.location.protocol === 'file:') {
+                window.location.href = '../superadmin_web/superadmin.html';
+            } else {
+                window.location.href = '/superadmin_web/superadmin.html';
+            }
         } else {
-            window.location.href = '/admin_web/admin.html';
+            if (window.location.protocol === 'file:') {
+                window.location.href = '../admin_web/admin.html';
+            } else {
+                window.location.href = '/admin_web/admin.html';
+            }
         }
     }
 }

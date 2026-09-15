@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScholarDoc Admin</title>
+    <title>ScholarDoc Super Admin</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800;900&display=swap"
@@ -27,7 +27,7 @@
             <img src="app_logo3.png" alt="ScholarDoc Logo" class="sidebar-logo">
             <div class="sidebar-brand">
                 <h2>ScholarDoc</h2>
-                <p>Admin Portal</p>
+                <p>Super Admin Portal</p>
             </div>
         </div>
 
@@ -35,8 +35,42 @@
             <hr style="border-top: 1px solid var(--border-color); margin: 0 0 8px 0; width: 100%;">
 
             <div class="sidebar-menu-list" style="display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto;">
-                <a href="#" class="nav-item active" data-view="annex5_generator">
-                    <i class="icon-file-spreadsheet"></i> Annex 5 TES Generator
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <i class="icon-layout-dashboard"></i> Dashboard
+                </a>
+
+                <a href="#" class="nav-item" data-view="student_records">
+                    <i class="icon-users"></i> Student Records
+                </a>
+
+                <a href="#" class="nav-item" data-view="scholarships">
+                    <i class="icon-graduation-cap"></i> Scholarships
+                </a>
+
+                <!-- Expandable Validation Menu -->
+                <div class="nav-item expandable" id="validation-menu-btn">
+                    <i class="icon-shield-check"></i> Validation
+                    <i class="icon-chevron-down" style="margin-left: auto; font-size: 0.9rem;"></i>
+                </div>
+                <div class="nav-sub-menu" id="validation-sub-menu">
+                    <a href="#" class="nav-item" data-view="sa_verification">
+                        <i class="icon-landmark"></i> SA Verification
+                    </a>
+                    <a href="#" class="nav-item" data-view="id_validation">
+                        <i class="icon-badge-check"></i> ID Validation
+                    </a>
+                </div>
+
+                <a href="#" class="nav-item" data-view="announcements">
+                    <i class="icon-megaphone"></i> Announcements
+                </a>
+
+                <a href="#" class="nav-item" data-view="audit_logs">
+                    <i class="icon-history"></i> Activity Logs
+                </a>
+
+                <a href="#" class="nav-item" data-view="reports">
+                    <i class="icon-bar-chart-4"></i> Reports
                 </a>
             </div>
 
@@ -63,13 +97,13 @@
                 <!-- Page Icon with Gradient Badge -->
                 <div id="topbar-icon-badge"
                     style="padding: 8px; background: linear-gradient(135deg, #0A1E3F, #1E355A, #7A6B43, #D4AF37); border-radius: 10px; box-shadow: 0 4px 8px rgba(10,30,63,0.25); display: flex; align-items: center; justify-content: center;">
-                    <i id="topbar-icon" class="icon-file-spreadsheet" style="font-size: 16px; color: white;"></i>
+                    <i id="topbar-icon" class="icon-layout-dashboard" style="font-size: 16px; color: white;"></i>
                 </div>
 
                 <!-- Page Title + Sync Status -->
                 <div style="display: flex; flex-direction: column;">
                     <h1 class="topbar-title" id="topbar-title"
-                        style="margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.3px;">CHED Annex 5 TES Generator</h1>
+                        style="margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.3px;">Dashboard</h1>
                     <div id="sync-status" style="display: none; align-items: center; gap: 6px;">
                         <div class="sync-spinner"
                             style="width: 10px; height: 10px; border: 1.5px solid var(--primary-color); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;">

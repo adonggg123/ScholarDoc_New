@@ -34,8 +34,10 @@ function findFilePath(urlPath) {
     }
 
     if (urlPath === '/login' || urlPath === '/login.html') {
-        const loginFile = path.join(ROOT, 'admin_web', 'login.html');
-        if (fs.existsSync(loginFile)) return loginFile;
+        const loginSuperAdmin = path.join(ROOT, 'superadmin_web', 'login.html');
+        if (fs.existsSync(loginSuperAdmin)) return loginSuperAdmin;
+        const loginAdmin = path.join(ROOT, 'admin_web', 'login.html');
+        if (fs.existsSync(loginAdmin)) return loginAdmin;
     }
 
     // 2. Direct path resolution
@@ -44,13 +46,19 @@ function findFilePath(urlPath) {
         return directPath;
     }
 
-    // 3. Fallback to admin_web
+    // 3. Fallback to superadmin_web
+    const superAdminPath = path.join(ROOT, 'superadmin_web', urlPath);
+    if (fs.existsSync(superAdminPath) && fs.statSync(superAdminPath).isFile()) {
+        return superAdminPath;
+    }
+
+    // 4. Fallback to admin_web
     const adminPath = path.join(ROOT, 'admin_web', urlPath);
     if (fs.existsSync(adminPath) && fs.statSync(adminPath).isFile()) {
         return adminPath;
     }
 
-    // 4. Fallback to student_web
+    // 5. Fallback to student_web
     const studentPath = path.join(ROOT, 'student_web', urlPath);
     if (fs.existsSync(studentPath) && fs.statSync(studentPath).isFile()) {
         return studentPath;
@@ -108,10 +116,11 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log('\n=======================================================');
     console.log(' 🎓 ScholarDoc Unified Web Platform');
-    console.log(` Running at:       http://localhost:${PORT}`);
-    console.log(` Landing Page:     http://localhost:${PORT}/`);
-    console.log(` Unified Login:    http://localhost:${PORT}/login.html`);
-    console.log(` Student Portal:   http://localhost:${PORT}/student_web/dashboard.html`);
-    console.log(` Admin Portal:     http://localhost:${PORT}/admin_web/admin.html`);
+    console.log(` Running at:          http://localhost:${PORT}`);
+    console.log(` Landing Page:        http://localhost:${PORT}/`);
+    console.log(` Unified Login:       http://localhost:${PORT}/login.html`);
+    console.log(` Student Portal:      http://localhost:${PORT}/student_web/dashboard.html`);
+    console.log(` Admin Portal:        http://localhost:${PORT}/admin_web/admin.html`);
+    console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
     console.log('=======================================================\n');
 });
