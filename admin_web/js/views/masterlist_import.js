@@ -1,6 +1,7 @@
 // js/views/masterlist_import.js
 import { BillingService } from '../services/billing_service.js';
 import { VerificationService } from '../services/verification_service.js';
+import { AnnexSyncService } from '../services/annex_sync_service.js';
 
 // Dynamically load document parsing libraries if needed
 if (!window.pdfjsLib) {
@@ -432,7 +433,7 @@ function renderTable() {
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="8" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="7" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-file-search" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>Upload a document and extract data to see new grantees listed here.</span>
@@ -450,7 +451,7 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="8" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="7" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>No records match the selected batch.</span>
@@ -472,9 +473,6 @@ function renderTable() {
             : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> New Grantee</span>`;
 
         tr.innerHTML = `
-            <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-student-id" data-index="${index}" value="${record.studentId || ''}" placeholder="Student ID" style="width: 100px;">
-            </td>
             <td style="padding: 6px 12px;">
                 <input type="text" class="input-clean edit-last-name" data-index="${index}" value="${record.lastName}">
             </td>
@@ -503,12 +501,6 @@ function renderTable() {
     });
     
     // Listeners for inline edits
-    document.querySelectorAll('.edit-student-id').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].studentId = e.target.value.trim();
-        });
-    });
 
     document.querySelectorAll('.edit-last-name').forEach(input => {
         input.addEventListener('change', (e) => {
@@ -582,7 +574,6 @@ async function saveRecordsToDatabase() {
     try {
         const tableName = getTableName();
         const toInsert = validToInsert.map(r => ({
-            student_id: r.studentId || '',
             last_name: r.lastName,
             first_name: r.firstName,
             middle_name: r.middleName,
@@ -616,19 +607,200 @@ async function loadSchoolStudentsAndVerify(grantees) {
         const { data: dbStudents } = await window.supabaseClient.from('students').select('*');
         schoolStudents = dbStudents || [];
 
-        const result = VerificationService.runBatchVerification(grantees, schoolStudents);
-        verifiedForm2List = result.form2List;
-        verifiedForm3List = result.form3List;
-        needsReviewList = result.needsReviewList;
+        // 1. Check if Admin has already verified and categorized records in Review Queue
+        const savedSync = AnnexSyncService.getVerifiedData();
+        if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0 || savedSync.needsReviewList.length > 0)) {
+            if (grantees && grantees.length > 0) {
+                const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
+                const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
+
+                const batchResult = VerificationService.runBatchVerification(grantees, schoolStudents);
+                const allItems = [...batchResult.form2List, ...batchResult.form3List, ...batchResult.needsReviewList];
+
+                const combinedForm2 = [];
+                const combinedForm3 = [];
+                const remainingReview = [];
+                const processedKeys = new Set();
+
+                for (const item of allItems) {
+                    const key = AnnexSyncService.getUniqueKey(item);
+                    if (processedKeys.has(key)) continue;
+                    processedKeys.add(key);
+
+                    if (resolvedForm2Map.has(key)) {
+                        const saved = resolvedForm2Map.get(key);
+                        combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
+                    } else if (resolvedForm3Map.has(key)) {
+                        const saved = resolvedForm3Map.get(key);
+                        combinedForm3.push({ ...item, ...saved, classification: 'INACTIVE_FORM3', isEnrolled: false });
+                    } else if (item.classification === 'MATCHED_FORM2') {
+                        combinedForm2.push(item);
+                    } else if (item.classification === 'INACTIVE_FORM3') {
+                        combinedForm3.push(item);
+                    } else {
+                        remainingReview.push(item);
+                    }
+                }
+
+                // Preserve any verified records from savedSync
+                for (const item of savedSync.form2List) {
+                    const key = AnnexSyncService.getUniqueKey(item);
+                    if (!processedKeys.has(key)) {
+                        processedKeys.add(key);
+                        combinedForm2.push(item);
+                    }
+                }
+                for (const item of savedSync.form3List) {
+                    const key = AnnexSyncService.getUniqueKey(item);
+                    if (!processedKeys.has(key)) {
+                        processedKeys.add(key);
+                        combinedForm3.push(item);
+                    }
+                }
+                for (const item of savedSync.needsReviewList) {
+                    const key = AnnexSyncService.getUniqueKey(item);
+                    if (!processedKeys.has(key)) {
+                        processedKeys.add(key);
+                        remainingReview.push(item);
+                    }
+                }
+
+                const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview);
+                verifiedForm2List = deduped.form2List;
+                verifiedForm3List = deduped.form3List;
+                needsReviewList = deduped.needsReviewList;
+            } else {
+                verifiedForm2List = savedSync.form2List;
+                verifiedForm3List = savedSync.form3List;
+                needsReviewList = savedSync.needsReviewList;
+            }
+        } else {
+            const result = VerificationService.runBatchVerification(grantees || [], schoolStudents);
+            const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList);
+            verifiedForm2List = deduped.form2List;
+            verifiedForm3List = deduped.form3List;
+            needsReviewList = deduped.needsReviewList;
+
+            AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                updatedBy: 'Super Admin (Initial Verification)'
+            });
+        }
 
         updateAnnexKPIs();
         renderAnnexForm2Table(verifiedForm2List);
         renderAnnexForm3Table(verifiedForm3List);
         renderAnnexReviewQueue(needsReviewList);
 
+        const syncBadge = document.getElementById('sa-sync-status-badge');
+        if (syncBadge) {
+            syncBadge.style.display = 'inline-flex';
+        }
+
     } catch (err) {
         console.warn('Error verifying Annex 5 tables in masterlist_import:', err);
     }
+}
+
+let activeSAResolutionItem = null;
+
+function openSuperAdminResolutionModal(reviewIndex) {
+    activeSAResolutionItem = reviewIndex;
+    const item = needsReviewList[reviewIndex];
+    if (!item) return;
+
+    const modal = document.getElementById('sa-resolution-modal');
+    const nameEl = document.getElementById('sa-modal-grantee-name');
+    const targetForm = document.getElementById('sa-modal-target-form');
+    const reasonGroup = document.getElementById('sa-modal-form3-reason-group');
+    const reasonSel = document.getElementById('sa-modal-form3-reason');
+    const remarksInput = document.getElementById('sa-modal-remarks');
+
+    if (nameEl) nameEl.textContent = item.grantee?.name || 'Scholar Grantee';
+    if (targetForm) targetForm.value = 'form3';
+    if (reasonGroup) reasonGroup.style.display = 'block';
+    if (reasonSel) reasonSel.value = item.specialStatusReason || 'Not enrolled';
+    if (remarksInput) remarksInput.value = '';
+
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeSuperAdminResolutionModal() {
+    activeSAResolutionItem = null;
+    const modal = document.getElementById('sa-resolution-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function resolveSuperAdminReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolled', remarks = '') {
+    const item = needsReviewList[reviewIndex];
+    if (!item) return;
+
+    needsReviewList.splice(reviewIndex, 1);
+
+    if (targetForm === 'form2') {
+        item.classification = 'MATCHED_FORM2';
+        item.isEnrolled = true;
+        if (!item.matchedStudent) {
+            item.matchedStudent = {
+                fullName: item.grantee?.name || '',
+                studentId: item.grantee?.student_id || '',
+                course: item.grantee?.course || 'BSIT',
+                year: item.grantee?.year || '1',
+                status: 'Enrolled'
+            };
+        } else {
+            item.matchedStudent.status = 'Enrolled';
+        }
+        verifiedForm2List.push(item);
+        if (window.showToast) window.showToast(`Approved ${item.grantee?.name || 'Grantee'} to Form 2 (Enrolled)`, 'check-circle');
+    } else {
+        item.classification = 'INACTIVE_FORM3';
+        item.isEnrolled = false;
+        item.specialStatusReason = specialReason;
+        item.remarks = remarks || `Categorized: ${specialReason}`;
+        if (!item.matchedStudent) {
+            item.matchedStudent = {
+                fullName: item.grantee?.name || '',
+                studentId: item.grantee?.student_id || '',
+                course: item.grantee?.course || 'BSIT',
+                year: item.grantee?.year || '1',
+                status: specialReason
+            };
+        } else {
+            item.matchedStudent.status = specialReason;
+        }
+        verifiedForm3List.push(item);
+        if (window.showToast) window.showToast(`Categorized ${item.grantee?.name || 'Grantee'} to Form 3 (${specialReason})`, 'tag');
+    }
+
+    const synced = AnnexSyncService.saveVerifiedData({
+        form2List: verifiedForm2List,
+        form3List: verifiedForm3List,
+        needsReviewList: needsReviewList,
+        updatedBy: 'Super Admin'
+    });
+    if (synced) {
+        verifiedForm2List = synced.form2List;
+        verifiedForm3List = synced.form3List;
+        needsReviewList = synced.needsReviewList;
+    }
+
+    try {
+        const granteeName = item.grantee?.name || `${item.grantee?.last_name || ''}, ${item.grantee?.first_name || ''}`.trim();
+        window.supabaseClient.from('audit_logs').insert([{
+            userName: 'Super Admin',
+            role: 'Super Admin',
+            action: `Reports Review: Categorized ${granteeName} to ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}`,
+            studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
+        }]).then(() => {}).catch(e => console.warn(e));
+    } catch (_) {}
+
+    updateAnnexKPIs();
+    renderAnnexForm2Table(verifiedForm2List);
+    renderAnnexForm3Table(verifiedForm3List);
+    renderAnnexReviewQueue(needsReviewList);
 }
 
 function updateAnnexKPIs() {
@@ -717,9 +889,17 @@ function renderAnnexForm3Table(items) {
         const reason = item.specialStatusReason || 'Not enrolled';
         const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
 
-        let badgeStyle = 'background: rgba(255,152,0,0.12); color: #E65100;';
-        if (reason === 'Dropped' || reason === 'Waived') badgeStyle = 'background: rgba(244,67,54,0.12); color: #D32F2F;';
-        if (reason === 'Graduated') badgeStyle = 'background: rgba(76,175,80,0.12); color: #2E7D32;';
+        // Specialized badge styling for all CHED Form 3 special status reasons
+        let badgeStyle = 'background: rgba(245,158,11,0.12); color: #D97706; border: 1px solid rgba(245,158,11,0.25);';
+        if (reason === 'Dropped' || reason === 'Waived') {
+            badgeStyle = 'background: rgba(244,67,54,0.12); color: #D32F2F; border: 1px solid rgba(244,67,54,0.25);';
+        } else if (reason === 'Graduated') {
+            badgeStyle = 'background: rgba(46,125,50,0.12); color: #2E7D32; border: 1px solid rgba(46,125,50,0.25);';
+        } else if (reason.includes('LOA') || reason.includes('Leave')) {
+            badgeStyle = 'background: rgba(147,51,234,0.12); color: #7E22CE; border: 1px solid rgba(147,51,234,0.25);';
+        } else if (reason.includes('Transfer') || reason === 'Transferee') {
+            badgeStyle = 'background: rgba(2,132,199,0.12); color: #0369A1; border: 1px solid rgba(2,132,199,0.25);';
+        }
 
         return `
             <tr>
@@ -761,10 +941,8 @@ function renderAnnexReviewQueue(items) {
 
     container.innerHTML = items.map((item, idx) => {
         const grantee = item.grantee;
-        const student = item.matchedStudent;
         const confidence = item.confidence;
         const discrepancies = item.discrepancies || [];
-
         const granteeName = grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''}`;
 
         return `
@@ -787,9 +965,35 @@ function renderAnnexReviewQueue(items) {
                         </span>
                     `).join('')}
                 </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+                    <button class="sa-btn-review-approve" data-index="${idx}" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <i class="icon-check"></i> Approve to Form 2 (Enrolled)
+                    </button>
+                    <button class="sa-btn-review-categorize" data-index="${idx}" style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <i class="icon-tag"></i> Categorize to Form 3
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
+
+    container.querySelectorAll('.sa-btn-review-approve').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+            resolveSuperAdminReviewItem(idx, 'form2');
+        });
+    });
+
+    container.querySelectorAll('.sa-btn-review-categorize').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+            openSuperAdminResolutionModal(idx);
+        });
+    });
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 }
 
 function activateSATab(activeBtn, activePane) {
@@ -995,6 +1199,24 @@ export function initMasterlistImport() {
     if (saTabBtn3) saTabBtn3.addEventListener('click', () => activateSATab(saTabBtn3, saTabPane3));
     if (saTabBtnRev) saTabBtnRev.addEventListener('click', () => activateSATab(saTabBtnRev, saTabPaneRev));
 
+    // Helper: Universal Blob download with FileSaver / Anchor tag fallback
+    function downloadBlob(blob, filename) {
+        if (typeof window.saveAs === 'function') {
+            window.saveAs(blob, filename);
+            return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 200);
+    }
+
     // Annex Auto-Fill Excel Exports
     if (btnExportF2) {
         btnExportF2.addEventListener('click', async () => {
@@ -1004,9 +1226,29 @@ export function initMasterlistImport() {
                 if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
                 const blob = await resp.blob();
 
-                const studentsToFill = verifiedForm2List.map(item => item.matchedStudent || item.grantee);
+                const studentsToFill = verifiedForm2List.map(item => {
+                    const grantee = item.grantee || {};
+                    const matched = item.matchedStudent || {};
+                    return {
+                        ...grantee,
+                        ...matched,
+                        studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                        saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                        fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                        lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                        firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                        middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                        batch: grantee.batch || matched.batch || '1',
+                        gender: matched.gender || grantee.gender || 'M',
+                        birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                        course: matched.course || grantee.course || grantee.program || '',
+                        year: matched.year || grantee.year || '1',
+                        email: matched.email || matched.authEmail || grantee.email || '',
+                        contactNumber: matched.contactNumber || matched.phone || grantee.contactNumber || grantee.phone || ''
+                    };
+                });
                 const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-                saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
+                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
             } catch (err) {
                 console.error('Form 2 export error:', err);
                 alert('Failed to generate Form 2: ' + err.message);
@@ -1024,14 +1266,31 @@ export function initMasterlistImport() {
                 if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
                 const blob = await resp.blob();
 
-                const studentsToFill = verifiedForm3List.map(item => ({
-                    ...(item.matchedStudent || item.grantee),
-                    status: item.specialStatusReason || 'Not enrolled',
-                    remarks: item.remarks || `Categorized: ${item.specialStatusReason || 'Not enrolled'}`
-                }));
+                const studentsToFill = verifiedForm3List.map(item => {
+                    const grantee = item.grantee || {};
+                    const matched = item.matchedStudent || {};
+                    const specialReason = item.specialStatusReason || matched.status || 'Not enrolled';
+                    return {
+                        ...grantee,
+                        ...matched,
+                        studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                        saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                        fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                        lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                        firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                        middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                        batch: grantee.batch || matched.batch || '1',
+                        gender: matched.gender || grantee.gender || 'M',
+                        birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                        course: matched.course || grantee.course || grantee.program || '',
+                        year: matched.year || grantee.year || '1',
+                        status: specialReason,
+                        remarks: item.remarks || (specialReason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${specialReason}`)
+                    };
+                });
 
                 const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-                saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
+                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
             } catch (err) {
                 console.error('Form 3 export error:', err);
                 alert('Failed to generate Form 3: ' + err.message);
@@ -1075,30 +1334,130 @@ export function initMasterlistImport() {
             }
             if (confirm('Are you sure you want to remove all records from the Annex Form 3 table?')) {
                 verifiedForm3List = [];
+                const synced = AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: needsReviewList,
+                    updatedBy: 'Super Admin'
+                });
+                if (synced) {
+                    verifiedForm2List = synced.form2List;
+                    verifiedForm3List = synced.form3List;
+                    needsReviewList = synced.needsReviewList;
+                }
                 updateAnnexKPIs();
                 renderAnnexForm3Table(verifiedForm3List);
             }
         });
     }
 
+    // Modal Handlers for Super Admin Grantee Categorization
+    const saBtnCloseRes = document.getElementById('sa-btn-close-resolution');
+    const saBtnCancelRes = document.getElementById('sa-btn-cancel-resolution');
+    const saBtnConfirmRes = document.getElementById('sa-btn-confirm-resolution');
+    const saModalTargetForm = document.getElementById('sa-modal-target-form');
+    const saModalForm3ReasonGroup = document.getElementById('sa-modal-form3-reason-group');
+    const saModalForm3Reason = document.getElementById('sa-modal-form3-reason');
+    const saModalRemarks = document.getElementById('sa-modal-remarks');
+
+    if (saBtnCloseRes) saBtnCloseRes.addEventListener('click', closeSuperAdminResolutionModal);
+    if (saBtnCancelRes) saBtnCancelRes.addEventListener('click', closeSuperAdminResolutionModal);
+
+    if (saModalTargetForm) {
+        saModalTargetForm.addEventListener('change', (e) => {
+            if (saModalForm3ReasonGroup) {
+                saModalForm3ReasonGroup.style.display = e.target.value === 'form3' ? 'block' : 'none';
+            }
+        });
+    }
+
+    if (saBtnConfirmRes) {
+        saBtnConfirmRes.addEventListener('click', () => {
+            if (activeSAResolutionItem === null) return;
+            const targetForm = saModalTargetForm ? saModalTargetForm.value : 'form3';
+            const reason = saModalForm3Reason ? saModalForm3Reason.value : 'Not enrolled';
+            const remarks = saModalRemarks ? saModalRemarks.value.trim() : '';
+
+            resolveSuperAdminReviewItem(activeSAResolutionItem, targetForm, reason, remarks);
+            closeSuperAdminResolutionModal();
+        });
+    }
+
     // Auto-Categorize All to Form 3
     if (btnAutoResolveAll) {
         btnAutoResolveAll.addEventListener('click', () => {
-            if (needsReviewList.length === 0) return;
+            if (needsReviewList.length === 0) {
+                if (window.showToast) window.showToast('Review queue is already empty.', 'info');
+                return;
+            }
             const count = needsReviewList.length;
             while (needsReviewList.length > 0) {
                 const item = needsReviewList.shift();
-                verifiedForm3List.push({
-                    ...item,
-                    specialStatusReason: 'Not enrolled',
-                    remarks: 'Batch categorized to Form 3 by Super Admin'
-                });
+                item.classification = 'INACTIVE_FORM3';
+                item.isEnrolled = false;
+                item.specialStatusReason = 'Not enrolled';
+                item.remarks = 'Batch categorized to Form 3 by Super Admin';
+                if (!item.matchedStudent) {
+                    item.matchedStudent = {
+                        fullName: item.grantee?.name || '',
+                        studentId: item.grantee?.student_id || '',
+                        course: item.grantee?.course || 'BSIT',
+                        year: item.grantee?.year || '1',
+                        status: 'Not enrolled'
+                    };
+                } else {
+                    item.matchedStudent.status = 'Not enrolled';
+                }
+                verifiedForm3List.push(item);
+            }
+            const synced = AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                updatedBy: 'Super Admin'
+            });
+            if (synced) {
+                verifiedForm2List = synced.form2List;
+                verifiedForm3List = synced.form3List;
+                needsReviewList = synced.needsReviewList;
             }
             updateAnnexKPIs();
             renderAnnexForm3Table(verifiedForm3List);
             renderAnnexReviewQueue(needsReviewList);
             if (window.showToast) window.showToast(`Auto-categorized ${count} records to Form 3`, 'check-circle');
         });
+    }
+
+    // Subscribe to live synchronization with Admin Review Queue
+    AnnexSyncService.onSync((synced) => {
+        if (!synced) return;
+        verifiedForm2List = synced.form2List || [];
+        verifiedForm3List = synced.form3List || [];
+        needsReviewList = synced.needsReviewList || [];
+
+        updateAnnexKPIs();
+        renderAnnexForm2Table(verifiedForm2List);
+        renderAnnexForm3Table(verifiedForm3List);
+        renderAnnexReviewQueue(needsReviewList);
+
+        const syncBadge = document.getElementById('sa-sync-status-badge');
+        if (syncBadge) {
+            const timeStr = new Date(synced.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced with Admin (${timeStr})`;
+            syncBadge.style.display = 'inline-flex';
+        }
+    });
+
+    // Load initial verified state immediately on boot
+    const initialSync = AnnexSyncService.getVerifiedData();
+    if (initialSync) {
+        verifiedForm2List = initialSync.form2List || [];
+        verifiedForm3List = initialSync.form3List || [];
+        needsReviewList = initialSync.needsReviewList || [];
+        updateAnnexKPIs();
+        renderAnnexForm2Table(verifiedForm2List);
+        renderAnnexForm3Table(verifiedForm3List);
+        renderAnnexReviewQueue(needsReviewList);
     }
 
     // Initial fetch of masterlist data

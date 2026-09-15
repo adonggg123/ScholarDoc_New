@@ -25,11 +25,14 @@ const PROGRAM_MAPPINGS = {
 
 export class VerificationService {
     /**
-     * Canonicalizes and cleans full names into structured parts.
+     * Canonicalizes and cleans full names into structured parts and tokens.
      */
     static normalizeName(fullName) {
         fullName = String(fullName || '').trim();
-        if (!fullName) return { lastName: '', firstName: '', middleName: '', mi: '', cleanKey: '' };
+        if (!fullName) return { lastName: '', firstName: '', middleName: '', mi: '', cleanKey: '', tokens: [] };
+
+        // Clean up common "N/A" artifacts
+        fullName = fullName.replace(/\bN\/A\b/gi, '').replace(/\s+/g, ' ').trim();
 
         let lastName = '';
         let firstName = '';
@@ -39,12 +42,18 @@ export class VerificationService {
         if (fullName.includes(',')) {
             const parts = fullName.split(',');
             lastName = parts[0].trim();
-            const rest = parts.slice(1).join(',').trim().split(/\s+/);
+            const rest = parts.slice(1).join(',').trim().split(/\s+/).filter(Boolean);
             if (rest.length > 1) {
                 const lastToken = rest[rest.length - 1];
                 if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
                     mi = lastToken.charAt(0).toUpperCase();
+                    middleName = rest.pop().replace(/\.$/, '');
+                    firstName = rest.join(' ');
+                } else if (rest.length >= 2) {
+                    // In Philippine lists formatted "LASTNAME, FIRSTNAME MIDDLENAME",
+                    // the trailing token is the middle name
                     middleName = rest.pop();
+                    mi = middleName.charAt(0).toUpperCase();
                     firstName = rest.join(' ');
                 } else {
                     firstName = rest.join(' ');
@@ -53,7 +62,7 @@ export class VerificationService {
                 firstName = rest.join(' ');
             }
         } else {
-            const parts = fullName.split(/\s+/);
+            const parts = fullName.split(/\s+/).filter(Boolean);
             if (parts.length === 1) {
                 lastName = parts[0];
             } else if (parts.length === 2) {
@@ -64,9 +73,11 @@ export class VerificationService {
                 const lastToken = parts[parts.length - 1];
                 if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
                     mi = lastToken.charAt(0).toUpperCase();
-                    middleName = parts.pop();
+                    middleName = parts.pop().replace(/\.$/, '');
+                    firstName = parts.join(' ');
+                } else {
+                    firstName = parts.join(' ');
                 }
-                firstName = parts.join(' ');
             }
         }
 
@@ -74,7 +85,36 @@ export class VerificationService {
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '');
 
-        return { lastName, firstName, middleName, mi, cleanKey };
+        const tokens = `${lastName} ${firstName} ${middleName}`
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, '')
+            .split(/\s+/)
+            .filter(t => t.length > 1);
+
+        return { lastName, firstName, middleName, mi, cleanKey, tokens };
+    }
+
+    /**
+     * Calculates the token overlap similarity between two sets of name tokens (0.0 to 1.0)
+     */
+    static calculateTokenOverlap(tokens1 = [], tokens2 = []) {
+        if (!tokens1.length || !tokens2.length) return 0.0;
+        const shorter = tokens1.length <= tokens2.length ? tokens1 : tokens2;
+        const longer = tokens1.length <= tokens2.length ? tokens2 : tokens1;
+
+        let matchCount = 0;
+        for (const tShort of shorter) {
+            let best = 0;
+            for (const tLong of longer) {
+                const sim = this.calculateJaroWinkler(tShort, tLong);
+                if (sim > best) best = sim;
+            }
+            if (best >= 0.85) {
+                matchCount++;
+            }
+        }
+
+        return matchCount / shorter.length;
     }
 
     /**
@@ -171,37 +211,116 @@ export class VerificationService {
      */
     static verifyGrantee(grantee, schoolStudents) {
         const granteeName = this.normalizeName(grantee.name || `${grantee.last_name || ''} ${grantee.first_name || ''} ${grantee.middle_name || ''}`);
-        const granteeId = grantee.student_id || grantee.studentId || '';
+        const granteeId = String(grantee.student_id || grantee.studentId || '').trim();
         const granteeProg = grantee.course || grantee.program || '';
         const granteeYear = String(grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '');
 
+        const hasValidGranteeId = Boolean(granteeId && !['unassigned', 'n/a', 'none', 'null', 'undefined', ''].includes(granteeId.toLowerCase()));
+
         let bestMatch = null;
         let highestConfidence = 0;
-        let matchBreakdown = { idScore: 0, nameScore: 0, progScore: 0, yearScore: 0 };
+        let matchBreakdown = { idScore: 0, nameScore: 0, progScore: 0, yearScore: 0, totalScore: 0 };
 
-        for (const student of schoolStudents) {
+        for (const student of (schoolStudents || [])) {
             const studentName = this.normalizeName(student.fullName || student.name || `${student.lastName || student.last_name || ''} ${student.firstName || student.first_name || ''}`);
-            const studentId = student.studentId || student.student_id || student.id || '';
+            const studentId = String(student.studentId || student.student_id || student.id || '').trim();
             const studentProg = student.course || student.program || '';
             const studentYear = String(student.year || student.scholarYearLevel || student.year_level || '1').replace(/[^0-9]/g, '');
 
-            // 1. Student ID Score (Max 40 points)
-            const idSim = this.matchStudentId(granteeId, studentId);
-            const idScore = idSim * 40;
+            const hasValidStudentId = Boolean(studentId && !['unassigned', 'n/a', 'none', 'null', 'undefined', ''].includes(studentId.toLowerCase()));
+            const canMatchId = hasValidGranteeId && hasValidStudentId;
 
-            // 2. Name Score (Max 40 points)
-            const lastNameSim = this.calculateJaroWinkler(granteeName.lastName, studentName.lastName);
-            const firstNameSim = this.calculateJaroWinkler(granteeName.firstName, studentName.firstName);
-            const directSim = this.calculateJaroWinkler(granteeName.cleanKey, studentName.cleanKey);
-            const nameSim = Math.max(directSim, (lastNameSim * 0.6 + firstNameSim * 0.4));
-            const nameScore = nameSim * 40;
+            // Extract structured names (prefer explicit fields if present on objects)
+            const gLast = (grantee.last_name || granteeName.lastName || '').trim();
+            const gFirst = (grantee.first_name || granteeName.firstName || '').trim();
+            const gMiddle = (grantee.middle_name || granteeName.middleName || '').replace(/\b(n\/a|na|none|null|undefined)\b/gi, '').trim();
+            const gMI = gMiddle ? gMiddle.charAt(0).toUpperCase() : (granteeName.mi || '');
 
-            // 3. Program Score (Max 10 points)
+            const sLast = (student.lastName || student.last_name || studentName.lastName || '').trim();
+            const sFirst = (student.firstName || student.first_name || studentName.firstName || '').trim();
+            const sMiddle = (student.middleName || student.middle_name || studentName.middleName || '').replace(/\b(n\/a|na|none|null|undefined)\b/gi, '').trim();
+            const sMI = sMiddle ? sMiddle.charAt(0).toUpperCase() : (studentName.mi || '');
+
+            // 1. Last Name Matching
+            const lastNameSim = this.calculateJaroWinkler(gLast, sLast);
+            if (lastNameSim < 0.70) {
+                continue; // Surnames do not match, skip candidate
+            }
+
+            // 2. First Name Matching (exact, Jaro-Winkler, and token overlap)
+            let firstNameSim = 0.0;
+            if (gFirst && sFirst) {
+                if (gFirst.toLowerCase() === sFirst.toLowerCase()) {
+                    firstNameSim = 1.0;
+                } else {
+                    const jaroFirst = this.calculateJaroWinkler(gFirst, sFirst);
+                    const gTokens = gFirst.toLowerCase().split(/\s+/).filter(Boolean);
+                    const sTokens = sFirst.toLowerCase().split(/\s+/).filter(Boolean);
+                    const tokenOverlap = this.calculateTokenOverlap(gTokens, sTokens);
+                    firstNameSim = Math.max(jaroFirst, tokenOverlap);
+                }
+            } else {
+                firstNameSim = 0.85;
+            }
+
+            if (firstNameSim < 0.60) {
+                continue; // First names do not match, skip candidate
+            }
+
+            // 3. User Rule:
+            // Match JUST with firstname and lastname if there is no middle name, or if middle initial
+            const hasMiddleG = Boolean(gMiddle && gMiddle.toLowerCase() !== 'na' && gMiddle.toLowerCase() !== 'none');
+            const hasMiddleS = Boolean(sMiddle && sMiddle.toLowerCase() !== 'na' && sMiddle.toLowerCase() !== 'none');
+            const isInitialG = hasMiddleG && gMiddle.length === 1;
+            const isInitialS = hasMiddleS && sMiddle.length === 1;
+
+            let nameSim = 0.0;
+
+            if (!hasMiddleG || !hasMiddleS || isInitialG || isInitialS) {
+                // Match JUST with firstname and lastname!
+                nameSim = (lastNameSim * 0.5) + (firstNameSim * 0.5);
+
+                // If both happen to have initials and they match, or initial matches the other's middle name initial:
+                if (gMI && sMI && gMI.toUpperCase() === sMI.toUpperCase()) {
+                    nameSim = Math.max(nameSim, 0.98);
+                }
+
+                if (lastNameSim >= 0.95 && firstNameSim >= 0.90) {
+                    nameSim = 1.0;
+                }
+            } else {
+                // Both have full middle names: compare middle names as well
+                const middleSim = this.calculateJaroWinkler(gMiddle, sMiddle);
+                nameSim = (lastNameSim * 0.45) + (firstNameSim * 0.45) + (middleSim * 0.10);
+                if (lastNameSim >= 0.95 && firstNameSim >= 0.90 && middleSim >= 0.85) {
+                    nameSim = 1.0;
+                }
+            }
+
+            // 2. Program Similarity
             const progSim = this.fuzzyMatchProgram(granteeProg, studentProg);
-            const progScore = progSim * 10;
 
-            // 4. Year Level Score (Max 10 points)
-            const yearScore = (granteeYear && studentYear && granteeYear === studentYear) ? 10 : 5;
+            // 3. Year Level Similarity
+            const yearSim = (granteeYear && studentYear && granteeYear === studentYear) ? 1.0 : (granteeYear ? 0.6 : 0.8);
+
+            let idScore = 0;
+            let nameScore = 0;
+            let progScore = 0;
+            let yearScore = 0;
+
+            if (canMatchId) {
+                const idSim = this.matchStudentId(granteeId, studentId);
+                idScore = idSim * 35;
+                nameScore = nameSim * 45;
+                progScore = progSim * 10;
+                yearScore = yearSim * 10;
+            } else {
+                // Adaptive weighting when ID is unassigned or not present in grantee record
+                idScore = 0;
+                nameScore = nameSim * 70;
+                progScore = progSim * 15;
+                yearScore = yearSim * 15;
+            }
 
             const totalScore = Math.round(idScore + nameScore + progScore + yearScore);
 
@@ -214,7 +333,7 @@ export class VerificationService {
 
         // Evaluate Status from school student records
         let rawStatus = String(bestMatch?.status || bestMatch?.enrollmentStatus || bestMatch?.submissionStatus || '').trim();
-        if (!bestMatch || highestConfidence < 50) {
+        if (!bestMatch || highestConfidence < 40) {
             rawStatus = 'Not enrolled';
         } else if (!rawStatus) {
             rawStatus = 'Enrolled'; // Present in official school masterlist file
@@ -234,25 +353,25 @@ export class VerificationService {
 
         // Discrepancies
         const discrepancies = [];
-        if (!bestMatch || highestConfidence < 50) {
+        if (!bestMatch || highestConfidence < 40) {
             discrepancies.push('Student not found in school student masterlist');
         } else {
-            if (matchBreakdown.idScore < 30 && granteeId) discrepancies.push('Student ID mismatch');
-            if (matchBreakdown.nameScore < 30) discrepancies.push('Name spelling difference');
-            if (matchBreakdown.progScore < 6 && granteeProg) discrepancies.push('Program difference');
+            if (hasValidGranteeId && matchBreakdown.idScore < 25) discrepancies.push('Student ID mismatch');
+            if (matchBreakdown.nameScore < 50) discrepancies.push('Name spelling difference');
+            if (matchBreakdown.progScore < 10 && granteeProg) discrepancies.push('Program difference');
             if (!isEnrolled) discrepancies.push(`Inactive in school records: ${specialStatusReason}`);
         }
 
         // Classification
         let classification = 'NEEDS_REVIEW';
 
-        if (highestConfidence >= 85) {
+        if (highestConfidence >= 80) {
             if (isEnrolled) {
                 classification = 'MATCHED_FORM2';
             } else {
                 classification = 'INACTIVE_FORM3';
             }
-        } else if (highestConfidence >= 65 && !isEnrolled && discrepancies.length === 1) {
+        } else if (highestConfidence >= 65 && !isEnrolled && discrepancies.length <= 1) {
             classification = 'INACTIVE_FORM3';
         } else {
             classification = 'NEEDS_REVIEW';
@@ -279,11 +398,25 @@ export class VerificationService {
         const needsReviewList = [];
 
         if (!schoolStudents || schoolStudents.length === 0) {
+            // When school students are not yet loaded, all grantees are placed into
+            // needsReviewList so they remain fully accessible for manual review/approval
+            const emptyReviewList = (grantees || []).map((grantee, idx) => ({
+                grantee,
+                granteeIndex: idx,
+                matchedStudent: null,
+                confidence: 0,
+                classification: 'NEEDS_REVIEW',
+                isEnrolled: false,
+                specialStatusReason: 'Not enrolled',
+                discrepancies: ['School student masterlist is empty or not yet loaded'],
+                breakdown: { idScore: 0, nameScore: 0, progScore: 0, yearScore: 0, totalScore: 0 }
+            }));
+
             return {
                 total: grantees ? grantees.length : 0,
                 form2List,
                 form3List,
-                needsReviewList,
+                needsReviewList: emptyReviewList,
                 accuracyRate: 0
             };
         }

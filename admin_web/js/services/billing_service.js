@@ -253,26 +253,26 @@ export class BillingService {
     static _defaultStyle(colIdx, isForm2) {
         if (isForm2) {
             switch (colIdx) {
-                case 1: return '279';
-                case 2: return '280';
-                case 3: return '280';
-                case 4: return '268';
-                case 5: return '268';
-                case 6: return '279';
-                case 7: return '279';
-                case 8: return '279';
-                case 9: return '279';
-                case 10: return '279';
-                case 11: return '279';
-                case 12: return '279';
-                case 13: return '279';
-                case 14: return '281';
-                case 15: return '282';
-                case 16: return '282';
-                default: return '279';
+                case 1: return '23';  // B: Control No
+                case 2: return '32';  // C: Student No
+                case 3: return '32';  // D: TES App No
+                case 4: return '29';  // E: Last Name
+                case 5: return '29';  // F: Given Name
+                case 6: return '23';  // G: Middle Initial
+                case 7: return '23';  // H: Sex
+                case 8: return '23';  // I: Birthdate
+                case 9: return '23';  // J: Degree Program
+                case 10: return '23'; // K: Year Level
+                case 11: return '23'; // L: Email
+                case 12: return '23'; // M: Phone
+                case 13: return '23'; // N: TES Batch
+                case 14: return '34'; // O: TES Amount
+                case 15: return '33'; // P: PWD Amount
+                case 16: return '33'; // Q: Total Amount
+                default: return '23';
             }
         } else {
-            return colIdx === 11 ? '344' : '321';
+            return colIdx === 11 ? '14' : '9';
         }
     }
 
@@ -366,24 +366,43 @@ export class BillingService {
             const rowNum = startRow + i;
             const ctrl = String(i + 1).padStart(5, '0');
 
-            const name = this._splitFullName(s.fullName || '');
-            let gender = String(s.gender || 'M').toUpperCase();
+            let lastName = String(s.lastName || s.last_name || '').trim();
+            let givenName = String(s.firstName || s.first_name || '').trim();
+            let middleName = String(s.middleName || s.middle_name || '').trim();
+            let middleInitial = middleName ? middleName.charAt(0).toUpperCase() : '';
+
+            if (!lastName || !givenName) {
+                const parsed = this._splitFullName(s.fullName || s.name || '');
+                if (!lastName) lastName = parsed.lastName;
+                if (!givenName) givenName = parsed.givenName;
+                if (!middleInitial) middleInitial = parsed.middleInitial;
+            }
+
+            let gender = String(s.gender || s.sex || 'M').toUpperCase();
             gender = gender.startsWith('F') ? 'F' : 'M';
             
-            let rawYear = String(s.year || s.scholarYearLevel || '1');
+            let rawYear = String(s.year || s.yearLevel || s.scholarYearLevel || '1');
             let year = rawYear.includes('1') ? '1' :
                        rawYear.includes('2') ? '2' :
                        rawYear.includes('3') ? '3' :
                        rawYear.includes('4') ? '4' : rawYear;
                        
             const family = s.familyDetails || {};
-            const sa = String(s.saNumber || family.saNumber || '');
-            const course = String(s.course || '');
+            const sa = String(s.saNumber || family.saNumber || s.tesAppNumber || s.tesApplicationNumber || '').trim();
+            const course = String(s.course || s.program || s.degreeProgram || '').trim();
+            
             let bdate = String(s.birthdate || s.birthday || '').trim();
-            if (bdate === '' || bdate.toUpperCase() === 'N/A') bdate = '01/01/2000';
-            const studId = String(s.studentId || '');
-            const email = String(s.email || s.authEmail || '');
-            const phone = String(s.contactNumber || s.phone || '');
+            if (bdate === '' || bdate.toUpperCase() === 'N/A') {
+                bdate = '01/01/2000';
+            } else if (/^\d{4}-\d{2}-\d{2}/.test(bdate)) {
+                const [y, m, d] = bdate.split('T')[0].split('-');
+                bdate = `${m}/${d}/${y}`;
+            }
+
+            const studId = String(s.studentId || s.student_id || s.studentNumber || '').trim();
+            const email = String(s.email || s.authEmail || s.emailAddress || '').trim();
+            const phone = String(s.contactNumber || s.phone || s.phoneNumber || '').trim();
+            const batchVal = Number(s.batch ? String(s.batch).replace(/\D/g, '') : 1) || 1;
 
             const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
@@ -391,23 +410,69 @@ export class BillingService {
             const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, true));
             const num_ = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, true, this._defaultStyle(colIdx, true));
 
-            str(1, ctrl);                    // A: Control No
-            str(2, studId);                  // B: Student No
-            str(3, studId);                  // C: Student No
-            str(4, sa !== '' ? sa : 'N/A');  // D: TES App No
-            str(5, name.lastName);           // E: Last Name
-            str(6, name.givenName);          // F: Given Name
-            str(7, name.middleInitial);       // G: Middle Initial
-            str(8, gender);                  // H: Sex
-            str(9, bdate);                   // I: Birthdate
-            str(10, course);                 // J: Degree Program
-            str(11, year);                   // K: Year Level
-            str(12, email);                  // L: Email
-            str(13, phone);                  // M: Phone
-            num_(14, 1);                     // N: TES Batch
-            num_(15, 10000);                 // O: TES Amount
-            num_(16, 0);                     // P: PWD Amount
-            num_(17, 10000);                 // Q: Total Amount
+            // Template Row 41 Headers:
+            // B: 5-digit Control Number (1)
+            // C: Student Number (2)
+            // D: TES Application Number (3)
+            // E: Last Name (4)
+            // F: Given Name (5)
+            // G: Middle Initial (6)
+            // H: Sex at Birth (M/F) (7)
+            // I: Birthdate (mm/dd/yyyy) (8)
+            // J: Degree Program (9)
+            // K: Year Level (10)
+            // L: E-mail address (11)
+            // M: Phone Number (12)
+            // N: TES Batch (13)
+            // O: TES Amount (14)
+            // P: TES-3A Person with Disability (15)
+            // Q: TOTAL AMOUNT (16)
+            str(1, ctrl);                            // B: 5-digit Control Number
+            str(2, studId !== '' ? studId : 'N/A');   // C: Student Number
+            str(3, sa !== '' ? sa : 'N/A');          // D: TES Application Number
+            str(4, lastName);                        // E: Last Name
+            str(5, givenName);                       // F: Given Name
+            str(6, middleInitial);                   // G: Middle Initial
+            str(7, gender);                          // H: Sex at Birth (M/F)
+            str(8, bdate);                           // I: Birthdate (mm/dd/yyyy)
+            str(9, course);                          // J: Degree Program
+            str(10, year);                           // K: Year Level
+            str(11, email);                          // L: E-mail address
+            str(12, phone);                          // M: Phone Number
+            num_(13, batchVal);                      // N: TES Batch
+            num_(14, 10000);                         // O: TES Amount
+            num_(15, 0);                             // P: TES-3A Person with Disability
+            num_(16, 10000);                         // Q: TOTAL AMOUNT
+        }
+
+        // Summary totals at bottom
+        const totalTesAmount = students.length * 10000;
+        const totalPwdAmount = 0;
+        const totalAmount = totalTesAmount + totalPwdAmount;
+        const mgmtFee = Math.round(totalAmount * 0.01);
+        const campusTotal = totalAmount + mgmtFee;
+
+        const row48 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '48');
+        if (row48) {
+            this._fillCell(doc, row48, 'O48', totalTesAmount, true, '25');
+            this._fillCell(doc, row48, 'P48', totalPwdAmount, true, '24');
+            this._fillCell(doc, row48, 'Q48', totalAmount, true, '23');
+        }
+        const row49 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '49');
+        if (row49) {
+            this._fillCell(doc, row49, 'Q49', totalAmount, true, '12');
+        }
+        const row50 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '50');
+        if (row50) {
+            this._fillCell(doc, row50, 'Q50', mgmtFee, true, '17');
+        }
+        const row51 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '51');
+        if (row51) {
+            this._fillCell(doc, row51, 'Q51', campusTotal, true, '12');
+        }
+        const row52 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '52');
+        if (row52) {
+            this._fillCell(doc, row52, 'Q52', campusTotal, true, '7');
         }
 
         const serializer = new XMLSerializer();
@@ -425,44 +490,74 @@ export class BillingService {
             const rowNum = startRow + i;
             const ctrl = String(i + 1).padStart(5, '0');
 
-            const name = this._splitFullName(s.fullName || '');
-            let gender = String(s.gender || 'M').toUpperCase();
+            let lastName = String(s.lastName || s.last_name || '').trim();
+            let givenName = String(s.firstName || s.first_name || '').trim();
+            let middleName = String(s.middleName || s.middle_name || '').trim();
+            let middleInitial = middleName ? middleName.charAt(0).toUpperCase() : '';
+
+            if (!lastName || !givenName) {
+                const parsed = this._splitFullName(s.fullName || s.name || '');
+                if (!lastName) lastName = parsed.lastName;
+                if (!givenName) givenName = parsed.givenName;
+                if (!middleInitial) middleInitial = parsed.middleInitial;
+            }
+
+            let gender = String(s.gender || s.sex || 'M').toUpperCase();
             gender = gender.startsWith('F') ? 'F' : 'M';
             
-            let rawYear = String(s.year || s.scholarYearLevel || '1');
+            let rawYear = String(s.year || s.yearLevel || s.scholarYearLevel || '1');
             let year = rawYear.includes('1') ? '1' :
                        rawYear.includes('2') ? '2' :
                        rawYear.includes('3') ? '3' :
                        rawYear.includes('4') ? '4' : rawYear;
                        
             const family = s.familyDetails || {};
-            const sa = String(s.saNumber || family.saNumber || '');
-            const course = String(s.course || '');
-            let bdate = String(s.birthdate || s.birthday || '').trim();
-            if (bdate === '' || bdate.toUpperCase() === 'N/A') bdate = '01/01/2000';
-            const studId = String(s.studentId || '');
+            const sa = String(s.saNumber || family.saNumber || s.tesAppNumber || s.tesApplicationNumber || '').trim();
+            const course = String(s.course || s.program || s.degreeProgram || '').trim();
             
-            const rawStatus = String(s.status || s.submissionStatus || 'Not enrolled');
+            let bdate = String(s.birthdate || s.birthday || '').trim();
+            if (bdate === '' || bdate.toUpperCase() === 'N/A') {
+                bdate = '01/01/2000';
+            } else if (/^\d{4}-\d{2}-\d{2}/.test(bdate)) {
+                const [y, m, d] = bdate.split('T')[0].split('-');
+                bdate = `${m}/${d}/${y}`;
+            }
+
+            const studId = String(s.studentId || s.student_id || s.studentNumber || '').trim();
+            const rawStatus = String(s.status || s.specialStatusReason || s.submissionStatus || 'Not enrolled');
             const status = rawStatus;
-            const remarks = String(s.adminRemarks || s.remarks || (status === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${status}`));
+            const remarks = String(s.remarks || s.adminRemarks || (status === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${status}`));
 
             const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
 
-            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, '1');
+            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, false));
 
-            str(1, ctrl);                    // A: Control No
-            str(3, studId);                  // C: Student Number
-            str(4, sa !== '' ? sa : 'N/A');  // D: TES Application Number
-            str(5, name.lastName);           // E: Last Name
-            str(6, name.givenName);          // F: Given Name
-            str(7, name.middleInitial);       // G: Middle Initial
-            str(8, gender);                  // H: Sex
-            str(9, bdate);                   // I: Birthdate
-            str(10, course);                 // J: Degree Program
-            str(11, year);                   // K: Year Level
-            str(12, status);                 // L: Status
-            str(13, remarks);                // M: Remarks
+            // Template Row 33 Headers:
+            // B: 5-digit Control Number (1)
+            // C: Student Number (2)
+            // D: TES Application Number (3)
+            // E: Last Name (4)
+            // F: Given Name (5)
+            // G: Middle Initial (6)
+            // H: Sex at Birth (M/F) (7)
+            // I: Birthdate (mm/dd/yyyy) (8)
+            // J: Degree Program (9)
+            // K: Year Level (10)
+            // L: Status (11)
+            // M: Remarks (12)
+            str(1, ctrl);                            // B: 5-digit Control Number
+            str(2, studId !== '' ? studId : 'N/A');   // C: Student Number
+            str(3, sa !== '' ? sa : 'N/A');          // D: TES Application Number
+            str(4, lastName);                        // E: Last Name
+            str(5, givenName);                       // F: Given Name
+            str(6, middleInitial);                   // G: Middle Initial
+            str(7, gender);                          // H: Sex at Birth (M/F)
+            str(8, bdate);                           // I: Birthdate (mm/dd/yyyy)
+            str(9, course);                          // J: Degree Program
+            str(10, year);                           // K: Year Level
+            str(11, status);                         // L: Status
+            str(12, remarks);                        // M: Remarks
         }
 
         const serializer = new XMLSerializer();

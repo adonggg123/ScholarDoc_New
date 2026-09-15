@@ -1,6 +1,7 @@
 // js/views/annex5_generator.js
 import { BillingService } from '../services/billing_service.js';
 import { VerificationService } from '../services/verification_service.js';
+import { AnnexSyncService } from '../services/annex_sync_service.js';
 
 const supabase = window.supabaseClient;
 
@@ -1040,9 +1041,71 @@ function parseTextLinesToStudents(text) {
 function runCrossVerification() {
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
-    verifiedForm2List = result.form2List;
-    verifiedForm3List = result.form3List;
-    needsReviewList = result.needsReviewList;
+    // Check if we have previously verified/resolved data from Admin Review Queue
+    const savedSync = AnnexSyncService.getVerifiedData();
+    if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
+        const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
+        const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
+
+        const combinedForm2 = [];
+        const combinedForm3 = [];
+        const remainingReview = [];
+        const processedKeys = new Set();
+
+        const allItems = [...result.form2List, ...result.form3List, ...result.needsReviewList];
+        for (const item of allItems) {
+            const key = AnnexSyncService.getUniqueKey(item);
+            if (processedKeys.has(key)) continue;
+            processedKeys.add(key);
+
+            if (resolvedForm2Map.has(key)) {
+                const saved = resolvedForm2Map.get(key);
+                combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
+            } else if (resolvedForm3Map.has(key)) {
+                const saved = resolvedForm3Map.get(key);
+                combinedForm3.push({ ...item, ...saved, classification: 'INACTIVE_FORM3', isEnrolled: false });
+            } else if (item.classification === 'MATCHED_FORM2') {
+                combinedForm2.push(item);
+            } else if (item.classification === 'INACTIVE_FORM3') {
+                combinedForm3.push(item);
+            } else {
+                remainingReview.push(item);
+            }
+        }
+
+        for (const savedItem of savedSync.form2List || []) {
+            const key = AnnexSyncService.getUniqueKey(savedItem);
+            if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                combinedForm2.push(savedItem);
+            }
+        }
+        for (const savedItem of savedSync.form3List || []) {
+            const key = AnnexSyncService.getUniqueKey(savedItem);
+            if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                combinedForm3.push(savedItem);
+            }
+        }
+
+        const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview);
+        verifiedForm2List = deduped.form2List;
+        verifiedForm3List = deduped.form3List;
+        needsReviewList = deduped.needsReviewList;
+    } else {
+        const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList);
+        verifiedForm2List = deduped.form2List;
+        verifiedForm3List = deduped.form3List;
+        needsReviewList = deduped.needsReviewList;
+    }
+
+    // Persist and broadcast state
+    AnnexSyncService.saveVerifiedData({
+        form2List: verifiedForm2List,
+        form3List: verifiedForm3List,
+        needsReviewList: needsReviewList,
+        updatedBy: window.currentAdmin?.username || 'Admin'
+    });
 
     updateKPIMetrics();
     renderForm2Table(verifiedForm2List);
@@ -1273,6 +1336,10 @@ function renderReviewQueue(items) {
             openResolutionModal(idx);
         });
     });
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 }
 
 // ── 9. Review Resolution Actions ────────────────────────────────────
@@ -1285,15 +1352,63 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
     if (targetForm === 'form2') {
         item.classification = 'MATCHED_FORM2';
         item.isEnrolled = true;
+        if (!item.matchedStudent) {
+            item.matchedStudent = {
+                fullName: item.grantee?.name || '',
+                studentId: item.grantee?.student_id || '',
+                course: item.grantee?.course || 'BSIT',
+                year: item.grantee?.year || '1',
+                status: 'Enrolled'
+            };
+        } else {
+            item.matchedStudent.status = 'Enrolled';
+        }
         verifiedForm2List.push(item);
-        showToast(`Approved ${item.grantee.name || 'Grantee'} to Form 2 (Enrolled)`, 'check-circle');
+        showToast(`Approved ${item.grantee?.name || 'Grantee'} to Form 2 (Enrolled)`, 'check-circle');
     } else {
         item.classification = 'INACTIVE_FORM3';
         item.isEnrolled = false;
         item.specialStatusReason = specialReason;
         item.remarks = remarks || `Categorized: ${specialReason}`;
+        if (!item.matchedStudent) {
+            item.matchedStudent = {
+                fullName: item.grantee?.name || '',
+                studentId: item.grantee?.student_id || '',
+                course: item.grantee?.course || 'BSIT',
+                year: item.grantee?.year || '1',
+                status: specialReason
+            };
+        } else {
+            item.matchedStudent.status = specialReason;
+        }
         verifiedForm3List.push(item);
-        showToast(`Categorized ${item.grantee.name || 'Grantee'} to Form 3 (${specialReason})`, 'tag');
+        showToast(`Categorized ${item.grantee?.name || 'Grantee'} to Form 3 (${specialReason})`, 'tag');
+    }
+
+    // Save and broadcast synchronized state across views
+    const synced = AnnexSyncService.saveVerifiedData({
+        form2List: verifiedForm2List,
+        form3List: verifiedForm3List,
+        needsReviewList: needsReviewList,
+        updatedBy: window.currentAdmin?.username || 'Admin'
+    });
+    if (synced) {
+        verifiedForm2List = synced.form2List;
+        verifiedForm3List = synced.form3List;
+        needsReviewList = synced.needsReviewList;
+    }
+
+    // Audit log entry for resolution
+    try {
+        const granteeName = item.grantee?.name || `${item.grantee?.last_name || ''}, ${item.grantee?.first_name || ''}`.trim();
+        supabase.from('audit_logs').insert([{
+            userName: window.currentAdmin?.username || 'Admin',
+            role: window.currentAdmin?.role || 'Admin',
+            action: `Review Queue: Categorized ${granteeName} to ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}`,
+            studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
+        }]).then(() => {}).catch(err => console.warn('Could not record audit log:', err));
+    } catch (e) {
+        console.warn('Audit log error:', e);
     }
 
     updateKPIMetrics();
@@ -1359,11 +1474,56 @@ if (btnConfirmRes) {
 const btnAutoResolveAll = document.getElementById('btn-auto-resolve-all');
 if (btnAutoResolveAll) {
     btnAutoResolveAll.addEventListener('click', () => {
-        if (needsReviewList.length === 0) return;
+        if (needsReviewList.length === 0) {
+            showToast('Review queue is already empty.', 'info');
+            return;
+        }
         const count = needsReviewList.length;
         while (needsReviewList.length > 0) {
-            resolveReviewItem(0, 'form3', 'Not enrolled', 'Batch categorized to Form 3 by Admin');
+            const item = needsReviewList.shift();
+            item.classification = 'INACTIVE_FORM3';
+            item.isEnrolled = false;
+            item.specialStatusReason = 'Not enrolled';
+            item.remarks = 'Batch categorized to Form 3 by Admin';
+            if (!item.matchedStudent) {
+                item.matchedStudent = {
+                    fullName: item.grantee?.name || '',
+                    studentId: item.grantee?.student_id || '',
+                    course: item.grantee?.course || 'BSIT',
+                    year: item.grantee?.year || '1',
+                    status: 'Not enrolled'
+                };
+            } else {
+                item.matchedStudent.status = 'Not enrolled';
+            }
+            verifiedForm3List.push(item);
         }
+
+        const synced = AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            needsReviewList: needsReviewList,
+            updatedBy: window.currentAdmin?.username || 'Admin'
+        });
+        if (synced) {
+            verifiedForm2List = synced.form2List;
+            verifiedForm3List = synced.form3List;
+            needsReviewList = synced.needsReviewList;
+        }
+
+        try {
+            supabase.from('audit_logs').insert([{
+                userName: window.currentAdmin?.username || 'Admin',
+                role: window.currentAdmin?.role || 'Admin',
+                action: `Review Queue: Batch categorized ${count} grantees to Form 3 (Not enrolled)`,
+                studentId: 'BATCH_RESOLVE'
+            }]).then(() => {}).catch(e => console.warn(e));
+        } catch (_) {}
+
+        updateKPIMetrics();
+        renderForm2Table(verifiedForm2List);
+        renderForm3Table(verifiedForm3List);
+        renderReviewQueue(needsReviewList);
         showToast(`Auto-categorized ${count} records to Form 3`, 'check-circle');
     });
 }
@@ -1434,6 +1594,24 @@ if (btnClearForm3) {
     });
 }
 
+// Helper: Universal Blob download with FileSaver / Anchor tag fallback
+function downloadBlob(blob, filename) {
+    if (typeof window.saveAs === 'function') {
+        window.saveAs(blob, filename);
+        return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 200);
+}
+
 // ── 13. Auto-Fill Excel Exports ─────────────────────────────────────
 async function exportForm2Excel() {
     const btn = document.getElementById('btn-export-form2-top');
@@ -1444,9 +1622,29 @@ async function exportForm2Excel() {
         if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
         const blob = await resp.blob();
 
-        const studentsToFill = verifiedForm2List.map(item => item.matchedStudent || item.grantee);
+        const studentsToFill = verifiedForm2List.map(item => {
+            const grantee = item.grantee || {};
+            const matched = item.matchedStudent || {};
+            return {
+                ...grantee,
+                ...matched,
+                studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                batch: grantee.batch || matched.batch || '1',
+                gender: matched.gender || grantee.gender || 'M',
+                birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                course: matched.course || grantee.course || grantee.program || '',
+                year: matched.year || grantee.year || '1',
+                email: matched.email || matched.authEmail || grantee.email || '',
+                contactNumber: matched.contactNumber || matched.phone || grantee.contactNumber || grantee.phone || ''
+            };
+        });
         const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-        saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
+        downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 2 Excel generated successfully!', 'check-circle');
     } catch (err) {
         console.error('Form 2 generation error:', err);
@@ -1465,14 +1663,31 @@ async function exportForm3Excel() {
         if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
         const blob = await resp.blob();
 
-        const studentsToFill = verifiedForm3List.map(item => ({
-            ...(item.matchedStudent || item.grantee),
-            status: item.specialStatusReason || 'Not enrolled',
-            remarks: item.remarks || `Categorized: ${item.specialStatusReason || 'Not enrolled'}`
-        }));
+        const studentsToFill = verifiedForm3List.map(item => {
+            const grantee = item.grantee || {};
+            const matched = item.matchedStudent || {};
+            const specialReason = item.specialStatusReason || matched.status || 'Not enrolled';
+            return {
+                ...grantee,
+                ...matched,
+                studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                batch: grantee.batch || matched.batch || '1',
+                gender: matched.gender || grantee.gender || 'M',
+                birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                course: matched.course || grantee.course || grantee.program || '',
+                year: matched.year || grantee.year || '1',
+                status: specialReason,
+                remarks: item.remarks || (specialReason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${specialReason}`)
+            };
+        });
 
         const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-        saveAs(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
+        downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 3 Excel generated successfully!', 'check-circle');
     } catch (err) {
         console.error('Form 3 generation error:', err);
@@ -1511,6 +1726,19 @@ function showToast(message, icon = 'check-circle') {
         console.log(message);
     }
 }
+
+// Live sync subscription
+AnnexSyncService.onSync((synced) => {
+    if (synced && Array.isArray(synced.form2List) && Array.isArray(synced.form3List)) {
+        verifiedForm2List = synced.form2List;
+        verifiedForm3List = synced.form3List;
+        needsReviewList = synced.needsReviewList || [];
+        updateKPIMetrics();
+        renderForm2Table(verifiedForm2List);
+        renderForm3Table(verifiedForm3List);
+        renderReviewQueue(needsReviewList);
+    }
+});
 
 // Initial Load
 loadInitialData();

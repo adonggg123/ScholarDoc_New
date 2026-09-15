@@ -265,7 +265,6 @@
                 <table class="import-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 650px; text-align: left;">
                     <thead>
                         <tr>
-                            <th>Student ID</th>
                             <th>Last Name</th>
                             <th>First Name</th>
                             <th>Middle Name</th>
@@ -277,7 +276,7 @@
                     </thead>
                     <tbody id="extracted-table-body">
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 60px 20px; color: #64748b; font-weight: 500;">
+                            <td colspan="7" style="text-align: center; padding: 60px 20px; color: #64748b; font-weight: 500;">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                                     <div style="position: relative;">
                                         <i class="icon-file-search" style="font-size: 48px; color: #cbd5e1; opacity: 0.5;"></i>
@@ -311,6 +310,9 @@
                     <i class="icon-alert-circle"></i> Needs Review Queue
                     <span id="sa-badge-review-count" class="annex-tab-badge" style="background: rgba(229,57,53,0.12); color: #E53935;">0</span>
                 </button>
+                <span id="sa-sync-status-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; color: #059669; background: rgba(16,185,129,0.1); margin-left: 8px;">
+                    <i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced with Admin Verification
+                </span>
             </div>
 
             <!-- Right: Upper Table Two Auto-Fill Buttons -->
@@ -437,6 +439,63 @@
                 <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
                     <i class="icon-check-circle" style="font-size: 32px; color: #10b981; margin-bottom: 8px;"></i>
                     <p style="margin: 0; font-weight: 600;">No items pending review.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Super Admin Review Resolution Modal -->
+    <div id="sa-resolution-modal"
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div
+            style="background: var(--surface-color, white); width: 100%; max-width: 520px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column;">
+            <div
+                style="padding: 18px 24px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; justify-content: space-between; align-items: center; color: white;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Manual Grantee Categorization</h3>
+                <button id="sa-btn-close-resolution"
+                    style="background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                    <i class="icon-x" style="font-size: 16px;"></i>
+                </button>
+            </div>
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee Name</label>
+                    <div id="sa-modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
+                </div>
+                <div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize Target Form</label>
+                    <select id="sa-modal-target-form"
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                        <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
+                        <option value="form3" selected>Form 3 – Not Included Student (Special Status)</option>
+                    </select>
+                </div>
+                <div id="sa-modal-form3-reason-group">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form 3 Status Reason</label>
+                    <select id="sa-modal-form3-reason"
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                        <option value="Not enrolled">Not enrolled in current term</option>
+                        <option value="Dropped">Dropped / Inactive</option>
+                        <option value="Waived">Waived scholarship benefits</option>
+                        <option value="On Leave of Absence (LOA)">On Leave of Absence (LOA)</option>
+                        <option value="Transferee">Transferee to another institution</option>
+                        <option value="Graduated">Graduated / Program completed</option>
+                    </select>
+                </div>
+                <div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative Remarks</label>
+                    <input type="text" id="sa-modal-remarks" placeholder="Optional notes for CHED billing sheet..."
+                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+                    <button id="sa-btn-cancel-resolution"
+                        style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
+                    <button id="sa-btn-confirm-resolution"
+                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save & Categorize</button>
                 </div>
             </div>
         </div>
