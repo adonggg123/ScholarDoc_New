@@ -148,7 +148,7 @@ class AuthService {
         final query = await _supabase
             .from('students')
             .select()
-            .eq('studentId', trimmedId)
+            .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId')
             .limit(1);
 
         if (query.isEmpty) {
@@ -161,7 +161,7 @@ class AuthService {
         }
 
         final data = query.first;
-        final String? gmail = data['email'] as String?;
+        final String? gmail = (data['email_address'] ?? data['email']) as String?;
         debugPrint('AuthService: Step 2 - Found legacy Gmail: $gmail');
 
         if (gmail == null || gmail.isEmpty) {
@@ -199,10 +199,28 @@ class AuthService {
       debugPrint('AuthService: Step 3 - Verifying record for UID: $uid');
 
       try {
-        final List<Map<String, dynamic>> doc = await _supabase
+        List<Map<String, dynamic>> doc = await _supabase
             .from('students')
             .select()
             .eq('uid', uid);
+
+        // Fallback: If UID doesn't match yet, find by Student ID and automatically link UID
+        if (doc.isEmpty) {
+          debugPrint('AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup by student ID: $trimmedId');
+          final fallback = await _supabase
+              .from('students')
+              .select()
+              .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+
+          if (fallback.isNotEmpty) {
+            debugPrint('AuthService: Step 3 - Found student record! Automatically linking UID $uid');
+            await _supabase
+                .from('students')
+                .update({'uid': uid})
+                .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+            doc = fallback;
+          }
+        }
 
         if (doc.isEmpty) {
           debugPrint('AuthService: Step 3 FAILED - No document for UID: $uid');
@@ -211,14 +229,15 @@ class AuthService {
         }
 
         final studentData = doc.first;
+        final String displayName = studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
         debugPrint(
-          'AuthService: Step 3 SUCCESS - Found student: ${studentData['fullName']}',
+          'AuthService: Step 3 SUCCESS - Found student: $displayName',
         );
 
         // Log Activity
         await _auditService.logActivity(
           action: 'Logged in using Student ID',
-          userName: studentData['fullName'] ?? 'Student',
+          userName: displayName,
           role: 'Student',
           studentId: trimmedId,
         );

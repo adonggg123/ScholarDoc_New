@@ -101,7 +101,8 @@ const viewTitles = {
     'reports': 'Reports & Analytics',
     'settings': 'System Settings',
     'masterlist_import': 'Scholar Masterlist Import',
-    'annex5_generator': 'CHED Annex 5 TES Generator'
+    'annex5_generator': 'CHED Annex 5 TES Generator',
+    'view_annex': 'Historical Annex Records (Form 2 & 3)'
 };
 
 // Icon class map matching Flutter's _getPageIcon()
@@ -116,7 +117,8 @@ const viewIcons = {
     'reports': 'icon-bar-chart-4',
     'settings': 'icon-settings',
     'masterlist_import': 'icon-file-text',
-    'annex5_generator': 'icon-file-spreadsheet'
+    'annex5_generator': 'icon-file-spreadsheet',
+    'view_annex': 'icon-eye'
 };
 
 // Track current view for sync
@@ -128,7 +130,7 @@ let currentScript = null;
 // Load a View
 async function loadView(viewName) {
     try {
-        if (viewName !== 'settings' && viewName !== 'annex5_generator') {
+        if (viewName !== 'settings' && viewName !== 'annex5_generator' && viewName !== 'view_annex') {
             viewName = 'annex5_generator';
         }
 
@@ -292,7 +294,7 @@ const notificationDropdown = document.getElementById('notification-dropdown');
 const markAllReadBtn = document.getElementById('mark-all-read-btn');
 
 window.navigateToView = function(viewName, tabName) {
-    if (viewName !== 'settings' && viewName !== 'annex5_generator') {
+    if (viewName !== 'settings' && viewName !== 'annex5_generator' && viewName !== 'view_annex') {
         viewName = 'annex5_generator';
     }
 

@@ -24,7 +24,7 @@ async function loadInitialData() {
     try {
         // 1. Fetch Super Admin Grantee Masterlist
         let { data: masterlistData, error: errMasterlist } = await supabase
-            .from('scholar_masterlist')
+            .from('new_grantees_masterlist')
             .select('*')
             .order('created_at', { ascending: false });
 
@@ -107,11 +107,35 @@ async function loadInitialData() {
             }
         }
 
+        // 3. Automatic Restore from Supabase Database
+        try {
+            const dbSync = await AnnexSyncService.loadFromSupabase();
+            if (dbSync && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
+                console.log(`[Auto-Restore] Loaded ${dbSync.form2List.length} Form 2 and ${dbSync.form3List.length} Form 3 records from Supabase.`);
+                AnnexSyncService.saveVerifiedData({
+                    form2List: dbSync.form2List,
+                    form3List: dbSync.form3List,
+                    needsReviewList: [],
+                    updatedBy: 'Supabase Auto-Restore',
+                    syncToDb: false
+                });
+            }
+        } catch (dbErr) {
+            console.warn('Auto-restore check error:', dbErr);
+        }
+
         updateSourceCounts();
         populateSuperAdminBatchFilter();
         renderSuperAdminGranteesTable(rawSuperAdminGrantees);
         renderSchoolStudentsTable(rawSchoolStudents);
         runCrossVerification();
+
+        if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
+            const syncEl = document.getElementById('superadmin-sync-status');
+            if (syncEl) {
+                syncEl.innerHTML = `<i class="icon-database" style="font-size: 13px; color: #10b981;"></i> Auto-Restored from Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+            }
+        }
 
     } catch (e) {
         console.error('Error loading initial verification data:', e);
@@ -178,7 +202,7 @@ function populateSuperAdminBatchFilter() {
     });
 
     const currentVal = sel.value || 'All Batches';
-    sel.innerHTML = '<option value="All Batches">All Batches</option>' + 
+    sel.innerHTML = '<option value="All Batches">All Batches</option>' +
         sortedBatches.map(b => `<option value="${b}" ${b === currentVal ? 'selected' : ''}>${b}</option>`).join('');
 }
 
@@ -295,7 +319,7 @@ function parseAndFormatDate(raw) {
     };
 
     const textMatch = s.toLowerCase().match(/([a-z]+)[,\s\-]+(\d{1,2})[,\s\-]+(\d{2,4})/) ||
-                      s.toLowerCase().match(/(\d{1,2})[,\s\-]+([a-z]+)[,\s\-]+(\d{2,4})/);
+        s.toLowerCase().match(/(\d{1,2})[,\s\-]+([a-z]+)[,\s\-]+(\d{2,4})/);
     if (textMatch) {
         let monthStr = isNaN(textMatch[1]) ? textMatch[1] : textMatch[2];
         let dayNum = isNaN(textMatch[1]) ? parseInt(textMatch[2], 10) : parseInt(textMatch[1], 10);
@@ -813,7 +837,7 @@ async function parseSchoolExcelOrCsv(file) {
                     const row = rows[r];
                     if (!row || row.length === 0) continue;
                     const normalizedRow = row.map(c => String(c || '').toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\.\,\_\-]/g, ' ').replace(/\s+/g, ' ').trim());
-                    
+
                     const hasId = normalizedRow.some(c => c.includes('student no') || c.includes('student id') || c.includes('id number') || c.includes('control no') || c === 'id');
                     const hasName = normalizedRow.some(c => c.includes('full name') || c.includes('student name') || (c.includes('name') && !c.includes('father') && !c.includes('mother')));
                     const hasTemplate = normalizedRow.some(c => c.includes('father') || c.includes('mother') || c.includes('date of birth') || c.includes('program'));
@@ -822,7 +846,7 @@ async function parseSchoolExcelOrCsv(file) {
                         headerRowIndex = r;
                         normalizedRow.forEach((col, idx) => {
                             if (!col) return;
-                            
+
                             // 1. Father fields FIRST (before generic 'full name', 'name', or 'status')
                             if (col.includes('father') || col.includes('tatay') || col.includes('ama')) {
                                 if (col.includes('occ') || col.includes('work') || col.includes('job') || col.includes('profess') || col.includes('edu') || col.includes('status')) {
@@ -940,7 +964,7 @@ async function parseSchoolExcelOrCsv(file) {
                         let mi = colMap.middleName !== undefined ? String(row[colMap.middleName] || '').trim() : '';
                         let programName = colMap.programName !== undefined ? String(row[colMap.programName] || 'BSIT').trim() : 'BSIT';
                         let yearLevel = colMap.yearLevel !== undefined ? String(row[colMap.yearLevel] || '1').trim() : '1';
-                        
+
                         // Date of Birth & Age
                         const rawDob = colMap.dateOfBirth !== undefined ? row[colMap.dateOfBirth] : '';
                         const formattedDob = parseAndFormatDate(rawDob);
@@ -954,7 +978,7 @@ async function parseSchoolExcelOrCsv(file) {
                         let religion = colMap.religion !== undefined ? String(row[colMap.religion] || '').trim() : '';
                         let mobileNumber = colMap.mobileNumber !== undefined ? String(row[colMap.mobileNumber] || '').trim() : '';
                         let emailAddress = colMap.emailAddress !== undefined ? String(row[colMap.emailAddress] || '').trim() : '';
-                        
+
                         // Parents information (trim to avoid whitespace-only values)
                         let fatherFullName = colMap.fatherFullName !== undefined ? String(row[colMap.fatherFullName] || '').trim() : '';
                         let fatherOccupation = colMap.fatherOccupation !== undefined ? String(row[colMap.fatherOccupation] || '').trim() : '';
@@ -1540,7 +1564,7 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
             role: window.currentAdmin?.role || 'Admin',
             action: `Review Queue: Categorized ${granteeName} to ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}`,
             studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
-        }]).then(() => {}).catch(err => console.warn('Could not record audit log:', err));
+        }]).then(() => { }).catch(err => console.warn('Could not record audit log:', err));
     } catch (e) {
         console.warn('Audit log error:', e);
     }
@@ -1651,8 +1675,8 @@ if (btnAutoResolveAll) {
                 role: window.currentAdmin?.role || 'Admin',
                 action: `Review Queue: Batch categorized ${count} grantees to Form 3 (Not enrolled)`,
                 studentId: 'BATCH_RESOLVE'
-            }]).then(() => {}).catch(e => console.warn(e));
-        } catch (_) {}
+            }]).then(() => { }).catch(e => console.warn(e));
+        } catch (_) { }
 
         updateKPIMetrics();
         renderForm2Table(verifiedForm2List);

@@ -65,7 +65,7 @@ let saSearchF3 = null;
 let btnAutoResolveAll = null;
 
 function getTableName() {
-    return 'scholar_masterlist';
+    return 'new_grantees_masterlist';
 }
 
 function formatBytes(bytes, decimals = 2) {
@@ -94,28 +94,24 @@ function clearFileState() {
     fetchExistingMasterlist();
 }
 
-function handleFile(file) {
+async function handleFile(file) {
     const validExtensions = ['pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
     const ext = file.name.split('.').pop().toLowerCase();
-    
+
     if (!validExtensions.includes(ext)) {
         alert('Please upload a valid masterlist file (PDF, DOCX, XLSX, CSV).');
         return;
     }
-    
+
     currentFile = file;
     if (fileNameDisplay) fileNameDisplay.textContent = file.name;
     if (fileSizeDisplay) fileSizeDisplay.textContent = formatBytes(file.size);
-    
+
     if (dropZone) dropZone.classList.add('hidden');
     if (fileInfoContainer) fileInfoContainer.classList.remove('hidden');
-    if (btnExtract) btnExtract.disabled = false;
-    
-    extractedRecords = [];
-    if (importSummaryCard) importSummaryCard.classList.add('hidden');
-    populateBatchFilter();
-    renderTable();
-    if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
+
+    // Expected Flow: Upload File -> Automatically Extract Data -> Display in Table -> Automatically Save to Database
+    await executeAutoImportPipeline(file);
 }
 
 async function extractExcelOrCsv(file) {
@@ -220,11 +216,11 @@ async function extractPdfText(file) {
                 const typedarray = new Uint8Array(e.target.result);
                 const pdf = await window.pdfjsLib.getDocument({ data: typedarray }).promise;
                 let fullText = '';
-                
+
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    
+
                     let pageText = '';
                     for (const item of textContent.items) {
                         pageText += item.str;
@@ -277,15 +273,15 @@ async function parseDocumentText(text) {
                 continue;
             }
         }
-        
+
         const lLine = line.toLowerCase();
         if (lLine === 'name' || lLine === 'student' || lLine.includes('last name') || lLine.includes('first name') || lLine.includes('middle name') || lLine === 'no.' || lLine === 'no' || line.length < 2) {
             continue;
         }
-        
+
         const cleanLine = line.replace(/^[\d\.\-\)\s]+/, '').trim();
         if (cleanLine.length < 2) continue;
-        
+
         if (cleanLine.includes(',')) {
             const parts = cleanLine.split(',').map(p => p.trim());
             rawRecords.push({
@@ -312,7 +308,7 @@ async function parseDocumentText(text) {
             }
         }
     }
-    
+
     if (tempNameParts.length > 0) {
         rawRecords.push({
             lastName: tempNameParts[0] || '',
@@ -326,15 +322,15 @@ async function parseDocumentText(text) {
 
     if (rawRecords.length === 0) {
         alert('No grantee names could be clearly extracted from this document.');
-        return;
+        return [];
     }
 
-    await checkAndFlagDuplicates(rawRecords);
+    return rawRecords;
 }
 
 async function checkAndFlagDuplicates(records) {
     let existingDbNames = new Set();
-    
+
     try {
         const { data, error } = await window.supabaseClient
             .from(getTableName())
@@ -348,7 +344,7 @@ async function checkAndFlagDuplicates(records) {
             });
         }
     } catch (e) {
-        console.warn('Could not query scholar_masterlist for duplicate check:', e);
+        console.warn('Could not query masterlist for duplicate check:', e);
     }
 
     const seenInFile = new Set();
@@ -395,14 +391,156 @@ async function checkAndFlagDuplicates(records) {
     populateBatchFilter();
     renderTable();
 
-    if (extractedRecords.length > 0 && btnSaveRecords) {
-        btnSaveRecords.classList.remove('hidden');
-        btnSaveRecords.disabled = importedCount === 0;
-        btnSaveRecords.innerHTML = `<i class="icon-save" style="font-size: 16px;"></i> Save (${importedCount} New Grantees)`;
-        btnSaveRecords.classList.add('btn-gradient-save');
-        btnSaveRecords.style.background = '';
-    } else if (btnSaveRecords) {
-        btnSaveRecords.classList.add('hidden');
+    return { skippedCount, importedCount };
+}
+
+// ── Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database ──
+async function executeAutoImportPipeline(file) {
+    if (!file) return;
+
+    if (btnExtract) {
+        btnExtract.disabled = true;
+        btnExtract.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Auto-Extracting...';
+    }
+    if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
+    if (ocrStatusText) ocrStatusText.textContent = 'Extracting grantee data from file...';
+    if (ocrProgressBar) {
+        ocrProgressBar.style.width = '35%';
+        ocrProgressBar.style.animation = 'pulse 1.5s infinite';
+    }
+
+    extractedRecords = [];
+    if (importSummaryCard) importSummaryCard.classList.add('hidden');
+    populateBatchFilter();
+    renderTable();
+
+    try {
+        const ext = file.name.split('.').pop().toLowerCase();
+        let rawRecords = [];
+
+        if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+            rawRecords = await extractExcelOrCsv(file);
+        } else if (ext === 'pdf') {
+            const text = await extractPdfText(file);
+            rawRecords = await parseDocumentText(text);
+        } else if (ext === 'docx' || ext === 'doc') {
+            const text = await extractDocxText(file);
+            rawRecords = await parseDocumentText(text);
+        }
+
+        if (!rawRecords || rawRecords.length === 0) {
+            alert('No grantee records could be clearly extracted from this file.');
+            if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
+            if (btnExtract) {
+                btnExtract.disabled = false;
+                btnExtract.innerHTML = '<i class="icon-settings"></i> Extract Grantees Data';
+            }
+            return;
+        }
+
+        // Step 2: Validate & Flag duplicates, immediately display in table
+        if (ocrStatusText) ocrStatusText.textContent = 'Validating records & checking duplicates...';
+        if (ocrProgressBar) ocrProgressBar.style.width = '65%';
+
+        const { skippedCount, importedCount } = await checkAndFlagDuplicates(rawRecords);
+
+        // Step 3: Automatically Save unique records to database
+        const validToInsert = extractedRecords.filter(r => !r.isDuplicate);
+
+        if (validToInsert.length > 0) {
+            if (ocrStatusText) ocrStatusText.textContent = `Auto-saving ${validToInsert.length} new grantees to database...`;
+            if (ocrProgressBar) ocrProgressBar.style.width = '85%';
+
+            const tableName = getTableName();
+            const toInsert = validToInsert.map(r => ({
+                last_name: r.lastName,
+                first_name: r.firstName,
+                middle_name: r.middleName || '',
+                name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
+                course: r.course || 'BSIT',
+                batch: r.batch || 'Batch 1'
+            }));
+
+            const { data: insertedData, error } = await window.supabaseClient
+                .from(tableName)
+                .insert(toInsert)
+                .select();
+
+            if (error) {
+                throw error;
+            }
+
+            // Link returned Supabase database IDs back to in-memory records
+            if (insertedData && insertedData.length > 0) {
+                let insIdx = 0;
+                extractedRecords.forEach(r => {
+                    if (!r.isDuplicate && insIdx < insertedData.length) {
+                        r.id = insertedData[insIdx].id;
+                        insIdx++;
+                    }
+                });
+            }
+
+            if (ocrStatusText) ocrStatusText.textContent = `Complete: Auto-saved ${validToInsert.length} new grantees to database!`;
+            if (ocrProgressBar) ocrProgressBar.style.width = '100%';
+
+            if (window.showToast) {
+                window.showToast(`Auto-saved ${validToInsert.length} new grantees to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
+            }
+
+            // Re-render table to display updated "Saved to DB" status
+            renderTable();
+
+            // Sync with Annex 5 and verification
+            const { data: allCurrentGrantees } = await window.supabaseClient
+                .from(tableName)
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (allCurrentGrantees && allCurrentGrantees.length > 0) {
+                const granteesForVerification = allCurrentGrantees.map(m => ({
+                    id: m.id,
+                    name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
+                    last_name: m.last_name,
+                    first_name: m.first_name,
+                    middle_name: m.middle_name,
+                    batch: m.batch || 'Batch 1',
+                    student_id: m.student_id || '',
+                    course: m.course || 'BSIT',
+                    year: m.year || '1'
+                }));
+                await loadSchoolStudentsAndVerify(granteesForVerification);
+            }
+
+        } else {
+            // All records were duplicates
+            if (ocrStatusText) ocrStatusText.textContent = `All ${extractedRecords.length} records already exist in database (no duplicates added).`;
+            if (ocrProgressBar) ocrProgressBar.style.width = '100%';
+
+            if (window.showToast) {
+                window.showToast(`All ${extractedRecords.length} records are already registered in the database. No duplicates added.`, 'info');
+            }
+        }
+
+        if (btnExtract) {
+            btnExtract.disabled = true;
+            btnExtract.innerHTML = '<i class="icon-check" style="font-size: 16px;"></i> File Processed Automatically';
+        }
+
+    } catch (err) {
+        console.error('Auto-import pipeline error:', err);
+        alert(`Auto-import error: ${err.message || 'Check console'}`);
+        if (summaryErrors) summaryErrors.textContent = 1;
+        if (ocrStatusText) ocrStatusText.textContent = `Error: ${err.message}`;
+        if (btnExtract) {
+            btnExtract.disabled = false;
+            btnExtract.innerHTML = '<i class="icon-refresh-cw" style="font-size: 16px;"></i> Retry Import';
+        }
+    } finally {
+        setTimeout(() => {
+            if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
+        }, 3000);
+        if (window.lucide) window.lucide.createIcons();
     }
 }
 
@@ -411,11 +549,11 @@ function populateBatchFilter() {
         if (filterBatch) filterBatch.classList.add('hidden');
         return;
     }
-    
+
     if (!filterBatch) return;
-    
+
     const batches = [...new Set(extractedRecords.map(r => r.batch))].sort();
-    
+
     filterBatch.innerHTML = '<option value="All Batches">All Batches</option>';
     batches.forEach(b => {
         const opt = document.createElement('option');
@@ -423,7 +561,7 @@ function populateBatchFilter() {
         opt.textContent = b;
         filterBatch.appendChild(opt);
     });
-    
+
     filterBatch.classList.remove('hidden');
 }
 
@@ -442,9 +580,9 @@ function renderTable() {
             </tr>`;
         return;
     }
-    
+
     const filterValue = filterBatch ? filterBatch.value : 'All Batches';
-    
+
     const displayRecords = extractedRecords.map((record, index) => ({ record, index }))
         .filter(item => filterValue === 'All Batches' || item.record.batch === filterValue);
 
@@ -460,9 +598,9 @@ function renderTable() {
             </tr>`;
         return;
     }
-    
+
     extractedTableBody.innerHTML = '';
-    displayRecords.forEach(({record, index}) => {
+    displayRecords.forEach(({ record, index }) => {
         const tr = document.createElement('tr');
         if (record.isDuplicate) {
             tr.style.background = 'rgba(254, 243, 199, 0.3)';
@@ -470,7 +608,7 @@ function renderTable() {
 
         const statusBadge = record.isDuplicate
             ? `<span title="${record.duplicateReason}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
-            : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> New Grantee</span>`;
+            : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> Saved to DB</span>`;
 
         tr.innerHTML = `
             <td style="padding: 6px 12px;">
@@ -499,49 +637,109 @@ function renderTable() {
         `;
         extractedTableBody.appendChild(tr);
     });
-    
-    // Listeners for inline edits
 
+    // Listeners for inline edits
     document.querySelectorAll('.edit-last-name').forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].lastName = e.target.value.trim();
+            const val = e.target.value.trim();
+            extractedRecords[idx].lastName = val;
+            if (extractedRecords[idx].id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).update({
+                        last_name: val,
+                        name: `${val}, ${extractedRecords[idx].firstName || ''} ${extractedRecords[idx].middleName || ''}`.trim()
+                    }).eq('id', extractedRecords[idx].id);
+                } catch (err) {
+                    console.warn('Error updating last name:', err);
+                }
+            }
         });
     });
 
     document.querySelectorAll('.edit-first-name').forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].firstName = e.target.value.trim();
+            const val = e.target.value.trim();
+            extractedRecords[idx].firstName = val;
+            if (extractedRecords[idx].id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).update({
+                        first_name: val,
+                        name: `${extractedRecords[idx].lastName || ''}, ${val} ${extractedRecords[idx].middleName || ''}`.trim()
+                    }).eq('id', extractedRecords[idx].id);
+                } catch (err) {
+                    console.warn('Error updating first name:', err);
+                }
+            }
         });
     });
 
     document.querySelectorAll('.edit-middle-name').forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].middleName = e.target.value.trim();
+            const val = e.target.value.trim();
+            extractedRecords[idx].middleName = val;
+            if (extractedRecords[idx].id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).update({
+                        middle_name: val,
+                        name: `${extractedRecords[idx].lastName || ''}, ${extractedRecords[idx].firstName || ''} ${val}`.trim()
+                    }).eq('id', extractedRecords[idx].id);
+                } catch (err) {
+                    console.warn('Error updating middle name:', err);
+                }
+            }
         });
     });
 
     document.querySelectorAll('.edit-course').forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].course = e.target.value.trim();
+            const val = e.target.value.trim();
+            extractedRecords[idx].course = val;
+            if (extractedRecords[idx].id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).update({
+                        course: val
+                    }).eq('id', extractedRecords[idx].id);
+                } catch (err) {
+                    console.warn('Error updating course:', err);
+                }
+            }
         });
     });
-    
+
     document.querySelectorAll('.edit-batch').forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
-            extractedRecords[idx].batch = e.target.value.trim();
+            const val = e.target.value.trim();
+            extractedRecords[idx].batch = val;
+            if (extractedRecords[idx].id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).update({
+                        batch: val
+                    }).eq('id', extractedRecords[idx].id);
+                } catch (err) {
+                    console.warn('Error updating batch:', err);
+                }
+            }
         });
     });
-    
+
     document.querySelectorAll('.btn-remove').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const idx = e.currentTarget.getAttribute('data-index');
+            const rec = extractedRecords[idx];
+            if (rec && rec.id) {
+                try {
+                    await window.supabaseClient.from(getTableName()).delete().eq('id', rec.id);
+                } catch (delErr) {
+                    console.warn('Error deleting record from db:', delErr);
+                }
+            }
             extractedRecords.splice(idx, 1);
-            
+
             const skipped = extractedRecords.filter(r => r.isDuplicate).length;
             const imported = extractedRecords.filter(r => !r.isDuplicate).length;
             if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
@@ -566,11 +764,13 @@ async function saveRecordsToDatabase() {
         alert('No new unique grantee records to save.');
         return;
     }
-    
-    const originalText = btnSaveRecords.innerHTML;
-    btnSaveRecords.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Saving...';
-    btnSaveRecords.disabled = true;
-    
+
+    const originalText = btnSaveRecords ? btnSaveRecords.innerHTML : '';
+    if (btnSaveRecords) {
+        btnSaveRecords.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Saving...';
+        btnSaveRecords.disabled = true;
+    }
+
     try {
         const tableName = getTableName();
         const toInsert = validToInsert.map(r => ({
@@ -581,24 +781,28 @@ async function saveRecordsToDatabase() {
             course: r.course || 'BSIT',
             batch: r.batch
         }));
-        
+
         const { error } = await window.supabaseClient
             .from(tableName)
             .insert(toInsert);
-            
+
         if (error) throw error;
-        
-        btnSaveRecords.innerHTML = `<i class="icon-check" style="color: white;"></i> Saved ${validToInsert.length} Grantees to Masterlist`;
-        btnSaveRecords.classList.remove('btn-gradient-save');
-        btnSaveRecords.style.background = '#10b981';
-        
+
+        if (btnSaveRecords) {
+            btnSaveRecords.innerHTML = `<i class="icon-check" style="color: white;"></i> Saved ${validToInsert.length} Grantees to Masterlist`;
+            btnSaveRecords.classList.remove('btn-gradient-save');
+            btnSaveRecords.style.background = '#10b981';
+        }
+
         await fetchExistingMasterlist();
 
     } catch (err) {
         console.error('Error saving masterlist:', err);
         alert(`Failed to save records: ${err.message || 'Check console'}`);
-        btnSaveRecords.innerHTML = originalText;
-        btnSaveRecords.disabled = false;
+        if (btnSaveRecords) {
+            btnSaveRecords.innerHTML = originalText;
+            btnSaveRecords.disabled = false;
+        }
     }
 }
 
@@ -794,8 +998,8 @@ function resolveSuperAdminReviewItem(reviewIndex, targetForm, specialReason = 'N
             role: 'Super Admin',
             action: `Reports Review: Categorized ${granteeName} to ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}`,
             studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
-        }]).then(() => {}).catch(e => console.warn(e));
-    } catch (_) {}
+        }]).then(() => { }).catch(e => console.warn(e));
+    } catch (_) { }
 
     updateAnnexKPIs();
     renderAnnexForm2Table(verifiedForm2List);
@@ -1012,12 +1216,12 @@ async function fetchExistingMasterlist() {
             .from(tableName)
             .select('*')
             .order('created_at', { ascending: false });
-            
+
         if (error) {
             console.warn('Error fetching scholar_masterlist:', error);
             return;
         }
-        
+
         if (data && data.length > 0) {
             extractedRecords = data.map(row => ({
                 id: row.id,
@@ -1033,14 +1237,6 @@ async function fetchExistingMasterlist() {
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
             populateBatchFilter();
             renderTable();
-            
-            if (btnSaveRecords) {
-                btnSaveRecords.classList.remove('hidden');
-                btnSaveRecords.innerHTML = '<i class="icon-check" style="color: white;"></i> Saved in Masterlist';
-                btnSaveRecords.classList.remove('btn-gradient-save');
-                btnSaveRecords.style.background = '#10b981';
-                btnSaveRecords.disabled = true;
-            }
 
             // Trigger Annex 5 verification in Super Admin view
             const granteesForVerification = data.map(m => ({
@@ -1060,7 +1256,6 @@ async function fetchExistingMasterlist() {
             extractedRecords = [];
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
             renderTable();
-            if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
         }
     } catch (err) {
         console.error('Error fetching existing masterlist:', err);
@@ -1146,41 +1341,7 @@ export function initMasterlistImport() {
     if (btnExtract) {
         btnExtract.addEventListener('click', async () => {
             if (!currentFile) return;
-            
-            btnExtract.disabled = true;
-            if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
-            extractedRecords = [];
-            if (importSummaryCard) importSummaryCard.classList.add('hidden');
-            populateBatchFilter();
-            renderTable();
-            if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
-            
-            try {
-                const ext = currentFile.name.split('.').pop().toLowerCase();
-                
-                if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-                    const rawRecords = await extractExcelOrCsv(currentFile);
-                    await checkAndFlagDuplicates(rawRecords);
-                } else {
-                    let extractedText = '';
-                    if (ext === 'pdf') {
-                        extractedText = await extractPdfText(currentFile);
-                    } else if (ext === 'docx' || ext === 'doc') {
-                        extractedText = await extractDocxText(currentFile);
-                    }
-                    await parseDocumentText(extractedText);
-                }
-                
-            } catch (err) {
-                console.error('Extraction Error:', err);
-                alert('Error extracting text from document: ' + err.message);
-            } finally {
-                btnExtract.disabled = false;
-                if (ocrStatusText) ocrStatusText.textContent = 'Complete';
-                setTimeout(() => {
-                    if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
-                }, 2000);
-            }
+            await executeAutoImportPipeline(currentFile);
         });
     }
 
@@ -1448,17 +1609,54 @@ export function initMasterlistImport() {
         }
     });
 
-    // Load initial verified state immediately on boot
-    const initialSync = AnnexSyncService.getVerifiedData();
-    if (initialSync) {
-        verifiedForm2List = initialSync.form2List || [];
-        verifiedForm3List = initialSync.form3List || [];
-        needsReviewList = initialSync.needsReviewList || [];
-        updateAnnexKPIs();
-        renderAnnexForm2Table(verifiedForm2List);
-        renderAnnexForm3Table(verifiedForm3List);
-        renderAnnexReviewQueue(needsReviewList);
-    }
+    // Automatically restore verified state from Supabase on boot
+    AnnexSyncService.loadFromSupabase().then(dbSync => {
+        if (dbSync && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
+            verifiedForm2List = dbSync.form2List || [];
+            verifiedForm3List = dbSync.form3List || [];
+            needsReviewList = [];
+            updateAnnexKPIs();
+            renderAnnexForm2Table(verifiedForm2List);
+            renderAnnexForm3Table(verifiedForm3List);
+            renderAnnexReviewQueue(needsReviewList);
+            AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: [],
+                updatedBy: 'Supabase Auto-Restore',
+                syncToDb: false
+            });
+            const syncBadge = document.getElementById('sa-sync-status-badge');
+            if (syncBadge) {
+                syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> Auto-Restored from Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                syncBadge.style.display = 'inline-flex';
+            }
+        } else {
+            // Local storage fallback
+            const initialSync = AnnexSyncService.getVerifiedData();
+            if (initialSync && (initialSync.form2List.length > 0 || initialSync.form3List.length > 0)) {
+                verifiedForm2List = initialSync.form2List || [];
+                verifiedForm3List = initialSync.form3List || [];
+                needsReviewList = initialSync.needsReviewList || [];
+                updateAnnexKPIs();
+                renderAnnexForm2Table(verifiedForm2List);
+                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexReviewQueue(needsReviewList);
+            }
+        }
+    }).catch(e => {
+        console.warn('Super Admin loadFromSupabase error:', e);
+        const initialSync = AnnexSyncService.getVerifiedData();
+        if (initialSync) {
+            verifiedForm2List = initialSync.form2List || [];
+            verifiedForm3List = initialSync.form3List || [];
+            needsReviewList = initialSync.needsReviewList || [];
+            updateAnnexKPIs();
+            renderAnnexForm2Table(verifiedForm2List);
+            renderAnnexForm3Table(verifiedForm3List);
+            renderAnnexReviewQueue(needsReviewList);
+        }
+    });
 
     // Initial fetch of masterlist data
     fetchExistingMasterlist();

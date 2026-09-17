@@ -14,12 +14,19 @@ async function loadIdQueue() {
     }
 
     try {
-        const { data, error } = await supabase
+        let res = await supabase
             .from('students')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (res.error) {
+            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        }
+        if (res.error) {
+            res = await supabase.from('students').select('*');
+        }
+        if (res.error) throw res.error;
+        const data = res.data;
 
         // Filter students who have submitted documents
         idStudents = (data || []).filter(s => {
@@ -729,12 +736,19 @@ window.downloadAllIdDocuments = async function () {
         updateBulkDownloadProgress(5, 'Fetching student records from database...', 'Compiling ZIP Archive...', 'Step 1/4 • Database Query');
 
         // Fetch all students from database
-        const { data: allStudents, error } = await supabase
+        let res = await supabase
             .from('students')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (res.error) {
+            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        }
+        if (res.error) {
+            res = await supabase.from('students').select('*');
+        }
+        if (res.error) throw res.error;
+        const allStudents = res.data;
 
         // Filter students who have uploaded PDF document requirements
         const eligibleStudents = (allStudents || []).filter(s => {

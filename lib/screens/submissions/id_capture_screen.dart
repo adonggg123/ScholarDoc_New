@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:typed_data';
 import 'dart:io';
+import 'dart:ui' as ui;
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 
@@ -49,11 +50,34 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
     super.dispose();
   }
 
+  /// Scales down image bytes if they exceed 350KB using native hardware decoding
+  Future<Uint8List> _optimizeImageBytes(Uint8List originalBytes, {int targetWidth = 1024}) async {
+    if (originalBytes.lengthInBytes <= 350 * 1024) {
+      return originalBytes;
+    }
+    try {
+      final codec = await ui.instantiateImageCodec(
+        originalBytes,
+        targetWidth: targetWidth,
+      );
+      final frame = await codec.getNextFrame();
+      final byteData = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        return byteData.buffer.asUint8List();
+      }
+    } catch (e) {
+      debugPrint('Error optimizing image bytes: $e');
+    }
+    return originalBytes;
+  }
+
   Future<void> _captureImage(bool isFront) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 75,
       );
       if (image != null) {
         setState(() {
@@ -92,18 +116,28 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
     });
 
     try {
-      final pdf = pw.Document();
-      final frontBytes = await _frontImage!.readAsBytes();
-      final backBytes = await _backImage!.readAsBytes();
+      // Small delay to allow UI to paint loading spinner smoothly
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final rawFrontBytes = await _frontImage!.readAsBytes();
+      final rawBackBytes = await _backImage!.readAsBytes();
       
+      final frontBytes = await _optimizeImageBytes(rawFrontBytes);
+      final backBytes = await _optimizeImageBytes(rawBackBytes);
+
       final pw.MemoryImage frontPwImage = pw.MemoryImage(frontBytes);
       final pw.MemoryImage backPwImage = pw.MemoryImage(backBytes);
 
-      final signatureBytes = await _signatureController.toPngBytes();
+      final signatureBytes = await _signatureController.toPngBytes(
+        width: 280,
+        height: 120,
+      );
       pw.MemoryImage? signaturePwImage;
       if (signatureBytes != null) {
         signaturePwImage = pw.MemoryImage(signatureBytes);
       }
+
+      final pdf = pw.Document();
 
       pdf.addPage(
         pw.Page(
@@ -745,11 +779,20 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
           
           // Action button
           ElevatedButton.icon(
-            onPressed: _generatePdf,
-            icon: const Icon(LucideIcons.fileText, color: Colors.white, size: 18),
-            label: const Text(
-              'GENERATE & PREVIEW PDF',
-              style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
+            onPressed: _isGeneratingPdf ? null : _generatePdf,
+            icon: _isGeneratingPdf
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(LucideIcons.fileText, color: Colors.white, size: 18),
+            label: Text(
+              _isGeneratingPdf ? 'GENERATING PDF...' : 'GENERATE & PREVIEW PDF',
+              style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F3260),

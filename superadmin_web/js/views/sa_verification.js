@@ -14,12 +14,19 @@ async function loadSaQueue() {
     }
 
     try {
-        const { data, error } = await supabase
+        let res = await supabase
             .from('students')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (res.error) {
+            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        }
+        if (res.error) {
+            res = await supabase.from('students').select('*');
+        }
+        if (res.error) throw res.error;
+        const data = res.data;
 
         // Filter students who have submitted SA number
         saStudents = (data || []).filter(s => {

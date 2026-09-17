@@ -6,14 +6,22 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
 class PdfGenerator {
-  /// Helper to load a Unicode-compatible font (Roboto)
+  /// Helper to load a Unicode-compatible font (Roboto) with timeout and fallback
   static Future<pw.ThemeData> _buildTheme() async {
-    final font = await PdfGoogleFonts.robotoRegular();
-    final boldFont = await PdfGoogleFonts.robotoBold();
-    return pw.ThemeData.withFont(
-      base: font,
-      bold: boldFont,
-    );
+    try {
+      final font = await PdfGoogleFonts.robotoRegular().timeout(const Duration(seconds: 2));
+      final boldFont = await PdfGoogleFonts.robotoBold().timeout(const Duration(seconds: 2));
+      return pw.ThemeData.withFont(
+        base: font,
+        bold: boldFont,
+      );
+    } catch (_) {
+      // Fallback to built-in standard fonts immediately if network is slow or offline
+      return pw.ThemeData.withFont(
+        base: pw.Font.helvetica(),
+        bold: pw.Font.helveticaBold(),
+      );
+    }
   }
 
   static Future<void> generateInstitutionalReport({

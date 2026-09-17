@@ -1,0 +1,276 @@
+<div class="view-content" style="display: flex; flex-direction: column; gap: 20px; overflow-y: auto;">
+    <!-- Top Header & Filter Bar -->
+    <div class="card"
+        style="padding: 22px 24px; border-radius: 20px; border-top: 4px solid var(--primary-color); display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span
+                        style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(15,50,96,0.1); color: var(--primary-color);">
+                        <i class="icon-archive" style="font-size: 12px;"></i> HISTORICAL ARCHIVES
+                    </span>
+                    <span id="view-active-filter-badge"
+                        style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: rgba(16,185,129,0.1); color: #059669;">
+                        <i class="icon-calendar" style="font-size: 12px;"></i> A.Y. 2024-2025 • 1st Semester
+                    </span>
+                </div>
+                <h2 style="margin: 8px 0 3px; font-size: 20px; font-weight: 800; color: var(--text-primary);">
+                    Previous Annex 5 Records (Form 2 & Form 3)
+                </h2>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">
+                    Browse, filter by semester and school year, search, and export archived billing and grantee lists directly from the Supabase database.
+                </p>
+            </div>
+
+            <!-- Upper Action Buttons: Refresh & Auto-Fill Exports -->
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <button id="btn-view-refresh" class="icon-btn" title="Refresh records from Supabase"
+                    style="background: rgba(0,0,0,0.04); border-radius: 12px; padding: 9px 12px; border: 1px solid var(--border-color); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary); transition: all 0.2s ease;">
+                    <i id="icon-view-refresh" class="icon-refresh-cw" style="font-size: 14px;"></i>
+                    <span>Refresh</span>
+                </button>
+                <button id="btn-view-export-f2"
+                    style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 16px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+                    <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
+                </button>
+                <button id="btn-view-export-f3"
+                    style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 16px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                    <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter Controls Bar -->
+        <div
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: center; background: rgba(0,0,0,0.02); padding: 12px 16px; border-radius: 14px; border: 1px solid var(--border-color);">
+            <!-- 1. School Year / Academic Year Filter -->
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                    <i class="icon-calendar" style="font-size: 12px; color: var(--primary-color);"></i> SCHOOL YEAR (A.Y.)
+                </label>
+                <select id="view-filter-ay"
+                    style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text-primary); background: var(--surface-color, #ffffff); cursor: pointer; outline: none;">
+                    <option value="2024-2025" selected>2024-2025</option>
+                    <option value="2023-2024">2023-2024</option>
+                    <option value="2022-2023">2022-2023</option>
+                    <option value="2021-2022">2021-2022</option>
+                    <option value="All">All School Years</option>
+                </select>
+            </div>
+
+            <!-- 2. Semester Filter -->
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                    <i class="icon-clock" style="font-size: 12px; color: #1E88E5;"></i> SEMESTER
+                </label>
+                <select id="view-filter-sem"
+                    style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text-primary); background: var(--surface-color, #ffffff); cursor: pointer; outline: none;">
+                    <option value="1st Semester" selected>1st Semester</option>
+                    <option value="2nd Semester">2nd Semester</option>
+                    <option value="Summer / Midyear">Summer / Midyear</option>
+                    <option value="All">All Semesters</option>
+                </select>
+            </div>
+
+            <!-- 3. TES Batch Filter -->
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                    <i class="icon-layers" style="font-size: 12px; color: #FF8F00;"></i> TES BATCH
+                </label>
+                <select id="view-filter-batch"
+                    style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; font-weight: 600; color: var(--text-primary); background: var(--surface-color, #ffffff); cursor: pointer; outline: none;">
+                    <option value="All">All Batches</option>
+                    <option value="1">Batch 1</option>
+                    <option value="2">Batch 2</option>
+                    <option value="3">Batch 3</option>
+                </select>
+            </div>
+
+            <!-- 4. Real-Time Search -->
+            <div style="display: flex; flex-direction: column; gap: 4px; grid-column: span 1 / -1;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                    <i class="icon-search" style="font-size: 12px; color: var(--primary-color);"></i> QUICK SEARCH
+                </label>
+                <div style="position: relative; width: 100%;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 14px;"></i>
+                    <input type="text" id="view-search-input"
+                        placeholder="Search by student no, full name, course/degree, control no, or TES SA number..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; outline: none; background: var(--surface-color, #ffffff);">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Summary Metric Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+        <!-- KPI 1: Enrolled Grantees (Form 2) -->
+        <div class="card"
+            style="padding: 18px 20px; border-radius: 16px; border-left: 4px solid #10b981; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+            <div>
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+                    Form 2 Enrolled
+                </span>
+                <h3 id="view-kpi-f2-count" style="margin: 4px 0 0; font-size: 24px; font-weight: 800; color: #10b981;">0</h3>
+                <span style="font-size: 11px; color: var(--text-secondary);">Verified Grantees</span>
+            </div>
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="icon-file-spreadsheet" style="font-size: 22px; color: #10b981;"></i>
+            </div>
+        </div>
+
+        <!-- KPI 2: Total Billing Amount -->
+        <div class="card"
+            style="padding: 18px 20px; border-radius: 16px; border-left: 4px solid var(--primary-color); display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+            <div>
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+                    Total TES Billing
+                </span>
+                <h3 id="view-kpi-f2-amount" style="margin: 4px 0 0; font-size: 22px; font-weight: 800; color: var(--primary-color);">₱0.00</h3>
+                <span style="font-size: 11px; color: var(--text-secondary);">₱10,000.00 per grantee</span>
+            </div>
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(15,50,96,0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="icon-credit-card" style="font-size: 22px; color: var(--primary-color);"></i>
+            </div>
+        </div>
+
+        <!-- KPI 3: Not Included Grantees (Form 3) -->
+        <div class="card"
+            style="padding: 18px 20px; border-radius: 16px; border-left: 4px solid #FF8F00; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+            <div>
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+                    Form 3 Not Included
+                </span>
+                <h3 id="view-kpi-f3-count" style="margin: 4px 0 0; font-size: 24px; font-weight: 800; color: #FF8F00;">0</h3>
+                <span style="font-size: 11px; color: var(--text-secondary);">Special status scholars</span>
+            </div>
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,143,0,0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="icon-file-text" style="font-size: 22px; color: #FF8F00;"></i>
+            </div>
+        </div>
+
+        <!-- KPI 4: Total Queried Records -->
+        <div class="card"
+            style="padding: 18px 20px; border-radius: 16px; border-left: 4px solid #8E24AA; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+            <div>
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+                    Total Records
+                </span>
+                <h3 id="view-kpi-total-count" style="margin: 4px 0 0; font-size: 24px; font-weight: 800; color: #8E24AA;">0</h3>
+                <span id="view-kpi-term-subtext" style="font-size: 11px; color: var(--text-secondary);">In selected term</span>
+            </div>
+            <div
+                style="width: 44px; height: 44px; border-radius: 12px; background: rgba(142,36,170,0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="icon-database" style="font-size: 22px; color: #8E24AA;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dual Tabbed Table Section -->
+    <div class="card"
+        style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color);">
+        <!-- Tab Switcher Header -->
+        <div class="annex-tabs-header">
+            <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                <button id="view-tab-btn-f2" class="annex-tab-btn active">
+                    <i class="icon-file-spreadsheet"></i> Annex 5 - Form 2 (Enrolled Grantees & Billing)
+                    <span id="view-badge-f2-count" class="annex-tab-badge">0</span>
+                </button>
+                <button id="view-tab-btn-f3" class="annex-tab-btn">
+                    <i class="icon-file-text"></i> Annex 5 - Form 3 (Not Included Students)
+                    <span id="view-badge-f3-count" class="annex-tab-badge">0</span>
+                </button>
+            </div>
+
+            <!-- Right: Status filter toggle for Form 3 -->
+            <div id="view-f3-status-filter-wrap" style="display: none; align-items: center; gap: 8px; padding: 6px 16px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">Status Filter:</label>
+                <select id="view-filter-status"
+                    style="padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 11px; font-weight: 600; color: var(--text-primary); background: var(--surface-color, #ffffff); cursor: pointer; outline: none;">
+                    <option value="All">All Special Statuses</option>
+                    <option value="Not enrolled">Not enrolled</option>
+                    <option value="Dropped">Dropped</option>
+                    <option value="Waived">Waived</option>
+                    <option value="On Leave of Absence (LOA)">On Leave of Absence (LOA)</option>
+                    <option value="Transferee">Transferee</option>
+                    <option value="Graduated">Graduated</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tab 1: Annex 5 - Form 2 Content -->
+        <div id="view-tab-pane-f2" style="display: block; padding: 20px 24px;">
+            <div class="annex-table-wrap" style="max-height: 520px; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px;">
+                <table class="annex-table" style="min-width: 1400px; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Seq #</th>
+                            <th style="min-width: 110px;">Student ID</th>
+                            <th style="min-width: 130px;">TES Award No.</th>
+                            <th>Last Name</th>
+                            <th>Given Name</th>
+                            <th style="width: 50px;">M.I.</th>
+                            <th style="width: 50px; text-align: center;">Sex</th>
+                            <th style="min-width: 95px;">Birthdate</th>
+                            <th style="min-width: 130px;">Degree Program</th>
+                            <th style="width: 70px; text-align: center;">Year</th>
+                            <th style="min-width: 150px;">Email Address</th>
+                            <th style="min-width: 110px;">Contact No.</th>
+                            <th style="width: 65px; text-align: center;">Batch</th>
+                            <th style="min-width: 100px; text-align: right;">TES Amount</th>
+                            <th style="min-width: 90px; text-align: right;">PWD (3A)</th>
+                            <th style="min-width: 105px; text-align: right;">Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="view-tbody-f2">
+                        <tr>
+                            <td colspan="16" style="text-align: center; padding: 48px; color: var(--text-secondary);">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                                    <div class="sync-spinner" style="width: 24px; height: 24px; border: 2.5px solid var(--primary-color); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                                    <span>Loading Form 2 records from Supabase...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 2: Annex 5 - Form 3 Content -->
+        <div id="view-tab-pane-f3" style="display: none; padding: 20px 24px;">
+            <div class="annex-table-wrap" style="max-height: 520px; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px;">
+                <table class="annex-table" style="min-width: 1100px; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Seq #</th>
+                            <th style="min-width: 110px;">Student ID</th>
+                            <th style="min-width: 130px;">TES Award No.</th>
+                            <th>Last Name</th>
+                            <th>Given Name</th>
+                            <th style="width: 50px;">M.I.</th>
+                            <th style="width: 50px; text-align: center;">Sex</th>
+                            <th style="min-width: 95px;">Birthdate</th>
+                            <th style="min-width: 130px;">Degree Program</th>
+                            <th style="width: 70px; text-align: center;">Year</th>
+                            <th style="min-width: 130px;">Status Reason</th>
+                            <th style="min-width: 180px;">Remarks / Justification</th>
+                        </tr>
+                    </thead>
+                    <tbody id="view-tbody-f3">
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 48px; color: var(--text-secondary);">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                                    <div class="sync-spinner" style="width: 24px; height: 24px; border: 2.5px solid var(--primary-color); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                                    <span>Loading Form 3 records from Supabase...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

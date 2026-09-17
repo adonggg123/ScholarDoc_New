@@ -23,42 +23,52 @@ const modalContent = document.getElementById('modal-content');
 
 async function loadStudents() {
     try {
-        const { data, error } = await supabase.from('students').select('*').order('createdAt', { ascending: false });
-        if (error) throw error;
+        let res = await supabase.from('students').select('*').order('created_at', { ascending: false });
+        if (res.error) {
+            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        }
+        if (res.error) {
+            res = await supabase.from('students').select('*');
+        }
+        if (res.error) throw res.error;
         
-        allStudents = data || [];
+        allStudents = res.data || [];
         applyFilters();
     } catch (e) {
         console.error('Error loading students:', e);
-        tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
     }
 }
 
 function applyFilters() {
-    const search = searchInput.value.toLowerCase();
-    const status = filterStatus.value;
-    const course = filterCourse.value;
-    const scholarship = filterScholarship.value;
-    const sort = sortBy.value;
+    const search = (searchInput ? searchInput.value : '').toLowerCase();
+    const status = filterStatus ? filterStatus.value : 'All';
+    const course = filterCourse ? filterCourse.value : 'All';
+    const scholarship = filterScholarship ? filterScholarship.value : 'All';
+    const sort = sortBy ? sortBy.value : 'Name (A-Z)';
 
     filteredStudents = allStudents.filter(s => {
-        const matchSearch = (s.fullName || '').toLowerCase().includes(search) || 
-                            (s.studentId || '').toLowerCase().includes(search) ||
-                            (s.email || '').toLowerCase().includes(search);
+        const name = (s.full_name || s.fullName || '').toLowerCase();
+        const id = (s.student_no || s.studentId || '').toLowerCase();
+        const email = (s.email_address || s.email || '').toLowerCase();
+        const matchSearch = !search || name.includes(search) || id.includes(search) || email.includes(search);
         
-        const matchStatus = status === 'All' || (s.status || '') === status;
-        const matchCourse = course === 'All' || (s.course || '') === course;
+        const currentStatus = s.status || '';
+        const matchStatus = status === 'All' || currentStatus.toLowerCase() === status.toLowerCase();
+
+        const currentCourse = (s.program_name || s.course || '').toLowerCase();
+        const matchCourse = course === 'All' || currentCourse.includes(course.toLowerCase());
         
-        // Actually the scholarship program is sometimes stored inside 'scholarships' array or a string, let's assume it's in a single string or just ignore if complex
-        const matchSchol = scholarship === 'All' || (s.scholarshipProgram || s.scholarshipName || '').includes(scholarship);
+        const currentSchol = (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES').toLowerCase();
+        const matchSchol = scholarship === 'All' || currentSchol.includes(scholarship.toLowerCase());
 
         return matchSearch && matchStatus && matchCourse && matchSchol;
     });
 
     if (sort === 'Name (A-Z)') {
-        filteredStudents.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+        filteredStudents.sort((a, b) => (a.full_name || a.fullName || '').localeCompare(b.full_name || b.fullName || ''));
     } else if (sort === 'Latest First') {
-        filteredStudents.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        filteredStudents.sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
     }
 
     renderTable();
@@ -94,7 +104,12 @@ function renderTable() {
     pageInfo.textContent = `Showing ${filteredStudents.length} results`;
 
     tableBody.innerHTML = filteredStudents.map(s => {
-        const firstLetter = (s.fullName || 'U').charAt(0).toUpperCase();
+        const fullName = s.full_name || s.fullName || 'Unknown';
+        const studentNo = s.student_no || s.studentId || 'N/A';
+        const program = s.program_name || s.course || 'N/A';
+        const yearLevel = s.year_level || s.year || 'N/A';
+        const birthdate = s.date_of_birth || s.birthdate || 'N/A';
+        const firstLetter = fullName.charAt(0).toUpperCase();
         const picUrl = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
         
         const avatarHtml = picUrl 
@@ -108,16 +123,16 @@ function renderTable() {
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                         ${avatarHtml}
-                        <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">${s.fullName || 'Unknown'}</div>
+                        <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">${fullName}</div>
                     </div>
                 </td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.course || 'N/A'} - ${s.year || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${program} - ${yearLevel}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || yearLevel || 'N/A'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.birthdate || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${birthdate}</td>
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; gap: 8px;">
                         <button class="view-btn" data-id="${s.uid}" title="View Details" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
@@ -315,16 +330,31 @@ function showStudentModal(student) {
 
     const statusBadge = getStatusBadge(student.status);
 
-    dynamicDetails.innerHTML = `
+        const fullName = student.full_name || student.fullName || 'Unknown';
+        const studentNo = student.student_no || student.studentId || 'N/A';
+        const program = student.program_name || student.course || 'N/A';
+        const yearLevel = student.year_level || student.year || 'N/A';
+        const birthdate = student.date_of_birth || student.birthdate || 'N/A';
+        const email = student.email_address || student.email || 'N/A';
+        const mobile = student.mobile_number || student.contactNumber || 'N/A';
+        const civilStatus = student.civil_status || fam.civilStatus || 'Single';
+        const religion = student.religion || fam.religion || 'N/A';
+        const age = student.age || 'N/A';
+        const fatherName = student.father_full_name || fam.fatherName || 'N/A';
+        const fatherOcc = student.father_occupation || fam.fatherOccupation || 'N/A';
+        const motherName = student.mother_full_name || fam.motherName || 'N/A';
+        const motherOcc = student.mother_occupation || fam.motherOccupation || 'N/A';
+
+        dynamicDetails.innerHTML = `
         <!-- Profile Header -->
         <div style="display: flex; align-items: center; gap: 20px; padding: 24px; background: linear-gradient(to right, rgba(0,0,0,0.01), rgba(0,0,0,0.03)); border-radius: 16px; margin-bottom: 8px;">
             ${profilePicHtml}
             <div style="flex: 1;">
-                <h3 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${student.fullName || 'Unknown'}</h3>
+                <h3 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${fullName}</h3>
                 <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); font-weight: 500;">
-                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-hash" style="font-size: 14px;"></i> ${student.studentId || 'N/A'}</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-hash" style="font-size: 14px;"></i> ${studentNo}</span>
                     <span style="width: 4px; height: 4px; border-radius: 50%; background: var(--border-color);"></span>
-                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-graduation-cap" style="font-size: 14px;"></i> ${student.course || 'N/A'} - ${student.year || 'N/A'}</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-graduation-cap" style="font-size: 14px;"></i> ${program} - ${yearLevel}</span>
                 </div>
             </div>
             <div>
@@ -337,40 +367,48 @@ function showStudentModal(student) {
             
             <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; grid-column: 1 / -1;">
                 <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Personal Information</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Email Address</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary);">${student.email || 'N/A'}</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${email}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Contact Number</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary);">${student.contactNumber || 'N/A'}</p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mobile / Contact</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${mobile}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Birthdate</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.birthdate || 'N/A'}</p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Date of Birth</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${birthdate}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Age</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${age}</p>
                     </div>
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Gender</p>
                         <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.gender || 'N/A'}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Religion</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.religion || 'N/A'}</p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Civil Status</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${civilStatus}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Tribe / Ethnicity</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.tribe || 'N/A'}</p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Religion</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${religion}</p>
                     </div>
                 </div>
             </div>
 
             <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
-                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Scholarship Data</p>
+                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Scholarship & Academic Data</p>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
                     <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Program Name</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${program}</p>
+                    </div>
+                    <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Scholarship Program</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarshipProgram || student.scholarshipName || 'N/A'}</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarshipProgram || student.scholarshipName || 'CHED TES'}</p>
                     </div>
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">SA Number</p>
@@ -378,8 +416,8 @@ function showStudentModal(student) {
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <div>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Started</p>
-                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarYearLevel || 'N/A'}</p>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Year Level</p>
+                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${yearLevel}</p>
                         </div>
                         <div>
                             <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Payouts</p>
@@ -393,16 +431,20 @@ function showStudentModal(student) {
                 <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Family Background</p>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Name & Education</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.fatherName || 'N/A'} <span style="font-weight: normal; color: var(--text-secondary);">(${fam.fatherEduStatus || 'N/A'})</span></p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Full Name</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fatherName}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Name & Education</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.motherName || 'N/A'} <span style="font-weight: normal; color: var(--text-secondary);">(${fam.motherEduStatus || 'N/A'})</span></p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Occupation</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fatherOcc}</p>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Yearly Family Income</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fam.yearlyIncome || 'N/A'}</p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Full Name</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${motherName}</p>
+                    </div>
+                    <div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Occupation</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${motherOcc}</p>
                     </div>
                 </div>
             </div>

@@ -335,13 +335,20 @@ async function loadActivity() {
 // Fetch and render Priority Pending Applications
 async function loadPending() {
     try {
-        const { data: students, error } = await supabase.from('students')
-            .select('uid, fullName, course, year, createdAt')
+        let res = await supabase.from('students')
+            .select('*')
             .eq('status', 'Pending')
-            .order('createdAt', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(4);
         
-        if (error) throw error;
+        if (res.error) {
+            res = await supabase.from('students')
+                .select('*')
+                .eq('status', 'Pending')
+                .limit(4);
+        }
+        
+        const students = res.data || [];
 
         const container = document.getElementById('pending-list');
         if (!container) return;
@@ -360,14 +367,15 @@ async function loadPending() {
         }
 
         container.innerHTML = students.map(s => {
-            const name = s.fullName || 'Unknown Applicant';
+            const name = s.full_name || s.fullName || 'Unknown Applicant';
             const initials = name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'ST';
-            const course = s.course || 'General';
-            const year = s.year ? `Yr ${s.year}` : '1st Year';
+            const course = s.program_name || s.course || 'General';
+            const year = (s.year_level || s.year) ? `Yr ${s.year_level || s.year}` : '1st Year';
 
             let timeAgo = '';
-            if (s.createdAt) {
-                const diffDays = Math.floor((new Date() - new Date(s.createdAt)) / (1000 * 60 * 60 * 24));
+            const rawDate = s.created_at || s.createdAt;
+            if (rawDate) {
+                const diffDays = Math.floor((new Date() - new Date(rawDate)) / (1000 * 60 * 60 * 24));
                 if (diffDays > 0) timeAgo = ` • ${diffDays}d ago`;
                 else timeAgo = ' • Today';
             }
@@ -418,8 +426,10 @@ async function renderChart() {
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)';
 
     try {
-        const { data: students, error } = await supabase.from('students').select('createdAt, status');
-        if (error) throw error;
+        let { data: students, error } = await supabase.from('students').select('*');
+        if (error) {
+            students = [];
+        }
 
         const now = new Date();
         const year = now.getFullYear();
@@ -430,8 +440,9 @@ async function renderChart() {
         let totalYearSubmissions = 0;
 
         (students || []).forEach(s => {
-            if (!s.createdAt) return;
-            const d = new Date(s.createdAt);
+            const rawDate = s.created_at || s.createdAt;
+            if (!rawDate) return;
+            const d = new Date(rawDate);
             if (d.getFullYear() === year) {
                 const m = d.getMonth();
                 submissionsByMonth[m]++;

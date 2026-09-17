@@ -87,10 +87,10 @@ export class BillingService {
             }
 
             if (!match && fullName !== '' && scholarship !== '') {
-                match = masterList.find(s => 
+                match = masterList.find(s =>
                     String(s.fullName || '').trim().toLowerCase() === fullName.toLowerCase() &&
                     (String(s.scholarshipName || '').trim().toLowerCase() === scholarship.toLowerCase() ||
-                     String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
+                        String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
                 );
             }
 
@@ -104,16 +104,16 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Student ID', ['studentId']);
                 this._fillIfEmpty(resultRow, match, 'Full Name', ['fullName']);
                 this._fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarshipName', 'scholarshipType']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Course/Program', ['course']);
                 this._fillIfEmpty(resultRow, match, 'Degree/Program', ['course']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Year Level', ['year', 'scholarYearLevel']);
                 this._fillIfEmpty(resultRow, match, 'Year', ['year', 'scholarYearLevel']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Semester', ['semester']);
                 this._fillIfEmpty(resultRow, match, 'Academic Year', ['academicYear', 'ay']);
-                
+
                 const family = match.familyDetails || {};
                 this._fillIfEmpty(resultRow, match, 'SA Number', ['saNumber', () => family.saNumber]); // Function trick not supported like this, so just mapping to string below
                 if (!resultRow['SA Number'] && family.saNumber) resultRow['SA Number'] = family.saNumber;
@@ -121,20 +121,20 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Sex at Birth (M/F)', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Sex', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Gender', ['gender']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Birthdate (mm/dd/yyyy)', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthdate', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birth Date', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthday', ['birthdate']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'E-mail address', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email Address', ['email']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Phone Number', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Phone', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Contact Number', ['contactNumber']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Status', ['status']);
             } else {
                 unmatchedCount++;
@@ -162,7 +162,7 @@ export class BillingService {
         if (!data || data.length === 0) return;
 
         const headers = Object.keys(data[0]).filter(k => k !== 'matchStatus');
-        
+
         if (asCsv) {
             const rows = [headers];
             for (let row of data) {
@@ -206,7 +206,7 @@ export class BillingService {
             const restParts = rest.split(/\s+/);
             let givenName = '';
             let middleInitial = '';
-            
+
             if (restParts.length > 1) {
                 const lastPart = restParts[restParts.length - 1];
                 middleInitial = lastPart.charAt(0).toUpperCase();
@@ -318,7 +318,9 @@ export class BillingService {
         if (!cell) {
             cell = ns ? doc.createElementNS(ns, 'c') : doc.createElement('c');
             cell.setAttribute('r', addr);
-            cell.setAttribute('s', defaultStyle);
+            if (defaultStyle) {
+                cell.setAttribute('s', defaultStyle);
+            }
 
             const targetIdx = this._colIndexFromAddr(addr);
             const cells = Array.from(rowEl.childNodes).filter(n => n.nodeName === 'c');
@@ -334,6 +336,8 @@ export class BillingService {
             } else {
                 rowEl.appendChild(cell);
             }
+        } else if (defaultStyle) {
+            cell.setAttribute('s', defaultStyle);
         }
 
         while (cell.firstChild) {
@@ -360,6 +364,78 @@ export class BillingService {
         const doc = parser.parseFromString(xmlStr, "application/xml");
         const sheetData = doc.getElementsByTagName("sheetData")[0];
         const startRow = 42;
+        const templateCapacity = 6;
+        const footerStartRow = 48;
+        const shiftCount = students.length > templateCapacity ? students.length - templateCapacity : 0;
+
+        if (shiftCount > 0) {
+            // 1. Shift mergeCells with rows >= footerStartRow
+            const mergeCells = doc.getElementsByTagName("mergeCell");
+            for (let mc of Array.from(mergeCells)) {
+                const ref = mc.getAttribute("ref") || "";
+                const shiftedRef = ref.split(':').map(part => {
+                    const col = part.replace(/[0-9]/g, '');
+                    const row = parseInt(part.replace(/[^0-9]/g, ''), 10);
+                    if (!isNaN(row) && row >= footerStartRow) {
+                        return `${col}${row + shiftCount}`;
+                    }
+                    return part;
+                }).join(':');
+                if (shiftedRef !== ref) {
+                    mc.setAttribute("ref", shiftedRef);
+                }
+            }
+
+            // 2. Shift existing rows >= footerStartRow in descending order
+            const allRows = Array.from(sheetData.childNodes).filter(n => n.nodeName === 'row');
+            const footerRows = allRows
+                .map(rowEl => ({ rowEl, rNum: parseInt(rowEl.getAttribute('r') || '0', 10) }))
+                .filter(item => item.rNum >= footerStartRow)
+                .sort((a, b) => b.rNum - a.rNum);
+
+            for (const { rowEl, rNum } of footerRows) {
+                const newR = rNum + shiftCount;
+                rowEl.setAttribute('r', String(newR));
+                const cellNodes = Array.from(rowEl.childNodes).filter(n => n.nodeName === 'c');
+                for (const cell of cellNodes) {
+                    const oldAddr = cell.getAttribute('r') || '';
+                    const col = oldAddr.replace(/[0-9]/g, '');
+                    if (col) {
+                        cell.setAttribute('r', `${col}${newR}`);
+                    }
+                }
+            }
+
+            // 3. Pre-create inserted student rows (footerStartRow to footerStartRow + shiftCount - 1)
+            const ns = sheetData.namespaceURI;
+            for (let r = footerStartRow; r < footerStartRow + shiftCount; r++) {
+                const newRow = this._getOrCreateRow(doc, sheetData, r);
+                newRow.setAttribute('spans', '1:24');
+                newRow.setAttribute('ht', '15.75');
+                newRow.setAttribute('customHeight', '1');
+                newRow.setAttribute('thickBot', '1');
+
+                const addCell = (col, style) => {
+                    const addr = `${col}${r}`;
+                    let cell = Array.from(newRow.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === addr);
+                    if (!cell) {
+                        cell = ns ? doc.createElementNS(ns, 'c') : doc.createElement('c');
+                        cell.setAttribute('r', addr);
+                        cell.setAttribute('s', style);
+                        newRow.appendChild(cell);
+                    }
+                    return cell;
+                };
+
+                addCell('A', '31');
+                for (let c = 1; c <= 16; c++) {
+                    addCell(this._colLetter(c), this._defaultStyle(c, true));
+                }
+                for (let col of ['R', 'S', 'T', 'U', 'V', 'W', 'X']) {
+                    addCell(col, '1');
+                }
+            }
+        }
 
         for (let i = 0; i < students.length; i++) {
             const s = students[i];
@@ -380,17 +456,17 @@ export class BillingService {
 
             let gender = String(s.gender || s.sex || 'M').toUpperCase();
             gender = gender.startsWith('F') ? 'F' : 'M';
-            
+
             let rawYear = String(s.year || s.yearLevel || s.scholarYearLevel || '1');
             let year = rawYear.includes('1') ? '1' :
-                       rawYear.includes('2') ? '2' :
-                       rawYear.includes('3') ? '3' :
-                       rawYear.includes('4') ? '4' : rawYear;
-                       
+                rawYear.includes('2') ? '2' :
+                    rawYear.includes('3') ? '3' :
+                        rawYear.includes('4') ? '4' : rawYear;
+
             const family = s.familyDetails || {};
             const sa = String(s.saNumber || family.saNumber || s.tesAppNumber || s.tesApplicationNumber || '').trim();
             const course = String(s.course || s.program || s.degreeProgram || '').trim();
-            
+
             let bdate = String(s.birthdate || s.birthday || '').trim();
             if (bdate === '' || bdate.toUpperCase() === 'N/A') {
                 bdate = '01/01/2000';
@@ -445,34 +521,40 @@ export class BillingService {
             num_(16, 10000);                         // Q: TOTAL AMOUNT
         }
 
-        // Summary totals at bottom
+        // Summary totals at bottom (shifted dynamically when rows expand)
         const totalTesAmount = students.length * 10000;
         const totalPwdAmount = 0;
         const totalAmount = totalTesAmount + totalPwdAmount;
         const mgmtFee = Math.round(totalAmount * 0.01);
         const campusTotal = totalAmount + mgmtFee;
 
-        const row48 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '48');
+        const targetRow48 = 48 + shiftCount;
+        const targetRow49 = 49 + shiftCount;
+        const targetRow50 = 50 + shiftCount;
+        const targetRow51 = 51 + shiftCount;
+        const targetRow52 = 52 + shiftCount;
+
+        const row48 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow48));
         if (row48) {
-            this._fillCell(doc, row48, 'O48', totalTesAmount, true, '25');
-            this._fillCell(doc, row48, 'P48', totalPwdAmount, true, '24');
-            this._fillCell(doc, row48, 'Q48', totalAmount, true, '23');
+            this._fillCell(doc, row48, `O${targetRow48}`, totalTesAmount, true, '25');
+            this._fillCell(doc, row48, `P${targetRow48}`, totalPwdAmount, true, '24');
+            this._fillCell(doc, row48, `Q${targetRow48}`, totalAmount, true, '23');
         }
-        const row49 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '49');
+        const row49 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow49));
         if (row49) {
-            this._fillCell(doc, row49, 'Q49', totalAmount, true, '12');
+            this._fillCell(doc, row49, `Q${targetRow49}`, totalAmount, true, '12');
         }
-        const row50 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '50');
+        const row50 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow50));
         if (row50) {
-            this._fillCell(doc, row50, 'Q50', mgmtFee, true, '17');
+            this._fillCell(doc, row50, `Q${targetRow50}`, mgmtFee, true, '17');
         }
-        const row51 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '51');
+        const row51 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow51));
         if (row51) {
-            this._fillCell(doc, row51, 'Q51', campusTotal, true, '12');
+            this._fillCell(doc, row51, `Q${targetRow51}`, campusTotal, true, '12');
         }
-        const row52 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '52');
+        const row52 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow52));
         if (row52) {
-            this._fillCell(doc, row52, 'Q52', campusTotal, true, '7');
+            this._fillCell(doc, row52, `Q${targetRow52}`, campusTotal, true, '7');
         }
 
         const serializer = new XMLSerializer();
@@ -484,6 +566,77 @@ export class BillingService {
         const doc = parser.parseFromString(xmlStr, "application/xml");
         const sheetData = doc.getElementsByTagName("sheetData")[0];
         const startRow = 34;
+        const templateCapacity = 6;
+        const footerStartRow = 40;
+        const shiftCount = students.length > templateCapacity ? students.length - templateCapacity : 0;
+
+        if (shiftCount > 0) {
+            // 1. Shift mergeCells with rows >= footerStartRow
+            const mergeCells = doc.getElementsByTagName("mergeCell");
+            for (let mc of Array.from(mergeCells)) {
+                const ref = mc.getAttribute("ref") || "";
+                const shiftedRef = ref.split(':').map(part => {
+                    const col = part.replace(/[0-9]/g, '');
+                    const row = parseInt(part.replace(/[^0-9]/g, ''), 10);
+                    if (!isNaN(row) && row >= footerStartRow) {
+                        return `${col}${row + shiftCount}`;
+                    }
+                    return part;
+                }).join(':');
+                if (shiftedRef !== ref) {
+                    mc.setAttribute("ref", shiftedRef);
+                }
+            }
+
+            // 2. Shift existing rows >= footerStartRow in descending order
+            const allRows = Array.from(sheetData.childNodes).filter(n => n.nodeName === 'row');
+            const footerRows = allRows
+                .map(rowEl => ({ rowEl, rNum: parseInt(rowEl.getAttribute('r') || '0', 10) }))
+                .filter(item => item.rNum >= footerStartRow)
+                .sort((a, b) => b.rNum - a.rNum);
+
+            for (const { rowEl, rNum } of footerRows) {
+                const newR = rNum + shiftCount;
+                rowEl.setAttribute('r', String(newR));
+                const cellNodes = Array.from(rowEl.childNodes).filter(n => n.nodeName === 'c');
+                for (const cell of cellNodes) {
+                    const oldAddr = cell.getAttribute('r') || '';
+                    const col = oldAddr.replace(/[0-9]/g, '');
+                    if (col) {
+                        cell.setAttribute('r', `${col}${newR}`);
+                    }
+                }
+            }
+
+            // 3. Pre-create inserted student rows (footerStartRow to footerStartRow + shiftCount - 1)
+            const ns = sheetData.namespaceURI;
+            for (let r = footerStartRow; r < footerStartRow + shiftCount; r++) {
+                const newRow = this._getOrCreateRow(doc, sheetData, r);
+                newRow.setAttribute('spans', '1:27');
+                newRow.setAttribute('ht', '14.4');
+                newRow.setAttribute('thickBot', '1');
+
+                const addCell = (col, style) => {
+                    const addr = `${col}${r}`;
+                    let cell = Array.from(newRow.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === addr);
+                    if (!cell) {
+                        cell = ns ? doc.createElementNS(ns, 'c') : doc.createElement('c');
+                        cell.setAttribute('r', addr);
+                        cell.setAttribute('s', style);
+                        newRow.appendChild(cell);
+                    }
+                    return cell;
+                };
+
+                addCell('A', '13');
+                for (let c = 1; c <= 12; c++) {
+                    addCell(this._colLetter(c), this._defaultStyle(c, false));
+                }
+                for (let col of ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA']) {
+                    addCell(col, '1');
+                }
+            }
+        }
 
         for (let i = 0; i < students.length; i++) {
             const s = students[i];
@@ -504,17 +657,17 @@ export class BillingService {
 
             let gender = String(s.gender || s.sex || 'M').toUpperCase();
             gender = gender.startsWith('F') ? 'F' : 'M';
-            
+
             let rawYear = String(s.year || s.yearLevel || s.scholarYearLevel || '1');
             let year = rawYear.includes('1') ? '1' :
-                       rawYear.includes('2') ? '2' :
-                       rawYear.includes('3') ? '3' :
-                       rawYear.includes('4') ? '4' : rawYear;
-                       
+                rawYear.includes('2') ? '2' :
+                    rawYear.includes('3') ? '3' :
+                        rawYear.includes('4') ? '4' : rawYear;
+
             const family = s.familyDetails || {};
             const sa = String(s.saNumber || family.saNumber || s.tesAppNumber || s.tesApplicationNumber || '').trim();
             const course = String(s.course || s.program || s.degreeProgram || '').trim();
-            
+
             let bdate = String(s.birthdate || s.birthday || '').trim();
             if (bdate === '' || bdate.toUpperCase() === 'N/A') {
                 bdate = '01/01/2000';

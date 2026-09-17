@@ -89,12 +89,12 @@ function getFilteredStudents() {
 
     return allStudents.filter(s => {
         const family = s.familyDetails || {};
-        const name = (s.fullName || '').toLowerCase();
-        const id = (s.studentId || '').toLowerCase();
+        const name = (s.full_name || s.fullName || '').toLowerCase();
+        const id = (s.student_no || s.studentId || '').toLowerCase();
         const matchSearch = !query || name.includes(query) || id.includes(query);
         const matchGender = gender === 'All Genders' || s.gender === gender;
-        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarshipProgram || s.scholarshipName) === scholarship;
-        const matchYear = year === 'All Year Levels' || s.scholarYearLevel === year;
+        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarshipProgram || s.scholarshipName || 'CHED TES') === scholarship;
+        const matchYear = year === 'All Year Levels' || s.scholarYearLevel === year || s.year_level === year || s.year === year;
         const matchFather = fatherEdu === 'All (Father)' || (family.fatherEduStatus || 'Non-graduate') === fatherEdu;
         const matchMother = motherEdu === 'All (Mother)' || (family.motherEduStatus || 'Non-graduate') === motherEdu;
         return matchSearch && matchGender && matchScholarship && matchYear && matchFather && matchMother;
@@ -116,8 +116,8 @@ function renderMasterTable(students) {
 
     body.innerHTML = students.map(s => {
         let nameParts = { last: 'N/A', first: 'N/A', mi: '' };
-        if (s.fullName) {
-            const fn = s.fullName.trim();
+        const fn = (s.full_name || s.fullName || '').trim();
+        if (fn) {
             if (fn.includes(',')) {
                 const parts = fn.split(',');
                 const last = parts[0].trim();
@@ -143,40 +143,50 @@ function renderMasterTable(students) {
         }
         
         const family = s.familyDetails || {};
-        const isChecked = selectedStudentIds.has(s.uid) ? 'checked' : '';
+        const isChecked = selectedStudentIds.has(s.uid || s.id) ? 'checked' : '';
         const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' : 
                             (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
                             (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
 
+        const studentNo = s.student_no || s.studentId || 'N/A';
+        const email = s.email_address || s.email || 'N/A';
+        const birthdate = s.date_of_birth || s.birthdate || 'N/A';
+        const program = s.program_name || s.course || 'N/A';
+        const yr = (s.year_level || s.year || '').split(' ')[0] || '';
+        const phone = s.mobile_number || s.contactNumber || 'N/A';
+        const fatherName = s.father_full_name || family.fatherName || 'N/A';
+        const motherName = s.mother_full_name || family.motherName || 'N/A';
+        const religion = s.religion || family.religion || 'N/A';
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 14px;">
-                    <input type="checkbox" class="rpt-row-checkbox" data-uid="${s.uid}" ${isChecked} style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
+                    <input type="checkbox" class="rpt-row-checkbox" data-uid="${s.uid || s.id}" ${isChecked} style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
                 </td>
-                <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${s.studentId || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
                 <td style="padding: 14px; font-weight: 600; font-size: 13px;">
                     ${nameParts.last}
                 </td>
                 <td style="padding: 14px; font-size: 13px;">${nameParts.first}</td>
                 <td style="padding: 14px; font-size: 13px;">${nameParts.mi}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.email || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.birthdate || '01/01/2000'}</td>
+                <td style="padding: 14px; font-size: 13px;">${email}</td>
+                <td style="padding: 14px; font-size: 13px;">${birthdate}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.gender || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.course || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${(s.year || '').split(' ')[0] || ''} - ${s.section || ''}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.scholarshipProgram || s.scholarshipName || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.scholarYearLevel || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${program}</td>
+                <td style="padding: 14px; font-size: 13px;">${yr} - ${s.section || ''}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.scholarYearLevel || yr || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.payoutsReceived || 0}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.contactNumber || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${phone}</td>
                 <td style="padding: 14px;">
                     <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 4px 10px; border-radius: 16px;">${s.status || 'Pending'}</span>
                 </td>
-                <td style="padding: 14px; font-size: 13px;">${family.fatherName || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${family.fatherEduStatus || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${family.motherName || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${family.motherEduStatus || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${fatherName}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.father_occupation || family.fatherEduStatus || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${motherName}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.mother_occupation || family.motherEduStatus || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${family.yearlyIncome || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${family.religion || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${religion}</td>
                 <td style="padding: 14px; font-size: 13px;">${family.tribe || 'N/A'}</td>
             </tr>
         `;

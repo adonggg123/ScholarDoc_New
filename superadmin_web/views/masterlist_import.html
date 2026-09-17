@@ -189,7 +189,7 @@
                 </div>
                 <div style="text-align: center;">
                     <div id="summary-imported" style="font-size: 20px; font-weight: 800; color: #4ade80;">0</div>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Ready to Save</div>
+                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Auto-Saved to DB</div>
                 </div>
                 <div style="text-align: center;">
                     <div id="summary-skipped" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0</div>
@@ -232,7 +232,7 @@
                 </button>
             </div>
 
-            <button class="btn btn-primary" id="btn-extract" disabled style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; font-size: 13px; border-radius: 12px;">
+            <button class="btn btn-primary" id="btn-extract" disabled style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; font-size: 13px; border-radius: 12px; display: none;">
                 <i class="icon-settings" style="font-size: 16px;"></i> Extract Grantees Data
             </button>
             <div id="ocr-progress-container" class="hidden" style="margin-top: 2px;">
@@ -256,9 +256,6 @@
                         <option value="All Batches">All Batches</option>
                     </select>
                 </div>
-                <button class="btn btn-gradient-save hidden" id="btn-save-records" style="padding: 9px 18px; font-weight: 700; font-size: 13px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
-                    <i class="icon-save" style="font-size: 15px;"></i> Save to Masterlist
-                </button>
             </div>
             
             <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: white;">
@@ -282,7 +279,7 @@
                                         <i class="icon-file-search" style="font-size: 48px; color: #cbd5e1; opacity: 0.5;"></i>
                                         <i class="icon-sparkles" style="font-size: 20px; color: var(--primary-color); position: absolute; top: -6px; right: -6px;"></i>
                                     </div>
-                                    <span style="font-size: 14px; max-width: 280px; line-height: 1.5; color: #475569;">Upload a document and extract data to see the new grantees listed here.</span>
+                                    <span style="font-size: 14px; max-width: 280px; line-height: 1.5; color: #475569;">Upload a document to automatically extract and save new grantees.</span>
                                 </div>
                             </td>
                         </tr>
