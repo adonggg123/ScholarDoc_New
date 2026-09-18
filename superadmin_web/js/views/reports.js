@@ -66,7 +66,7 @@ async function loadAllData() {
 function populateScholarshipFilter(students) {
     const set = new Set();
     students.forEach(s => {
-        const name = s.scholarshipProgram || s.scholarshipName;
+        const name = s.scholarship_name || s.scholarshipProgram || s.scholarshipName;
         if (name) set.add(name);
     });
     const sel = document.getElementById('rpt-filter-scholarship');
@@ -93,7 +93,7 @@ function getFilteredStudents() {
         const id = (s.student_no || s.studentId || '').toLowerCase();
         const matchSearch = !query || name.includes(query) || id.includes(query);
         const matchGender = gender === 'All Genders' || s.gender === gender;
-        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarshipProgram || s.scholarshipName || 'CHED TES') === scholarship;
+        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES') === scholarship;
         const matchYear = year === 'All Year Levels' || s.scholarYearLevel === year || s.year_level === year || s.year === year;
         const matchFather = fatherEdu === 'All (Father)' || (family.fatherEduStatus || 'Non-graduate') === fatherEdu;
         const matchMother = motherEdu === 'All (Mother)' || (family.motherEduStatus || 'Non-graduate') === motherEdu;
@@ -174,7 +174,7 @@ function renderMasterTable(students) {
                 <td style="padding: 14px; font-size: 13px;">${s.gender || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${program}</td>
                 <td style="padding: 14px; font-size: 13px;">${yr} - ${s.section || ''}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 14px; font-size: 13px;">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.scholarYearLevel || yr || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.payoutsReceived || 0}</td>
                 <td style="padding: 14px; font-size: 13px;">${phone}</td>
@@ -399,8 +399,8 @@ document.getElementById('btn-export-excel').addEventListener('click', function()
     const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
     const rows = studentsToExport.map(s => {
         let nameParts = { last: '', first: '', mi: '' };
-        if (s.fullName) {
-            const fn = s.fullName.trim();
+        const fn = (s.full_name || s.fullName || '').trim();
+        if (fn) {
             if (fn.includes(',')) {
                 const parts = fn.split(',');
                 const last = parts[0].trim();
@@ -430,11 +430,11 @@ document.getElementById('btn-export-excel').addEventListener('click', function()
             nameParts.last,
             nameParts.first,
             nameParts.mi,
-            s.studentId || '',
-            s.course || '',
-            s.year || '',
+            s.student_no || s.studentId || '',
+            s.program_name || s.course || '',
+            s.year_level || s.year || '',
             s.gender || '',
-            s.scholarshipProgram || s.scholarshipName || '',
+            s.scholarship_name || s.scholarshipProgram || s.scholarshipName || '',
             s.status || '',
             s.scholarYearLevel || '',
             s.payoutsReceived || 0,
@@ -494,12 +494,12 @@ document.getElementById('btn-export-pdf').addEventListener('click', function() {
                 <tbody>
                     ${allStudents.map(s => `
                         <tr>
-                            <td>${s.fullName || ''}</td>
-                            <td>${s.studentId || ''}</td>
-                            <td>${s.course || ''}</td>
-                            <td>${s.year || ''}</td>
+                            <td>${s.full_name || s.fullName || ''}</td>
+                            <td>${s.student_no || s.studentId || ''}</td>
+                            <td>${s.program_name || s.course || ''}</td>
+                            <td>${s.year_level || s.year || ''}</td>
                             <td>${s.gender || ''}</td>
-                            <td>${s.scholarshipProgram || s.scholarshipName || ''}</td>
+                            <td>${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || ''}</td>
                             <td>${s.status || ''}</td>
                         </tr>
                     `).join('')}

@@ -128,7 +128,7 @@ function renderTable() {
                 </td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${program} - ${yearLevel}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || yearLevel || 'N/A'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
@@ -408,7 +408,7 @@ function showStudentModal(student) {
                     </div>
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Scholarship Program</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarshipProgram || student.scholarshipName || 'CHED TES'}</p>
+                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarship_name || student.scholarshipProgram || student.scholarshipName || 'CHED TES'}</p>
                     </div>
                     <div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">SA Number</p>

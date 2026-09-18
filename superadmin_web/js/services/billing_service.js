@@ -89,7 +89,7 @@ export class BillingService {
             if (!match && fullName !== '' && scholarship !== '') {
                 match = masterList.find(s => 
                     String(s.fullName || '').trim().toLowerCase() === fullName.toLowerCase() &&
-                    (String(s.scholarshipName || '').trim().toLowerCase() === scholarship.toLowerCase() ||
+                    (String(s.scholarship_name || s.scholarshipName || s.scholarship || '').trim().toLowerCase() === scholarship.toLowerCase() ||
                      String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
                 );
             }
@@ -103,7 +103,7 @@ export class BillingService {
                 // Auto-fill missing fields
                 this._fillIfEmpty(resultRow, match, 'Student ID', ['studentId']);
                 this._fillIfEmpty(resultRow, match, 'Full Name', ['fullName']);
-                this._fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarshipName', 'scholarshipType']);
+                this._fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarship_name', 'scholarshipName', 'scholarship', 'scholarshipType']);
                 
                 this._fillIfEmpty(resultRow, match, 'Course/Program', ['course']);
                 this._fillIfEmpty(resultRow, match, 'Degree/Program', ['course']);

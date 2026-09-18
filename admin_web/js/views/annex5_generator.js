@@ -68,43 +68,91 @@ async function loadInitialData() {
             .select('*')
             .order('created_at', { ascending: false });
 
+        // Also fetch students table to ensure scholarship_name and latest profile updates are mapped
+        let { data: studentsDbData } = await supabase
+            .from('students')
+            .select('*');
+
+        const studentProfileMap = new Map();
+        (studentsDbData || []).forEach(st => {
+            const sNo = String(st.student_no || st.studentId || '').trim();
+            const sName = String(st.full_name || st.fullName || '').trim().toLowerCase();
+            if (sNo) studentProfileMap.set(sNo, st);
+            if (sName) studentProfileMap.set(sName, st);
+        });
+
         if (!errSchool && schoolDbData && schoolDbData.length > 0) {
-            rawSchoolStudents = schoolDbData.map(s => ({
-                id: s.id,
-                uid: s.student_no || s.id,
-                studentNo: s.student_no || '',
-                studentId: s.student_no || '',
-                fullName: s.full_name || '',
-                name: s.full_name || '',
-                programName: s.program_name || '',
-                course: s.program_name || '',
-                yearLevel: s.year_level || '',
-                year: s.year_level || '',
-                dateOfBirth: s.date_of_birth || '',
-                birthdate: s.date_of_birth || '',
-                age: s.age || '',
-                gender: s.gender || '',
-                civilStatus: s.civil_status || 'Single',
-                religion: s.religion || '',
-                mobileNumber: s.mobile_number || '',
-                phone: s.mobile_number || '',
-                emailAddress: s.email_address || '',
-                email: s.email_address || '',
-                fatherFullName: s.father_full_name || '',
-                fatherOccupation: s.father_occupation || '',
-                motherFullName: s.mother_full_name || '',
-                motherOccupation: s.mother_occupation || '',
-                status: 'Enrolled'
-            }));
-        } else {
-            // Fallback to legacy students table if school_students is not yet populated
-            const { data: legacyStudents } = await supabase
-                .from('students')
-                .select('*')
-                .order('createdAt', { ascending: false });
-            if (legacyStudents && legacyStudents.length > 0) {
-                rawSchoolStudents = legacyStudents;
-            }
+            rawSchoolStudents = schoolDbData.map(s => {
+                const sNo = String(s.student_no || '').trim();
+                const sName = String(s.full_name || '').trim().toLowerCase();
+                const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+
+                const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
+
+                return {
+                    id: s.id,
+                    uid: s.student_no || s.id,
+                    studentNo: s.student_no || '',
+                    studentId: s.student_no || '',
+                    fullName: s.full_name || '',
+                    name: s.full_name || '',
+                    programName: s.program_name || '',
+                    course: s.program_name || '',
+                    yearLevel: s.year_level || '',
+                    year: s.year_level || '',
+                    dateOfBirth: s.date_of_birth || '',
+                    birthdate: s.date_of_birth || '',
+                    age: s.age || '',
+                    gender: s.gender || '',
+                    civilStatus: s.civil_status || 'Single',
+                    religion: s.religion || '',
+                    mobileNumber: s.mobile_number || '',
+                    phone: s.mobile_number || '',
+                    emailAddress: s.email_address || '',
+                    email: s.email_address || '',
+                    fatherFullName: s.father_full_name || '',
+                    fatherOccupation: s.father_occupation || '',
+                    motherFullName: s.mother_full_name || '',
+                    motherOccupation: s.mother_occupation || '',
+                    scholarship: scholarship,
+                    scholarshipName: scholarship,
+                    status: (matchedSt && matchedSt.status) || 'Enrolled'
+                };
+            });
+        } else if (studentsDbData && studentsDbData.length > 0) {
+            // Fallback to students table if school_students is not yet populated
+            rawSchoolStudents = studentsDbData.map(s => {
+                const scholarship = s.scholarship_name || s.scholarshipProgram || s.scholarshipName || s.scholarship || 'TES';
+                return {
+                    id: s.id,
+                    uid: s.student_no || s.studentId || s.id,
+                    studentNo: s.student_no || s.studentId || '',
+                    studentId: s.student_no || s.studentId || '',
+                    fullName: s.full_name || s.fullName || '',
+                    name: s.full_name || s.fullName || '',
+                    programName: s.program_name || s.course || '',
+                    course: s.program_name || s.course || '',
+                    yearLevel: s.year_level || s.year || '',
+                    year: s.year_level || s.year || '',
+                    dateOfBirth: s.date_of_birth || s.birthdate || '',
+                    birthdate: s.date_of_birth || s.birthdate || '',
+                    age: s.age || '',
+                    gender: s.gender || '',
+                    civilStatus: s.civil_status || 'Single',
+                    religion: s.religion || '',
+                    mobileNumber: s.mobile_number || s.contactNumber || '',
+                    phone: s.mobile_number || s.contactNumber || '',
+                    emailAddress: s.email_address || s.email || '',
+                    email: s.email_address || s.email || '',
+                    fatherFullName: s.father_full_name || '',
+                    fatherOccupation: s.father_occupation || '',
+                    motherFullName: s.mother_full_name || '',
+                    motherOccupation: s.mother_occupation || '',
+                    scholarship: scholarship,
+                    scholarshipName: scholarship,
+                    status: s.status || 'Enrolled'
+                };
+            });
         }
 
         // 3. Automatic Restore from Supabase Database
@@ -364,7 +412,7 @@ function renderSchoolStudentsTable(students) {
     if (!tbody) return;
 
     if (!students || students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
         return;
     }
 
@@ -387,6 +435,9 @@ function renderSchoolStudentsTable(students) {
                 fullName = 'N/A';
             }
         }
+
+        // Scholarship Name (Enriched from DB)
+        const scholarship = s.scholarship || s.scholarshipName || s.scholarship_name || 'TES';
 
         // 3. Program Name
         const programName = s.programName || s.program || s.course || 'N/A';
@@ -438,6 +489,9 @@ function renderSchoolStudentsTable(students) {
                 </td>
                 <td style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">${studentNo}</td>
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; white-space: nowrap; color: var(--text-primary);">${fullName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">
+                    <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(30, 136, 229, 0.1); color: #1E88E5; border: 1px solid rgba(30, 136, 229, 0.2);">${scholarship}</span>
+                </td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${programName}</td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap; text-align: center;">${yearLevel}</td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${dob}</td>
@@ -478,13 +532,14 @@ if (searchSchoolStudents) {
             const family = s.familyDetails || {};
             const studentNo = (s.studentNo || s.studentId || s.student_id || '').toLowerCase();
             const name = (s.fullName || `${s.last_name || ''} ${s.first_name || ''}`).toLowerCase();
+            const schol = (s.scholarship || s.scholarshipName || s.scholarship_name || '').toLowerCase();
             const prog = (s.programName || s.program || s.course || '').toLowerCase();
             const email = (s.emailAddress || s.email || '').toLowerCase();
             const father = (s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').toLowerCase();
             const mother = (s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').toLowerCase();
             const religion = (s.religion || family.religion || '').toLowerCase();
             const dob = (s.dateOfBirth || s.birthdate || '').toLowerCase();
-            return studentNo.includes(q) || name.includes(q) || prog.includes(q) || email.includes(q) || father.includes(q) || mother.includes(q) || religion.includes(q) || dob.includes(q);
+            return studentNo.includes(q) || name.includes(q) || schol.includes(q) || prog.includes(q) || email.includes(q) || father.includes(q) || mother.includes(q) || religion.includes(q) || dob.includes(q);
         });
         renderSchoolStudentsTable(filtered);
     });
@@ -540,6 +595,7 @@ function downloadSchoolStudentTemplate() {
     const headers = [
         'Student No.',
         'Full Name',
+        'Scholarship',
         'Program Name',
         'Year Level',
         'Date of Birth',
@@ -559,6 +615,7 @@ function downloadSchoolStudentTemplate() {
         [
             '2024-00101',
             'DELA CRUZ, JUAN PEDRO M.',
+            'TES',
             'Bachelor of Science in Information Technology',
             '1st Year',
             '2004-05-15',
@@ -576,6 +633,7 @@ function downloadSchoolStudentTemplate() {
         [
             '2024-00102',
             'SANTOS, MARIA CLARA S.',
+            'TES',
             'Bachelor of Science in Computer Science',
             '2nd Year',
             '2003-08-22',
@@ -598,6 +656,7 @@ function downloadSchoolStudentTemplate() {
     ws['!cols'] = [
         { wch: 15 }, // Student No.
         { wch: 28 }, // Full Name
+        { wch: 15 }, // Scholarship
         { wch: 35 }, // Program Name
         { wch: 12 }, // Year Level
         { wch: 15 }, // Date of Birth
@@ -673,43 +732,94 @@ if (btnClearFile) {
         if (uploadPrompt) uploadPrompt.style.display = 'flex';
         if (fileInfo) fileInfo.style.display = 'none';
 
-        // Revert to database students (from school_students or legacy students)
+        // Revert to database students (from school_students or students)
         let { data: dbStudents } = await supabase
             .from('school_students')
             .select('*')
             .order('created_at', { ascending: false });
 
+        let { data: fallbackStudents } = await supabase
+            .from('students')
+            .select('*');
+
+        const studentProfileMap = new Map();
+        (fallbackStudents || []).forEach(st => {
+            const sNo = String(st.student_no || st.studentId || '').trim();
+            const sName = String(st.full_name || st.fullName || '').trim().toLowerCase();
+            if (sNo) studentProfileMap.set(sNo, st);
+            if (sName) studentProfileMap.set(sName, st);
+        });
+
         if (dbStudents && dbStudents.length > 0) {
-            rawSchoolStudents = dbStudents.map(s => ({
-                id: s.id,
-                uid: s.student_no || s.id,
-                studentNo: s.student_no || '',
-                studentId: s.student_no || '',
-                fullName: s.full_name || '',
-                name: s.full_name || '',
-                programName: s.program_name || '',
-                course: s.program_name || '',
-                yearLevel: s.year_level || '',
-                year: s.year_level || '',
-                dateOfBirth: s.date_of_birth || '',
-                birthdate: s.date_of_birth || '',
-                age: s.age || '',
-                gender: s.gender || '',
-                civilStatus: s.civil_status || 'Single',
-                religion: s.religion || '',
-                mobileNumber: s.mobile_number || '',
-                phone: s.mobile_number || '',
-                emailAddress: s.email_address || '',
-                email: s.email_address || '',
-                fatherFullName: s.father_full_name || '',
-                fatherOccupation: s.father_occupation || '',
-                motherFullName: s.mother_full_name || '',
-                motherOccupation: s.mother_occupation || '',
-                status: 'Enrolled'
-            }));
-        } else {
-            const { data: fallbackStudents } = await supabase.from('students').select('*');
-            rawSchoolStudents = fallbackStudents || [];
+            rawSchoolStudents = dbStudents.map(s => {
+                const sNo = String(s.student_no || '').trim();
+                const sName = String(s.full_name || '').trim().toLowerCase();
+                const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+                const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
+
+                return {
+                    id: s.id,
+                    uid: s.student_no || s.id,
+                    studentNo: s.student_no || '',
+                    studentId: s.student_no || '',
+                    fullName: s.full_name || '',
+                    name: s.full_name || '',
+                    programName: s.program_name || '',
+                    course: s.program_name || '',
+                    yearLevel: s.year_level || '',
+                    year: s.year_level || '',
+                    dateOfBirth: s.date_of_birth || '',
+                    birthdate: s.date_of_birth || '',
+                    age: s.age || '',
+                    gender: s.gender || '',
+                    civilStatus: s.civil_status || 'Single',
+                    religion: s.religion || '',
+                    mobileNumber: s.mobile_number || '',
+                    phone: s.mobile_number || '',
+                    emailAddress: s.email_address || '',
+                    email: s.email_address || '',
+                    fatherFullName: s.father_full_name || '',
+                    fatherOccupation: s.father_occupation || '',
+                    motherFullName: s.mother_full_name || '',
+                    motherOccupation: s.mother_occupation || '',
+                    scholarship: scholarship,
+                    scholarshipName: scholarship,
+                    status: (matchedSt && matchedSt.status) || 'Enrolled'
+                };
+            });
+        } else if (fallbackStudents && fallbackStudents.length > 0) {
+            rawSchoolStudents = fallbackStudents.map(s => {
+                const scholarship = s.scholarship_name || s.scholarshipProgram || s.scholarshipName || s.scholarship || 'TES';
+                return {
+                    id: s.id,
+                    uid: s.student_no || s.studentId || s.id,
+                    studentNo: s.student_no || s.studentId || '',
+                    studentId: s.student_no || s.studentId || '',
+                    fullName: s.full_name || s.fullName || '',
+                    name: s.full_name || s.fullName || '',
+                    programName: s.program_name || s.course || '',
+                    course: s.program_name || s.course || '',
+                    yearLevel: s.year_level || s.year || '',
+                    year: s.year_level || s.year || '',
+                    dateOfBirth: s.date_of_birth || s.birthdate || '',
+                    birthdate: s.date_of_birth || s.birthdate || '',
+                    age: s.age || '',
+                    gender: s.gender || '',
+                    civilStatus: s.civil_status || 'Single',
+                    religion: s.religion || '',
+                    mobileNumber: s.mobile_number || s.contactNumber || '',
+                    phone: s.mobile_number || s.contactNumber || '',
+                    emailAddress: s.email_address || s.email || '',
+                    email: s.email_address || s.email || '',
+                    fatherFullName: s.father_full_name || '',
+                    fatherOccupation: s.father_occupation || '',
+                    motherFullName: s.mother_full_name || '',
+                    motherOccupation: s.mother_occupation || '',
+                    scholarship: scholarship,
+                    scholarshipName: scholarship,
+                    status: s.status || 'Enrolled'
+                };
+            });
         }
 
         updateSourceCounts();
@@ -763,6 +873,7 @@ async function handleSchoolFile(file) {
                     father_occupation: s.fatherOccupation || null,
                     mother_full_name: s.motherFullName || null,
                     mother_occupation: s.motherOccupation || null,
+                    scholarship_name: s.scholarship || s.scholarshipName || 'TES',
                     updated_at: new Date().toISOString()
                 };
             }).filter(r => r.full_name && r.full_name !== 'Unknown');
@@ -773,18 +884,25 @@ async function handleSchoolFile(file) {
                 let storedCount = 0;
                 for (let i = 0; i < dbRecords.length; i += batchSize) {
                     const batch = dbRecords.slice(i, i + batchSize);
-                    const { error: upsertErr } = await supabase
+                    let { error: upsertErr } = await supabase
                         .from('school_students')
                         .upsert(batch, { onConflict: 'student_no' });
 
                     if (upsertErr) {
-                        console.warn('Upsert on school_students failed, falling back to insert:', upsertErr);
-                        const { error: insertErr } = await supabase
+                        console.warn('Upsert on school_students failed, falling back without scholarship_name or insert:', upsertErr);
+                        // If column is missing on school_students table, strip it out gracefully
+                        const strippedBatch = batch.map(({ scholarship_name, ...rest }) => rest);
+                        const { error: retryErr } = await supabase
                             .from('school_students')
-                            .insert(batch);
-                        if (insertErr) {
-                            console.error('Insert error to school_students:', insertErr);
-                            throw insertErr;
+                            .upsert(strippedBatch, { onConflict: 'student_no' });
+                        if (retryErr) {
+                            const { error: insertErr } = await supabase
+                                .from('school_students')
+                                .insert(strippedBatch);
+                            if (insertErr) {
+                                console.error('Insert error to school_students:', insertErr);
+                                throw insertErr;
+                            }
                         }
                     }
                     storedCount += batch.length;
@@ -920,6 +1038,10 @@ async function parseSchoolExcelOrCsv(file) {
                             else if (col.includes('status') || col.includes('enrollment') || col.includes('remarks')) {
                                 colMap.status = idx;
                             }
+                            // 15. Scholarship Program / Type
+                            else if (col.includes('scholarship') || col.includes('grant') || col === 'scholar' || col === 'scholarship_name') {
+                                colMap.scholarship = idx;
+                            }
                         });
                         break;
                     }
@@ -985,6 +1107,7 @@ async function parseSchoolExcelOrCsv(file) {
                         let motherFullName = colMap.motherFullName !== undefined ? String(row[colMap.motherFullName] || '').trim() : '';
                         let motherOccupation = colMap.motherOccupation !== undefined ? String(row[colMap.motherOccupation] || '').trim() : '';
                         let status = colMap.status !== undefined ? String(row[colMap.status] || 'Enrolled').trim() : 'Enrolled';
+                        let scholarship = colMap.scholarship !== undefined ? String(row[colMap.scholarship] || '').trim() : '';
 
                         if (!fullName && (lastName || firstName)) {
                             fullName = [lastName, firstName, mi].filter(Boolean).join(', ');
@@ -999,6 +1122,8 @@ async function parseSchoolExcelOrCsv(file) {
                             first_name: firstName,
                             last_name: lastName,
                             middle_name: mi,
+                            scholarship: scholarship || 'TES',
+                            scholarshipName: scholarship || 'TES',
                             programName: programName,
                             course: programName,
                             yearLevel: yearLevel,
@@ -1100,6 +1225,8 @@ async function parseSchoolExcelOrCsv(file) {
                                 studentNo: studentNo,
                                 studentId: studentNo,
                                 fullName: fullName || 'N/A',
+                                scholarship: 'TES',
+                                scholarshipName: 'TES',
                                 programName: programName,
                                 course: programName,
                                 yearLevel: yearLevel,
