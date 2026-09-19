@@ -42,6 +42,7 @@ let ocrProgressBar = null;
 let extractedTableBody = null;
 let btnSaveRecords = null;
 let filterBatch = null;
+let btnClearMasterlist = null;
 
 // Summary Metrics Elements
 let importSummaryCard = null;
@@ -565,8 +566,21 @@ function populateBatchFilter() {
     filterBatch.classList.remove('hidden');
 }
 
+function updateClearMasterlistButtonVisibility() {
+    if (btnClearMasterlist) {
+        if (extractedRecords && extractedRecords.length > 0) {
+            btnClearMasterlist.classList.remove('hidden');
+            btnClearMasterlist.style.display = 'inline-flex';
+        } else {
+            btnClearMasterlist.classList.add('hidden');
+            btnClearMasterlist.style.display = 'none';
+        }
+    }
+}
+
 function renderTable() {
     if (!extractedTableBody) return;
+    updateClearMasterlistButtonVisibility();
 
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
@@ -729,27 +743,77 @@ function renderTable() {
 
     document.querySelectorAll('.btn-remove').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const idx = e.currentTarget.getAttribute('data-index');
+            const btnEl = e.currentTarget;
+            const idx = parseInt(btnEl.getAttribute('data-index'), 10);
             const rec = extractedRecords[idx];
-            if (rec && rec.id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).delete().eq('id', rec.id);
-                } catch (delErr) {
-                    console.warn('Error deleting record from db:', delErr);
-                }
+            if (!rec) return;
+
+            const granteeName = (rec.lastName || rec.firstName)
+                ? `${rec.lastName || ''}, ${rec.firstName || ''} ${rec.middleName || ''}`.trim()
+                : (rec.name || 'this grantee');
+
+            if (!confirm(`Are you sure you want to delete "${granteeName}" from the New Grantees Masterlist?`)) {
+                return;
             }
-            extractedRecords.splice(idx, 1);
 
-            const skipped = extractedRecords.filter(r => r.isDuplicate).length;
-            const imported = extractedRecords.filter(r => !r.isDuplicate).length;
-            if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
-            if (summaryImported) summaryImported.textContent = imported;
-            if (summarySkipped) summarySkipped.textContent = skipped;
+            const origContent = btnEl.innerHTML;
+            btnEl.disabled = true;
+            btnEl.innerHTML = '<i class="icon-loader" style="font-size: 14px; animation: spin 1s linear infinite; display: inline-block;"></i>';
 
-            renderTable();
-            if (extractedRecords.length === 0) {
-                if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
-                if (importSummaryCard) importSummaryCard.classList.add('hidden');
+            try {
+                if (rec && rec.id) {
+                    const { data, error } = await window.supabaseClient
+                        .from(getTableName())
+                        .delete()
+                        .eq('id', rec.id)
+                        .select();
+
+                    if (error) {
+                        console.error('Error deleting record from db:', error);
+                        alert(`Failed to delete record from database: ${error.message}`);
+                        btnEl.disabled = false;
+                        btnEl.innerHTML = origContent;
+                        return;
+                    }
+
+                    // Check if RLS blocked the delete (0 rows deleted despite record having an id in DB)
+                    if (data && data.length === 0) {
+                        console.warn('PostgREST returned 0 affected rows on delete:', rec.id);
+                        alert(
+                            'Notice: The record was removed locally, but could not be deleted from Supabase because Row Level Security (RLS) is active without a DELETE policy on new_grantees_masterlist.\n\n' +
+                            'Please run the "scratch/fix_new_grantees_rls.sql" script in your Supabase SQL Editor to grant DELETE permissions.'
+                        );
+                    }
+                }
+
+                // Remove from array (find by id if present, or index)
+                const targetIndex = rec.id 
+                    ? extractedRecords.findIndex(r => r.id === rec.id)
+                    : idx;
+                if (targetIndex !== -1) {
+                    extractedRecords.splice(targetIndex, 1);
+                }
+
+                const skipped = extractedRecords.filter(r => r.isDuplicate).length;
+                const imported = extractedRecords.filter(r => !r.isDuplicate).length;
+                if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
+                if (summaryImported) summaryImported.textContent = imported;
+                if (summarySkipped) summarySkipped.textContent = skipped;
+
+                renderTable();
+                if (extractedRecords.length === 0) {
+                    if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
+                    if (importSummaryCard) importSummaryCard.classList.add('hidden');
+                }
+
+                if (typeof window.showToast === 'function') {
+                    window.showToast(`"${granteeName}" deleted from masterlist.`, 'trash-2');
+                }
+            } catch (delErr) {
+                console.error('Error deleting record from db:', delErr);
+                alert(`Error deleting record: ${delErr.message || delErr}`);
+                btnEl.disabled = false;
+                btnEl.innerHTML = origContent;
             }
         });
     });
@@ -808,7 +872,11 @@ async function saveRecordsToDatabase() {
 
 async function loadSchoolStudentsAndVerify(grantees) {
     try {
-        const { data: dbStudents } = await window.supabaseClient.from('students').select('*');
+        let { data: dbStudents } = await window.supabaseClient.from('school_students').select('*');
+        if (!dbStudents || dbStudents.length === 0) {
+            const res = await window.supabaseClient.from('students').select('*');
+            dbStudents = res.data;
+        }
         schoolStudents = dbStudents || [];
 
         // 1. Check if Admin has already verified and categorized records in Review Queue
@@ -1237,25 +1305,13 @@ async function fetchExistingMasterlist() {
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
             populateBatchFilter();
             renderTable();
-
-            // Trigger Annex 5 verification in Super Admin view
-            const granteesForVerification = data.map(m => ({
-                id: m.id,
-                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                last_name: m.last_name,
-                first_name: m.first_name,
-                middle_name: m.middle_name,
-                batch: m.batch || 'Batch 1',
-                student_id: m.student_id || '',
-                course: m.course || 'BSIT',
-                year: m.year || '1'
-            }));
-            await loadSchoolStudentsAndVerify(granteesForVerification);
+            updateClearMasterlistButtonVisibility();
 
         } else {
             extractedRecords = [];
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
             renderTable();
+            updateClearMasterlistButtonVisibility();
         }
     } catch (err) {
         console.error('Error fetching existing masterlist:', err);
@@ -1277,6 +1333,7 @@ export function initMasterlistImport() {
     extractedTableBody = document.getElementById('extracted-table-body');
     btnSaveRecords = document.getElementById('btn-save-records');
     filterBatch = document.getElementById('filter-batch');
+    btnClearMasterlist = document.getElementById('btn-clear-masterlist');
 
     importSummaryCard = document.getElementById('import-summary-card');
     summaryExtracted = document.getElementById('summary-extracted');
@@ -1353,6 +1410,66 @@ export function initMasterlistImport() {
 
     if (btnSaveRecords) {
         btnSaveRecords.addEventListener('click', saveRecordsToDatabase);
+    }
+
+    if (btnClearMasterlist) {
+        btnClearMasterlist.addEventListener('click', async () => {
+            if (!extractedRecords || extractedRecords.length === 0) {
+                alert('The masterlist is already empty.');
+                return;
+            }
+
+            const confirmed = confirm(
+                `Are you sure you want to permanently delete ALL ${extractedRecords.length} records from the New Grantees Masterlist?\n\nThis will remove them from the database and cannot be undone.`
+            );
+            if (!confirmed) return;
+
+            const origHtml = btnClearMasterlist.innerHTML;
+            btnClearMasterlist.disabled = true;
+            btnClearMasterlist.innerHTML = '<i class="icon-loader" style="font-size: 13px; animation: spin 1s linear infinite; display: inline-block;"></i> Clearing...';
+
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from(getTableName())
+                    .delete()
+                    .neq('id', '00000000-0000-0000-0000-000000000000')
+                    .select();
+
+                if (error) {
+                    console.error('Error clearing masterlist:', error);
+                    alert(`Failed to clear masterlist from database: ${error.message}`);
+                    return;
+                }
+
+                if (data && data.length === 0 && extractedRecords.some(r => r.id)) {
+                    alert(
+                        'Notice: Records could not be deleted from Supabase because Row Level Security (RLS) is active without a DELETE policy.\n\n' +
+                        'Please run the "scratch/fix_new_grantees_rls.sql" script in your Supabase SQL Editor to grant DELETE permissions.'
+                    );
+                }
+
+                extractedRecords = [];
+                if (summaryExtracted) summaryExtracted.textContent = '0';
+                if (summaryImported) summaryImported.textContent = '0';
+                if (summarySkipped) summarySkipped.textContent = '0';
+                if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
+                if (importSummaryCard) importSummaryCard.classList.add('hidden');
+
+                populateBatchFilter();
+                renderTable();
+
+                if (typeof window.showToast === 'function') {
+                    window.showToast('All grantees successfully removed from the masterlist.', 'trash-2');
+                }
+            } catch (err) {
+                console.error('Error in clear masterlist:', err);
+                alert('An unexpected error occurred: ' + (err.message || err));
+            } finally {
+                btnClearMasterlist.disabled = false;
+                btnClearMasterlist.innerHTML = origHtml;
+                updateClearMasterlistButtonVisibility();
+            }
+        });
     }
 
     // Annex Tab Switching
@@ -1486,31 +1603,148 @@ export function initMasterlistImport() {
         });
     }
 
-    const saBtnClearForm3 = document.getElementById('sa-btn-clear-form3-data');
-    if (saBtnClearForm3) {
-        saBtnClearForm3.addEventListener('click', () => {
-            if (verifiedForm3List.length === 0) {
-                alert('Form 3 table is already empty.');
+    // Form 2 Clear Data Action
+    const saBtnClearForm2 = document.getElementById('sa-btn-clear-form2-data');
+    if (saBtnClearForm2) {
+        saBtnClearForm2.addEventListener('click', async () => {
+            if (verifiedForm2List.length === 0) {
+                alert('Form 2 table is already empty.');
                 return;
             }
-            if (confirm('Are you sure you want to remove all records from the Annex Form 3 table?')) {
-                verifiedForm3List = [];
+            if (confirm('Are you sure you want to clear all records from the Annex Form 2 table? This will clear local cache and delete records from Supabase.')) {
+                verifiedForm2List = [];
                 const synced = AnnexSyncService.saveVerifiedData({
                     form2List: verifiedForm2List,
                     form3List: verifiedForm3List,
                     needsReviewList: needsReviewList,
-                    updatedBy: 'Super Admin'
+                    updatedBy: 'Super Admin',
+                    syncToDb: false
                 });
                 if (synced) {
                     verifiedForm2List = synced.form2List;
                     verifiedForm3List = synced.form3List;
                     needsReviewList = synced.needsReviewList;
                 }
+                if (window.supabaseClient) {
+                    try {
+                        await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    } catch (dbErr) {
+                        console.warn('Error deleting annex_form_2 in Supabase:', dbErr);
+                    }
+                }
                 updateAnnexKPIs();
-                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexForm2Table(verifiedForm2List);
+                const syncBadge = document.getElementById('sa-sync-status-badge');
+                if (syncBadge) {
+                    syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Form 2 Cleared (0 Records)`;
+                }
+                if (window.showToast) window.showToast('Annex Form 2 records cleared.', 'info');
             }
         });
     }
+
+    // Form 3 Clear Data Action
+    const saBtnClearForm3 = document.getElementById('sa-btn-clear-form3-data');
+    if (saBtnClearForm3) {
+        saBtnClearForm3.addEventListener('click', async () => {
+            if (verifiedForm3List.length === 0) {
+                alert('Form 3 table is already empty.');
+                return;
+            }
+            if (confirm('Are you sure you want to remove all records from the Annex Form 3 table? This will clear local cache and delete records from Supabase.')) {
+                verifiedForm3List = [];
+                const synced = AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: needsReviewList,
+                    updatedBy: 'Super Admin',
+                    syncToDb: false
+                });
+                if (synced) {
+                    verifiedForm2List = synced.form2List;
+                    verifiedForm3List = synced.form3List;
+                    needsReviewList = synced.needsReviewList;
+                }
+                if (window.supabaseClient) {
+                    try {
+                        await window.supabaseClient.from('annex_form_3').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    } catch (dbErr) {
+                        console.warn('Error deleting annex_form_3 in Supabase:', dbErr);
+                    }
+                }
+                updateAnnexKPIs();
+                renderAnnexForm3Table(verifiedForm3List);
+                const syncBadge = document.getElementById('sa-sync-status-badge');
+                if (syncBadge) {
+                    syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Form 3 Cleared (0 Records)`;
+                }
+                if (window.showToast) window.showToast('Annex Form 3 records cleared.', 'info');
+            }
+        });
+    }
+
+    // Manual DB Refresh Action
+    const refreshFromDb = async () => {
+        const syncBadge = document.getElementById('sa-sync-status-badge');
+        if (syncBadge) {
+            syncBadge.innerHTML = `<i class="icon-refresh-cw sync-spin" style="font-size: 13px;"></i> Syncing with Database...`;
+            syncBadge.style.display = 'inline-flex';
+        }
+        try {
+            const dbSync = await AnnexSyncService.loadFromSupabase();
+            if (dbSync && dbSync.fromDb) {
+                verifiedForm2List = dbSync.form2List || [];
+                verifiedForm3List = dbSync.form3List || [];
+                needsReviewList = [];
+                updateAnnexKPIs();
+                renderAnnexForm2Table(verifiedForm2List);
+                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexReviewQueue(needsReviewList);
+
+                AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: [],
+                    updatedBy: 'Supabase Manual Refresh',
+                    syncToDb: false
+                });
+
+                if (syncBadge) {
+                    if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
+                        syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                    } else {
+                        syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Database in Sync (0 Records)`;
+                    }
+                }
+                if (window.showToast) window.showToast(`Database synced: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3 records.`, 'check-circle');
+            }
+        } catch (err) {
+            console.error('Error refreshing from database:', err);
+            if (window.showToast) window.showToast('Failed to sync from database: ' + (err.message || err), 'error');
+        }
+    };
+
+    const saBtnRefreshF2 = document.getElementById('sa-btn-refresh-form2-db');
+    if (saBtnRefreshF2) saBtnRefreshF2.addEventListener('click', refreshFromDb);
+    const saBtnRefreshF3 = document.getElementById('sa-btn-refresh-form3-db');
+    if (saBtnRefreshF3) saBtnRefreshF3.addEventListener('click', refreshFromDb);
+
+    window.refreshAnnexFromDb = refreshFromDb;
+    window.clearAnnexForm2 = async () => {
+        verifiedForm2List = [];
+        AnnexSyncService.saveVerifiedData({
+            form2List: [],
+            form3List: verifiedForm3List,
+            needsReviewList: needsReviewList,
+            updatedBy: 'Manual Clear',
+            syncToDb: false
+        });
+        if (window.supabaseClient) {
+            await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        }
+        updateAnnexKPIs();
+        renderAnnexForm2Table(verifiedForm2List);
+    };
 
     // Modal Handlers for Super Admin Grantee Categorization
     const saBtnCloseRes = document.getElementById('sa-btn-close-resolution');
@@ -1611,7 +1845,7 @@ export function initMasterlistImport() {
 
     // Automatically restore verified state from Supabase on boot
     AnnexSyncService.loadFromSupabase().then(dbSync => {
-        if (dbSync && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
+        if (dbSync && dbSync.fromDb) {
             verifiedForm2List = dbSync.form2List || [];
             verifiedForm3List = dbSync.form3List || [];
             needsReviewList = [];
@@ -1619,22 +1853,29 @@ export function initMasterlistImport() {
             renderAnnexForm2Table(verifiedForm2List);
             renderAnnexForm3Table(verifiedForm3List);
             renderAnnexReviewQueue(needsReviewList);
+
+            // Database is the ground truth: sync to localStorage so stale cached records are eliminated
             AnnexSyncService.saveVerifiedData({
                 form2List: verifiedForm2List,
                 form3List: verifiedForm3List,
                 needsReviewList: [],
-                updatedBy: 'Supabase Auto-Restore',
+                updatedBy: 'Supabase Sync',
                 syncToDb: false
             });
+
             const syncBadge = document.getElementById('sa-sync-status-badge');
             if (syncBadge) {
-                syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> Auto-Restored from Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
+                    syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                } else {
+                    syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Database in Sync (0 Records)`;
+                }
                 syncBadge.style.display = 'inline-flex';
             }
         } else {
-            // Local storage fallback
+            // Local storage fallback only if Supabase could not be contacted / offline
             const initialSync = AnnexSyncService.getVerifiedData();
-            if (initialSync && (initialSync.form2List.length > 0 || initialSync.form3List.length > 0)) {
+            if (initialSync) {
                 verifiedForm2List = initialSync.form2List || [];
                 verifiedForm3List = initialSync.form3List || [];
                 needsReviewList = initialSync.needsReviewList || [];

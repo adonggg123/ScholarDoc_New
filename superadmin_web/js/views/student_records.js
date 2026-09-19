@@ -1,4 +1,5 @@
 // js/views/student_records.js
+import { StudentSyncService } from '../services/student_sync_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -23,25 +24,26 @@ const modalContent = document.getElementById('modal-content');
 
 async function loadStudents() {
     try {
-        let res = await supabase.from('students').select('*').order('created_at', { ascending: false });
-        if (res.error) {
-            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+        if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                <i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i>
+                <div>Loading student records...</div>
+            </td></tr>`;
+            if (window.lucide) window.lucide.createIcons();
         }
-        if (res.error) {
-            res = await supabase.from('students').select('*');
-        }
-        if (res.error) throw res.error;
-        
-        allStudents = res.data || [];
+
+        allStudents = await StudentSyncService.loadAndSyncStudents();
         applyFilters();
     } catch (e) {
         console.error('Error loading students:', e);
-        tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+        if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+        }
     }
 }
 
 function applyFilters() {
-    const search = (searchInput ? searchInput.value : '').toLowerCase();
+    const search = (searchInput ? searchInput.value : '').toLowerCase().trim();
     const status = filterStatus ? filterStatus.value : 'All';
     const course = filterCourse ? filterCourse.value : 'All';
     const scholarship = filterScholarship ? filterScholarship.value : 'All';
@@ -51,13 +53,32 @@ function applyFilters() {
         const name = (s.full_name || s.fullName || '').toLowerCase();
         const id = (s.student_no || s.studentId || '').toLowerCase();
         const email = (s.email_address || s.email || '').toLowerCase();
-        const matchSearch = !search || name.includes(search) || id.includes(search) || email.includes(search);
+        const prog = (s.program_name || s.course || '').toLowerCase();
+        const matchSearch = !search || name.includes(search) || id.includes(search) || email.includes(search) || prog.includes(search);
         
-        const currentStatus = s.status || '';
-        const matchStatus = status === 'All' || currentStatus.toLowerCase() === status.toLowerCase();
+        const currentStatus = (s.status || '').toLowerCase();
+        let matchStatus = status === 'All';
+        if (!matchStatus) {
+            const stLower = status.toLowerCase();
+            matchStatus = currentStatus === stLower ||
+                (stLower === 'verified' && (currentStatus === 'verified' || currentStatus === 'approved')) ||
+                (stLower === 'approved' && (currentStatus === 'verified' || currentStatus === 'approved'));
+        }
 
-        const currentCourse = (s.program_name || s.course || '').toLowerCase();
-        const matchCourse = course === 'All' || currentCourse.includes(course.toLowerCase());
+        const currentCourse = prog;
+        let matchCourse = course === 'All';
+        if (!matchCourse) {
+            const cLower = course.toLowerCase();
+            if (currentCourse.includes(cLower)) {
+                matchCourse = true;
+            } else if (cLower === 'bsit' && (currentCourse.includes('information technology') || currentCourse.includes('computer'))) {
+                matchCourse = true;
+            } else if (cLower === 'bfpt' && (currentCourse.includes('food processing') || currentCourse.includes('food technology'))) {
+                matchCourse = true;
+            } else if (cLower === 'btled' && (currentCourse.includes('technology and livelihood') || currentCourse.includes('livelihood') || currentCourse.includes('education'))) {
+                matchCourse = true;
+            }
+        }
         
         const currentSchol = (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES').toLowerCase();
         const matchSchol = scholarship === 'All' || currentSchol.includes(scholarship.toLowerCase());

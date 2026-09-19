@@ -256,6 +256,9 @@
                         <option value="All Batches">All Batches</option>
                     </select>
                 </div>
+                <button id="btn-clear-masterlist" class="hidden" style="display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer; color: #ef4444; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.2s;" title="Permanently delete all records from this masterlist">
+                    <i class="icon-trash-2" style="font-size: 14px;"></i> Clear Masterlist
+                </button>
             </div>
             
             <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: white;">
@@ -338,6 +341,16 @@
                     <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
                         <i class="icon-coins" style="font-size: 14px;"></i> <span id="sa-stat-form2-amount">₱0.00 Total Billing</span>
                     </div>
+                    <button id="sa-btn-refresh-form2-db"
+                        style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Re-sync Form 2 records with Supabase database">
+                        <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                    </button>
+                    <button id="sa-btn-clear-form2-data"
+                        style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Remove all records from Annex Form 2 table">
+                        <i class="icon-trash-2" style="font-size: 13px;"></i> Clear Form 2 Data
+                    </button>
                 </div>
             </div>
 
@@ -383,6 +396,11 @@
                     <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
                         <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not Included Grantees</span>
                     </div>
+                    <button id="sa-btn-refresh-form3-db"
+                        style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Re-sync Form 3 records with Supabase database">
+                        <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                    </button>
                     <button id="sa-btn-clear-form3-data"
                         style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
                         title="Remove all records from Annex Form 3 table">

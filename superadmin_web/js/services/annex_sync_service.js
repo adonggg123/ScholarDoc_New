@@ -319,9 +319,9 @@ export class AnnexSyncService {
                 };
             });
 
-            // 3. Clear current academic year / semester records to avoid duplicate stacks, then insert
+            // 3. Sync Form 2 to Supabase: always clear previous for this AY/Sem, and insert new if any
+            await supabase.from('annex_form_2').delete().match({ academic_year: academicYear, semester: semester });
             if (f2Rows.length > 0) {
-                await supabase.from('annex_form_2').delete().match({ academic_year: academicYear, semester: semester });
                 const batchSize = 100;
                 for (let i = 0; i < f2Rows.length; i += batchSize) {
                     const chunk = f2Rows.slice(i, i + batchSize);
@@ -333,8 +333,9 @@ export class AnnexSyncService {
                 }
             }
 
+            // 4. Sync Form 3 to Supabase: always clear previous for this AY/Sem, and insert new if any
+            await supabase.from('annex_form_3').delete().match({ academic_year: academicYear, semester: semester });
             if (f3Rows.length > 0) {
-                await supabase.from('annex_form_3').delete().match({ academic_year: academicYear, semester: semester });
                 const batchSize = 100;
                 for (let i = 0; i < f3Rows.length; i += batchSize) {
                     const chunk = f3Rows.slice(i, i + batchSize);
@@ -347,6 +348,17 @@ export class AnnexSyncService {
             }
 
             console.log(`AnnexSyncService: Saved ${f2Rows.length} Form 2 rows and ${f3Rows.length} Form 3 rows to Supabase.`);
+
+            // Automatically trigger background synchronization with students table
+            try {
+                const { StudentSyncService } = await import('./student_sync_service.js');
+                StudentSyncService.loadAndSyncStudents().catch(syncErr => {
+                    console.warn('AnnexSyncService: Background student sync error:', syncErr);
+                });
+            } catch (importErr) {
+                console.warn('AnnexSyncService: Could not import StudentSyncService:', importErr);
+            }
+
             return {
                 success: true,
                 f2Count: f2Rows.length,
@@ -392,7 +404,7 @@ export class AnnexSyncService {
                 if (resF3.data && resF3.data.length > 0) f3Data = resF3.data;
             }
 
-            if ((!errF2 && f2Data && f2Data.length > 0) || (!errF3 && f3Data && f3Data.length > 0)) {
+            if (!errF2 && !errF3) {
                 const form2List = (f2Data || []).map(row => ({
                     classification: 'MATCHED_FORM2',
                     isEnrolled: true,
@@ -457,7 +469,8 @@ export class AnnexSyncService {
                 return {
                     form2List,
                     form3List,
-                    needsReviewList: []
+                    needsReviewList: [],
+                    fromDb: true
                 };
             }
             return null;

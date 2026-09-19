@@ -158,11 +158,11 @@ async function loadInitialData() {
         // 3. Automatic Restore from Supabase Database
         try {
             const dbSync = await AnnexSyncService.loadFromSupabase();
-            if (dbSync && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
+            if (dbSync && dbSync.fromDb) {
                 console.log(`[Auto-Restore] Loaded ${dbSync.form2List.length} Form 2 and ${dbSync.form3List.length} Form 3 records from Supabase.`);
                 AnnexSyncService.saveVerifiedData({
-                    form2List: dbSync.form2List,
-                    form3List: dbSync.form3List,
+                    form2List: dbSync.form2List || [],
+                    form3List: dbSync.form3List || [],
                     needsReviewList: [],
                     updatedBy: 'Supabase Auto-Restore',
                     syncToDb: false
@@ -1863,21 +1863,98 @@ if (searchF3) {
     });
 }
 
+// Form 2 Clear Action
+const btnClearForm2 = document.getElementById('btn-clear-form2-data');
+if (btnClearForm2) {
+    btnClearForm2.addEventListener('click', async () => {
+        if (verifiedForm2List.length === 0) {
+            showToast('Form 2 table is already empty.', 'info');
+            return;
+        }
+        if (confirm('Are you sure you want to remove all records from the Annex Form 2 table? This will clear local cache and delete records from Supabase.')) {
+            verifiedForm2List = [];
+            AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                updatedBy: 'Admin',
+                syncToDb: false
+            });
+            if (window.supabaseClient) {
+                try {
+                    await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                } catch (err) {
+                    console.warn('Error deleting annex_form_2 from database:', err);
+                }
+            }
+            updateKPIMetrics();
+            renderForm2Table(verifiedForm2List);
+            showToast('Annex Form 2 table data removed.', 'check-circle');
+        }
+    });
+}
+
+// Form 3 Clear Action
 const btnClearForm3 = document.getElementById('btn-clear-form3-data');
 if (btnClearForm3) {
-    btnClearForm3.addEventListener('click', () => {
+    btnClearForm3.addEventListener('click', async () => {
         if (verifiedForm3List.length === 0) {
             showToast('Form 3 table is already empty.', 'info');
             return;
         }
-        if (confirm('Are you sure you want to remove all records from the Annex Form 3 table?')) {
+        if (confirm('Are you sure you want to remove all records from the Annex Form 3 table? This will clear local cache and delete records from Supabase.')) {
             verifiedForm3List = [];
+            AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                updatedBy: 'Admin',
+                syncToDb: false
+            });
+            if (window.supabaseClient) {
+                try {
+                    await window.supabaseClient.from('annex_form_3').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                } catch (err) {
+                    console.warn('Error deleting annex_form_3 from database:', err);
+                }
+            }
             updateKPIMetrics();
             renderForm3Table(verifiedForm3List);
             showToast('Annex Form 3 table data removed.', 'check-circle');
         }
     });
 }
+
+// Manual Supabase DB Refresh Action
+const refreshAdminFromDb = async () => {
+    try {
+        const dbSync = await AnnexSyncService.loadFromSupabase();
+        if (dbSync && dbSync.fromDb) {
+            verifiedForm2List = dbSync.form2List || [];
+            verifiedForm3List = dbSync.form3List || [];
+            needsReviewList = [];
+            AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: [],
+                updatedBy: 'Supabase Manual Refresh',
+                syncToDb: false
+            });
+            updateKPIMetrics();
+            renderForm2Table(verifiedForm2List);
+            renderForm3Table(verifiedForm3List);
+            showToast(`Database synced: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3 records.`, 'check-circle');
+        }
+    } catch (err) {
+        console.error('Error refreshing from database:', err);
+        showToast('Failed to sync from database: ' + (err.message || err), 'error');
+    }
+};
+
+const btnRefreshF2 = document.getElementById('btn-refresh-form2-db');
+if (btnRefreshF2) btnRefreshF2.addEventListener('click', refreshAdminFromDb);
+const btnRefreshF3 = document.getElementById('btn-refresh-form3-db');
+if (btnRefreshF3) btnRefreshF3.addEventListener('click', refreshAdminFromDb);
 
 // Helper: Universal Blob download with FileSaver / Anchor tag fallback
 function downloadBlob(blob, filename) {

@@ -317,6 +317,16 @@
                         <i class="icon-coins" style="font-size: 14px;"></i> <span id="stat-form2-amount">₱0.00 Total
                             Billing</span>
                     </div>
+                    <button id="btn-refresh-form2-db"
+                        style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Re-sync Form 2 records with Supabase database">
+                        <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                    </button>
+                    <button id="btn-clear-form2-data"
+                        style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Remove all records from Annex Form 2 table">
+                        <i class="icon-trash-2" style="font-size: 13px;"></i> Clear Form 2 Data
+                    </button>
                 </div>
             </div>
 
@@ -345,8 +355,8 @@
                     </thead>
                     <tbody id="tbody-form2">
                         <tr>
-                            <td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">
-                                Loading verified Form 2 records...</td>
+                            <td colspan="16" style="text-align: center; padding: 36px; color: var(--text-secondary);">
+                                No verified enrolled grantees for Form 2.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -354,7 +364,7 @@
         </div>
 
         <!-- Tab 2: Annex 5 - Form 3 Content -->
-        <div id="tab-pane-form3" style="display: none; padding: 20px 24px;">
+        <div id="tab-pane-form3" style="display: none; padding: 24px;">
             <!-- Form 3 Control Bar -->
             <div
                 style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
@@ -371,6 +381,11 @@
                         <i class="icon-user-x" style="font-size: 14px;"></i> <span id="stat-form3-count">0 Not Included
                             Grantees</span>
                     </div>
+                    <button id="btn-refresh-form3-db"
+                        style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                        title="Re-sync Form 3 records with Supabase database">
+                        <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                    </button>
                     <button id="btn-clear-form3-data"
                         style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
                         title="Remove all records from Annex Form 3 table">

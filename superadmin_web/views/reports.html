@@ -346,7 +346,7 @@
             <div class="reports-segmented-control">
                 <button id="seg-btn-masterlist" class="reports-segment-btn" onclick="switchReportTab('masterlist')">
                     <i class="icon-users" style="font-size: 14px;"></i>
-                    <span>School Student List</span>
+                    <span>Student Master List Records</span>
                 </button>
                 <button id="seg-btn-import" class="reports-segment-btn active" onclick="switchReportTab('import')">
                     <i class="icon-upload-cloud" style="font-size: 14px;"></i>
@@ -540,7 +540,8 @@
                     </div>
                     <div style="text-align: center;">
                         <div id="summary-imported" style="font-size: 20px; font-weight: 800; color: #4ade80;">0</div>
-                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Auto-Saved to DB</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
+                            Auto-Saved to DB</div>
                     </div>
                     <div style="text-align: center;">
                         <div id="summary-skipped" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0</div>
@@ -630,6 +631,11 @@
                             <option value="All Batches">All Batches</option>
                         </select>
                     </div>
+                    <button id="btn-clear-masterlist" class="hidden"
+                        style="display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer; color: #ef4444; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.2s;"
+                        title="Permanently delete all records from this masterlist">
+                        <i class="icon-trash-2" style="font-size: 14px;"></i> Clear Masterlist
+                    </button>
                 </div>
 
                 <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: var(--surface-color);">
@@ -732,6 +738,16 @@
                             <i class="icon-coins" style="font-size: 14px;"></i> <span id="sa-stat-form2-amount">₱0.00
                                 Total Billing</span>
                         </div>
+                        <button id="sa-btn-refresh-form2-db"
+                            style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                            title="Re-sync Form 2 records with Supabase database">
+                            <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                        </button>
+                        <button id="sa-btn-clear-form2-data"
+                            style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                            title="Remove all records from Annex Form 2 table">
+                            <i class="icon-trash-2" style="font-size: 13px;"></i> Clear Form 2 Data
+                        </button>
                     </div>
                 </div>
 
@@ -789,6 +805,11 @@
                             <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not
                                 Included Grantees</span>
                         </div>
+                        <button id="sa-btn-refresh-form3-db"
+                            style="background: rgba(15,50,96,0.08); border: 1px solid rgba(15,50,96,0.2); color: var(--primary-color); padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
+                            title="Re-sync Form 3 records with Supabase database">
+                            <i class="icon-refresh-cw" style="font-size: 13px;"></i> Sync DB
+                        </button>
                         <button id="sa-btn-clear-form3-data"
                             style="background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.2); color: #D32F2F; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;"
                             title="Remove all records from Annex Form 3 table">
@@ -873,12 +894,15 @@
             <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee Name</label>
-                    <div id="sa-modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee
+                        Name</label>
+                    <div id="sa-modal-grantee-name"
+                        style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
                 </div>
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize Target Form</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize
+                        Target Form</label>
                     <select id="sa-modal-target-form"
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
@@ -887,7 +911,8 @@
                 </div>
                 <div id="sa-modal-form3-reason-group">
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form 3 Status Reason</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form
+                        3 Status Reason</label>
                     <select id="sa-modal-form3-reason"
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="Not enrolled">Not enrolled in current term</option>
@@ -900,7 +925,8 @@
                 </div>
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative Remarks</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative
+                        Remarks</label>
                     <input type="text" id="sa-modal-remarks" placeholder="Optional notes for CHED billing sheet..."
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                 </div>
@@ -908,7 +934,8 @@
                     <button id="sa-btn-cancel-resolution"
                         style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
                     <button id="sa-btn-confirm-resolution"
-                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save & Categorize</button>
+                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save
+                        & Categorize</button>
                 </div>
             </div>
         </div>

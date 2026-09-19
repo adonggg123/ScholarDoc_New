@@ -1,6 +1,7 @@
 // js/views/reports.js
 import { BillingService } from '../services/billing_service.js';
 import { initMasterlistImport } from './masterlist_import.js';
+import { StudentSyncService } from '../services/student_sync_service.js';
 const supabase = window.supabaseClient;
 
 window.__reportsHostingImport = true;
@@ -11,7 +12,7 @@ let throughputChart = null;
 let deptChart = null;
 
 // ── Segmented Control / Tab Switching ──────────────────────────────
-window.switchReportTab = function(tabName) {
+window.switchReportTab = function (tabName) {
     const btnMasterlist = document.getElementById('seg-btn-masterlist');
     const btnImport = document.getElementById('seg-btn-import');
     const paneMasterlist = document.getElementById('report-pane-masterlist');
@@ -39,6 +40,7 @@ window.switchReportTab = function(tabName) {
         if (subtitle) subtitle.textContent = 'Comprehensive institutional database of all verified and registered students.';
         if (btnExportExcel) btnExportExcel.style.display = 'inline-flex';
         if (portalBadge) portalBadge.style.display = 'none';
+        loadAllData();
     }
 
     if (window.lucide) {
@@ -49,16 +51,19 @@ window.switchReportTab = function(tabName) {
 
 // ── Load All Data ───────────────────────────────────────────────────
 async function loadAllData() {
+    const body = document.getElementById('rpt-master-body');
+    if (body && allStudents.length === 0) {
+        body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i><div>Loading student master list records...</div></td></tr>`;
+        if (window.lucide) window.lucide.createIcons();
+    }
     try {
-        const { data, error } = await supabase.from('students').select('*');
-        if (error) throw error;
-        allStudents = data || [];
+        allStudents = await StudentSyncService.loadAndSyncStudents();
         renderMasterTable(allStudents);
         buildCharts(allStudents);
         populateScholarshipFilter(allStudents);
     } catch (e) {
         console.error('Error loading students for reports:', e);
-        document.getElementById('rpt-master-body').innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data.</td></tr>`;
+        if (body) body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data: ${e.message || e}</td></tr>`;
     }
 }
 
@@ -70,6 +75,8 @@ function populateScholarshipFilter(students) {
         if (name) set.add(name);
     });
     const sel = document.getElementById('rpt-filter-scholarship');
+    if (!sel) return;
+    sel.innerHTML = '<option>All Scholarships</option>';
     set.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -80,23 +87,35 @@ function populateScholarshipFilter(students) {
 
 // ── Filter Logic ────────────────────────────────────────────────────
 function getFilteredStudents() {
-    const query = document.getElementById('rpt-search').value.toLowerCase();
-    const gender = document.getElementById('rpt-filter-gender').value;
-    const scholarship = document.getElementById('rpt-filter-scholarship').value;
-    const year = document.getElementById('rpt-filter-year').value;
-    const fatherEdu = document.getElementById('rpt-filter-father').value;
-    const motherEdu = document.getElementById('rpt-filter-mother').value;
+    const query = (document.getElementById('rpt-search')?.value || '').toLowerCase().trim();
+    const gender = document.getElementById('rpt-filter-gender')?.value || 'All Genders';
+    const scholarship = document.getElementById('rpt-filter-scholarship')?.value || 'All Scholarships';
+    const year = document.getElementById('rpt-filter-year')?.value || 'All Year Levels';
+    const fatherEdu = document.getElementById('rpt-filter-father')?.value || 'All (Father)';
+    const motherEdu = document.getElementById('rpt-filter-mother')?.value || 'All (Mother)';
 
     return allStudents.filter(s => {
         const family = s.familyDetails || {};
         const name = (s.full_name || s.fullName || '').toLowerCase();
         const id = (s.student_no || s.studentId || '').toLowerCase();
-        const matchSearch = !query || name.includes(query) || id.includes(query);
-        const matchGender = gender === 'All Genders' || s.gender === gender;
-        const matchScholarship = scholarship === 'All Scholarships' || (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES') === scholarship;
-        const matchYear = year === 'All Year Levels' || s.scholarYearLevel === year || s.year_level === year || s.year === year;
-        const matchFather = fatherEdu === 'All (Father)' || (family.fatherEduStatus || 'Non-graduate') === fatherEdu;
-        const matchMother = motherEdu === 'All (Mother)' || (family.motherEduStatus || 'Non-graduate') === motherEdu;
+        const email = (s.email_address || s.email || '').toLowerCase();
+        const program = (s.program_name || s.course || '').toLowerCase();
+
+        const matchSearch = !query || name.includes(query) || id.includes(query) || email.includes(query) || program.includes(query);
+        const matchGender = gender === 'All Genders' || (s.gender || '').toLowerCase() === gender.toLowerCase();
+        
+        const sSchol = (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES').toLowerCase();
+        const matchScholarship = scholarship === 'All Scholarships' || sSchol.includes(scholarship.toLowerCase());
+        
+        const sYear = String(s.scholarYearLevel || s.year_level || s.year || '');
+        const matchYear = year === 'All Year Levels' || sYear === year || (year.charAt(0) === sYear.charAt(0));
+
+        const sFatherEdu = (s.father_occupation || family.fatherEduStatus || '').toLowerCase();
+        const matchFather = fatherEdu === 'All (Father)' || !fatherEdu || sFatherEdu.includes(fatherEdu.toLowerCase());
+
+        const sMotherEdu = (s.mother_occupation || family.motherEduStatus || '').toLowerCase();
+        const matchMother = motherEdu === 'All (Mother)' || !motherEdu || sMotherEdu.includes(motherEdu.toLowerCase());
+
         return matchSearch && matchGender && matchScholarship && matchYear && matchFather && matchMother;
     });
 }
@@ -109,8 +128,10 @@ function applyFilters() {
 // ── Render Master Table ─────────────────────────────────────────────
 function renderMasterTable(students) {
     const body = document.getElementById('rpt-master-body');
+    if (!body) return;
     if (students.length === 0) {
-        body.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">No students match filters.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-users" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>No students match filters.</td></tr>`;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
@@ -141,12 +162,12 @@ function renderMasterTable(students) {
                 }
             }
         }
-        
+
         const family = s.familyDetails || {};
         const isChecked = selectedStudentIds.has(s.uid || s.id) ? 'checked' : '';
-        const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' : 
-                            (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
-                            (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
+        const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' :
+            (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
+                (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
 
         const studentNo = s.student_no || s.studentId || 'N/A';
         const email = s.email_address || s.email || 'N/A';
@@ -246,8 +267,9 @@ function buildThroughputChart(students) {
             const start = new Date(year, q * 3, 1);
             const end = new Date(year, (q + 1) * 3, 1); // 1st day of next quarter
             const qStudents = students.filter(s => {
-                if (!s.createdAt) return false;
-                const d = new Date(s.createdAt);
+                const dateStr = s.created_at || s.createdAt;
+                if (!dateStr) return true; // Include if date missing
+                const d = new Date(dateStr);
                 return d >= start && d < end;
             });
             submissions.push(qStudents.length);
@@ -258,12 +280,13 @@ function buildThroughputChart(students) {
         const now = new Date();
         for (let w = 0; w < 4; w++) {
             const start = new Date(now.getFullYear(), now.getMonth(), 1 + w * 7);
-            const end = w === 3 
+            const end = w === 3
                 ? new Date(now.getFullYear(), now.getMonth() + 1, 1) // 1st of next month
                 : new Date(now.getFullYear(), now.getMonth(), 1 + (w + 1) * 7); // Start of next week
             const wStudents = students.filter(s => {
-                if (!s.createdAt) return false;
-                const d = new Date(s.createdAt);
+                const dateStr = s.created_at || s.createdAt;
+                if (!dateStr) return true;
+                const d = new Date(dateStr);
                 return d >= start && d < end;
             });
             submissions.push(wStudents.length);
@@ -310,20 +333,20 @@ function buildThroughputChart(students) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { 
-                legend: { 
-                    display: true, 
-                    position: 'bottom', 
-                    labels: { color: textColor, font: { size: 11 } } 
-                } 
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: { color: textColor, font: { size: 11 } }
+                }
             },
             scales: {
-                x: { 
+                x: {
                     grid: { display: false },
                     ticks: { color: textColor }
                 },
-                y: { 
-                    grid: { color: gridColor }, 
+                y: {
+                    grid: { color: gridColor },
                     beginAtZero: true,
                     ticks: { color: textColor }
                 }
@@ -338,19 +361,20 @@ function buildDeptChart(students) {
     const ctx = canvas.getContext('2d');
     const deptCounts = { BSIT: 0, BTLED: 0, BFPT: 0 };
     students.forEach(s => {
-        const course = s.course || '';
-        if (course.includes('BSIT')) deptCounts.BSIT++;
-        else if (course.includes('BTLED')) deptCounts.BTLED++;
-        else if (course.includes('BFPT')) deptCounts.BFPT++;
+        const course = (s.program_name || s.course || '').toLowerCase();
+        if (course.includes('bsit') || course.includes('information technology') || course.includes('computer')) deptCounts.BSIT++;
+        else if (course.includes('btled') || course.includes('livelihood') || course.includes('education')) deptCounts.BTLED++;
+        else if (course.includes('bfpt') || course.includes('food processing') || course.includes('food technology')) deptCounts.BFPT++;
+        else deptCounts.BSIT++;
     });
 
     const total = deptCounts.BSIT + deptCounts.BTLED + deptCounts.BFPT;
     const legendContainer = document.getElementById('dept-legend');
-    
+
     const isDark = document.body.classList.contains('dark');
     const colors = isDark ? ['#3b82f6', '#f59e0b', '#10b981'] : ['#0F3260', '#D4AF37', '#43A047'];
     const borderColor = isDark ? '#111827' : 'white';
-    
+
     const labels = ['BSIT', 'BTLED', 'BFPT'];
     const values = [deptCounts.BSIT, deptCounts.BTLED, deptCounts.BFPT];
 
@@ -385,7 +409,7 @@ function buildDeptChart(students) {
 }
 
 // ── Export CSV (Excel) ───────────────────────────────────────────────
-document.getElementById('btn-export-excel').addEventListener('click', function() {
+document.getElementById('btn-export-excel').addEventListener('click', function () {
     const studentsToExport = selectedStudentIds.size > 0
         ? allStudents.filter(s => selectedStudentIds.has(s.uid))
         : getFilteredStudents();
@@ -456,7 +480,7 @@ document.getElementById('btn-export-excel').addEventListener('click', function()
 });
 
 // ── Export PDF (Print) ──────────────────────────────────────────────
-document.getElementById('btn-export-pdf').addEventListener('click', function() {
+document.getElementById('btn-export-pdf').addEventListener('click', function () {
     // Use browser print dialog
     const printContent = `
         <html>
@@ -528,7 +552,7 @@ document.getElementById('throughput-timeframe').addEventListener('change', () =>
     buildThroughputChart(allStudents);
 });
 
-document.getElementById('rpt-select-all').addEventListener('change', function() {
+document.getElementById('rpt-select-all').addEventListener('change', function () {
     const filtered = getFilteredStudents();
     if (this.checked) {
         filtered.forEach(s => selectedStudentIds.add(s.uid));
