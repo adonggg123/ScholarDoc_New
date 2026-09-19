@@ -386,15 +386,92 @@ class AuthService {
     await _supabase.auth.signOut();
   }
 
+  // Normalize student dictionary to support both snake_case and camelCase
+  Map<String, dynamic> _normalizeStudentData(Map<String, dynamic> raw) {
+    final data = Map<String, dynamic>.from(raw);
+    
+    // Normalize scholarship
+    final scholarship = data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
+    data['scholarshipName'] = scholarship;
+    data['scholarship_name'] = scholarship;
+
+    // Normalize academic program & course
+    final course = data['course'] ?? data['program_name'] ?? '';
+    data['course'] = course;
+    data['program_name'] = course;
+
+    // Normalize year level
+    final year = data['year'] ?? data['year_level'] ?? '';
+    data['year'] = year;
+    data['year_level'] = year;
+
+    // Normalize student ID
+    final studentId = data['studentId'] ?? data['student_no'] ?? '';
+    data['studentId'] = studentId;
+    data['student_no'] = studentId;
+
+    // Normalize full name
+    final fullName = data['fullName'] ?? data['full_name'] ?? '';
+    data['fullName'] = fullName;
+    data['full_name'] = fullName;
+
+    // Normalize contact and email
+    final email = data['email'] ?? data['email_address'] ?? '';
+    data['email'] = email;
+    data['email_address'] = email;
+
+    final contact = data['contactNumber'] ?? data['mobile_number'] ?? '';
+    data['contactNumber'] = contact;
+    data['mobile_number'] = contact;
+
+    // Normalize Year became a scholar
+    final scholarYear = data['scholarYearLevel'] ?? 
+        data['year_became_scholar'] ?? 
+        data['yearBecameScholar'] ?? 
+        '';
+    data['scholarYearLevel'] = scholarYear;
+    data['year_became_scholar'] = scholarYear;
+    data['yearBecameScholar'] = scholarYear;
+
+    // Normalize Payouts received
+    final payouts = data['payoutsReceived'] ?? data['payouts_received'] ?? 0;
+    data['payoutsReceived'] = payouts;
+    data['payouts_received'] = payouts;
+
+    // Merge user metadata if available
+    final userMeta = _supabase.auth.currentUser?.userMetadata;
+    if (userMeta != null) {
+      if ((data['scholarYearLevel'] == null || data['scholarYearLevel'].toString().isEmpty) && userMeta['yearBecameScholar'] != null) {
+        final val = userMeta['yearBecameScholar'].toString();
+        data['scholarYearLevel'] = val;
+        data['year_became_scholar'] = val;
+        data['yearBecameScholar'] = val;
+      }
+      if (userMeta['payoutsReceived'] != null && (data['payoutsReceived'] == 0 || data['payoutsReceived'] == null)) {
+        data['payoutsReceived'] = userMeta['payoutsReceived'];
+        data['payouts_received'] = userMeta['payoutsReceived'];
+      }
+      if (userMeta['scholarshipName'] != null) {
+        data['scholarshipName'] = userMeta['scholarshipName'];
+        data['scholarship_name'] = userMeta['scholarshipName'];
+      }
+    }
+
+    return data;
+  }
+
   // Get student profile data from Supabase
   Future<Map<String, dynamic>?> getStudentProfile(String uid) async {
     final response = await _supabase.from('students').select().eq('uid', uid);
-    return response.isNotEmpty ? response.first : null;
+    if (response.isEmpty) return null;
+    return _normalizeStudentData(response.first);
   }
 
   // Get stream of student profile data for real-time tracking
   Stream<List<Map<String, dynamic>>> getStudentStream(String uid) {
-    return _supabase.from('students').stream(primaryKey: ['uid']).eq('uid', uid);
+    return _supabase.from('students').stream(primaryKey: ['uid']).eq('uid', uid).map((list) {
+      return list.map((item) => _normalizeStudentData(item)).toList();
+    });
   }
 
   // Update student profile data
@@ -402,7 +479,65 @@ class AuthService {
     String uid,
     Map<String, dynamic> updates,
   ) async {
-    await _supabase.from('students').update(updates).eq('uid', uid);
+    final dbPayload = Map<String, dynamic>.from(updates);
+
+    // Synchronize aliases so both styles are included
+    if (dbPayload.containsKey('scholarshipName')) {
+      dbPayload['scholarship_name'] = dbPayload['scholarshipName'];
+    } else if (dbPayload.containsKey('scholarship_name')) {
+      dbPayload['scholarshipName'] = dbPayload['scholarship_name'];
+    }
+
+    if (dbPayload.containsKey('scholarYearLevel')) {
+      dbPayload['year_became_scholar'] = dbPayload['scholarYearLevel'];
+      dbPayload['yearBecameScholar'] = dbPayload['scholarYearLevel'];
+    } else if (dbPayload.containsKey('year_became_scholar')) {
+      dbPayload['scholarYearLevel'] = dbPayload['year_became_scholar'];
+      dbPayload['yearBecameScholar'] = dbPayload['year_became_scholar'];
+    }
+
+    if (dbPayload.containsKey('payoutsReceived')) {
+      dbPayload['payouts_received'] = dbPayload['payoutsReceived'].toString();
+    }
+
+    // Always persist to Supabase Auth user metadata as an instant fail-safe
+    try {
+      await _supabase.auth.updateUser(UserAttributes(data: updates));
+    } catch (e) {
+      debugPrint('AuthService: Failed to update user metadata: $e');
+    }
+
+    // Try updating students table; if any column is missing in Supabase, strip and retry
+    try {
+      await _supabase.from('students').update(dbPayload).eq('uid', uid);
+    } catch (e) {
+      debugPrint('AuthService: Retrying table update with safe fields: $e');
+      final safePayload = <String, dynamic>{};
+      const safeFields = [
+        'full_name', 'fullName', 'mobile_number', 'contactNumber',
+        'program_name', 'course', 'year_level', 'year', 'section',
+        'birthdate', 'scholarship_name', 'status', 'saNumber', 'sa_number',
+        'submissionPdfUrl', 'submission_pdf_url', 'submissionPdfName', 'submission_pdf_name',
+        'documents', 'atmCardUrl', 'atm_card_url', 'atmCardFileName',
+        'idFrontUrl', 'id_front_url', 'idBackUrl', 'id_back_url',
+        'pdfVerified', 'academicYear', 'academic_year', 'semester',
+        'stickerValidated', 'sticker_validated', 'submittedAt', 'submitted_at',
+        'requiresResubmission', 'adminRemarks', 'admin_remarks', 'familyDetails'
+      ];
+      for (final key in safeFields) {
+        if (dbPayload.containsKey(key)) safePayload[key] = dbPayload[key];
+      }
+      try {
+        await _supabase.from('students').update(safePayload).eq('uid', uid);
+      } catch (inner) {
+        debugPrint('AuthService: Safe batch update failed: $inner. Retrying column-by-column...');
+        for (final entry in safePayload.entries) {
+          try {
+            await _supabase.from('students').update({entry.key: entry.value}).eq('uid', uid);
+          } catch (_) {}
+        }
+      }
+    }
 
     // Log Activity
     await _auditService.logActivity(
@@ -417,7 +552,8 @@ class AuthService {
     return _supabase
         .from('students')
         .stream(primaryKey: ['uid'])
-        .order('createdAt', ascending: false);
+        .order('createdAt', ascending: false)
+        .map((list) => list.map((item) => _normalizeStudentData(item)).toList());
   }
 
   // Get stream of all activity logs for Admin

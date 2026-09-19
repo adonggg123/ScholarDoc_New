@@ -30,9 +30,9 @@ async function loadIdQueue() {
 
         // Filter students who have submitted documents
         idStudents = (data || []).filter(s => {
-            const hasPdf = s.submissionPdfUrl || (s.documents && s.documents.submissionPdfUrl);
-            const hasFront = s.idFrontUrl || (s.documents && s.documents.idFrontUrl);
-            const hasBack = s.idBackUrl || (s.documents && s.documents.idBackUrl);
+            const hasPdf = s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url));
+            const hasFront = s.idFrontUrl || s.id_front_url || (s.documents && (s.documents.idFrontUrl || s.documents.id_front_url));
+            const hasBack = s.idBackUrl || s.id_back_url || (s.documents && (s.documents.idBackUrl || s.documents.id_back_url));
             return hasPdf || hasFront || hasBack;
         });
 
@@ -71,7 +71,7 @@ function updateKpis() {
     let pdfCount = 0;
 
     idStudents.forEach(s => {
-        const status = s.documents?.idValidationStatus || 'Pending';
+        const status = s.documents?.idValidationStatus || s.documents?.id_validation_status || s.status || 'Pending';
         if (status === 'Verified' || status === 'Approved') {
             verified++;
         } else if (status === 'Missing') {
@@ -80,7 +80,7 @@ function updateKpis() {
             pending++;
         }
 
-        const pdfUrl = s.submissionPdfUrl || (s.documents && s.documents.submissionPdfUrl);
+        const pdfUrl = s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url));
         if (pdfUrl) {
             pdfCount++;
         }
@@ -319,12 +319,12 @@ function renderPanel() {
     const s = filteredIdStudents[selectedIndex];
     if (!s) return;
 
-    const name = s.fullName || 'Unnamed Student';
-    const studentId = s.studentId || s.id || 'N/A';
-    const course = s.course || 'N/A';
-    const year = s.year || 'N/A';
+    const name = s.fullName || s.full_name || 'Unnamed Student';
+    const studentId = s.studentId || s.student_no || s.id || 'N/A';
+    const course = s.course || s.program_name || 'N/A';
+    const year = s.year || s.year_level || 'N/A';
     const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
-    const currentRemarks = s.adminRemarks || '';
+    const currentRemarks = s.adminRemarks || s.admin_remarks || '';
 
     // Queue Navigation Counts
     const currentPos = selectedIndex + 1;
@@ -348,10 +348,10 @@ function renderPanel() {
     }
 
     // Front ID & Back ID Display Cards
-    const frontUrl = s.idFrontUrl || s.documents?.idFrontUrl;
-    const backUrl = s.idBackUrl || s.documents?.idBackUrl;
-    const pdfUrl = s.submissionPdfUrl || s.documents?.submissionPdfUrl;
-    const pdfName = s.submissionPdfName || (s.documents && s.documents.submissionPdfName) || 'Submission_Requirement_Dossier.pdf';
+    const frontUrl = s.idFrontUrl || s.id_front_url || s.documents?.idFrontUrl || s.documents?.id_front_url;
+    const backUrl = s.idBackUrl || s.id_back_url || s.documents?.idBackUrl || s.documents?.id_back_url;
+    const pdfUrl = s.submissionPdfUrl || s.submission_pdf_url || s.documents?.submissionPdfUrl || s.documents?.submission_pdf_url;
+    const pdfName = s.submissionPdfName || s.submission_pdf_name || (s.documents && (s.documents.submissionPdfName || s.documents.submission_pdf_name)) || 'Submission_Requirement_Dossier.pdf';
 
     let idCardsSection = '';
     if (frontUrl || backUrl) {
@@ -415,6 +415,22 @@ function renderPanel() {
                                 <a href="${backUrl}" target="_blank" style="padding: 4px 8px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 10px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 3px;">
                                     <i class="icon-external-link" style="font-size: 10px;"></i>
                                 </a>
+                            </div>
+
+                            <!-- Document AI Validation Sticker Badge -->
+                            <div style="margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: ${s.stickerValidated ? 'rgba(16, 185, 129, 0.08)' : (s.stickerFlagged ? 'rgba(239, 68, 68, 0.08)' : 'rgba(15, 50, 96, 0.04)')}; border: 1px solid ${s.stickerValidated ? 'rgba(16, 185, 129, 0.25)' : (s.stickerFlagged ? 'rgba(239, 68, 68, 0.25)' : 'var(--border-color)')}; display: flex; align-items: center; justify-content: space-between;">
+                                <div>
+                                    <div style="font-size: 9px; font-weight: 800; color: ${s.stickerValidated ? '#10B981' : (s.stickerFlagged ? '#EF4444' : 'var(--primary-color)')};">
+                                        <i class="${s.stickerValidated ? 'icon-shield-check' : 'icon-award'}" style="font-size: 10px;"></i>
+                                        ${s.stickerValidated ? 'STICKER VALIDATED' : (s.stickerFlagged ? 'STICKER MISMATCH' : 'STICKER SCAN')}
+                                    </div>
+                                    <div style="font-size: 9px; color: var(--text-primary); font-weight: 600;">
+                                        ${s.academicYear ? `AY ${s.academicYear}` : 'AY 2026-2027'} • ${s.semester || '1st Sem'}
+                                    </div>
+                                </div>
+                                <button onclick="triggerDocumentAiScan('${backUrl}', ${selectedIndex})" title="Run Google Document AI Scan" style="padding: 3px 6px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
+                                    AI Scan
+                                </button>
                             </div>
                         ` : `
                             <div style="height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color); color: var(--text-secondary);">
@@ -594,35 +610,56 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
     try {
         // 1. Update ID Validation Status (stored inside documents JSON)
         const currentDocs = s.documents || {};
-        const updatedDocs = { ...currentDocs, idValidationStatus: newStatus };
+        const updatedDocs = { 
+            ...currentDocs, 
+            idValidationStatus: newStatus,
+            id_validation_status: newStatus 
+        };
 
         const updatePayload = {
             documents: updatedDocs,
             adminRemarks: remarks,
+            admin_remarks: remarks,
             requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
-            updatedAt: new Date().toISOString()
+            requires_resubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
+            updatedAt: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         };
 
         // Auto-calculate overall status:
         // Only set global status to Verified when BOTH SA and ID are verified
-        const currentSaStatus = currentDocs.saVerificationStatus || 'Pending';
+        const currentSaStatus = currentDocs.saVerificationStatus || currentDocs.sa_verification_status || 'Pending';
         if (newStatus === 'Verified' && (currentSaStatus === 'Verified' || currentSaStatus === 'Approved')) {
             updatePayload.status = 'Verified';
         } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
             updatePayload.status = newStatus;
         }
 
-        const { error } = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
-        if (error) throw error;
+        let updateRes = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
+        if (updateRes.error) {
+            // Fallback: update with reduced fields if schema difference
+            const fallbackPayload = {
+                admin_remarks: remarks,
+                adminRemarks: remarks,
+                updated_at: new Date().toISOString()
+            };
+            if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
+            updateRes = await supabase.from('students').update(fallbackPayload).eq('uid', s.uid);
+            if (updateRes.error) throw updateRes.error;
+        }
 
         // 2. Audit Log
-        await supabase.from('audit_logs').insert([{
-            adminId: (await supabase.auth.getUser()).data.user?.id || 'unknown',
-            adminName: 'Admin',
-            action: `Validated student ID: ${newStatus}`,
-            targetUser: s.uid,
-            timestamp: new Date().toISOString()
-        }]);
+        try {
+            await supabase.from('audit_logs').insert([{
+                adminId: (await supabase.auth.getUser()).data.user?.id || 'unknown',
+                adminName: 'Admin',
+                action: `Validated student ID: ${newStatus}`,
+                targetUser: s.uid,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (auditErr) {
+            console.warn('Could not write audit log:', auditErr);
+        }
 
         // 3. Notification
         let title = '';
@@ -647,19 +684,23 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             type = 'error';
         }
 
-        await supabase.from('notifications').insert([{
-            studentId: s.uid,
-            title: title,
-            message: message,
-            type: type,
-            isRead: false,
-            timestamp: new Date().toISOString()
-        }]);
+        try {
+            await supabase.from('notifications').insert([{
+                studentId: s.uid,
+                title: title,
+                message: message,
+                type: type,
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (notifErr) {
+            console.warn('Could not send notification:', notifErr);
+        }
 
         if (window.showToast) {
-            window.showToast(`Updated ${s.fullName || 'student'} to ${newStatus}.`, 'check-circle');
+            window.showToast(`Updated ${s.fullName || s.full_name || 'student'} to ${newStatus}.`, 'check-circle');
         } else {
-            alert(`Student ${s.fullName} status updated to ${newStatus}.`);
+            alert(`Student ${s.fullName || s.full_name} status updated to ${newStatus}.`);
         }
 
         await loadIdQueue();
@@ -849,9 +890,66 @@ window.downloadAllIdDocuments = async function () {
     }
 };
 
+// Google Document AI Scanner for Back ID validation sticker
+window.triggerDocumentAiScan = async function(imageUrl, studentIndex) {
+    if (!imageUrl) return;
+    const s = filteredIdStudents[studentIndex];
+    if (!s) return;
+
+    if (window.showToast) {
+        window.showToast('Scanning validation sticker with Google Document AI...', 'refresh-cw');
+    }
+
+    try {
+        const imgRes = await fetch(imageUrl);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+
+        reader.onloadend = async () => {
+            const base64data = reader.result.split(',')[1];
+            try {
+                const apiRes = await fetch('/api/document-ai/scan-sticker', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64data })
+                });
+
+                const data = await apiRes.json();
+                if (data && data.success) {
+                    s.academicYear = data.academicYear || '2026-2027';
+                    s.semester = data.semester || '1st Semester';
+                    s.stickerValidated = data.isValid;
+                    s.stickerFlagged = !data.isValid;
+
+                    const statusMsg = data.isValid
+                        ? `✓ Verified: ${data.semester} AY ${data.academicYear}`
+                        : `⚠️ ${data.message || 'Sticker mismatch'}`;
+
+                    if (window.showToast) {
+                        window.showToast(statusMsg, data.isValid ? 'shield-check' : 'alert-triangle');
+                    }
+                    renderPanel();
+                } else {
+                    if (window.showToast) {
+                        window.showToast(data.message || 'Could not detect sticker on card.', 'alert-triangle');
+                    }
+                }
+            } catch (err) {
+                console.error('Scan error:', err);
+                if (window.showToast) window.showToast('Document AI service error: ' + err.message, 'alert-circle');
+            }
+        };
+        reader.readAsDataURL(blob);
+    } catch (e) {
+        console.error('Image fetch error:', e);
+        if (window.showToast) window.showToast('Could not load image for scanning.', 'alert-circle');
+    }
+};
+
 // Global Exposure for admin router
 window.loadIdQueue = loadIdQueue;
 window.filterIdQueue = filterIdQueue;
 
 // Init
 loadIdQueue();
+

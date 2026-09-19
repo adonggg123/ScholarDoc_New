@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,6 +8,7 @@ import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/scholarship_service.dart';
 import '../auth/login_screen.dart';
 import 'student_activity_log_screen.dart';
 
@@ -26,22 +28,40 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _sectionController = TextEditingController();
   final _emailController = TextEditingController();
   final _birthdateController = TextEditingController();
+  final _yearBecameScholarController = TextEditingController();
+  final _payoutsReceivedController = TextEditingController(text: '0');
 
   final AuthService _authService = AuthService();
   final AuditService _auditService = AuditService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
+  final ScholarshipService _scholarshipService = ScholarshipService();
+  StreamSubscription<List<Scholarship>>? _scholarshipSub;
+
+  String? _selectedScholarship;
+  final List<String> _scholarshipOptions = ['TES', 'TDP', 'DBP', 'SANTEH', 'STUFAP', 'CHED TES'];
 
   Map<String, dynamic>? _profileData;
   bool _isProfileLoading = true;
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
   String? _profilePictureUrl;
-  final Set<String> _expandedSections = {};
+  final Set<String> _expandedSections = {'academic'};
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _scholarshipSub = _scholarshipService.getActiveScholarships().listen((list) {
+      if (mounted && list.isNotEmpty) {
+        setState(() {
+          for (final s in list) {
+            if (s.name.isNotEmpty && !_scholarshipOptions.contains(s.name)) {
+              _scholarshipOptions.add(s.name);
+            }
+          }
+        });
+      }
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -50,14 +70,21 @@ class _ProfileScreenState extends State<ProfileScreen>
       final doc = await _authService.getStudentProfile(uid);
       if (doc != null) {
         final data = doc;
+        final schName = data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
+        if (!_scholarshipOptions.contains(schName)) {
+          _scholarshipOptions.add(schName);
+        }
         setState(() {
           _profileData = data;
+          _selectedScholarship = schName;
           _nameController.text = data['fullName'] ?? '';
           _emailController.text = data['email'] ?? '';
           _contactController.text = data['contactNumber'] ?? '';
           _sectionController.text = data['section'] ?? '';
           _saController.text = data['saNumber'] ?? '';
           _birthdateController.text = data['birthdate'] ?? '01/01/2000';
+          _yearBecameScholarController.text = (data['yearBecameScholar'] ?? data['year_became_scholar'] ?? data['scholarYearLevel'] ?? '').toString();
+          _payoutsReceivedController.text = (data['payoutsReceived'] ?? data['payouts_received'] ?? '0').toString();
           _profilePictureUrl = data['profilePictureUrl'] as String?;
           _isProfileLoading = false;
         });
@@ -67,6 +94,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   void dispose() {
+    _scholarshipSub?.cancel();
+    _yearBecameScholarController.dispose();
+    _payoutsReceivedController.dispose();
     _saController.dispose();
     _nameController.dispose();
     _contactController.dispose();
@@ -198,7 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 color: AppTheme.accentColor.withOpacity(0.4)),
                           ),
                           child: Text(
-                            _profileData?['scholarshipName'] ?? 'No Scholarship',
+                            _selectedScholarship ?? _profileData?['scholarshipName'] ?? 'No Scholarship',
                             style: TextStyle(
                               color: AppTheme.accentColor,
                               fontSize: 11,
@@ -247,11 +277,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                       sectionKey: 'academic',
                       title: 'Academic & Program',
                       icon: LucideIcons.graduationCap,
-                      subtitle: _profileData?['scholarshipName'] ?? 'Scholarship details',
+                      subtitle: _selectedScholarship ?? _profileData?['scholarshipName'] ?? 'Scholarship details',
                       children: [
-                        _buildReadOnlyField('Scholarship Program',
-                            _profileData?['scholarshipName'] ?? 'Not Assigned',
-                            LucideIcons.star),
+                        _buildScholarshipDropdownField(),
+                        const SizedBox(height: 16),
+                        _buildReadOnlyField('Degree Program / Course',
+                            _profileData?['course'] ?? _profileData?['program_name'] ?? 'Not Specified',
+                            LucideIcons.graduationCap),
                         const SizedBox(height: 16),
                         _buildReadOnlyField('Student ID',
                             _profileData?['studentId'] ?? '...', LucideIcons.badgeCheck),
@@ -259,11 +291,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _buildReadOnlyField('Email Address',
                             _profileData?['email'] ?? '...', LucideIcons.mail),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Year Became Scholar',
-                            _profileData?['scholarYearLevel'] ?? 'N/A', LucideIcons.calendarCheck),
+                        _buildYearBecameScholarField(),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Payouts Received',
-                            (_profileData?['payoutsReceived']?.toString() ?? '0'), LucideIcons.wallet),
+                        _buildPayoutsReceivedField(),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -644,6 +674,244 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildScholarshipDropdownField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Scholarship Program',
+              style: TextStyle(
+                fontSize: 11,
+                color: context.textSec,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBC02D).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.4)),
+              ),
+              child: const Text(
+                'Assigned Program',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F3260),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _selectedScholarship,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(LucideIcons.award, size: 18, color: AppTheme.primaryColor),
+            filled: true,
+            fillColor: context.bgC,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+          ),
+          items: _scholarshipOptions.map((name) {
+            return DropdownMenuItem<String>(
+              value: name,
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.sparkles, size: 14, color: Color(0xFFFBC02D)),
+                  const SizedBox(width: 8),
+                  Text(
+                    name,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() {
+                _selectedScholarship = val;
+              });
+            }
+          },
+          validator: (val) => val == null || val.isEmpty ? 'Please select a scholarship' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildYearBecameScholarField() {
+    final quickYears = ['2022', '2023', '2024', '2025', '2026', '1st Year', '2nd Year', '3rd Year'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Year Became a Scholar',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _yearBecameScholarController,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(LucideIcons.calendarCheck, size: 16, color: AppTheme.primaryColor),
+            hintText: 'e.g. 2023, 2024, or 1st Year',
+            filled: true,
+            fillColor: context.bgC,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.error),
+            ),
+          ),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter the year you became a scholar' : null,
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: quickYears.map((yr) {
+              final isSelected = _yearBecameScholarController.text.trim() == yr;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  label: Text(
+                    yr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : context.textPri,
+                    ),
+                  ),
+                  backgroundColor: isSelected ? AppTheme.primaryColor : context.surfaceC,
+                  side: BorderSide(color: isSelected ? AppTheme.primaryColor : context.crispBorder),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () {
+                    setState(() {
+                      _yearBecameScholarController.text = yr;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPayoutsReceivedField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payouts Received to Date',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _payoutsReceivedController,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(LucideIcons.wallet, size: 16, color: AppTheme.primaryColor),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Decrease payouts',
+                  icon: const Icon(LucideIcons.minusCircle, size: 18, color: AppTheme.primaryColor),
+                  onPressed: () {
+                    int val = int.tryParse(_payoutsReceivedController.text.trim()) ?? 0;
+                    if (val > 0) val--;
+                    setState(() {
+                      _payoutsReceivedController.text = val.toString();
+                    });
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Increase payouts',
+                  icon: const Icon(LucideIcons.plusCircle, size: 18, color: AppTheme.primaryColor),
+                  onPressed: () {
+                    int val = int.tryParse(_payoutsReceivedController.text.trim()) ?? 0;
+                    val++;
+                    setState(() {
+                      _payoutsReceivedController.text = val.toString();
+                    });
+                  },
+                ),
+              ],
+            ),
+            hintText: 'e.g. 0',
+            filled: true,
+            fillColor: context.bgC,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.error),
+            ),
+          ),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) return 'Enter number of payouts';
+            final n = int.tryParse(v.trim());
+            if (n == null || n < 0) return 'Must be a non-negative number';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildActivityLogTile(BuildContext context) {
     return InkWell(
       onTap: () => Navigator.push(
@@ -870,9 +1138,16 @@ class _ProfileScreenState extends State<ProfileScreen>
             'section': _sectionController.text.trim(),
             'saNumber': _saController.text.trim(),
             'birthdate': _birthdateController.text.trim(),
+            'scholarshipName': _selectedScholarship ?? 'TES',
+            'scholarship_name': _selectedScholarship ?? 'TES',
+            'scholarYearLevel': _yearBecameScholarController.text.trim(),
+            'year_became_scholar': _yearBecameScholarController.text.trim(),
+            'yearBecameScholar': _yearBecameScholarController.text.trim(),
+            'payoutsReceived': int.tryParse(_payoutsReceivedController.text.trim()) ?? 0,
+            'payouts_received': _payoutsReceivedController.text.trim(),
           });
           await _auditService.logActivity(
-            action: 'Updated Profile (SA number)',
+            action: 'Updated Profile (Academic & Program, SA number)',
             userName: _nameController.text.trim(),
             role: 'Student',
             studentId: _profileData?['studentId'],

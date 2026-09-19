@@ -37,6 +37,14 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   String? _atmCardFeedback;
   String? _atmCardFileName;
 
+  String? _idFrontUrl;
+  String? _idBackUrl;
+
+  String? _stickerAcademicYear;
+  String? _stickerSemester;
+  bool? _stickerValidated;
+  bool? _stickerOverriddenForAdmin;
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +133,32 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         bytes: bytes,
       );
 
+      String? frontDownloadUrl;
+      String? backDownloadUrl;
+      final frontBytes = result['frontBytes'] as Uint8List?;
+      if (frontBytes != null) {
+        try {
+          frontDownloadUrl = await _storageService.uploadFile(
+            path: 'submissions/$uid/ID_FRONT_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            bytes: frontBytes,
+          );
+        } catch (e) {
+          debugPrint('Error uploading front ID: $e');
+        }
+      }
+
+      final backBytes = result['backBytes'] as Uint8List?;
+      if (backBytes != null) {
+        try {
+          backDownloadUrl = await _storageService.uploadFile(
+            path: 'submissions/$uid/ID_BACK_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            bytes: backBytes,
+          );
+        } catch (e) {
+          debugPrint('Error uploading back ID: $e');
+        }
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -132,6 +166,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         _pdfFeedback = "✅ Document Ready";
         _pdfFileName = originalName;
         _submissionPdfUrl = downloadUrl;
+        _idFrontUrl = frontDownloadUrl;
+        _idBackUrl = backDownloadUrl;
+        _stickerAcademicYear = result['academicYear'] as String?;
+        _stickerSemester = result['semester'] as String?;
+        _stickerValidated = result['stickerValidated'] as bool?;
+        _stickerOverriddenForAdmin = result['stickerOverriddenForAdmin'] as bool?;
       });
     } catch (e) {
       if (!mounted) return;
@@ -663,22 +703,71 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             documents = Map<String, dynamic>.from(data['documents']);
           }
           documents['atmCardUrl'] = _atmCardUrl;
+          documents['atm_card_url'] = _atmCardUrl;
           documents['atmCardFileName'] = _atmCardFileName;
+          documents['submissionPdfUrl'] = _submissionPdfUrl;
+          documents['submission_pdf_url'] = _submissionPdfUrl;
+          documents['submissionPdfName'] = _pdfFileName;
+          documents['submission_pdf_name'] = _pdfFileName;
+          if (_idFrontUrl != null) {
+            documents['idFrontUrl'] = _idFrontUrl;
+            documents['id_front_url'] = _idFrontUrl;
+          }
+          if (_idBackUrl != null) {
+            documents['idBackUrl'] = _idBackUrl;
+            documents['id_back_url'] = _idBackUrl;
+          }
+          documents['saNumber'] = _saController.text.trim();
+          documents['sa_number'] = _saController.text.trim();
           documents['saVerificationStatus'] = 'Pending';
           documents['idValidationStatus'] = 'Pending';
+          if (_stickerAcademicYear != null) {
+            documents['academicYear'] = _stickerAcademicYear;
+            documents['academic_year'] = _stickerAcademicYear;
+          }
+          if (_stickerSemester != null) documents['semester'] = _stickerSemester;
+          if (_stickerValidated != null) {
+            documents['stickerValidated'] = _stickerValidated;
+            documents['sticker_validated'] = _stickerValidated;
+          }
+          if (_stickerOverriddenForAdmin != null) {
+            documents['stickerOverriddenForAdmin'] = _stickerOverriddenForAdmin;
+          }
 
-          await _authService.updateStudentProfile(user.id, {
+          final Map<String, dynamic> studentPayload = {
             'status': 'Pending',
             'saNumber': _saController.text.trim(),
+            'sa_number': _saController.text.trim(),
             'submissionPdfUrl': _submissionPdfUrl,
+            'submission_pdf_url': _submissionPdfUrl,
             'submissionPdfName': _pdfFileName,
+            'submission_pdf_name': _pdfFileName,
+            'atmCardUrl': _atmCardUrl,
+            'atm_card_url': _atmCardUrl,
+            'atmCardFileName': _atmCardFileName,
             'documents': documents,
             'pdfVerified': true,
+            'academicYear': _stickerAcademicYear ?? 'AY 2026-2027',
+            'academic_year': _stickerAcademicYear ?? 'AY 2026-2027',
+            'semester': _stickerSemester ?? '1st Semester',
+            'stickerValidated': _stickerValidated ?? true,
+            'sticker_validated': _stickerValidated ?? true,
             'createdAt': DateTime.now().toUtc().toIso8601String(),
             'submittedAt': DateTime.now().toUtc().toIso8601String(),
+            'submitted_at': DateTime.now().toUtc().toIso8601String(),
             'requiresResubmission': false,
             'adminRemarks': null,
-          });
+          };
+          if (_idFrontUrl != null) {
+            studentPayload['idFrontUrl'] = _idFrontUrl;
+            studentPayload['id_front_url'] = _idFrontUrl;
+          }
+          if (_idBackUrl != null) {
+            studentPayload['idBackUrl'] = _idBackUrl;
+            studentPayload['id_back_url'] = _idBackUrl;
+          }
+
+          await _authService.updateStudentProfile(user.id, studentPayload);
 
           final notificationService = NotificationService();
           await notificationService.sendNotification(

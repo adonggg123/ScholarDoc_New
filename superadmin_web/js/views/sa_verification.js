@@ -30,7 +30,7 @@ async function loadSaQueue() {
 
         // Filter students who have submitted SA number
         saStudents = (data || []).filter(s => {
-            const sa = s.saNumber || s.familyDetails?.saNumber;
+            const sa = s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber;
             return sa && sa.toString().trim() !== '' && sa.toString().trim() !== 'N/A';
         });
 
@@ -69,7 +69,7 @@ const duplicateSaMap = new Map(); // saNumber -> Array of students
 function computeDuplicateMap() {
     duplicateSaMap.clear();
     saStudents.forEach(s => {
-        const sa = (s.saNumber || s.familyDetails?.saNumber || '').toString().trim();
+        const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || '').toString().trim();
         if (sa) {
             if (!duplicateSaMap.has(sa)) {
                 duplicateSaMap.set(sa, []);
@@ -80,14 +80,14 @@ function computeDuplicateMap() {
 }
 
 function isStudentDuplicate(student) {
-    const sa = (student.saNumber || student.familyDetails?.saNumber || '').toString().trim();
+    const sa = (student.saNumber || student.sa_number || student.documents?.saNumber || student.documents?.sa_number || student.familyDetails?.saNumber || '').toString().trim();
     if (!sa) return false;
     const list = duplicateSaMap.get(sa);
     return list && list.length > 1;
 }
 
 function getDuplicateConflicts(student) {
-    const sa = (student.saNumber || student.familyDetails?.saNumber || '').toString().trim();
+    const sa = (student.saNumber || student.sa_number || student.documents?.saNumber || student.documents?.sa_number || student.familyDetails?.saNumber || '').toString().trim();
     if (!sa) return [];
     const list = duplicateSaMap.get(sa) || [];
     return list.filter(s => s.uid !== student.uid && s.id !== student.id);
@@ -138,11 +138,11 @@ function filterSaQueue() {
     const sortBy = document.getElementById('sa-sort-by')?.value || 'latest';
 
     filteredSaStudents = saStudents.filter(s => {
-        const name = (s.fullName || '').toLowerCase();
-        const studentId = (s.studentId || s.id || '').toLowerCase();
-        const sa = (s.saNumber || s.familyDetails?.saNumber || '').toString().toLowerCase();
-        const course = (s.course || '').toUpperCase();
-        const status = s.documents?.saVerificationStatus || 'Pending';
+        const name = (s.fullName || s.full_name || '').toLowerCase();
+        const studentId = (s.studentId || s.student_no || s.id || '').toLowerCase();
+        const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || '').toString().toLowerCase();
+        const course = (s.course || s.program_name || '').toUpperCase();
+        const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || 'Pending';
         const isDup = isStudentDuplicate(s);
 
         // Search Match
@@ -151,7 +151,7 @@ function filterSaQueue() {
         // Status Match
         let matchStatus = true;
         if (statusFilter === 'Pending') {
-            matchStatus = status === 'Pending' || (!s.documents?.saVerificationStatus);
+            matchStatus = status === 'Pending' || (!s.documents?.saVerificationStatus && !s.documents?.sa_verification_status);
         } else if (statusFilter === 'Verified') {
             matchStatus = status === 'Verified' || status === 'Approved';
         } else if (statusFilter === 'Missing') {
@@ -174,17 +174,17 @@ function filterSaQueue() {
     // Sorting
     filteredSaStudents.sort((a, b) => {
         if (sortBy === 'name_asc') {
-            return (a.fullName || '').localeCompare(b.fullName || '');
+            return (a.fullName || a.full_name || '').localeCompare(b.fullName || b.full_name || '');
         } else if (sortBy === 'name_desc') {
-            return (b.fullName || '').localeCompare(a.fullName || '');
+            return (b.fullName || b.full_name || '').localeCompare(a.fullName || a.full_name || '');
         } else if (sortBy === 'sa_num') {
-            const saA = (a.saNumber || a.familyDetails?.saNumber || '').toString();
-            const saB = (b.saNumber || b.familyDetails?.saNumber || '').toString();
+            const saA = (a.saNumber || a.sa_number || a.documents?.saNumber || a.documents?.sa_number || a.familyDetails?.saNumber || '').toString();
+            const saB = (b.saNumber || b.sa_number || b.documents?.saNumber || b.documents?.sa_number || b.familyDetails?.saNumber || '').toString();
             return saA.localeCompare(saB);
         } else {
             // Latest First by createdAt or updatedAt
-            const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-            const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            const dateA = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at || 0).getTime();
             return dateB - dateA;
         }
     });
@@ -225,12 +225,12 @@ function renderQueue() {
 
     container.innerHTML = filteredSaStudents.map((s, index) => {
         const isSelected = index === selectedIndex;
-        const name = s.fullName || 'Unnamed Student';
-        const studentId = s.studentId || s.id || 'N/A';
-        const course = s.course || 'N/A';
-        const sa = s.saNumber || s.familyDetails?.saNumber || 'N/A';
-        const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
-        const status = s.documents?.saVerificationStatus || 'Pending';
+        const name = s.fullName || s.full_name || 'Unnamed Student';
+        const studentId = s.studentId || s.student_no || s.id || 'N/A';
+        const course = s.course || s.program_name || 'N/A';
+        const sa = s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || 'N/A';
+        const photo = s.profilePictureUrl || s.profile_picture_url || s.profileImageUrl || s.photoUrl || s.photoURL;
+        const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || 'Pending';
         const isDup = isStudentDuplicate(s);
 
         // Status Badge Chip
@@ -328,14 +328,14 @@ function renderPanel() {
     const s = filteredSaStudents[selectedIndex];
     if (!s) return;
 
-    const name = s.fullName || 'Unnamed Student';
-    const sa = (s.saNumber || s.familyDetails?.saNumber || 'Not Submitted').toString();
-    const studentId = s.studentId || s.id || 'N/A';
-    const course = s.course || 'N/A';
-    const year = s.year || 'N/A';
-    const photo = s.profilePictureUrl || s.profileImageUrl || s.photoUrl || s.photoURL;
-    const currentRemarks = s.adminRemarks || '';
-    const status = s.documents?.saVerificationStatus || 'Pending';
+    const name = s.fullName || s.full_name || 'Unnamed Student';
+    const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || 'Not Submitted').toString();
+    const studentId = s.studentId || s.student_no || s.id || 'N/A';
+    const course = s.course || s.program_name || 'N/A';
+    const year = s.year || s.year_level || 'N/A';
+    const photo = s.profilePictureUrl || s.profile_picture_url || s.profileImageUrl || s.photoUrl || s.photoURL;
+    const currentRemarks = s.adminRemarks || s.admin_remarks || '';
+    const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || 'Pending';
 
     // Queue Navigation Counts
     const currentPos = selectedIndex + 1;
@@ -390,8 +390,8 @@ function renderPanel() {
 
     // ATM Card Proof Box
     let atmCardHtml = '';
-    const atmCardUrl = s.atmCardUrl || (s.documents && s.documents.atmCardUrl);
-    const atmCardFileName = s.atmCardFileName || (s.documents && s.documents.atmCardFileName) || 'ATM_Proof_Image.jpg';
+    const atmCardUrl = s.atmCardUrl || s.atm_card_url || (s.documents && (s.documents.atmCardUrl || s.documents.atm_card_url));
+    const atmCardFileName = s.atmCardFileName || s.atm_card_file_name || (s.documents && (s.documents.atmCardFileName || s.documents.atm_card_file_name)) || 'ATM_Proof_Image.jpg';
 
     if (atmCardUrl) {
         atmCardHtml = `
@@ -602,35 +602,56 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
     try {
         // 1. Update SA Verification Status (stored inside documents JSON)
         const currentDocs = s.documents || {};
-        const updatedDocs = { ...currentDocs, saVerificationStatus: newStatus };
+        const updatedDocs = { 
+            ...currentDocs, 
+            saVerificationStatus: newStatus,
+            sa_verification_status: newStatus 
+        };
 
         const updatePayload = {
             documents: updatedDocs,
             adminRemarks: remarks,
+            admin_remarks: remarks,
             requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
-            updatedAt: new Date().toISOString()
+            requires_resubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
+            updatedAt: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         };
 
         // Auto-calculate overall status:
         // Only set global status to Verified when BOTH SA and ID are verified
-        const currentIdStatus = currentDocs.idValidationStatus || 'Pending';
+        const currentIdStatus = currentDocs.idValidationStatus || currentDocs.id_validation_status || 'Pending';
         if (newStatus === 'Verified' && (currentIdStatus === 'Verified' || currentIdStatus === 'Approved')) {
             updatePayload.status = 'Verified';
         } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
             updatePayload.status = newStatus;
         }
 
-        const { error } = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
-        if (error) throw error;
+        let updateRes = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
+        if (updateRes.error) {
+            // Fallback: update with reduced fields if schema difference
+            const fallbackPayload = {
+                admin_remarks: remarks,
+                adminRemarks: remarks,
+                updated_at: new Date().toISOString()
+            };
+            if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
+            updateRes = await supabase.from('students').update(fallbackPayload).eq('uid', s.uid);
+            if (updateRes.error) throw updateRes.error;
+        }
 
         // 2. Audit Log
-        await supabase.from('audit_logs').insert([{
-            adminId: (await supabase.auth.getUser()).data.user?.id || 'unknown',
-            adminName: 'Admin',
-            action: `Verified student SA Number: ${newStatus}`,
-            targetUser: s.uid,
-            timestamp: new Date().toISOString()
-        }]);
+        try {
+            await supabase.from('audit_logs').insert([{
+                adminId: (await supabase.auth.getUser()).data.user?.id || 'unknown',
+                adminName: 'Admin',
+                action: `Verified student SA Number: ${newStatus}`,
+                targetUser: s.uid,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (auditErr) {
+            console.warn('Could not write audit log:', auditErr);
+        }
 
         // 3. Notification
         let title = '';
@@ -655,19 +676,23 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
             type = 'error';
         }
         
-        await supabase.from('notifications').insert([{
-            studentId: s.uid,
-            title: title,
-            message: message,
-            type: type,
-            isRead: false,
-            timestamp: new Date().toISOString()
-        }]);
+        try {
+            await supabase.from('notifications').insert([{
+                studentId: s.uid,
+                title: title,
+                message: message,
+                type: type,
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (notifErr) {
+            console.warn('Could not send notification:', notifErr);
+        }
 
         if (window.showToast) {
-            window.showToast(`Updated ${s.fullName || 'student'} to ${newStatus}.`, 'check-circle');
+            window.showToast(`Updated ${s.fullName || s.full_name || 'student'} to ${newStatus}.`, 'check-circle');
         } else {
-            alert(`Student ${s.fullName} status updated to ${newStatus}.`);
+            alert(`Student ${s.fullName || s.full_name} status updated to ${newStatus}.`);
         }
         
         // Reload SA Queue
