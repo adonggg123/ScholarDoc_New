@@ -206,8 +206,8 @@ class AcademicTermService {
         .replaceAll(RegExp(r'[oO](?=\d)'), '0')
         .replaceAll(RegExp(r'(?<=\d)[oO]'), '0');
 
-    // Replace em/en dashes, slashes, and spaces between numbers with hyphen
-    clean = clean.replaceAll(RegExp(r'[\u2013\u2014\u2212/]'), '-');
+    // Replace em/en dashes, slashes, "to", dots, and underscores between numbers with hyphen
+    clean = clean.replaceAll(RegExp(r'[\u2013\u2014\u2212/\.~_]|(?<=\d)\s*to\s*(?=\d)'), '-');
 
     // Extract 4-digit start year and 2-to-4 digit end year
     final match = RegExp(r'(20\d{2})\s*-\s*(20\d{2}|\d{2})').firstMatch(clean);
@@ -236,20 +236,36 @@ class AcademicTermService {
     if (raw.isEmpty) return '';
     final lower = raw.toLowerCase().trim();
 
-    if (lower.contains('1st') ||
-        lower.contains('first') ||
-        lower.contains('sem 1') ||
-        lower.contains('sem1') ||
-        lower == '1') {
-      return '1st Semester';
-    }
-
+    // 2nd Semester check first (handles 2nd, second, 2*, 2 nd, 2-nd, 2rd, sem 2, sem2)
     if (lower.contains('2nd') ||
         lower.contains('second') ||
         lower.contains('sem 2') ||
         lower.contains('sem2') ||
-        lower == '2') {
+        lower.contains('2*') ||
+        lower.contains('2 nd') ||
+        lower.contains('2-nd') ||
+        lower.contains('2rd') ||
+        lower == '2' ||
+        lower.startsWith('2 ') ||
+        lower.endsWith(' 2')) {
       return '2nd Semester';
+    }
+
+    // 1st Semester (handles 1st, first, 1*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1)
+    if (lower.contains('1st') ||
+        lower.contains('first') ||
+        lower.contains('sem 1') ||
+        lower.contains('sem1') ||
+        lower.contains('1*') ||
+        lower.contains('1 st') ||
+        lower.contains('1-st') ||
+        lower.contains('ist') ||
+        lower.contains('1sl') ||
+        lower.contains('1si') ||
+        lower == '1' ||
+        lower.startsWith('1 ') ||
+        lower.endsWith(' 1')) {
+      return '1st Semester';
     }
 
     if (lower.contains('summer') || lower.contains('midyear') || lower.contains('mid-year')) {

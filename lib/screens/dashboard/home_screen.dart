@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../screens/submissions/submission_history_screen.dart';
@@ -33,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<DateTime> _weekDays;
 
   Stream<List<Map<String, dynamic>>>? _notificationStream;
+  StreamSubscription<List<Map<String, dynamic>>>? _notificationSubscription;
   final Set<String> _shownNotificationIds = {};
   bool _isInitialLoad = true;
   OverlayEntry? _currentToastEntry;
@@ -56,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _notificationSubscription?.cancel();
     if (_currentToastEntry != null) {
       _currentToastEntry!.remove();
       _currentToastEntry = null;
@@ -65,9 +69,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _setupNotificationListener() {
     final uid = _authService.currentUser?.id;
-    if (uid != null) {
+    if (uid != null && _notificationSubscription == null) {
       _notificationStream = _notificationService.getNotificationsStream(uid).asBroadcastStream();
-      _notificationStream?.listen((notifications) {
+      _notificationSubscription = _notificationStream?.listen((notifications) {
         if (!mounted) return;
         
         final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
@@ -233,6 +237,10 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _profileData = doc;
         });
+
+        // Trigger welcome toast on first login
+        final displayName = (doc['full_name'] ?? doc['fullName'] ?? 'Scholar').toString().trim();
+        _checkAndShowFirstLoginWelcome(uid, displayName);
       }
     }
 
@@ -265,9 +273,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _checkAndShowFirstLoginWelcome(String uid, String displayName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final shownKey = 'welcome_toast_shown_$uid';
+      final alreadyShown = prefs.getBool(shownKey) ?? false;
+      if (!alreadyShown) {
+        await prefs.setBool(shownKey, true);
+        if (!mounted) return;
+        Future.delayed(const Duration(milliseconds: 700), () {
+          if (mounted) {
+            _showToastPopup(
+              'Welcome to ScholarDoc! 👋',
+              'Welcome, $displayName! Your scholarship portal is ready.',
+              'welcome_$uid',
+            );
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
-    _setupNotificationListener();
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(

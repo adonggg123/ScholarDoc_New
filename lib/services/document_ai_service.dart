@@ -78,37 +78,53 @@ class DocumentAIScannerService {
   }) async {
     final activeTerm = targetTerm ?? AcademicTermService.currentTerm;
     String rawText = '';
-    String engine = 'High-Accuracy Document OCR';
+    String engine = 'Google Cloud Vision / Document AI';
     String? apiError;
     bool isApiDisabled = false;
 
-    // 1. Primary engine: Call High-Accuracy Document OCR (instant, free, works on all devices)
+    // 1. Primary engine: Call Google Cloud Vision / Document AI REST API
     try {
-      final ocrResult = await _callOcrSpace(imageBytes);
-      if (ocrResult != null && ocrResult.isNotEmpty) {
-        rawText = ocrResult;
-        engine = 'High-Accuracy Document OCR';
+      final googleResult = await _callGoogleDocumentTextDetection(imageBytes);
+      if (googleResult != null && googleResult.trim().isNotEmpty) {
+        rawText = googleResult.trim();
+        engine = 'Google Cloud Vision / Document AI';
         isApiDisabled = false;
       }
     } catch (e) {
-      debugPrint('High-Accuracy Document OCR error: $e');
+      debugPrint('Google Document AI call error: $e');
+      apiError = e.toString();
+      if (apiError.contains('403') || apiError.contains('disabled') || apiError.contains('PERMISSION_DENIED')) {
+        isApiDisabled = true;
+      }
     }
 
-    // 2. Secondary attempt: Call Google Cloud Vision / Document AI REST API
-    if (rawText.isEmpty) {
+    // Check if Google Document AI found both Academic Year & Semester
+    bool hasBoth = false;
+    if (rawText.isNotEmpty) {
+      final y = _extractAcademicYear(rawText);
+      final s = _extractSemester(rawText);
+      if (y != null && s != null) {
+        hasBoth = true;
+      }
+    }
+
+    // 2. High-Accuracy Document OCR: If Google API is disabled, failed, or missed sem/year
+    if (!hasBoth) {
       try {
-        final googleResult = await _callGoogleDocumentTextDetection(imageBytes);
-        if (googleResult != null && googleResult.isNotEmpty) {
-          rawText = googleResult;
-          engine = 'Google Cloud Vision / Document AI';
-          isApiDisabled = false;
+        final ocrResult = await _callOcrSpace(imageBytes);
+        if (ocrResult != null && ocrResult.trim().isNotEmpty) {
+          if (rawText.isEmpty) {
+            rawText = ocrResult.trim();
+            engine = 'High-Accuracy Document OCR';
+            isApiDisabled = false;
+          } else {
+            // Complement and combine with Google Document AI output
+            rawText = '$rawText\n${ocrResult.trim()}';
+            engine = 'Google Document AI + High-Accuracy OCR';
+          }
         }
       } catch (e) {
-        debugPrint('Google Document AI call error: $e');
-        apiError = e.toString();
-        if (apiError.contains('403') || apiError.contains('disabled') || apiError.contains('PERMISSION_DENIED')) {
-          isApiDisabled = true;
-        }
+        debugPrint('High-Accuracy Document OCR error: $e');
       }
     }
 
@@ -116,8 +132,8 @@ class DocumentAIScannerService {
     if (rawText.isEmpty) {
       try {
         final proxyResult = await _callBackendProxy(imageBytes);
-        if (proxyResult != null && proxyResult.isNotEmpty) {
-          rawText = proxyResult;
+        if (proxyResult != null && proxyResult.trim().isNotEmpty) {
+          rawText = proxyResult.trim();
           engine = 'ScholarDoc Backend Proxy';
           isApiDisabled = false;
         }
@@ -144,7 +160,7 @@ class DocumentAIScannerService {
     );
   }
 
-  /// Crops the upper portion (top 50%) of the back ID where the validation sticker is located.
+  /// Crops the upper portion (top 58%) of the back ID where the validation sticker is located.
   static Future<Uint8List> cropUpperStickerROI(Uint8List originalBytes) async {
     try {
       final codec = await ui.instantiateImageCodec(originalBytes);
@@ -152,7 +168,7 @@ class DocumentAIScannerService {
       final image = frame.image;
 
       final width = image.width;
-      final cropHeight = (image.height * 0.52).round(); // Upper ~50% portion
+      final cropHeight = (image.height * 0.58).round().clamp(1, image.height); // Upper ~58% portion
 
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
@@ -187,8 +203,12 @@ class DocumentAIScannerService {
         {
           'image': {'content': base64Image},
           'features': [
-            {'type': 'DOCUMENT_TEXT_DETECTION', 'maxResults': 1}
-          ]
+            {'type': 'DOCUMENT_TEXT_DETECTION'},
+            {'type': 'TEXT_DETECTION'},
+          ],
+          'imageContext': {
+            'languageHints': ['en']
+          }
         }
       ]
     });
@@ -205,9 +225,17 @@ class DocumentAIScannerService {
       final data = jsonDecode(response.body);
       final responses = data['responses'] as List?;
       if (responses != null && responses.isNotEmpty) {
-        final fullText = responses[0]['fullTextAnnotation']?['text'];
-        if (fullText != null) {
-          return fullText.toString();
+        final firstResp = responses[0];
+        final fullText = firstResp['fullTextAnnotation']?['text'];
+        if (fullText != null && fullText.toString().trim().isNotEmpty) {
+          return fullText.toString().trim();
+        }
+        final textAnn = firstResp['textAnnotations'] as List?;
+        if (textAnn != null && textAnn.isNotEmpty) {
+          final desc = textAnn[0]['description'];
+          if (desc != null && desc.toString().trim().isNotEmpty) {
+            return desc.toString().trim();
+          }
         }
       }
     } else {
@@ -326,10 +354,54 @@ class DocumentAIScannerService {
     );
   }
 
+  /// Re-validates and merges scanned term data with newly detected academic year or semester.
+  static StickerScanResult revalidateWithTerms(
+    StickerScanResult original, {
+    String? academicYear,
+    String? semester,
+    bool? hasValidationStamp,
+    String? registrarText,
+    AcademicTerm? targetTerm,
+  }) {
+    final term = targetTerm ?? original.termValidation.currentTerm;
+    final year = academicYear ?? original.academicYear;
+    final sem = semester ?? original.semester;
+    final stamp = hasValidationStamp ?? original.hasValidationStamp;
+    final reg = registrarText ?? original.registrarText;
+
+    final normYear = year != null && year.isNotEmpty ? AcademicTermService.normalizeYear(year) : null;
+    final normSem = sem != null && sem.isNotEmpty ? AcademicTermService.normalizeSemester(sem) : null;
+
+    final termValidation = AcademicTermService.validateScannedTerm(
+      detectedYear: normYear,
+      detectedSemester: normSem,
+      targetTerm: term,
+    );
+
+    double confidence = 0.0;
+    if (normYear != null) confidence += 0.45;
+    if (normSem != null) confidence += 0.35;
+    if (stamp) confidence += 0.20;
+
+    return StickerScanResult(
+      stickerFound: normYear != null || normSem != null || stamp,
+      academicYear: normYear,
+      semester: normSem,
+      hasValidationStamp: stamp,
+      registrarText: reg,
+      confidence: confidence.clamp(0.0, 1.0),
+      rawExtractedText: original.rawExtractedText,
+      engineUsed: original.engineUsed,
+      termValidation: termValidation,
+      errorMessage: original.errorMessage,
+    );
+  }
+
   /// Calls high-accuracy document OCR engine using multipart streaming
   static Future<String?> _callOcrSpace(Uint8List imageBytes) async {
     final isPng = imageBytes.length > 8 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50;
     const keys = ['helloworld'];
+    String combinedText = '';
 
     for (final key in keys) {
       for (final engine in ['2', '1']) {
@@ -337,6 +409,7 @@ class DocumentAIScannerService {
           final uri = Uri.parse('https://api.ocr.space/parse/image');
           final request = http.MultipartRequest('POST', uri);
           request.headers['apikey'] = key;
+          request.headers['User-Agent'] = 'ScholarDoc/1.0';
           request.fields['language'] = 'eng';
           request.fields['OCREngine'] = engine;
           request.fields['scale'] = 'true';
@@ -350,16 +423,22 @@ class DocumentAIScannerService {
             ),
           );
 
-          final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
+          final streamedResponse = await request.send().timeout(const Duration(seconds: 20));
           final response = await http.Response.fromStream(streamedResponse);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             final results = data['ParsedResults'] as List?;
             if (results != null && results.isNotEmpty) {
-              final text = results[0]['ParsedText']?.toString() ?? '';
-              if (text.trim().isNotEmpty) {
-                return text.trim();
+              final text = (results[0]['ParsedText']?.toString() ?? '').trim();
+              if (text.isNotEmpty) {
+                // If this pass already found both year and semester, return immediately
+                final y = _extractAcademicYear(text);
+                final s = _extractSemester(text);
+                if (y != null && s != null) {
+                  return text;
+                }
+                combinedText = combinedText.isEmpty ? text : '$combinedText\n$text';
               }
             }
           }
@@ -368,44 +447,77 @@ class DocumentAIScannerService {
         }
       }
     }
-    return null;
+    return combinedText.isNotEmpty ? combinedText : null;
   }
 
   /// Robust regex extraction for ANY Academic Year (e.g. 2026-2027, 2024-2025, 2025-26, etc.)
   static String? _extractAcademicYear(String text) {
-    // 1. Check for standard patterns like "A.Y. 2026 - 2027", "AY 2026-2027", "2026-2027"
-    final ayRegex = RegExp(
-      r'(?:(?:A\.?\s*Y\.?|S\.?\s*Y\.?|Academic\s*Year|School\s*Year)\s*[:\.]?\s*)?(20\d{2})\s*[\u2013\u2014\u2212\-/–—\s]+\s*(20\d{2}|\d{2})',
+    if (text.isEmpty) return null;
+
+    // Normalize OCR letter 'O' / 'o' confusion inside year numbers (e.g. 2O26 -> 2026)
+    var cleaned = text
+        .replaceAll(RegExp(r'\b2[oO]2'), '202')
+        .replaceAll(RegExp(r'[oO](?=\d)'), '0')
+        .replaceAll(RegExp(r'(?<=\d)[oO]'), '0');
+
+    // 1. Highest priority: explicit AY / SY prefix + year range
+    // Handles: "A.Y. 2026 - 2027", "AY 2026-2027", "AY: 2026-2027", "A.Y 2026-27", "S.Y. 2026-2027", "SY 2026/2027"
+    final explicitAyRegex = RegExp(
+      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(20\d{2})\s*[\u2013\u2014\u2212\-/–—~\.\s]+\s*(20\d{2}|\d{2})\b',
       caseSensitive: false,
     );
 
-    final match = ayRegex.firstMatch(text);
-    if (match != null) {
-      final start = match.group(1)!;
-      var end = match.group(2)!;
-      if (end.length == 2) {
-        end = '${start.substring(0, 2)}$end';
+    final explicitMatches = explicitAyRegex.allMatches(cleaned);
+    for (final match in explicitMatches) {
+      final start = int.parse(match.group(1)!);
+      final endStr = match.group(2)!;
+      final end = endStr.length == 2
+          ? int.parse('${match.group(1)!.substring(0, 2)}$endStr')
+          : int.parse(endStr);
+      // Valid academic years are either consecutive (start + 1) or in a reasonable range (2020-2035)
+      if (end == start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+        return '$start-$end';
       }
-      return '$start-$end';
     }
 
-    // 2. Check for OCR letter 'O' substitutions (e.g. "2O26 - 2O27")
-    final ocrSubText = text.replaceAll(RegExp(r'\b2[oO]2'), '202');
-    final matchOcr = ayRegex.firstMatch(ocrSubText);
-    if (matchOcr != null) {
-      final start = matchOcr.group(1)!;
-      var end = matchOcr.group(2)!;
-      if (end.length == 2) {
-        end = '${start.substring(0, 2)}$end';
+    // 2. High priority: consecutive years without prefix (e.g. "2026 - 2027", "2026/2027", "2026–2027")
+    final rangeRegex = RegExp(
+      r'\b(202[0-9]|203[0-5])\s*[\u2013\u2014\u2212\-/–—~]\s*(202[0-9]|203[0-5]|\d{2})\b',
+    );
+    final rangeMatches = rangeRegex.allMatches(cleaned);
+    for (final match in rangeMatches) {
+      final start = int.parse(match.group(1)!);
+      final endStr = match.group(2)!;
+      final end = endStr.length == 2
+          ? int.parse('${match.group(1)!.substring(0, 2)}$endStr')
+          : int.parse(endStr);
+      if (end == start + 1) {
+        return '$start-$end';
       }
-      return '$start-$end';
     }
 
-    // 3. Fallback: Check for standalone 4-digit year in range 2020-2035
-    final singleYearMatch = RegExp(r'\b(202[0-9]|203[0-5])\b').firstMatch(text);
-    if (singleYearMatch != null) {
-      final y = int.parse(singleYearMatch.group(1)!);
+    // 3. Fallback: single year with explicit AY/SY prefix (e.g. "A.Y. 2026" or "AY 2026")
+    final singleAyRegex = RegExp(
+      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b',
+      caseSensitive: false,
+    );
+    final singleMatch = singleAyRegex.firstMatch(cleaned);
+    if (singleMatch != null) {
+      final y = int.parse(singleMatch.group(1)!);
       return '$y-${y + 1}';
+    }
+
+    // 4. Low-priority fallback: standalone year in reasonable window ONLY if adjacent to "Semester" or "Validated"
+    final semAdjMatch = RegExp(
+      r'(?:sem(?:ester)?|validated)[\s\S]{0,30}\b(202[0-9]|203[0-5])\b|\b(202[0-9]|203[0-5])\b[\s\S]{0,30}(?:sem(?:ester)?|validated)',
+      caseSensitive: false,
+    ).firstMatch(cleaned);
+    if (semAdjMatch != null) {
+      final yearStr = semAdjMatch.group(1) ?? semAdjMatch.group(2);
+      if (yearStr != null) {
+        final y = int.parse(yearStr);
+        return '$y-${y + 1}';
+      }
     }
 
     return null;
@@ -413,33 +525,54 @@ class DocumentAIScannerService {
 
   /// Robust regex extraction for Semester (1st, 2nd, Summer/Midyear).
   static String? _extractSemester(String text) {
-    final lower = text.toLowerCase();
+    if (text.isEmpty) return null;
+    final lines = text.split(RegExp(r'[\r\n]+'));
 
-    // 2nd Semester check first (prevents 1st from mis-matching "2nd")
-    final is2nd = RegExp(r'\b(?:2nd|second)\s*(?:sem(?:ester)?)?\b', caseSensitive: false).hasMatch(lower) ||
-        RegExp(r'\b(?:2[\*+ndND]|2)\s*sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
-        RegExp(r'\bsem(?:ester)?\s*2\b', caseSensitive: false).hasMatch(lower) ||
-        lower.contains('2* semester') ||
-        lower.contains('2nd semester') ||
-        lower.contains('2 semester');
+    String? checkSem(String s) {
+      final lower = s.toLowerCase();
 
-    if (is2nd) return '2nd Semester';
+      // 2nd Semester: Check 2nd / Second with semester context
+      final is2nd = RegExp(
+            r'\b(?:2\s*nd|2\s*rd|second|2[\*+]|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          RegExp(r'\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*2\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b2\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b2nd\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\bsecond\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+          lower.contains('2* semester') ||
+          lower.contains('2* sem');
+      if (is2nd) return '2nd Semester';
 
-    // 1st Semester (handles "1st", "1*", "1st.", "first", "1 semester")
-    final is1st = RegExp(r'\b(?:1st|first)\s*(?:sem(?:ester)?)?\b', caseSensitive: false).hasMatch(lower) ||
-        RegExp(r'\b(?:1[\*+stST]|1)\s*sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
-        RegExp(r'\bsem(?:ester)?\s*1\b', caseSensitive: false).hasMatch(lower) ||
-        lower.contains('1* semester') ||
-        lower.contains('1st semester') ||
-        lower.contains('1 semester');
+      // 1st Semester: Check 1st / First with semester context (including OCR letter I / l / 1* / 1 st)
+      final is1st = RegExp(
+            r'\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+]|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          RegExp(r'\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*1\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b1\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b1st\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\bfirst\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b[il]st\s+sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
+          lower.contains('1* semester') ||
+          lower.contains('1* sem');
+      if (is1st) return '1st Semester';
 
-    if (is1st) return '1st Semester';
+      // Summer / Midyear
+      if (RegExp(r'\b(?:summer|mid\s*[\-]?year)\b', caseSensitive: false).hasMatch(lower)) {
+        return 'Summer / Midyear';
+      }
 
-    // Summer / Midyear
-    if (RegExp(r'\b(?:summer|midyear|mid-year)\b', caseSensitive: false).hasMatch(lower)) {
-      return 'Summer / Midyear';
+      return null;
     }
 
-    return null;
+    // 1. Search line-by-line first (lines with sticker context or AY are top candidates)
+    for (final line in lines) {
+      final res = checkSem(line);
+      if (res != null) return res;
+    }
+
+    // 2. Search entire text if not found on single line
+    return checkSem(text);
   }
 }

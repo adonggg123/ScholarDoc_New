@@ -420,12 +420,29 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       // 1. Scan the captured image directly (fast, preserves full context without cropping off sticker)
       var result = await DocumentAIScannerService.scanIdBackSticker(bytes);
 
-      // 2. Fallback: if sticker cues weren't found on the full image, try the cropped upper 52% ROI
-      if (!result.stickerFound) {
+      // 2. High-Accuracy Fallback: If not validated or missing academic year / semester, scan cropped sticker ROI
+      if (!result.isValid || result.academicYear == null || result.semester == null) {
         final roiBytes = await DocumentAIScannerService.cropUpperStickerROI(bytes);
         final roiResult = await DocumentAIScannerService.scanIdBackSticker(roiBytes);
-        if (roiResult.stickerFound) {
+        if (roiResult.isValid) {
           result = roiResult;
+        } else if (!result.stickerFound && roiResult.stickerFound) {
+          result = roiResult;
+        } else if (roiResult.stickerFound) {
+          // Merge detected fields from full scan and ROI scan
+          final bestYear = result.academicYear ?? roiResult.academicYear;
+          final bestSem = result.semester ?? roiResult.semester;
+          final bestStamp = result.hasValidationStamp || roiResult.hasValidationStamp;
+          final bestRegistrar = result.registrarText ?? roiResult.registrarText;
+          if (bestYear != result.academicYear || bestSem != result.semester) {
+            result = DocumentAIScannerService.revalidateWithTerms(
+              result,
+              academicYear: bestYear,
+              semester: bestSem,
+              hasValidationStamp: bestStamp,
+              registrarText: bestRegistrar,
+            );
+          }
         }
       }
 

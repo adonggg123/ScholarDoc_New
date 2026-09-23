@@ -120,36 +120,48 @@ class AuthService {
 
     AuthResponse? authResponse;
 
+    // Helper to format password to satisfy Supabase Auth's minimum 6-character requirement
+    String formatAuthPassword(String pwd) {
+      final clean = pwd.trim();
+      if (clean.isNotEmpty && clean.length < 6) {
+        return clean.padLeft(6, '0');
+      }
+      return clean;
+    }
+
     debugPrint('AuthService: Starting login for ID: $trimmedId');
     debugPrint('AuthService: Step 1 - Trying ID-based email: $authEmail');
 
-    // --- Step 1: Try new ID-based email (accounts registered after the update) ---
-    try {
-      authResponse = await _supabase.auth.signInWithPassword(
-        email: authEmail,
-        password: trimmedPassword,
-      );
-      debugPrint(
-        'AuthService: Step 1 SUCCESS (UID: ${authResponse.user?.id})',
-      );
-    } on AuthException catch (e) {
-      debugPrint('AuthService: Step 1 FAILED (${e.message})');
-      if (!e.message.toLowerCase().contains('invalid login') && 
-          !e.message.toLowerCase().contains('not found')) {
-        rethrow;
+    // --- Step 1: Try ID-based email ---
+    final step1Passwords = <String>{};
+    if (trimmedPassword.length >= 6) step1Passwords.add(trimmedPassword);
+    step1Passwords.add(formatAuthPassword(trimmedPassword));
+
+    for (final pwd in step1Passwords) {
+      try {
+        authResponse = await _supabase.auth.signInWithPassword(
+          email: authEmail,
+          password: pwd,
+        );
+        if (authResponse.user != null) {
+          debugPrint(
+            'AuthService: Step 1 SUCCESS (UID: ${authResponse.user?.id})',
+          );
+          break;
+        }
+      } on AuthException catch (e) {
+        debugPrint('AuthService: Step 1 attempt ($authEmail) -> ${e.message}');
       }
-      // Fall through to legacy fallback below
     }
 
-    // --- Step 2: Fallback — look up student by ID in Supabase and try their Gmail ---
+    // --- Step 2: Fallback — look up student by ID in Supabase and try all linked credentials ---
     if (authResponse == null) {
-      debugPrint('AuthService: Step 2 - Falling back to Supabase lookup');
+      debugPrint('AuthService: Step 2 - Falling back to Supabase lookup for ID: $trimmedId');
       try {
         final query = await _supabase
             .from('students')
             .select()
-            .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId')
-            .limit(1);
+            .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
 
         if (query.isEmpty) {
           debugPrint(
@@ -160,29 +172,126 @@ class AuthService {
           );
         }
 
-        final data = query.first;
-        final String? gmail = (data['email_address'] ?? data['email']) as String?;
-        debugPrint('AuthService: Step 2 - Found legacy Gmail: $gmail');
+        // Build list of candidate emails and passwords across all matching records
+        final candidateEmails = <String>{};
+        final candidatePasswords = <String>{};
 
-        if (gmail == null || gmail.isEmpty) {
-          throw Exception(
-            'Account data is incomplete. Please contact your administrator.',
-          );
+        void addCandidatePassword(String? p) {
+          if (p == null || p.trim().isEmpty) return;
+          final clean = p.trim();
+          if (clean.length >= 6) {
+            candidatePasswords.add(clean);
+          }
+          candidatePasswords.add(clean.padLeft(6, '0'));
         }
 
-        // Try logging in with the original Gmail + password
-        try {
-          authResponse = await _supabase.auth.signInWithPassword(
-            email: gmail,
-            password: trimmedPassword,
-          );
-          debugPrint(
-            'AuthService: Step 2 SUCCESS (UID: ${authResponse.user?.id})',
-          );
-        } on AuthException catch (e) {
-          debugPrint(
-            'AuthService: Step 2 - Login with Gmail FAILED (${e.message})',
-          );
+        candidateEmails.add(_getAuthEmail(trimmedId));
+        addCandidatePassword(trimmedPassword);
+        addCandidatePassword(trimmedId);
+
+        final foundEmails = <String>{};
+
+        for (final data in query) {
+          final studentNo = data['student_no']?.toString().trim();
+          final studentIdField = data['studentId']?.toString().trim();
+          final authEmailField = data['authEmail']?.toString().trim();
+          final emailField = (data['email_address'] ?? data['email'])?.toString().trim();
+
+          if (studentNo != null && studentNo.isNotEmpty) {
+            candidateEmails.add(_getAuthEmail(studentNo));
+            addCandidatePassword(studentNo);
+          }
+          if (studentIdField != null && studentIdField.isNotEmpty) {
+            candidateEmails.add(_getAuthEmail(studentIdField));
+            addCandidatePassword(studentIdField);
+          }
+          if (authEmailField != null && authEmailField.isNotEmpty) {
+            candidateEmails.add(authEmailField);
+          }
+          if (emailField != null && emailField.isNotEmpty) {
+            candidateEmails.add(emailField);
+            foundEmails.add(emailField);
+          }
+        }
+
+        // If email was found, query other companion rows to discover primary student numbers
+        for (final email in foundEmails) {
+          try {
+            final companionRows = await _supabase
+                .from('students')
+                .select('student_no, studentId')
+                .or('email_address.eq.$email,email.eq.$email');
+            for (final comp in companionRows) {
+              final sNo = comp['student_no']?.toString().trim();
+              final sId = comp['studentId']?.toString().trim();
+              if (sNo != null && sNo.isNotEmpty) {
+                candidateEmails.add(_getAuthEmail(sNo));
+                addCandidatePassword(sNo);
+              }
+              if (sId != null && sId.isNotEmpty) {
+                candidateEmails.add(_getAuthEmail(sId));
+                addCandidatePassword(sId);
+              }
+            }
+          } catch (_) {}
+        }
+
+        debugPrint('AuthService: Step 2 - Candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options');
+
+        for (final candidateEmail in candidateEmails) {
+          for (final candidatePassword in candidatePasswords) {
+            if (candidatePassword.length < 6) continue;
+            try {
+              authResponse = await _supabase.auth.signInWithPassword(
+                email: candidateEmail,
+                password: candidatePassword,
+              );
+              if (authResponse.user != null) {
+                debugPrint(
+                  'AuthService: Step 2 SUCCESS with email: $candidateEmail (UID: ${authResponse.user?.id})',
+                );
+                break;
+              }
+            } on AuthException catch (e) {
+              debugPrint('AuthService: Step 2 attempt ($candidateEmail) -> ${e.message}');
+            }
+          }
+          if (authResponse != null && authResponse.user != null) {
+            break;
+          }
+        }
+
+        // Auto-provision student account if student exists in the database but Auth account does not
+        if (authResponse == null || authResponse.user == null) {
+          final firstRecord = query.first;
+          final primaryId = (firstRecord['student_no'] ?? firstRecord['studentId'] ?? trimmedId).toString().trim();
+          final primaryEmail = _getAuthEmail(primaryId);
+          final autoProvisionPassword = formatAuthPassword(trimmedPassword);
+
+          debugPrint('AuthService: Step 2 - Auto-provisioning student Auth account ($primaryEmail)...');
+          try {
+            final signUpRes = await _supabase.auth.signUp(
+              email: primaryEmail,
+              password: autoProvisionPassword,
+            );
+            if (signUpRes.user != null) {
+              authResponse = signUpRes;
+              debugPrint('AuthService: Step 2 - Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})');
+              try {
+                await _supabase
+                    .from('students')
+                    .update({'uid': signUpRes.user!.id})
+                    .or('student_no.eq.$primaryId,studentId.eq.$primaryId');
+              } catch (upErr) {
+                debugPrint('AuthService: Auto-provision student UID link notice: $upErr');
+              }
+            }
+          } catch (signUpErr) {
+            debugPrint('AuthService: Auto-provisioning failed: $signUpErr');
+          }
+        }
+
+        if (authResponse == null || authResponse.user == null) {
           throw Exception('Login failed. Please verify your ID and password.');
         }
       } catch (e) {
@@ -228,7 +337,30 @@ class AuthService {
           throw Exception('Student record not found. Please contact your administrator.');
         }
 
+        // If multiple student records exist (e.g. legacy/duplicate), prioritize the active/complete one
+        if (doc.length > 1) {
+          doc.sort((a, b) {
+            final aHasData = a['submissionPdfUrl'] != null || a['documents'] != null || a['saNumber'] != null;
+            final bHasData = b['submissionPdfUrl'] != null || b['documents'] != null || b['saNumber'] != null;
+            if (aHasData && !bHasData) return -1;
+            if (!aHasData && bHasData) return 1;
+            return 0;
+          });
+        }
+
         final studentData = doc.first;
+        // Cache uid on record if missing or mismatched
+        if (studentData['uid'] == null || studentData['uid'] != uid) {
+          try {
+            await _supabase
+                .from('students')
+                .update({
+                  'uid': uid,
+                })
+                .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+          } catch (_) {}
+        }
+
         final String displayName = studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
         debugPrint(
           'AuthService: Step 3 SUCCESS - Found student: $displayName',
@@ -244,6 +376,29 @@ class AuthService {
 
         // Initialize Presence tracking
         await _presenceService.setUserPresence(uid);
+
+        // Send Welcome notification on first login
+        try {
+          final existingWelcome = await _supabase
+              .from('notifications')
+              .select('id')
+              .eq('studentId', uid)
+              .ilike('title', '%Welcome%')
+              .limit(1);
+
+          if (existingWelcome.isEmpty) {
+            debugPrint('AuthService: First login detected for $displayName - generating Welcome notification');
+            await _notificationService.sendNotification(
+              studentId: uid,
+              title: 'Welcome to ScholarDoc!',
+              message:
+                  'Welcome, $displayName! Your scholarship portal is ready. Check your profile, submitted documents, and stay updated on announcements.',
+              type: 'success',
+            );
+          }
+        } catch (notifErr) {
+          debugPrint('AuthService: Welcome notification check notice: $notifErr');
+        }
       } catch (e) {
         debugPrint(
           'AuthService: Step 3 - Supabase fetch FAILED ($e)',

@@ -168,6 +168,84 @@ void main() {
       expect(result.termValidation.isValid, isFalse);
     });
 
+    test('Ignores preceding student numbers and dates, correctly prioritizing academic year', () {
+      const cardBackText = '''
+        STUDENT NO: 2023-45678
+        BIRTHDATE: 2004-10-15
+        EMERGENCY CONTACT: 0917-202-4567
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: cardBackText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.termValidation.isValid, isTrue);
+    });
+
+    test('Prevents address text like 2nd Floor from falsely triggering 2nd Semester', () {
+      const addressText = '''
+        USTP OROQUIETA CAMPUS
+        2nd Floor Admin Building, Mobod
+        1st Semester A.Y. 2026 - 2027
+        VALIDATED
+      ''';
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: addressText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+      );
+
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.termValidation.isValid, isTrue);
+    });
+
+    test('Correctly extracts variations like 1 st Sem, Ist Sem, and 2* Semester', () {
+      const sample1 = 'USTP 1 st Sem. AY 2026-2027 VALIDATED';
+      const sample2 = 'USTP Ist Semester AY 2026-27 VALIDATED';
+      const sample3 = 'USTP 2* Semester A.Y. 2025 - 2026 VALIDATED';
+
+      final r1 = DocumentAIScannerService.parseStickerText(
+        rawText: sample1,
+        engineUsed: 'Google Document AI',
+        targetTerm: const AcademicTerm(academicYear: '2026-2027', semester: '1st Semester'),
+      );
+      expect(r1.academicYear, '2026-2027');
+      expect(r1.semester, '1st Semester');
+      expect(r1.termValidation.isValid, isTrue);
+
+      final r2 = DocumentAIScannerService.parseStickerText(
+        rawText: sample2,
+        engineUsed: 'Google Document AI',
+        targetTerm: const AcademicTerm(academicYear: '2026-2027', semester: '1st Semester'),
+      );
+      expect(r2.academicYear, '2026-2027');
+      expect(r2.semester, '1st Semester');
+      expect(r2.termValidation.isValid, isTrue);
+
+      final r3 = DocumentAIScannerService.parseStickerText(
+        rawText: sample3,
+        engineUsed: 'Google Document AI',
+        targetTerm: const AcademicTerm(academicYear: '2025-2026', semester: '2nd Semester'),
+      );
+      expect(r3.academicYear, '2025-2026');
+      expect(r3.semester, '2nd Semester');
+      expect(r3.termValidation.isValid, isTrue);
+    });
+
     test('ROI cropping executes without error on local sticker asset', () async {
       final file = File('assets/610fa119-da65-4d5d-bd6e-ed56bbcd1dc7.jpg');
       if (await file.exists()) {

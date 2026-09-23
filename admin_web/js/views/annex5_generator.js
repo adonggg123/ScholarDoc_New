@@ -412,7 +412,7 @@ function renderSchoolStudentsTable(students) {
     if (!tbody) return;
 
     if (!students || students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
         return;
     }
 
@@ -489,9 +489,6 @@ function renderSchoolStudentsTable(students) {
                 </td>
                 <td style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">${studentNo}</td>
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; white-space: nowrap; color: var(--text-primary);">${fullName}</td>
-                <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">
-                    <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(30, 136, 229, 0.1); color: #1E88E5; border: 1px solid rgba(30, 136, 229, 0.2);">${scholarship}</span>
-                </td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${programName}</td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap; text-align: center;">${yearLevel}</td>
                 <td style="padding: 10px 14px; font-size: 12px; white-space: nowrap;">${dob}</td>

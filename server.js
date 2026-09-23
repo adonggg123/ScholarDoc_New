@@ -85,37 +85,78 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         };
     }
 
+    let cleaned = text.replace(/\b2[oO]2/g, '202');
+
+    // 1. Extract Academic Year with priority
     let detectedYear = null;
-    const ayMatch = text.match(/(?:(?:A\.?\s*Y\.?|S\.?\s*Y\.?|Academic\s*Year)\s*[:\.]?\s*)?(20\d{2})\s*[\u2013\u2014\u2212\-/–—\s]+\s*(20\d{2}|\d{2})/i);
-    if (ayMatch) {
-        const start = ayMatch[1];
-        let end = ayMatch[2];
-        if (end.length === 2) end = start.slice(0, 2) + end;
-        detectedYear = `${start}-${end}`;
-    } else {
-        const singleYear = text.match(/\b(202[0-9]|203[0-5])\b/);
-        if (singleYear) {
-            const y = parseInt(singleYear[1], 10);
+    const explicitAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(20\d{2})\s*[\u2013\u2014\u2212\-/–—~\.\s]+\s*(20\d{2}|\d{2})\b/gi;
+    let match;
+    while ((match = explicitAyRegex.exec(cleaned)) !== null) {
+        const start = parseInt(match[1], 10);
+        let endStr = match[2];
+        let end = endStr.length === 2 ? parseInt(match[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+        if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+            detectedYear = `${start}-${end}`;
+            break;
+        }
+    }
+
+    if (!detectedYear) {
+        const rangeRegex = /\b(202[0-9]|203[0-5])\s*[\u2013\u2014\u2212\-/–—~]\s*(202[0-9]|203[0-5]|\d{2})\b/g;
+        while ((match = rangeRegex.exec(cleaned)) !== null) {
+            const start = parseInt(match[1], 10);
+            let endStr = match[2];
+            let end = endStr.length === 2 ? parseInt(match[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+            if (end === start + 1) {
+                detectedYear = `${start}-${end}`;
+                break;
+            }
+        }
+    }
+
+    if (!detectedYear) {
+        const singleAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b/i;
+        const singleMatch = cleaned.match(singleAyRegex);
+        if (singleMatch) {
+            const y = parseInt(singleMatch[1], 10);
             detectedYear = `${y}-${y + 1}`;
         }
     }
 
+    // 2. Extract Semester
     let detectedSem = null;
-    const is2nd = /\b(?:2nd|second)\s*(?:sem(?:ester)?)?\b/i.test(text) ||
-        /\b(?:2[\*+ndND]|2)\s*sem(?:ester)?\b/i.test(text) ||
-        /\bsem(?:ester)?\s*2\b/i.test(text) ||
-        /2[\*+ndND]\s*semester/i.test(text);
-    const is1st = /\b(?:1st|first)\s*(?:sem(?:ester)?)?\b/i.test(text) ||
-        /\b(?:1[\*+stST]|1)\s*sem(?:ester)?\b/i.test(text) ||
-        /\bsem(?:ester)?\s*1\b/i.test(text) ||
-        /1[\*+stST]\s*semester/i.test(text);
+    const lines = cleaned.split(/[\r\n]+/);
 
-    if (is2nd) {
-        detectedSem = '2nd Semester';
-    } else if (is1st) {
-        detectedSem = '1st Semester';
-    } else if (/\b(?:summer|midyear|mid-year)\b/i.test(text)) {
-        detectedSem = 'Summer / Midyear';
+    function checkSem(s) {
+        const is2nd = /\b(?:2\s*nd|2\s*rd|second|2[\*+]|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b/i.test(s) ||
+            /\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*2\b/i.test(s) ||
+            /\b2\s*[\/\-]\s*sem\b/i.test(s) ||
+            /\b2nd\s+semester\b/i.test(s) ||
+            /\bsecond\s+semester\b/i.test(s) ||
+            s.includes('2* semester') || s.includes('2* sem');
+        if (is2nd) return '2nd Semester';
+
+        const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+]|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b/i.test(s) ||
+            /\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*1\b/i.test(s) ||
+            /\b1\s*[\/\-]\s*sem\b/i.test(s) ||
+            /\b1st\s+semester\b/i.test(s) ||
+            /\bfirst\s+semester\b/i.test(s) ||
+            /\b[il]st\s+sem(?:ester)?\b/i.test(s) ||
+            s.includes('1* semester') || s.includes('1* sem');
+        if (is1st) return '1st Semester';
+
+        if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(s)) {
+            return 'Summer / Midyear';
+        }
+        return null;
+    }
+
+    for (const line of lines) {
+        detectedSem = checkSem(line);
+        if (detectedSem) break;
+    }
+    if (!detectedSem) {
+        detectedSem = checkSem(cleaned);
     }
 
     const hasValidationStamp = /\bVALIDATED\b/i.test(text) || /\bRegistrar\b/i.test(text) || /\bUSTP\b/i.test(text);
