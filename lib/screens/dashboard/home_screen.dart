@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../screens/submissions/submission_history_screen.dart';
 import '../submissions/upload_workflow_screen.dart';
+import '../submissions/status_tracking_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/announcement_service.dart';
@@ -732,11 +733,20 @@ class _HomeScreenState extends State<HomeScreen> {
       statusIcon = LucideIcons.alertTriangle;
     }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const StatusTrackingScreen(),
+          ),
+        ).then((_) => _loadData());
+      },
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: const Color(0xFFF1F5F9), // Clean, light border
           width: 1.5,
@@ -890,7 +900,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildVerificationBadge() {

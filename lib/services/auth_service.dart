@@ -617,16 +617,88 @@ class AuthService {
 
   // Get student profile data from Supabase
   Future<Map<String, dynamic>?> getStudentProfile(String uid) async {
-    final response = await _supabase.from('students').select().eq('uid', uid);
-    if (response.isEmpty) return null;
-    return _normalizeStudentData(response.first);
+    try {
+      final response = await _supabase.from('students').select().eq('uid', uid);
+      if (response.isNotEmpty) {
+        final list = List<Map<String, dynamic>>.from(response);
+        if (list.length > 1) {
+          list.sort((a, b) {
+            final aHas = a['submissionPdfUrl'] != null ||
+                (a['documents'] is Map && (a['documents'] as Map).isNotEmpty) ||
+                (a['saNumber'] != null && a['saNumber'] != 'N/A');
+            final bHas = b['submissionPdfUrl'] != null ||
+                (b['documents'] is Map && (b['documents'] as Map).isNotEmpty) ||
+                (b['saNumber'] != null && b['saNumber'] != 'N/A');
+            if (aHas && !bHas) return -1;
+            if (!aHas && bHas) return 1;
+            return 0;
+          });
+        }
+        return _normalizeStudentData(list.first);
+      }
+
+      // Fallback: If no document by uid, attempt lookup by user email (derived from student ID)
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final email = user.email ?? '';
+        final sId = email.contains('@') ? email.split('@').first.replaceAll('_', ' ').trim() : '';
+        if (sId.isNotEmpty) {
+          final byId = await _supabase
+              .from('students')
+              .select()
+              .or('student_no.eq.$sId,studentId.eq.$sId');
+          if (byId.isNotEmpty) {
+            final list = List<Map<String, dynamic>>.from(byId);
+            list.sort((a, b) {
+              final aHas = a['submissionPdfUrl'] != null ||
+                  (a['documents'] is Map && (a['documents'] as Map).isNotEmpty);
+              final bHas = b['submissionPdfUrl'] != null ||
+                  (b['documents'] is Map && (b['documents'] as Map).isNotEmpty);
+              if (aHas && !bHas) return -1;
+              if (!aHas && bHas) return 1;
+              return 0;
+            });
+            // Link UID in background
+            try {
+              await _supabase.from('students').update({'uid': uid}).eq('id', list.first['id']);
+            } catch (_) {}
+            return _normalizeStudentData(list.first);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('AuthService getStudentProfile error: $e');
+    }
+    return null;
   }
 
   // Get stream of student profile data for real-time tracking
   Stream<List<Map<String, dynamic>>> getStudentStream(String uid) {
-    return _supabase.from('students').stream(primaryKey: ['uid']).eq('uid', uid).map((list) {
-      return list.map((item) => _normalizeStudentData(item)).toList();
-    });
+    try {
+      // Primary key of students table is 'id'
+      return _supabase
+          .from('students')
+          .stream(primaryKey: ['id'])
+          .eq('uid', uid)
+          .map((list) {
+            final sorted = List<Map<String, dynamic>>.from(list);
+            if (sorted.length > 1) {
+              sorted.sort((a, b) {
+                final aHas = a['submissionPdfUrl'] != null ||
+                    (a['documents'] is Map && (a['documents'] as Map).isNotEmpty);
+                final bHas = b['submissionPdfUrl'] != null ||
+                    (b['documents'] is Map && (b['documents'] as Map).isNotEmpty);
+                if (aHas && !bHas) return -1;
+                if (!aHas && bHas) return 1;
+                return 0;
+              });
+            }
+            return sorted.map((item) => _normalizeStudentData(item)).toList();
+          });
+    } catch (e) {
+      debugPrint('AuthService getStudentStream error: $e');
+      return Stream.empty();
+    }
   }
 
   // Update student profile data

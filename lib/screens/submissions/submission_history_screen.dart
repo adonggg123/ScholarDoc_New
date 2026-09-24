@@ -1,4 +1,6 @@
 // lib/screens/submissions/submission_history_screen.dart
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
@@ -17,11 +19,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   final AuthService _authService = AuthService();
   Map<String, dynamic>? _profileData;
   bool _isLoadingProfile = true;
+  StreamSubscription<List<Map<String, dynamic>>>? _profileSub;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _profileSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -34,6 +43,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           _isLoadingProfile = false;
         });
       }
+      try {
+        _profileSub?.cancel();
+        _profileSub = _authService.getStudentStream(uid).listen((list) {
+          if (!mounted) return;
+          if (list.isNotEmpty) {
+            setState(() {
+              _profileData = list.first;
+              _isLoadingProfile = false;
+            });
+          }
+        });
+      } catch (_) {}
     } else {
       if (mounted) {
         setState(() {
@@ -128,22 +149,23 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.08),
+              color: statusColor.withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: statusColor.withOpacity(0.3), width: 1.0),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(statusIcon, size: 10, color: statusColor),
-                const SizedBox(width: 4),
+                Icon(statusIcon, size: 14, color: statusColor),
+                const SizedBox(width: 5),
                 Text(
                   status,
                   style: TextStyle(
                     color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -180,9 +202,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
 
     final List<Map<String, String>> submissions = [];
-    if (_profileData != null && _profileData!['submittedAt'] != null) {
+    if (_profileData != null) {
       final String submittedAt = (() {
-        final ts = _profileData!['submittedAt'];
+        final ts = _profileData!['submittedAt'] ??
+            _profileData!['submitted_at'] ??
+            _profileData!['createdAt'] ??
+            _profileData!['created_at'];
         if (ts != null) {
           try {
             final parsed = DateTime.parse(ts.toString());
@@ -192,30 +217,121 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         return 'N/A';
       })();
 
-      final String status = _profileData!['status'] ?? 'Pending';
+      bool isFieldVerified(dynamic val) {
+        if (val == null) return false;
+        final s = val.toString().trim().toLowerCase();
+        return s == 'verified' || s == 'approved' || s == 'complete' || s == 'completed' || s == 'true';
+      }
 
-      if (_profileData!['submissionPdfName'] != null) {
+      bool isFieldRejected(dynamic val) {
+        if (val == null) return false;
+        final s = val.toString().trim().toLowerCase();
+        return s == 'rejected' || s == 'missing' || s == 'invalid';
+      }
+
+      final String overallStatus = (_profileData!['status'] ?? 'Pending').toString();
+      final bool isOverallVerified = isFieldVerified(overallStatus);
+
+      Map<String, dynamic> docs = {};
+      if (_profileData!['documents'] is Map) {
+        docs = Map<String, dynamic>.from(_profileData!['documents']);
+      } else if (_profileData!['documents'] is String && (_profileData!['documents'] as String).trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(_profileData!['documents'] as String);
+          if (decoded is Map) docs = Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+
+      // 1. Resolve ID Validation status
+      final bool isIdVerified = isFieldVerified(docs['idValidationStatus']) ||
+          isFieldVerified(docs['id_validation_status']) ||
+          isFieldVerified(_profileData!['idValidationStatus']) ||
+          isFieldVerified(_profileData!['id_validation_status']) ||
+          isFieldVerified(_profileData!['pdfVerified']) ||
+          isFieldVerified(docs['pdfVerified']) ||
+          isOverallVerified;
+
+      final bool isIdRejected = isFieldRejected(docs['idValidationStatus']) ||
+          isFieldRejected(docs['id_validation_status']) ||
+          isFieldRejected(_profileData!['idValidationStatus']) ||
+          isFieldRejected(_profileData!['id_validation_status']);
+
+      final String idItemStatus = isIdVerified
+          ? 'Verified'
+          : (isIdRejected || _profileData!['requiresResubmission'] == true
+              ? 'Needs Correction'
+              : 'Pending');
+
+      // 2. Resolve SA / Payout verification status
+      final bool isSaVerified = isFieldVerified(docs['saVerificationStatus']) ||
+          isFieldVerified(docs['sa_verification_status']) ||
+          isFieldVerified(_profileData!['saVerificationStatus']) ||
+          isFieldVerified(_profileData!['sa_verification_status']) ||
+          isOverallVerified;
+
+      final bool isSaRejected = isFieldRejected(docs['saVerificationStatus']) ||
+          isFieldRejected(docs['sa_verification_status']) ||
+          isFieldRejected(_profileData!['saVerificationStatus']) ||
+          isFieldRejected(_profileData!['sa_verification_status']);
+
+      final String saItemStatus = isSaVerified
+          ? 'Verified'
+          : (isSaRejected || _profileData!['requiresResubmission'] == true
+              ? 'Needs Correction'
+              : 'Pending');
+
+      // Check ID submission presence
+      final String? pdfName = _profileData!['submissionPdfName'] ??
+          docs['submissionPdfName'] ??
+          _profileData!['submission_pdf_name'] ??
+          docs['submission_pdf_name'];
+      final String? pdfUrl = _profileData!['submissionPdfUrl'] ??
+          docs['submissionPdfUrl'] ??
+          _profileData!['submission_pdf_url'] ??
+          docs['submission_pdf_url'];
+      final bool hasIdFiles = pdfName != null ||
+          pdfUrl != null ||
+          docs['idFrontUrl'] != null ||
+          _profileData!['idFrontUrl'] != null ||
+          docs['id_front_url'] != null;
+
+      if (hasIdFiles || isIdVerified) {
         submissions.add({
           'type': 'ID Capture & Digital Signature',
-          'fileName': _profileData!['submissionPdfName'].toString(),
+          'fileName': (pdfName ?? 'ID_Submission_Document.pdf').toString(),
           'date': submittedAt,
-          'status': status,
+          'status': idItemStatus,
         });
       }
 
-      final atmCardFileName = _profileData!['atmCardFileName'] ?? 
-                              (_profileData!['documents'] is Map ? _profileData!['documents']['atmCardFileName'] : null);
-      if (atmCardFileName != null) {
+      // Check ATM/Deposit Slip submission presence
+      final atmCardFileName = _profileData!['atmCardFileName'] ??
+          docs['atmCardFileName'] ??
+          _profileData!['atm_card_file_name'] ??
+          docs['atm_card_file_name'];
+      final atmCardUrl = _profileData!['atmCardUrl'] ??
+          docs['atmCardUrl'] ??
+          _profileData!['atm_card_url'] ??
+          docs['atm_card_url'];
+      final saNumber = _profileData!['saNumber'] ??
+          _profileData!['sa_number'] ??
+          docs['saNumber'] ??
+          docs['sa_number'];
+      final bool hasAtmFiles = atmCardFileName != null ||
+          atmCardUrl != null ||
+          (saNumber != null && saNumber.toString().trim().isNotEmpty && saNumber.toString().trim().toUpperCase() != 'N/A');
+
+      if (hasAtmFiles || isSaVerified) {
         final proofType = _profileData!['atmProofType'] ??
-            (_profileData!['documents'] is Map
-                ? _profileData!['documents']['atmProofType']
-                : null) ??
-            'ATM Card';
+            docs['atmProofType'] ??
+            _profileData!['atm_proof_type'] ??
+            docs['atm_proof_type'] ??
+            'ATM Card / Deposit Slip';
         submissions.add({
           'type': '$proofType Proof',
-          'fileName': atmCardFileName.toString(),
+          'fileName': (atmCardFileName ?? (saNumber != null ? 'SA: $saNumber' : '$proofType File')).toString(),
           'date': submittedAt,
-          'status': status,
+          'status': saItemStatus,
         });
       }
     }
@@ -225,6 +341,13 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         title: const Text('Submission History', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.refreshCw, size: 18),
+            onPressed: _loadProfile,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       backgroundColor: context.bgC,
       body: StreamBuilder<List<Map<String, dynamic>>>(
@@ -243,134 +366,138 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             }).toList();
           }
 
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Submitted Requirements',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F3260),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (submissions.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: context.surfaceC,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: context.crispBorder),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'No active submissions found.',
-                              style: TextStyle(color: context.textSec),
-                            ),
-                          ),
-                        )
-                      else
-                        ...submissions.map((item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12.0),
-                              child: _buildSubmissionItem(context, item),
-                            )),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Submission Activity Logs',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F3260),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
-                ),
-              ),
-              if (snapshot.connectionState == ConnectionState.waiting && logs.isEmpty)
-                const SliverToBoxAdapter(
-                  child: Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
-                )
-              else if (logs.isEmpty)
+          return RefreshIndicator(
+            onRefresh: _loadProfile,
+            color: AppTheme.primaryColor,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: context.surfaceC,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: context.crispBorder),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'No recent activity logs.',
-                          style: TextStyle(color: context.textSec),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Submitted Requirements',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F3260),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (submissions.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: context.surfaceC,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: context.crispBorder),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'No active submissions found.',
+                                style: TextStyle(color: context.textSec),
+                              ),
+                            ),
+                          )
+                        else
+                          ...submissions.map((item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: _buildSubmissionItem(context, item),
+                              )),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Submission Activity Logs',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F3260),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                if (snapshot.connectionState == ConnectionState.waiting && logs.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+                  )
+                else if (logs.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: context.surfaceC,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: context.crispBorder),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No recent activity logs.',
+                            style: TextStyle(color: context.textSec),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                )
-              else
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final data = logs[index];
-                      final String action = data['action'] ?? '';
-                      final String device = data['ipAddress'] ?? 'Unknown';
-                      final dynamic ts = data['timestamp'];
-                      String timeLabel = '';
-                      if (ts != null) {
-                        try {
-                          final date = DateTime.parse(ts.toString());
-                          final diff = DateTime.now().difference(date);
-                          if (diff.inMinutes < 1) timeLabel = 'Just now';
-                          else if (diff.inMinutes < 60) timeLabel = '${diff.inMinutes}m ago';
-                          else if (diff.inHours < 24) timeLabel = '${diff.inHours}h ago';
-                          else timeLabel = DateFormat('MMM d, y – h:mm a').format(date);
-                        } catch (_) {}
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: context.surfaceC,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: context.crispBorder),
-                          ),
-                          child: ListTile(
-                            leading: const Icon(LucideIcons.history, size: 20, color: AppTheme.primaryColor),
-                            title: Text(action, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            subtitle: Row(
-                              children: [
-                                Icon(LucideIcons.clock, size: 12, color: context.textSec),
-                                const SizedBox(width: 4),
-                                Text(timeLabel, style: const TextStyle(fontSize: 10)),
-                                const SizedBox(width: 12),
-                                Icon(LucideIcons.monitor, size: 12, color: context.textSec),
-                                const SizedBox(width: 4),
-                                Text(device, style: const TextStyle(fontSize: 10)),
-                              ],
+                  )
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final data = logs[index];
+                        final String action = data['action'] ?? '';
+                        final String device = data['ipAddress'] ?? 'Unknown';
+                        final dynamic ts = data['timestamp'];
+                        String timeLabel = '';
+                        if (ts != null) {
+                          try {
+                            final date = DateTime.parse(ts.toString());
+                            final diff = DateTime.now().difference(date);
+                            if (diff.inMinutes < 1) timeLabel = 'Just now';
+                            else if (diff.inMinutes < 60) timeLabel = '${diff.inMinutes}m ago';
+                            else if (diff.inHours < 24) timeLabel = '${diff.inHours}h ago';
+                            else timeLabel = DateFormat('MMM d, y – h:mm a').format(date);
+                          } catch (_) {}
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: context.surfaceC,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: context.crispBorder),
+                            ),
+                            child: ListTile(
+                              leading: const Icon(LucideIcons.history, size: 20, color: AppTheme.primaryColor),
+                              title: Text(action, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                              subtitle: Row(
+                                children: [
+                                  Icon(LucideIcons.clock, size: 12, color: context.textSec),
+                                  const SizedBox(width: 4),
+                                  Text(timeLabel, style: const TextStyle(fontSize: 10)),
+                                  const SizedBox(width: 12),
+                                  Icon(LucideIcons.monitor, size: 12, color: context.textSec),
+                                  const SizedBox(width: 4),
+                                  Text(device, style: const TextStyle(fontSize: 10)),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                    childCount: logs.length,
+                        );
+                      },
+                      childCount: logs.length,
+                    ),
                   ),
-                ),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
-            ],
+                const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+              ],
+            ),
           );
         },
       ),
