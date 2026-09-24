@@ -77,7 +77,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              type.contains('ID') ? LucideIcons.fileText : LucideIcons.creditCard,
+              type.contains('Deposit') || type.contains('ID')
+                  ? LucideIcons.fileText
+                  : LucideIcons.creditCard,
               color: AppTheme.primaryColor,
               size: 20,
             ),
@@ -204,8 +206,13 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       final atmCardFileName = _profileData!['atmCardFileName'] ?? 
                               (_profileData!['documents'] is Map ? _profileData!['documents']['atmCardFileName'] : null);
       if (atmCardFileName != null) {
+        final proofType = _profileData!['atmProofType'] ??
+            (_profileData!['documents'] is Map
+                ? _profileData!['documents']['atmProofType']
+                : null) ??
+            'ATM Card';
         submissions.add({
-          'type': 'ATM Card Proof',
+          'type': '$proofType Proof',
           'fileName': atmCardFileName.toString(),
           'date': submittedAt,
           'status': status,

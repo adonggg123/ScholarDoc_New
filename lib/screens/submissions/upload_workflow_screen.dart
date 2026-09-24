@@ -6,7 +6,8 @@ import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
-import 'package:file_picker/file_picker.dart';
+import '../../services/image_quality_service.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -36,6 +37,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   String? _atmCardUrl;
   String? _atmCardFeedback;
   String? _atmCardFileName;
+  String _atmProofType = 'ATM Card'; // 'ATM Card' or 'Deposit Slip'
+  Uint8List? _atmProofBytes;
+  final ImagePicker _imagePicker = ImagePicker();
 
   String? _idFrontUrl;
   String? _idBackUrl;
@@ -59,6 +63,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         final data = doc;
         setState(() {
           _saController.text = data['saNumber'] ?? '';
+          final existingType = (data['documents'] is Map ? data['documents']['atmProofType'] : null) ?? data['atmProofType'];
+          if (existingType != null && existingType.toString().isNotEmpty) {
+            _atmProofType = existingType.toString();
+          }
         });
       }
     }
@@ -182,29 +190,600 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     }
   }
 
-  Future<void> _handleAtmUpload() async {
+  void _showAtmProofSelectionSheet() {
+    String selectedType = _atmProofType;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          decoration: BoxDecoration(
+            color: context.bgC,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0F3260), Color(0xFF1E4E8C)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F3260).withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(LucideIcons.creditCard, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ATM / Bank Proof',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            color: context.textPri,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Choose document type and submission option',
+                          style: TextStyle(fontSize: 12, color: context.textSec),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Document Type Selector Chips
+              Text(
+                'DOCUMENT TYPE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: context.textSec,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDocTypeChip(
+                      title: 'ATM Card',
+                      subtitle: 'Landbank Card',
+                      icon: LucideIcons.creditCard,
+                      isSelected: selectedType == 'ATM Card',
+                      onTap: () {
+                        setSheetState(() => selectedType = 'ATM Card');
+                        setState(() => _atmProofType = 'ATM Card');
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildDocTypeChip(
+                      title: 'Deposit Slip',
+                      subtitle: 'Bank Slip / Receipt',
+                      icon: LucideIcons.fileText,
+                      isSelected: selectedType == 'Deposit Slip',
+                      onTap: () {
+                        setSheetState(() => selectedType = 'Deposit Slip');
+                        setState(() => _atmProofType = 'Deposit Slip');
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+
+              // Capture Methods: 2 Options
+              Text(
+                'SUBMISSION METHOD',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: context.textSec,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Option 1: Scanning ATM card / Deposit slip
+              _buildMethodCard(
+                title: 'Scan $selectedType',
+                subtitle: 'Use camera to scan your physical document',
+                badgeText: 'Option 1: Camera',
+                badgeColor: const Color(0xFF0F3260),
+                icon: LucideIcons.camera,
+                iconBg: const Color(0xFF0F3260),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _captureAtmProof(ImageSource.camera, selectedType);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Option 2: Upload a Photo
+              _buildMethodCard(
+                title: 'Upload a Photo',
+                subtitle: 'Choose an existing photo from your gallery',
+                badgeText: 'Option 2: Gallery',
+                badgeColor: const Color(0xFF10B981),
+                icon: LucideIcons.image,
+                iconBg: const Color(0xFF10B981),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _captureAtmProof(ImageSource.gallery, selectedType);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Helpful guidance note
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBC02D).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.info, size: 16, color: Color(0xFFB78103)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Ensure your full name and account number are sharply visible and not blurred.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: context.textPri,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocTypeChip({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF0F3260).withOpacity(0.08)
+              : context.surfaceC,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0F3260) : context.crispBorder,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? const Color(0xFF0F3260) : context.textSec,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: 13,
+                      color: isSelected ? const Color(0xFF0F3260) : context.textPri,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 10, color: context.textSec),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(LucideIcons.checkCircle2, size: 16, color: Color(0xFF0F3260)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMethodCard({
+    required String title,
+    required String subtitle,
+    required String badgeText,
+    required Color badgeColor,
+    required IconData icon,
+    required Color iconBg,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.surfaceC,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.crispBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconBg.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconBg, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: context.textPri,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 11.5, color: context.textSec),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, color: context.textSec, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _captureAtmProof(ImageSource source, String docType) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png'],
-        withData: true,
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 88,
       );
 
-      if (result == null || result.files.single.bytes == null) return;
-      
-      final bytes = result.files.single.bytes!;
-      String originalName = result.files.single.name;
+      if (image == null) return;
 
-      setState(() {
-        _isUploading = true;
-        _atmCardFeedback = null;
-      });
+      final bytes = await image.readAsBytes();
+      final originalName = image.name.isNotEmpty
+          ? image.name
+          : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
+      // Analyze image sharpness & brightness
+      final quality = await ImageQualityService.analyzeQuality(bytes);
+
+      if (!mounted) return;
+
+      // Show instant preview and confirmation sheet before final upload
+      _showAtmProofPreviewSheet(
+        bytes: bytes,
+        fileName: originalName,
+        docType: docType,
+        source: source,
+        quality: quality,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to capture $docType: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  void _showAtmProofPreviewSheet({
+    required Uint8List bytes,
+    required String fileName,
+    required String docType,
+    required ImageSource source,
+    required ImageQualityResult quality,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: context.bgC,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 24,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.35),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Review $docType',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: context.textPri,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Confirm your proof image before uploading',
+                        style: TextStyle(fontSize: 12, color: context.textSec),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F3260).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF0F3260).withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        source == ImageSource.camera ? LucideIcons.camera : LucideIcons.image,
+                        size: 14,
+                        color: const Color(0xFF0F3260),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        source == ImageSource.camera ? 'Scanned' : 'Uploaded',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F3260),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Image Preview Container
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: context.crispBorder),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.memory(
+                    bytes,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Quality indicator banner
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: quality.isBlurry
+                    ? const Color(0xFFEF4444).withOpacity(0.08)
+                    : const Color(0xFF10B981).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: quality.isBlurry
+                      ? const Color(0xFFEF4444).withOpacity(0.3)
+                      : const Color(0xFF10B981).withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    quality.isBlurry ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
+                    size: 16,
+                    color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      quality.isBlurry
+                          ? 'Photo may be blurry (${quality.sharpnessPercent}% clarity). Please make sure account numbers are readable.'
+                          : 'Sharp & clear scan (${quality.sharpnessPercent}% clarity). Ready for submission.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF059669),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showAtmProofSelectionSheet();
+                      },
+                      icon: const Icon(LucideIcons.refreshCw, size: 16),
+                      label: const Text('Retake / Change', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.textPri,
+                        side: BorderSide(color: context.crispBorder),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _uploadAtmProofBytes(bytes, fileName, docType);
+                      },
+                      icon: const Icon(LucideIcons.check, size: 18),
+                      label: Text('Confirm $docType', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F3260),
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _uploadAtmProofBytes(Uint8List bytes, String originalName, String docType) async {
+    setState(() {
+      _isUploading = true;
+      _atmCardFeedback = null;
+    });
+
+    try {
       final uid = _authService.currentUser?.id;
       if (uid == null) throw Exception("User not authenticated");
 
+      final safeName = originalName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final prefix = docType == 'Deposit Slip' ? 'DEPOSIT' : 'ATM';
       final String storagePath =
-          'submissions/$uid/ATM_${DateTime.now().millisecondsSinceEpoch}_$originalName';
+          'submissions/$uid/${prefix}_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+
       final String downloadUrl = await _storageService.uploadFile(
         path: storagePath,
         bytes: bytes,
@@ -214,26 +793,52 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
       setState(() {
         _isUploading = false;
-        _atmCardFeedback = "✅ ATM Card Ready";
+        _atmCardFeedback = "✅ $docType Ready";
         _atmCardFileName = originalName;
         _atmCardUrl = downloadUrl;
+        _atmProofType = docType;
+        _atmProofBytes = bytes;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(LucideIcons.checkCircle2, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text('$docType uploaded successfully and ready for submission!')),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploading = false;
         _atmCardFeedback = "Error: ${e.toString()}";
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: $e'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
   void _showReviewSheet(String label, String fileName) {
+    final bool isAtm = fileName == _atmCardFileName;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.65,
+        height: MediaQuery.of(context).size.height * 0.72,
         decoration: BoxDecoration(
           color: context.bgC,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -258,8 +863,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     color: AppTheme.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    LucideIcons.eye,
+                  child: Icon(
+                    isAtm ? LucideIcons.creditCard : LucideIcons.eye,
                     color: AppTheme.primaryColor,
                     size: 20,
                   ),
@@ -269,9 +874,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Document Review',
-                        style: TextStyle(
+                      Text(
+                        isAtm ? '$_atmProofType Review' : 'Document Review',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
@@ -297,13 +902,37 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      fileName.endsWith('.pdf')
-                          ? LucideIcons.fileText
-                          : LucideIcons.image,
-                      size: 56,
-                      color: AppTheme.primaryColor.withOpacity(0.5),
-                    ),
+                    if (isAtm && _atmProofBytes != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          _atmProofBytes!,
+                          height: 150,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    else if (isAtm && _atmCardUrl != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          _atmCardUrl!,
+                          height: 150,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            LucideIcons.creditCard,
+                            size: 56,
+                            color: AppTheme.primaryColor.withOpacity(0.5),
+                          ),
+                        ),
+                      )
+                    else
+                      Icon(
+                        fileName.endsWith('.pdf')
+                            ? LucideIcons.fileText
+                            : LucideIcons.image,
+                        size: 56,
+                        color: AppTheme.primaryColor.withOpacity(0.5),
+                      ),
                     const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -324,10 +953,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: OutlinedButton.icon(
                 onPressed: () async {
                   final String? urlToOpen = fileName == _pdfFileName ? _submissionPdfUrl : _atmCardUrl;
@@ -345,7 +974,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 },
                 icon: const Icon(LucideIcons.externalLink, size: 18),
                 label: const Text(
-                  'Preview Document',
+                  'Preview Full Document',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -357,10 +986,31 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            if (isAtm) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showAtmProofSelectionSheet();
+                  },
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
+                  label: Text(
+                    'Re-scan or Replace $_atmProofType',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF0F3260),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
@@ -372,7 +1022,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   elevation: 0,
                 ),
                 child: const Text(
-                  'Confirm Document',
+                  'Done',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
               ),
@@ -672,8 +1322,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       }
       if (_submissionPdfUrl == null || _atmCardUrl == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please upload both your PDF document and ATM Card before continuing.'),
+          SnackBar(
+            content: Text('Please upload both your ID document and $_atmProofType proof before continuing.'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -705,6 +1355,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           documents['atmCardUrl'] = _atmCardUrl;
           documents['atm_card_url'] = _atmCardUrl;
           documents['atmCardFileName'] = _atmCardFileName;
+          documents['atmProofType'] = _atmProofType;
+          documents['atm_proof_type'] = _atmProofType;
           documents['submissionPdfUrl'] = _submissionPdfUrl;
           documents['submission_pdf_url'] = _submissionPdfUrl;
           documents['submissionPdfName'] = _pdfFileName;
@@ -745,6 +1397,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             'atmCardUrl': _atmCardUrl,
             'atm_card_url': _atmCardUrl,
             'atmCardFileName': _atmCardFileName,
+            'atmProofType': _atmProofType,
+            'atm_proof_type': _atmProofType,
             'documents': documents,
             'pdfVerified': true,
             'academicYear': _stickerAcademicYear ?? 'AY 2026-2027',
@@ -813,6 +1467,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             _atmCardUrl = null;
             _atmCardFeedback = null;
             _atmCardFileName = null;
+            _atmProofType = 'ATM Card';
+            _atmProofBytes = null;
           });
         }
       } catch (e) {
@@ -847,7 +1503,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         const SizedBox(height: 20),
         _bulletPoint('Camera Capture: Front and Back of Student ID'),
         _bulletPoint('Digital Signature: Draw signature directly in the app'),
-        _bulletPoint('Clear photo of your Payout ATM Card (JPG/PNG format)'),
+        _bulletPoint('Scan or photo of your ATM Card or Deposit Slip Proof'),
         const SizedBox(height: 28),
         Container(
           padding: const EdgeInsets.all(20),
@@ -1047,11 +1703,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             fileName: _pdfFileName,
           ),
           _buildUploadCard(
-            'ATM Card Proof (Image)',
-            LucideIcons.creditCard,
-            onTap: () => _handleAtmUpload(),
+            '$_atmProofType Proof',
+            _atmProofType == 'Deposit Slip' ? LucideIcons.fileText : LucideIcons.creditCard,
+            onTap: () => _showAtmProofSelectionSheet(),
             feedback: _atmCardFeedback,
-            subtitle: 'Clear photo of your ATM Card (JPG/PNG)',
+            subtitle: _atmCardFileName != null
+                ? '$_atmProofType uploaded'
+                : 'Scan or upload photo of your ATM card or deposit slip',
             fileName: _atmCardFileName,
           ),
         ],
@@ -1265,7 +1923,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           const SizedBox(height: 12),
         ],
         if (_atmCardFileName != null) ...[
-          _buildReviewItem(_atmCardFileName!, 'ATM Card Image'),
+          _buildReviewItem(_atmCardFileName!, '$_atmProofType Proof Image'),
           const SizedBox(height: 12),
         ],
         if (_pdfFileName == null && _atmCardFileName == null)
