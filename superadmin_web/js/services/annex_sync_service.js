@@ -24,6 +24,8 @@ try {
 }
 
 export class AnnexSyncService {
+    static isSavingToDb = false;
+
     /**
      * Extracts a stable, unique key for a grantee or verification item.
      */
@@ -57,22 +59,26 @@ export class AnnexSyncService {
      * Helper to reliably extract and normalize name parts.
      */
     static parseNameParts(item) {
-        const grantee = item.grantee || {};
+        if (!item) return { lastName: '', firstName: '', mi: '', cleanKey: '', tokens: [] };
+        const grantee = item.grantee || item || {};
         const student = item.matchedStudent || {};
 
         if (typeof VerificationService !== 'undefined' && VerificationService.normalizeName) {
-            const norm = VerificationService.normalizeName(student.fullName || grantee.name || '');
-            if (norm.lastName || norm.firstName) {
-                return norm;
+            const rawName = student.fullName || student.name || grantee.name || grantee.fullName || '';
+            if (rawName) {
+                const norm = VerificationService.normalizeName(rawName);
+                if (norm && (norm.lastName || norm.firstName)) {
+                    return norm;
+                }
             }
         }
 
-        let lastName = student.lastName || grantee.last_name || '';
-        let firstName = student.firstName || grantee.first_name || '';
-        let mi = student.mi || student.middleInitial || grantee.middle_name || '';
+        let lastName = student.lastName || student.last_name || grantee.last_name || grantee.lastName || '';
+        let firstName = student.firstName || student.first_name || grantee.first_name || grantee.firstName || '';
+        let mi = student.mi || student.middleInitial || student.middle_name || grantee.middle_name || grantee.middleName || '';
 
         if (!lastName || !firstName) {
-            const raw = String(student.fullName || student.name || grantee.name || '').trim();
+            const raw = String(student.fullName || student.name || grantee.name || grantee.fullName || '').trim();
             if (raw.includes(',')) {
                 const parts = raw.split(',');
                 lastName = parts[0].trim();
@@ -85,7 +91,89 @@ export class AnnexSyncService {
                 firstName = tokens.slice(0, -1).join(' ') || lastName;
             }
         }
-        return { lastName, firstName, mi };
+        const cleanKey = `${lastName} ${firstName} ${mi}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const tokens = `${lastName} ${firstName}`.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(t => t.length > 1);
+        return { lastName, firstName, mi, cleanKey, tokens };
+    }
+
+    /**
+     * Determines whether two items represent the same student/grantee.
+     * Robustly compares database UUID, student ID, SA number, and normalized names.
+     */
+    static isSameStudent(itemA, itemB) {
+        if (!itemA || !itemB) return false;
+        if (itemA === itemB) return true;
+
+        const gA = itemA.grantee || itemA;
+        const sA = itemA.matchedStudent || {};
+        const gB = itemB.grantee || itemB;
+        const sB = itemB.matchedStudent || {};
+
+        // 1. Direct Database / Record ID match
+        const dbIdA = String(gA.id || itemA.id || '').trim();
+        const dbIdB = String(gB.id || itemB.id || '').trim();
+        if (dbIdA && dbIdB && dbIdA === dbIdB) {
+            return true;
+        }
+
+        // 2. Student ID match (ignoring generic placeholders)
+        const idA = String(sA.studentId || sA.studentNo || gA.student_id || gA.studentId || gA.studentNo || itemA.student_id || itemA.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idB = String(sB.studentId || sB.studentNo || gB.student_id || gB.studentId || gB.studentNo || itemB.student_id || itemB.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isPlaceholderId = (id) => !id || id === 'na' || id === 'unassigned' || id.length < 3;
+
+        if (!isPlaceholderId(idA) && !isPlaceholderId(idB)) {
+            if (idA === idB) return true;
+        }
+
+        // 3. Unique Key match (if not random or uuid-based)
+        const keyA = this.getUniqueKey(itemA);
+        const keyB = this.getUniqueKey(itemB);
+        if (keyA && keyB && keyA === keyB && !keyA.startsWith('uuid_')) {
+            return true;
+        }
+
+        // 4. TES / SA App Number match
+        const saA = String(sA.saNumber || gA.saNumber || gA.sa_number || gA.familyDetails?.saNumber || sA.familyDetails?.saNumber || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const saB = String(sB.saNumber || gB.saNumber || gB.sa_number || gB.familyDetails?.saNumber || sB.familyDetails?.saNumber || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (saA && saB && saA !== 'na' && saA.length >= 4 && saA === saB) {
+            return true;
+        }
+
+        // 5. Name Comparison using parsed & normalized name parts
+        const namePartsA = this.parseNameParts(itemA);
+        const namePartsB = this.parseNameParts(itemB);
+
+        const lastA = String(namePartsA.lastName || gA.last_name || gA.lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const lastB = String(namePartsB.lastName || gB.last_name || gB.lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const firstA = String(namePartsA.firstName || gA.first_name || gA.firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const firstB = String(namePartsB.firstName || gB.first_name || gB.firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (lastA && lastB && firstA && firstB) {
+            if (lastA === lastB) {
+                if (firstA === firstB || firstA.includes(firstB) || firstB.includes(firstA)) {
+                    return true;
+                }
+            }
+        }
+
+        // 6. Clean concatenated key comparison
+        const cleanA = String(namePartsA.cleanKey || `${lastA}${firstA}`).replace(/[^a-z0-9]/g, '');
+        const cleanB = String(namePartsB.cleanKey || `${lastB}${firstB}`).replace(/[^a-z0-9]/g, '');
+        if (cleanA && cleanB && cleanA.length >= 4 && cleanA === cleanB) {
+            return true;
+        }
+
+        // 7. Token overlap comparison
+        if (namePartsA.tokens && namePartsB.tokens && namePartsA.tokens.length >= 2 && namePartsB.tokens.length >= 2) {
+            const tokensA = namePartsA.tokens;
+            const tokensB = namePartsB.tokens;
+            const intersection = tokensA.filter(t => tokensB.includes(t));
+            if (intersection.length >= Math.min(tokensA.length, tokensB.length)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -239,6 +327,7 @@ export class AnnexSyncService {
             return { success: false, error: 'Supabase client not available' };
         }
 
+        this.isSavingToDb = true;
         try {
             // 1. Prepare Form 2 Rows (Enrolled Grantees)
             const f2Rows = (form2List || []).map((item, idx) => {
@@ -367,6 +456,8 @@ export class AnnexSyncService {
         } catch (err) {
             console.error('AnnexSyncService.saveToSupabase error:', err);
             return { success: false, error: err.message };
+        } finally {
+            this.isSavingToDb = false;
         }
     }
 

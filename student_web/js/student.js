@@ -285,48 +285,63 @@ async function loadProfileData() {
     let studentRecord = null;
     let uid = session?.user?.id;
 
-    // 1. Attempt lookup by authenticated user ID
+    // 1. Attempt lookup by authenticated user ID in student_grantees
     if (uid) {
-        const { data, error } = await window.supabaseClient
-            .from('students')
-            .select('*')
-            .eq('uid', uid)
-            .limit(1);
-        if (!error && data && data.length > 0) {
-            studentRecord = data[0];
-        }
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_grantees')
+                .select('*')
+                .eq('uid', uid)
+                .limit(1);
+            if (!error && data && data.length > 0) {
+                studentRecord = data[0];
+            }
+        } catch (_) {}
     }
 
-    // 2. Attempt lookup by student ID or email from session or storage
+    // 2. Attempt lookup by student ID or email in student_grantees or school_students
     if (!studentRecord) {
         let queryTarget = storedStudentId;
         if (!queryTarget && session?.user?.email) {
             queryTarget = session.user.email.split('@')[0];
         }
         if (queryTarget) {
-            const { data } = await window.supabaseClient
-                .from('students')
-                .select('*')
-                .or(`studentId.eq.${queryTarget},authEmail.eq.${queryTarget}@scholardoc.com,email.eq.${session?.user?.email}`)
-                .limit(1);
-            if (data && data.length > 0) {
-                studentRecord = data[0];
-                uid = studentRecord.uid;
-            }
+            try {
+                const { data } = await window.supabaseClient
+                    .from('student_grantees')
+                    .select('*')
+                    .or(`student_no.eq.${queryTarget},studentId.eq.${queryTarget},email_address.eq.${session?.user?.email},email.eq.${session?.user?.email}`)
+                    .limit(1);
+                if (data && data.length > 0) {
+                    studentRecord = data[0];
+                    uid = studentRecord.uid;
+                } else {
+                    const { data: ssData } = await window.supabaseClient
+                        .from('school_students')
+                        .select('*')
+                        .or(`student_no.eq.${queryTarget},email_address.eq.${session?.user?.email}`)
+                        .limit(1);
+                    if (ssData && ssData.length > 0) {
+                        studentRecord = ssData[0];
+                        uid = studentRecord.id;
+                    }
+                }
+            } catch (_) {}
         }
     }
 
-    // 3. Fallback: Fetch default active student from database (2023305311)
+    // 3. Fallback: Fetch first active student from student_grantees
     if (!studentRecord) {
-        const { data: defaultStudent } = await window.supabaseClient
-            .from('students')
-            .select('*')
-            .eq('studentId', '2023305311')
-            .limit(1);
-        if (defaultStudent && defaultStudent.length > 0) {
-            studentRecord = defaultStudent[0];
-            uid = studentRecord.uid;
-        }
+        try {
+            const { data: defaultGrantees } = await window.supabaseClient
+                .from('student_grantees')
+                .select('*')
+                .limit(1);
+            if (defaultGrantees && defaultGrantees.length > 0) {
+                studentRecord = defaultGrantees[0];
+                uid = studentRecord.uid || studentRecord.id;
+            }
+        } catch (_) {}
     }
 
     if (studentRecord) {

@@ -185,6 +185,8 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    height: 100%;
+    min-height: 0;
 }
 
 .topbar {
@@ -233,8 +235,36 @@ body {
 #app-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
     padding: 24px;
     background-color: var(--background-color);
+}
+
+/* Custom Scrollbar for App Content */
+#app-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+#app-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#app-content::-webkit-scrollbar-thumb {
+    background: rgba(15, 50, 96, 0.2);
+    border-radius: 4px;
+}
+
+#app-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 50, 96, 0.35);
+}
+
+body.dark #app-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+body.dark #app-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 /* Common UI Components */
@@ -846,8 +876,8 @@ body.dark .annex-tab-btn.active .annex-tab-badge {
 }
 
 .annex-table-wrap {
-    overflow-x: auto;
-    max-height: 520px;
+    overflow: auto;
+    max-height: 600px;
     position: relative;
 }
 

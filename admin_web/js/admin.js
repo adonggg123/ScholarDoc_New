@@ -92,7 +92,7 @@ const notificationBtn = document.getElementById('notification-btn');
 // View Routing Map
 const viewTitles = {
     'dashboard': 'Dashboard Overview',
-    'student_records': 'Student Records',
+    'student_records': 'Student Grantees',
     'scholarships': 'Scholarship Management',
     'sa_verification': 'SA Verification',
     'id_validation': 'ID Validation',

@@ -23,20 +23,27 @@ class AuthService {
   }) async {
     try {
       final String fullName = studentData['fullName']?.toString().trim() ?? '';
-      
+
       // 0. Validate against Masterlist Import (OCR)
       if (fullName.isNotEmpty) {
-        // Split the user's input into individual words to allow flexible ordering 
+        // Split the user's input into individual words to allow flexible ordering
         // (e.g. "Jude Esidore Jariol" matches "Jariol, Jude Esidore Zacarias")
-        final parts = fullName.toLowerCase().replaceAll(',', '').split(' ').where((s) => s.isNotEmpty).toList();
-        
+        final parts = fullName
+            .toLowerCase()
+            .replaceAll(',', '')
+            .split(' ')
+            .where((s) => s.isNotEmpty)
+            .toList();
+
         // Fetch the names from the database to perform a robust local match
-        final masterlist = await _supabase.from('scholar_masterlist').select('name');
-        
+        final masterlist = await _supabase
+            .from('scholar_masterlist')
+            .select('name');
+
         bool foundMatch = false;
         for (var record in masterlist) {
           final dbName = (record['name'] as String? ?? '').toLowerCase();
-          
+
           // Check if EVERY part of the student's inputted name exists somewhere in the DB record
           bool matchesAll = true;
           for (var part in parts) {
@@ -45,7 +52,7 @@ class AuthService {
               break;
             }
           }
-          
+
           if (matchesAll) {
             foundMatch = true;
             break;
@@ -53,7 +60,9 @@ class AuthService {
         }
 
         if (!foundMatch) {
-          throw Exception('MASTERLIST_DENIED: You are not included in the official scholar masterlist.');
+          throw Exception(
+            'MASTERLIST_DENIED: You are not included in the official scholar masterlist.',
+          );
         }
       } else {
         throw Exception('Full name is required for registration validation.');
@@ -74,7 +83,7 @@ class AuthService {
         studentData['authEmail'] = authEmail; // Track the internal auth email
         // createdAt is handled by the DB default NOW()
 
-        await _supabase.from('students').insert(studentData);
+        await _supabase.from('student_grantees').insert(studentData);
 
         // Log Activity
         await _auditService.logActivity(
@@ -156,10 +165,12 @@ class AuthService {
 
     // --- Step 2: Fallback — look up student by ID in Supabase and try all linked credentials ---
     if (authResponse == null) {
-      debugPrint('AuthService: Step 2 - Falling back to Supabase lookup for ID: $trimmedId');
+      debugPrint(
+        'AuthService: Step 2 - Falling back to Supabase lookup for ID: $trimmedId',
+      );
       try {
         final query = await _supabase
-            .from('students')
+            .from('student_grantees')
             .select()
             .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
 
@@ -195,7 +206,9 @@ class AuthService {
           final studentNo = data['student_no']?.toString().trim();
           final studentIdField = data['studentId']?.toString().trim();
           final authEmailField = data['authEmail']?.toString().trim();
-          final emailField = (data['email_address'] ?? data['email'])?.toString().trim();
+          final emailField = (data['email_address'] ?? data['email'])
+              ?.toString()
+              .trim();
 
           if (studentNo != null && studentNo.isNotEmpty) {
             candidateEmails.add(_getAuthEmail(studentNo));
@@ -218,7 +231,7 @@ class AuthService {
         for (final email in foundEmails) {
           try {
             final companionRows = await _supabase
-                .from('students')
+                .from('student_grantees')
                 .select('student_no, studentId')
                 .or('email_address.eq.$email,email.eq.$email');
             for (final comp in companionRows) {
@@ -236,7 +249,9 @@ class AuthService {
           } catch (_) {}
         }
 
-        debugPrint('AuthService: Step 2 - Candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options');
+        debugPrint(
+          'AuthService: Step 2 - Candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options',
+        );
 
         for (final candidateEmail in candidateEmails) {
           for (final candidatePassword in candidatePasswords) {
@@ -253,7 +268,9 @@ class AuthService {
                 break;
               }
             } on AuthException catch (e) {
-              debugPrint('AuthService: Step 2 attempt ($candidateEmail) -> ${e.message}');
+              debugPrint(
+                'AuthService: Step 2 attempt ($candidateEmail) -> ${e.message}',
+              );
             }
           }
           if (authResponse != null && authResponse.user != null) {
@@ -264,11 +281,18 @@ class AuthService {
         // Auto-provision student account if student exists in the database but Auth account does not
         if (authResponse == null || authResponse.user == null) {
           final firstRecord = query.first;
-          final primaryId = (firstRecord['student_no'] ?? firstRecord['studentId'] ?? trimmedId).toString().trim();
+          final primaryId =
+              (firstRecord['student_no'] ??
+                      firstRecord['studentId'] ??
+                      trimmedId)
+                  .toString()
+                  .trim();
           final primaryEmail = _getAuthEmail(primaryId);
           final autoProvisionPassword = formatAuthPassword(trimmedPassword);
 
-          debugPrint('AuthService: Step 2 - Auto-provisioning student Auth account ($primaryEmail)...');
+          debugPrint(
+            'AuthService: Step 2 - Auto-provisioning student Auth account ($primaryEmail)...',
+          );
           try {
             final signUpRes = await _supabase.auth.signUp(
               email: primaryEmail,
@@ -276,14 +300,18 @@ class AuthService {
             );
             if (signUpRes.user != null) {
               authResponse = signUpRes;
-              debugPrint('AuthService: Step 2 - Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})');
+              debugPrint(
+                'AuthService: Step 2 - Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})',
+              );
               try {
                 await _supabase
-                    .from('students')
+                    .from('student_grantees')
                     .update({'uid': signUpRes.user!.id})
                     .or('student_no.eq.$primaryId,studentId.eq.$primaryId');
               } catch (upErr) {
-                debugPrint('AuthService: Auto-provision student UID link notice: $upErr');
+                debugPrint(
+                  'AuthService: Auto-provision student UID link notice: $upErr',
+                );
               }
             }
           } catch (signUpErr) {
@@ -295,9 +323,7 @@ class AuthService {
           throw Exception('Login failed. Please verify your ID and password.');
         }
       } catch (e) {
-        debugPrint(
-          'AuthService: Step 2 - Supabase query FAILED ($e)',
-        );
+        debugPrint('AuthService: Step 2 - Supabase query FAILED ($e)');
         rethrow;
       }
     }
@@ -309,22 +335,26 @@ class AuthService {
 
       try {
         List<Map<String, dynamic>> doc = await _supabase
-            .from('students')
+            .from('student_grantees')
             .select()
             .eq('uid', uid);
 
         // Fallback: If UID doesn't match yet, find by Student ID and automatically link UID
         if (doc.isEmpty) {
-          debugPrint('AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup by student ID: $trimmedId');
+          debugPrint(
+            'AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup by student ID: $trimmedId',
+          );
           final fallback = await _supabase
-              .from('students')
+              .from('student_grantees')
               .select()
               .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
 
           if (fallback.isNotEmpty) {
-            debugPrint('AuthService: Step 3 - Found student record! Automatically linking UID $uid');
+            debugPrint(
+              'AuthService: Step 3 - Found student record! Automatically linking UID $uid',
+            );
             await _supabase
-                .from('students')
+                .from('student_grantees')
                 .update({'uid': uid})
                 .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
             doc = fallback;
@@ -334,14 +364,22 @@ class AuthService {
         if (doc.isEmpty) {
           debugPrint('AuthService: Step 3 FAILED - No document for UID: $uid');
           await _supabase.auth.signOut();
-          throw Exception('Student record not found. Please contact your administrator.');
+          throw Exception(
+            'Student record not found. Please contact your administrator.',
+          );
         }
 
         // If multiple student records exist (e.g. legacy/duplicate), prioritize the active/complete one
         if (doc.length > 1) {
           doc.sort((a, b) {
-            final aHasData = a['submissionPdfUrl'] != null || a['documents'] != null || a['saNumber'] != null;
-            final bHasData = b['submissionPdfUrl'] != null || b['documents'] != null || b['saNumber'] != null;
+            final aHasData =
+                a['submissionPdfUrl'] != null ||
+                a['documents'] != null ||
+                a['saNumber'] != null;
+            final bHasData =
+                b['submissionPdfUrl'] != null ||
+                b['documents'] != null ||
+                b['saNumber'] != null;
             if (aHasData && !bHasData) return -1;
             if (!aHasData && bHasData) return 1;
             return 0;
@@ -353,18 +391,15 @@ class AuthService {
         if (studentData['uid'] == null || studentData['uid'] != uid) {
           try {
             await _supabase
-                .from('students')
-                .update({
-                  'uid': uid,
-                })
+                .from('student_grantees')
+                .update({'uid': uid})
                 .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
           } catch (_) {}
         }
 
-        final String displayName = studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
-        debugPrint(
-          'AuthService: Step 3 SUCCESS - Found student: $displayName',
-        );
+        final String displayName =
+            studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
+        debugPrint('AuthService: Step 3 SUCCESS - Found student: $displayName');
 
         // Log Activity
         await _auditService.logActivity(
@@ -387,7 +422,9 @@ class AuthService {
               .limit(1);
 
           if (existingWelcome.isEmpty) {
-            debugPrint('AuthService: First login detected for $displayName - generating Welcome notification');
+            debugPrint(
+              'AuthService: First login detected for $displayName - generating Welcome notification',
+            );
             await _notificationService.sendNotification(
               studentId: uid,
               title: 'Welcome to ScholarDoc!',
@@ -397,12 +434,12 @@ class AuthService {
             );
           }
         } catch (notifErr) {
-          debugPrint('AuthService: Welcome notification check notice: $notifErr');
+          debugPrint(
+            'AuthService: Welcome notification check notice: $notifErr',
+          );
         }
       } catch (e) {
-        debugPrint(
-          'AuthService: Step 3 - Supabase fetch FAILED ($e)',
-        );
+        debugPrint('AuthService: Step 3 - Supabase fetch FAILED ($e)');
         await _supabase.auth.signOut();
         rethrow;
       }
@@ -417,13 +454,13 @@ class AuthService {
     required String password,
   }) async {
     final String clean = username.trim().toLowerCase();
-    final String adminEmail = clean.contains('@') 
-        ? clean 
+    final String adminEmail = clean.contains('@')
+        ? clean
         : (clean == 'superadmin'
-            ? 'superadmin@scholardoc.com'
-            : (clean == 'admin'
-                ? 'admin@scholardoc.com'
-                : '$clean@scholardoc.com'));
+              ? 'superadmin@scholardoc.com'
+              : (clean == 'admin'
+                    ? 'admin@scholardoc.com'
+                    : '$clean@scholardoc.com'));
 
     final bool isSuper = adminEmail.contains('superadmin');
     final String defaultRole = isSuper ? 'Super Admin' : 'Admin';
@@ -464,16 +501,16 @@ class AuthService {
       debugPrint('AuthService: Admin Login failed (${e.message})');
 
       // 2. If user doesn't exist, create the admin account (Auto-Provisioning)
-      if (e.message.toLowerCase().contains('invalid login') || e.message.toLowerCase().contains('not found')) {
-        if ((clean == 'admin' || clean == 'superadmin') && password.length >= 6) { // Supabase min is usually 6
+      if (e.message.toLowerCase().contains('invalid login') ||
+          e.message.toLowerCase().contains('not found')) {
+        if ((clean == 'admin' || clean == 'superadmin') &&
+            password.length >= 6) {
+          // Supabase min is usually 6
           debugPrint(
             'AuthService: Auto-provisioning admin account ($adminEmail)...',
           );
           try {
-            await _supabase.auth.signUp(
-              email: adminEmail,
-              password: password,
-            );
+            await _supabase.auth.signUp(email: adminEmail, password: password);
 
             // 3. Attempt to ensure Admin document exists
             try {
@@ -513,7 +550,8 @@ class AuthService {
           } catch (e) {
             debugPrint('AuthService: Unexpected provisioning error: $e');
           }
-        } else if ((clean == 'admin' || clean == 'superadmin') && password.length < 6) {
+        } else if ((clean == 'admin' || clean == 'superadmin') &&
+            password.length < 6) {
           throw Exception('The Admin password must be at least 6 characters.');
         }
       }
@@ -544,9 +582,10 @@ class AuthService {
   // Normalize student dictionary to support both snake_case and camelCase
   Map<String, dynamic> _normalizeStudentData(Map<String, dynamic> raw) {
     final data = Map<String, dynamic>.from(raw);
-    
+
     // Normalize scholarship
-    final scholarship = data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
+    final scholarship =
+        data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
     data['scholarshipName'] = scholarship;
     data['scholarship_name'] = scholarship;
 
@@ -580,9 +619,10 @@ class AuthService {
     data['mobile_number'] = contact;
 
     // Normalize Year became a scholar
-    final scholarYear = data['scholarYearLevel'] ?? 
-        data['year_became_scholar'] ?? 
-        data['yearBecameScholar'] ?? 
+    final scholarYear =
+        data['scholarYearLevel'] ??
+        data['year_became_scholar'] ??
+        data['yearBecameScholar'] ??
         '';
     data['scholarYearLevel'] = scholarYear;
     data['year_became_scholar'] = scholarYear;
@@ -596,13 +636,16 @@ class AuthService {
     // Merge user metadata if available
     final userMeta = _supabase.auth.currentUser?.userMetadata;
     if (userMeta != null) {
-      if ((data['scholarYearLevel'] == null || data['scholarYearLevel'].toString().isEmpty) && userMeta['yearBecameScholar'] != null) {
+      if ((data['scholarYearLevel'] == null ||
+              data['scholarYearLevel'].toString().isEmpty) &&
+          userMeta['yearBecameScholar'] != null) {
         final val = userMeta['yearBecameScholar'].toString();
         data['scholarYearLevel'] = val;
         data['year_became_scholar'] = val;
         data['yearBecameScholar'] = val;
       }
-      if (userMeta['payoutsReceived'] != null && (data['payoutsReceived'] == 0 || data['payoutsReceived'] == null)) {
+      if (userMeta['payoutsReceived'] != null &&
+          (data['payoutsReceived'] == 0 || data['payoutsReceived'] == null)) {
         data['payoutsReceived'] = userMeta['payoutsReceived'];
         data['payouts_received'] = userMeta['payoutsReceived'];
       }
@@ -618,15 +661,20 @@ class AuthService {
   // Get student profile data from Supabase
   Future<Map<String, dynamic>?> getStudentProfile(String uid) async {
     try {
-      final response = await _supabase.from('students').select().eq('uid', uid);
+      final response = await _supabase
+          .from('student_grantees')
+          .select()
+          .eq('uid', uid);
       if (response.isNotEmpty) {
         final list = List<Map<String, dynamic>>.from(response);
         if (list.length > 1) {
           list.sort((a, b) {
-            final aHas = a['submissionPdfUrl'] != null ||
+            final aHas =
+                a['submissionPdfUrl'] != null ||
                 (a['documents'] is Map && (a['documents'] as Map).isNotEmpty) ||
                 (a['saNumber'] != null && a['saNumber'] != 'N/A');
-            final bHas = b['submissionPdfUrl'] != null ||
+            final bHas =
+                b['submissionPdfUrl'] != null ||
                 (b['documents'] is Map && (b['documents'] as Map).isNotEmpty) ||
                 (b['saNumber'] != null && b['saNumber'] != 'N/A');
             if (aHas && !bHas) return -1;
@@ -641,18 +689,22 @@ class AuthService {
       final user = _supabase.auth.currentUser;
       if (user != null) {
         final email = user.email ?? '';
-        final sId = email.contains('@') ? email.split('@').first.replaceAll('_', ' ').trim() : '';
+        final sId = email.contains('@')
+            ? email.split('@').first.replaceAll('_', ' ').trim()
+            : '';
         if (sId.isNotEmpty) {
           final byId = await _supabase
-              .from('students')
+              .from('student_grantees')
               .select()
               .or('student_no.eq.$sId,studentId.eq.$sId');
           if (byId.isNotEmpty) {
             final list = List<Map<String, dynamic>>.from(byId);
             list.sort((a, b) {
-              final aHas = a['submissionPdfUrl'] != null ||
+              final aHas =
+                  a['submissionPdfUrl'] != null ||
                   (a['documents'] is Map && (a['documents'] as Map).isNotEmpty);
-              final bHas = b['submissionPdfUrl'] != null ||
+              final bHas =
+                  b['submissionPdfUrl'] != null ||
                   (b['documents'] is Map && (b['documents'] as Map).isNotEmpty);
               if (aHas && !bHas) return -1;
               if (!aHas && bHas) return 1;
@@ -660,7 +712,10 @@ class AuthService {
             });
             // Link UID in background
             try {
-              await _supabase.from('students').update({'uid': uid}).eq('id', list.first['id']);
+              await _supabase
+                  .from('student_grantees')
+                  .update({'uid': uid})
+                  .eq('id', list.first['id']);
             } catch (_) {}
             return _normalizeStudentData(list.first);
           }
@@ -677,17 +732,21 @@ class AuthService {
     try {
       // Primary key of students table is 'id'
       return _supabase
-          .from('students')
+          .from('student_grantees')
           .stream(primaryKey: ['id'])
           .eq('uid', uid)
           .map((list) {
             final sorted = List<Map<String, dynamic>>.from(list);
             if (sorted.length > 1) {
               sorted.sort((a, b) {
-                final aHas = a['submissionPdfUrl'] != null ||
-                    (a['documents'] is Map && (a['documents'] as Map).isNotEmpty);
-                final bHas = b['submissionPdfUrl'] != null ||
-                    (b['documents'] is Map && (b['documents'] as Map).isNotEmpty);
+                final aHas =
+                    a['submissionPdfUrl'] != null ||
+                    (a['documents'] is Map &&
+                        (a['documents'] as Map).isNotEmpty);
+                final bHas =
+                    b['submissionPdfUrl'] != null ||
+                    (b['documents'] is Map &&
+                        (b['documents'] as Map).isNotEmpty);
                 if (aHas && !bHas) return -1;
                 if (!aHas && bHas) return 1;
                 return 0;
@@ -736,31 +795,68 @@ class AuthService {
 
     // Try updating students table; if any column is missing in Supabase, strip and retry
     try {
-      await _supabase.from('students').update(dbPayload).eq('uid', uid);
+      await _supabase.from('student_grantees').update(dbPayload).eq('uid', uid);
     } catch (e) {
       debugPrint('AuthService: Retrying table update with safe fields: $e');
       final safePayload = <String, dynamic>{};
       const safeFields = [
-        'full_name', 'fullName', 'mobile_number', 'contactNumber',
-        'program_name', 'course', 'year_level', 'year', 'section',
-        'birthdate', 'scholarship_name', 'status', 'saNumber', 'sa_number',
-        'submissionPdfUrl', 'submission_pdf_url', 'submissionPdfName', 'submission_pdf_name',
-        'documents', 'atmCardUrl', 'atm_card_url', 'atmCardFileName',
-        'idFrontUrl', 'id_front_url', 'idBackUrl', 'id_back_url',
-        'pdfVerified', 'academicYear', 'academic_year', 'semester',
-        'stickerValidated', 'sticker_validated', 'submittedAt', 'submitted_at',
-        'requiresResubmission', 'adminRemarks', 'admin_remarks', 'familyDetails'
+        'full_name',
+        'fullName',
+        'mobile_number',
+        'contactNumber',
+        'program_name',
+        'course',
+        'year_level',
+        'year',
+        'section',
+        'birthdate',
+        'scholarship_name',
+        'status',
+        'saNumber',
+        'sa_number',
+        'submissionPdfUrl',
+        'submission_pdf_url',
+        'submissionPdfName',
+        'submission_pdf_name',
+        'documents',
+        'atmCardUrl',
+        'atm_card_url',
+        'atmCardFileName',
+        'idFrontUrl',
+        'id_front_url',
+        'idBackUrl',
+        'id_back_url',
+        'pdfVerified',
+        'academicYear',
+        'academic_year',
+        'semester',
+        'stickerValidated',
+        'sticker_validated',
+        'submittedAt',
+        'submitted_at',
+        'requiresResubmission',
+        'adminRemarks',
+        'admin_remarks',
+        'familyDetails',
       ];
       for (final key in safeFields) {
         if (dbPayload.containsKey(key)) safePayload[key] = dbPayload[key];
       }
       try {
-        await _supabase.from('students').update(safePayload).eq('uid', uid);
+        await _supabase
+            .from('student_grantees')
+            .update(safePayload)
+            .eq('uid', uid);
       } catch (inner) {
-        debugPrint('AuthService: Safe batch update failed: $inner. Retrying column-by-column...');
+        debugPrint(
+          'AuthService: Safe batch update failed: $inner. Retrying column-by-column...',
+        );
         for (final entry in safePayload.entries) {
           try {
-            await _supabase.from('students').update({entry.key: entry.value}).eq('uid', uid);
+            await _supabase
+                .from('student_grantees')
+                .update({entry.key: entry.value})
+                .eq('uid', uid);
           } catch (_) {}
         }
       }
@@ -777,10 +873,12 @@ class AuthService {
   // Get stream of all students for Admin
   Stream<List<Map<String, dynamic>>> getStudentsStream() {
     return _supabase
-        .from('students')
+        .from('student_grantees')
         .stream(primaryKey: ['uid'])
         .order('createdAt', ascending: false)
-        .map((list) => list.map((item) => _normalizeStudentData(item)).toList());
+        .map(
+          (list) => list.map((item) => _normalizeStudentData(item)).toList(),
+        );
   }
 
   // Get stream of all activity logs for Admin
@@ -800,7 +898,7 @@ class AuthService {
     if (studentsData.isEmpty) return;
 
     List<Map<String, dynamic>> toUpsert = [];
-    
+
     for (final data in studentsData) {
       data.remove('isUpdated'); // Remove internal flags
       data['status'] = data['status'] ?? 'Pending';
@@ -813,7 +911,7 @@ class AuthService {
     // We should probably rely on the backend function or match by studentId.
     // Since uid is required in our schema, we should probably upsert using 'studentId'.
     // For simplicity, we just use upsert.
-    await _supabase.from('students').upsert(toUpsert);
+    await _supabase.from('student_grantees').upsert(toUpsert);
 
     await _auditService.logActivity(
       action: 'Auto-filled / Updated student records via CSV Import',
@@ -827,12 +925,15 @@ class AuthService {
     int updatedCount = 0;
     try {
       final data = await _supabase
-          .from('students')
+          .from('student_grantees')
           .select()
           .eq('scholarshipName', 'STUFAH');
-      
+
       for (var doc in data) {
-        await _supabase.from('students').update({'scholarshipName': 'STUFAP'}).eq('uid', doc['uid']);
+        await _supabase
+            .from('student_grantees')
+            .update({'scholarshipName': 'STUFAP'})
+            .eq('uid', doc['uid']);
         updatedCount++;
       }
     } catch (e) {
@@ -845,22 +946,26 @@ class AuthService {
   Future<int> migrateRegistrationFields() async {
     int updatedCount = 0;
     try {
-      final data = await _supabase.from('students').select();
+      final data = await _supabase.from('student_grantees').select();
       for (var doc in data) {
         bool needsUpdate = false;
         Map<String, dynamic> updates = {};
-        
+
         if (doc['gender'] == null || doc['gender'].toString().isEmpty) {
           needsUpdate = true;
           updates['gender'] = 'Not Specified';
         }
-        if (doc['scholarYearLevel'] == null || doc['scholarYearLevel'].toString().isEmpty) {
+        if (doc['scholarYearLevel'] == null ||
+            doc['scholarYearLevel'].toString().isEmpty) {
           needsUpdate = true;
           updates['scholarYearLevel'] = 'Unknown';
         }
-        
+
         if (needsUpdate) {
-          await _supabase.from('students').update(updates).eq('uid', doc['uid']);
+          await _supabase
+              .from('student_grantees')
+              .update(updates)
+              .eq('uid', doc['uid']);
           updatedCount++;
         }
       }

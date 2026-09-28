@@ -85,20 +85,38 @@ export class StudentSyncService {
     /**
      * Maps and standardizes student fields for cross-view compatibility.
      */
-    static normalizeStudentRecord(ss, f2Match = null, gmMatch = null, existing = {}) {
-        const studentNo = ss.student_no || ss.studentId || existing.student_no || existing.studentId || 'N/A';
-        const fullName = ss.full_name || ss.fullName || existing.full_name || existing.fullName || 'Unknown Student';
-        const program = ss.program_name || ss.course || existing.program_name || existing.course || 'BSIT';
+    static normalizeStudentRecord(ss = {}, f2Match = null, gmMatch = null, existing = {}) {
+        ss = ss || {};
+        existing = existing || {};
+        const studentNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || 'N/A';
+        const fullName = ss.full_name || ss.fullName || (f2Match ? (f2Match.given_name ? `${f2Match.given_name} ${f2Match.last_name || ''}`.trim() : f2Match.name) : null) || existing.full_name || existing.fullName || 'Unknown Student';
+        const program = ss.program_name || ss.course || f2Match?.degree_program || existing.program_name || existing.course || 'BSIT';
         const yearLevel = ss.year_level || ss.year || f2Match?.year_level || existing.year_level || '1';
         const birthdate = ss.date_of_birth || ss.birthdate || f2Match?.birthdate || existing.date_of_birth || 'N/A';
-        const gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : 'Male') || existing.gender || 'Female';
+        const gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
         
         const saNumber = f2Match?.tes_application_number && f2Match.tes_application_number !== 'N/A'
             ? f2Match.tes_application_number
             : (existing.sa_number || existing.saNumber || existing.familyDetails?.saNumber || 'N/A');
 
-        const scholarshipName = ss.scholarship_name || existing.scholarship_name || existing.scholarshipProgram || 'CHED TES';
-        const status = f2Match ? 'Verified' : (existing.status || 'Approved');
+        const scholarshipName = f2Match?.scholarship_name || ss.scholarship_name || existing.scholarship_name || existing.scholarshipProgram || 'CHED TES';
+        
+        // Students registered in the system (school_students) and confirmed in student_grantees / Form 2
+        // are automatically approved as scholars with no manual approval required.
+        const isRegisteredInSystem = !!(ss && (ss.student_no || ss.id || ss.full_name));
+        const isConfirmedGrantee = !!(f2Match || (existing && (existing.student_no || existing.id)));
+        const shouldAutoApprove = isRegisteredInSystem && isConfirmedGrantee;
+
+        // Auto-approve confirmed registered scholars; otherwise keep verified/approved or fallback
+        const status = shouldAutoApprove
+            ? 'Approved'
+            : ((existing.status && existing.status !== 'Pending')
+                ? existing.status
+                : (f2Match?.status || existing.status || 'Pending'));
+
+        const subStatus = shouldAutoApprove
+            ? 'Approved'
+            : ((status === 'Approved' || status === 'Verified') ? 'Approved' : 'Pending');
         const batch = f2Match?.tes_batch || gmMatch?.batch || existing.batch || 'Batch 1';
 
         const fatherName = ss.father_full_name || existing.father_full_name || existing.familyDetails?.fatherName || 'N/A';
@@ -107,15 +125,38 @@ export class StudentSyncService {
         const motherEdu = ss.mother_occupation || existing.mother_occupation || existing.familyDetails?.motherEduStatus || 'N/A';
         const religion = ss.religion || existing.religion || existing.familyDetails?.religion || 'Roman Catholic';
 
+        const lastName = f2Match?.last_name || (ss.full_name ? ss.full_name.split(' ').pop() : '');
+        const firstName = f2Match?.given_name || (ss.full_name ? ss.full_name.split(' ').slice(0, -1).join(' ') : '');
+        const mi = f2Match?.middle_initial || '';
+
+        const existingDocs = existing.documents || {};
+        const saVerificationStatus = shouldAutoApprove
+            ? 'Approved'
+            : (existing.saVerificationStatus || existingDocs.saVerificationStatus || subStatus);
+        const idValidationStatus = shouldAutoApprove
+            ? 'Approved'
+            : (existing.idValidationStatus || existingDocs.idValidationStatus || subStatus);
+
+        const documents = {
+            ...existingDocs,
+            saVerificationStatus: saVerificationStatus,
+            idValidationStatus: idValidationStatus,
+            saNumber: saNumber
+        };
+
         return {
-            id: ss.id || existing.id || existing.uid || undefined,
-            uid: existing.uid || ss.id || undefined,
+            id: ss.id || f2Match?.id || existing.id || existing.uid || undefined,
+            uid: ss.id || f2Match?.id || existing.uid || undefined,
             
             // Identification
             student_no: studentNo,
             studentId: studentNo,
             full_name: fullName,
             fullName: fullName,
+            last_name: lastName,
+            first_name: firstName,
+            given_name: firstName,
+            middle_initial: mi,
 
             // Academic
             program_name: program,
@@ -129,10 +170,17 @@ export class StudentSyncService {
             scholarship_name: scholarshipName,
             scholarshipName: scholarshipName,
             scholarshipProgram: scholarshipName,
-            scholarYearLevel: ss.year_level || yearLevel || '1',
+            scholarYearLevel: f2Match?.year_level || ss.year_level || yearLevel || '1',
             payouts_received: existing.payouts_received || existing.payoutsReceived || 1,
             payoutsReceived: existing.payoutsReceived || existing.payouts_received || 1,
             status: status,
+            documents: documents,
+            saVerificationStatus: saVerificationStatus,
+            idValidationStatus: idValidationStatus,
+            sa_verification_status: saVerificationStatus,
+            id_validation_status: idValidationStatus,
+            adminRemarks: existing.adminRemarks || existing.admin_remarks || (shouldAutoApprove ? 'Automatically approved as confirmed scholar grantee.' : ''),
+            admin_remarks: existing.admin_remarks || existing.adminRemarks || (shouldAutoApprove ? 'Automatically approved as confirmed scholar grantee.' : ''),
             role: 'student',
             sa_number: saNumber,
             saNumber: saNumber,
@@ -140,6 +188,7 @@ export class StudentSyncService {
             academicYear: f2Match?.academic_year || existing.academic_year || '2024-2025',
             semester: f2Match?.semester || existing.semester || '1st Semester',
             total_amount: f2Match?.total_amount || 10000.00,
+            tes_amount: f2Match?.tes_amount || 10000.00,
 
             // Demographics
             date_of_birth: birthdate,
@@ -148,10 +197,10 @@ export class StudentSyncService {
             gender: gender,
             civil_status: ss.civil_status || existing.civil_status || 'Single',
             religion: religion,
-            mobile_number: ss.mobile_number || ss.contactNumber || existing.mobile_number || 'N/A',
-            contactNumber: ss.mobile_number || ss.contactNumber || existing.mobile_number || 'N/A',
-            email_address: ss.email_address || ss.email || existing.email_address || 'N/A',
-            email: ss.email_address || ss.email || existing.email_address || 'N/A',
+            mobile_number: ss.mobile_number || f2Match?.phone_number || ss.contactNumber || existing.mobile_number || 'N/A',
+            contactNumber: ss.mobile_number || f2Match?.phone_number || ss.contactNumber || existing.mobile_number || 'N/A',
+            email_address: ss.email_address || f2Match?.email_address || ss.email || existing.email_address || 'N/A',
+            email: ss.email_address || f2Match?.email_address || ss.email || existing.email_address || 'N/A',
 
             // Family
             father_full_name: fatherName,
@@ -171,15 +220,18 @@ export class StudentSyncService {
 
             // Profile Picture
             profilePictureUrl: existing.profilePictureUrl || existing.profileImageUrl || existing.photoUrl || null,
-            created_at: ss.created_at || existing.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            created_at: f2Match?.created_at || ss.created_at || existing.created_at || new Date().toISOString(),
+            updated_at: f2Match?.updated_at || new Date().toISOString()
         };
     }
 
     /**
-     * Loads School Students and identifies matching Grantees from Annex Form 2 and Grantee Masterlist.
-     * Upserts matched records to `public.students` in Supabase to keep the database in sync.
-     * Returns the complete array of matching students.
+     * Loads student grantees list directly from Supabase.
+     * Selects students present in `annex_form_2` (Form 2) table,
+     * and joins their detailed profile and demographic information from `school_students`.
+     * Default status is 'Pending' since their status is not yet verified.
+     * If records are deleted in Supabase, they are immediately reflected/gone.
+     * Returns the normalized array of student grantees.
      */
     static async loadAndSyncStudents() {
         const supabase = window.supabaseClient;
@@ -189,63 +241,86 @@ export class StudentSyncService {
         }
 
         try {
-            // Fetch school_students, annex_form_2, new_grantees_masterlist, and existing students concurrently
-            const [
-                { data: schoolStudents, error: ssErr },
-                { data: form2Records, error: f2Err },
-                { data: granteeRecords, error: gmErr },
-                { data: existingStudents, error: stErr }
-            ] = await Promise.all([
-                supabase.from('school_students').select('*'),
-                supabase.from('annex_form_2').select('*'),
-                supabase.from('new_grantees_masterlist').select('*'),
-                supabase.from('students').select('*')
-            ]);
+            // 1. Fetch Form 2 records (ground truth for Student Grantees)
+            let f2Query = supabase.from('annex_form_2').select('*');
+            if (typeof f2Query.order === 'function') {
+                f2Query = f2Query.order('created_at', { ascending: false });
+            }
+            let f2Res = await f2Query;
 
-            if (ssErr) console.warn('StudentSyncService: school_students query error:', ssErr);
-            if (f2Err) console.warn('StudentSyncService: annex_form_2 query error:', f2Err);
-            if (gmErr) console.warn('StudentSyncService: new_grantees_masterlist query error:', gmErr);
+            if (f2Res.error) {
+                console.warn('StudentSyncService: Error loading annex_form_2:', f2Res.error);
+                f2Res = { data: [] };
+            }
 
-            const allSchoolStudents = schoolStudents || [];
-            const allForm2 = form2Records || [];
-            const allGrantees = granteeRecords || [];
-            const currentStudents = existingStudents || [];
+            const form2List = f2Res.data || [];
 
-            // Index existing students by student number for fast lookup
-            const existingMap = new Map();
-            currentStudents.forEach(s => {
-                const key = this.clean(s.student_no || s.studentId);
-                if (key) existingMap.set(key, s);
-            });
+            // 2. Fetch School Student records (demographics & details)
+            let ssQuery = supabase.from('school_students').select('*');
+            if (typeof ssQuery.order === 'function') {
+                ssQuery = ssQuery.order('created_at', { ascending: false });
+            }
+            let ssRes = await ssQuery;
 
-            // Match school students with Form 2 or Grantee Masterlist
-            const matchedList = [];
-            const toUpsertInDb = [];
+            if (ssRes.error) {
+                console.warn('StudentSyncService: Error loading school_students:', ssRes.error);
+                ssRes = { data: [] };
+            }
 
-            allSchoolStudents.forEach(ss => {
-                const f2Match = allForm2.find(f => this.isMatch(ss, f));
-                const gmMatch = allGrantees.find(g => this.isMatch(ss, g));
+            const schoolStudents = ssRes.data || [];
 
-                // A student is included if they appear in Annex Form 2 OR the Grantee Master List
-                if (f2Match || gmMatch) {
-                    const cleanNo = this.clean(ss.student_no);
-                    const existing = cleanNo ? existingMap.get(cleanNo) || {} : {};
-                    const normalized = this.normalizeStudentRecord(ss, f2Match, gmMatch, existing);
-                    matchedList.push(normalized);
+            // 3. Check student_grantees table for existing records
+            let sgList = [];
+            try {
+                let sgRes = await supabase.from('student_grantees').select('*');
+                if (sgRes && sgRes.data) {
+                    sgList = sgRes.data;
+                }
+            } catch (_) {}
 
-                    // Prepare DB upsert payload (only valid table columns)
-                    toUpsertInDb.push({
+            // If annex_form_2 is completely empty, fallback to student_grantees records if available
+            if (!Array.isArray(form2List) || form2List.length === 0) {
+                if (Array.isArray(sgList) && sgList.length > 0) {
+                    return sgList.map(sg => {
+                        const ssMatch = Array.isArray(schoolStudents) ? schoolStudents.find(ss => this.isMatch(ss, sg)) : null;
+                        return this.normalizeStudentRecord(ssMatch || {}, null, null, sg);
+                    });
+                }
+                return [];
+            }
+
+            // 4. For each Form 2 record, select its student data from school_students
+            const toInsert = [];
+            const toUpdate = [];
+            const result = form2List.map(f2 => {
+                const ssMatch = Array.isArray(schoolStudents)
+                    ? schoolStudents.find(ss => this.isMatch(ss, f2))
+                    : null;
+                const existingSg = Array.isArray(sgList)
+                    ? sgList.find(sg => this.isMatch(sg, f2) || (ssMatch && this.isMatch(sg, ssMatch)))
+                    : null;
+                const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, null, existingSg || {});
+
+                if (!existingSg) {
+                    toInsert.push({
                         student_no: normalized.student_no,
+                        studentId: normalized.student_no,
                         full_name: normalized.full_name,
+                        fullName: normalized.fullName,
                         program_name: normalized.program_name,
-                        year_level: normalized.year_level,
+                        course: normalized.course,
+                        year_level: String(normalized.year_level),
+                        year: String(normalized.year),
                         date_of_birth: normalized.date_of_birth,
+                        birthdate: normalized.birthdate,
                         age: normalized.age,
                         gender: normalized.gender,
                         civil_status: normalized.civil_status,
                         religion: normalized.religion,
                         mobile_number: normalized.mobile_number,
+                        contactNumber: normalized.contactNumber,
                         email_address: normalized.email_address,
+                        email: normalized.email,
                         father_full_name: normalized.father_full_name,
                         father_occupation: normalized.father_occupation,
                         mother_full_name: normalized.mother_full_name,
@@ -254,48 +329,87 @@ export class StudentSyncService {
                         scholarship_name: normalized.scholarship_name,
                         role: 'student',
                         sa_number: normalized.sa_number,
+                        saNumber: normalized.saNumber,
                         academic_year: normalized.academic_year,
+                        academicYear: normalized.academicYear,
                         semester: normalized.semester,
-                        familyDetails: normalized.familyDetails
+                        documents: normalized.documents,
+                        familyDetails: normalized.familyDetails,
+                        idValidationStatus: normalized.idValidationStatus,
+                        id_validation_status: normalized.idValidationStatus,
+                        saVerificationStatus: normalized.saVerificationStatus,
+                        sa_verification_status: normalized.saVerificationStatus,
+                        admin_remarks: normalized.admin_remarks
                     });
+                } else if (existingSg && ssMatch) {
+                    // Student is confirmed in student_grantees and registered in school_students:
+                    // Ensure their status in Supabase is automatically Approved with no manual approval needed
+                    const needsApproval = existingSg.status !== 'Approved' ||
+                        existingSg.saVerificationStatus !== 'Approved' ||
+                        existingSg.idValidationStatus !== 'Approved' ||
+                        existingSg.documents?.saVerificationStatus !== 'Approved' ||
+                        existingSg.documents?.idValidationStatus !== 'Approved';
+
+                    if (needsApproval) {
+                        toUpdate.push({
+                            id: existingSg.id,
+                            uid: existingSg.uid,
+                            status: 'Approved',
+                            saVerificationStatus: 'Approved',
+                            sa_verification_status: 'Approved',
+                            idValidationStatus: 'Approved',
+                            id_validation_status: 'Approved',
+                            documents: {
+                                ...(existingSg.documents || {}),
+                                saVerificationStatus: 'Approved',
+                                idValidationStatus: 'Approved',
+                                saNumber: normalized.saNumber
+                            },
+                            admin_remarks: existingSg.admin_remarks || 'Automatically approved as confirmed scholar grantee.',
+                            updated_at: new Date().toISOString()
+                        });
+                    }
                 }
+
+                return normalized;
             });
 
-            // Also preserve any manually registered students in `students` table that weren't in school_students
-            currentStudents.forEach(cs => {
-                const cleanNo = this.clean(cs.student_no || cs.studentId);
-                const alreadyIncluded = matchedList.some(m => this.clean(m.student_no) === cleanNo);
-                if (!alreadyIncluded && cleanNo) {
-                    matchedList.push(this.normalizeStudentRecord(cs, null, null, cs));
+            // Automatically populate student_grantees table in Supabase if records were missing
+            if (toInsert.length > 0) {
+                try {
+                    const { error: insErr } = await supabase.from('student_grantees').insert(toInsert);
+                    if (insErr) {
+                        console.warn('StudentSyncService: Could not insert missing grantees into student_grantees:', insErr);
+                    } else {
+                        console.log(`StudentSyncService: Synced ${toInsert.length} students into student_grantees in Supabase.`);
+                    }
+                } catch (insErr) {
+                    console.warn('StudentSyncService: Could not insert missing grantees into student_grantees:', insErr);
                 }
-            });
+            }
 
-            // Asynchronously sync to Supabase `students` table in background (upsert on student_no)
-            if (toUpsertInDb.length > 0) {
-                supabase
-                    .from('students')
-                    .upsert(toUpsertInDb, { onConflict: 'student_no' })
-                    .then(({ error: upsertErr }) => {
-                        if (upsertErr) {
-                            console.warn('StudentSyncService: Background upsert to students table:', upsertErr);
-                        } else {
-                            console.log(`StudentSyncService: Successfully synced ${toUpsertInDb.length} matched students to database.`);
+            // Automatically update existing grantees to Approved in Supabase
+            if (toUpdate.length > 0) {
+                for (const item of toUpdate) {
+                    try {
+                        const { id, ...updateFields } = item;
+                        if (id) {
+                            await supabase.from('student_grantees').update(updateFields).eq('id', id);
+                        } else if (item.uid) {
+                            await supabase.from('student_grantees').update(updateFields).eq('uid', item.uid);
                         }
-                    })
-                    .catch(err => console.warn('StudentSyncService: Upsert error:', err));
+                    } catch (updErr) {
+                        console.warn('StudentSyncService: Could not auto-approve existing grantee in Supabase:', updErr);
+                    }
+                }
+                console.log(`StudentSyncService: Auto-approved ${toUpdate.length} confirmed registered grantees in Supabase.`);
             }
 
-            return matchedList;
-
+            return result;
         } catch (err) {
-            console.error('StudentSyncService: Unexpected error while syncing students:', err);
-            // Fallback to whatever is in students table
-            try {
-                const { data } = await supabase.from('students').select('*');
-                return data || [];
-            } catch (fallbackErr) {
-                return [];
-            }
+            console.error('StudentSyncService: Error loading students:', err);
+            return [];
         }
     }
 }
+

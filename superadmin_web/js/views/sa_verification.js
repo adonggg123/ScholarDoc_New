@@ -15,15 +15,15 @@ async function loadSaQueue() {
 
     try {
         let res = await supabase
-            .from('students')
+            .from('student_grantees')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (res.error) {
-            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+            res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
         }
         if (res.error) {
-            res = await supabase.from('students').select('*');
+            res = await supabase.from('student_grantees').select('*');
         }
         if (res.error) throw res.error;
         const data = res.data;
@@ -102,7 +102,7 @@ function updateKpis() {
     let duplicates = 0;
 
     saStudents.forEach(s => {
-        const status = s.documents?.saVerificationStatus || 'Pending';
+        const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || s.status || 'Pending';
         if (status === 'Verified' || status === 'Approved') {
             verified++;
         } else if (status === 'Missing') {
@@ -537,20 +537,20 @@ function renderPanel() {
 }
 
 // ── Queue Navigation ────────────────────────────────────────────────
-window.selectSaStudent = function(index) {
+window.selectSaStudent = function (index) {
     selectedIndex = index;
     renderQueue();
     renderPanel();
 };
 
-window.navigateSaQueue = function(direction) {
+window.navigateSaQueue = function (direction) {
     const nextIndex = selectedIndex + direction;
     if (nextIndex >= 0 && nextIndex < filteredSaStudents.length) {
         selectSaStudent(nextIndex);
     }
 };
 
-window.applySaPreset = function(presetText) {
+window.applySaPreset = function (presetText) {
     const textarea = document.getElementById('sa-remarks');
     if (textarea) {
         textarea.value = presetText;
@@ -558,7 +558,7 @@ window.applySaPreset = function(presetText) {
     }
 };
 
-window.copySaNumber = function(saNum) {
+window.copySaNumber = function (saNum) {
     navigator.clipboard.writeText(saNum).then(() => {
         const textEl = document.getElementById('copy-sa-text');
         const btn = document.getElementById('copy-sa-btn');
@@ -574,7 +574,7 @@ window.copySaNumber = function(saNum) {
 };
 
 // ── Image Lightbox ──────────────────────────────────────────────────
-window.openSaLightbox = function(url, caption = '') {
+window.openSaLightbox = function (url, caption = '') {
     const modal = document.getElementById('sa-lightbox-modal');
     const img = document.getElementById('sa-lightbox-img');
     const cap = document.getElementById('sa-lightbox-caption');
@@ -585,13 +585,13 @@ window.openSaLightbox = function(url, caption = '') {
     }
 };
 
-window.closeSaLightbox = function() {
+window.closeSaLightbox = function () {
     const modal = document.getElementById('sa-lightbox-modal');
     if (modal) modal.style.display = 'none';
 };
 
 // ── Update SA Status ────────────────────────────────────────────────
-window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
+window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
     if (isUpdating) return;
     const s = filteredSaStudents[selectedIndex];
     if (!s || !s.uid) return;
@@ -602,10 +602,10 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
     try {
         // 1. Update SA Verification Status (stored inside documents JSON)
         const currentDocs = s.documents || {};
-        const updatedDocs = { 
-            ...currentDocs, 
+        const updatedDocs = {
+            ...currentDocs,
             saVerificationStatus: newStatus,
-            sa_verification_status: newStatus 
+            sa_verification_status: newStatus
         };
 
         const updatePayload = {
@@ -627,7 +627,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
             updatePayload.status = newStatus;
         }
 
-        let updateRes = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
+        let updateRes = await supabase.from('student_grantees').update(updatePayload).eq('uid', s.uid);
         if (updateRes.error) {
             // Fallback: update with reduced fields if schema difference
             const fallbackPayload = {
@@ -636,7 +636,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
                 updated_at: new Date().toISOString()
             };
             if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
-            updateRes = await supabase.from('students').update(fallbackPayload).eq('uid', s.uid);
+            updateRes = await supabase.from('student_grantees').update(fallbackPayload).eq('uid', s.uid);
             if (updateRes.error) throw updateRes.error;
         }
 
@@ -664,7 +664,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
             type = 'success';
         } else if (newStatus === 'Missing') {
             title = 'SA Number Missing';
-            message = remarks 
+            message = remarks
                 ? `Your submitted SA Number requires revision. Please review the feedback provided by the administrator: ${remarks}`
                 : 'Your submitted SA Number requires revision. Please review the feedback provided by the administrator.';
             type = 'warning';
@@ -675,7 +675,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
                 : 'Your SA Number has been rejected.';
             type = 'error';
         }
-        
+
         try {
             await supabase.from('notifications').insert([{
                 studentId: s.uid,
@@ -694,7 +694,7 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
         } else {
             alert(`Student ${s.fullName || s.full_name} status updated to ${newStatus}.`);
         }
-        
+
         // Reload SA Queue
         await loadSaQueue();
 
@@ -710,5 +710,31 @@ window.updateSaStatus = async function(newStatus, isFinalRejection = false) {
 window.loadSaQueue = loadSaQueue;
 window.filterSaQueue = filterSaQueue;
 
+let saRealtimeChannel = null;
+function setupRealtimeSaSubscription() {
+    if (!supabase || typeof supabase.channel !== 'function') return;
+    try {
+        if (saRealtimeChannel) {
+            supabase.removeChannel(saRealtimeChannel);
+            saRealtimeChannel = null;
+        }
+
+        saRealtimeChannel = supabase.channel('public:sa_verification_realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'student_grantees' }, (payload) => {
+                console.log('[Realtime] students change event in sa_verification:', payload.eventType);
+                loadSaQueue();
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] sa_verification subscribed to students table');
+                }
+            });
+    } catch (e) {
+        console.warn('Could not establish realtime channel in sa_verification:', e);
+    }
+}
+
 // Init
 loadSaQueue();
+setupRealtimeSaSubscription();
+

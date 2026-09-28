@@ -7,7 +7,13 @@ const headers = { 'apikey': key, 'Authorization': 'Bearer ' + key };
 globalThis.window = {
   supabaseClient: {
     from: (table) => ({
-      select: (cols) => fetch(baseUrl + '/' + table + '?select=' + (cols || '*'), { headers }).then(r => r.json()).then(data => ({ data })),
+      select: (cols) => {
+        const queryPromise = fetch(baseUrl + '/' + table + '?select=' + (cols || '*'), { headers })
+          .then(r => r.json())
+          .then(data => ({ data }));
+        queryPromise.order = () => queryPromise;
+        return queryPromise;
+      },
       upsert: (rows, opts) => fetch(baseUrl + '/' + table + (opts?.onConflict ? '?on_conflict=' + opts.onConflict : ''), {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },

@@ -7,7 +7,7 @@ const uid = window.currentStudentUid;
 async function initStatusView() {
     if (uid && sb) {
         sb.channel(`status-${uid}`).on('postgres_changes', {
-            event: '*', schema: 'public', table: 'students', filter: `uid=eq.${uid}`
+            event: '*', schema: 'public', table: 'student_grantees', filter: `uid=eq.${uid}`
         }, () => { loadStatusData(); }).subscribe();
     }
     await loadStatusData();
@@ -16,41 +16,43 @@ async function initStatusView() {
 async function loadStatusData() {
     let student = null;
     if (uid && sb) {
-        const { data, error } = await sb.from('students').select().eq('uid', uid);
+        const { data, error } = await sb.from('student_grantees').select().eq('uid', uid);
         if (!error && data && data.length > 0) student = data[0];
     }
     if (!student) {
         student = window.currentStudentProfile || {
             fullName: 'Jude Student',
             scholarshipName: 'TES Scholarship Program',
-            status: 'Verified',
+            status: 'Approved',
             documents: {
-                saVerificationStatus: 'Verified',
-                idValidationStatus: 'Verified'
+                saVerificationStatus: 'Approved',
+                idValidationStatus: 'Approved'
             },
-            adminRemarks: 'All requirements verified by the University Scholarship Committee. Eligible for upcoming disbursement batch.'
+            adminRemarks: 'All requirements verified and approved. Officially confirmed as scholarship grantee.'
         };
     }
 
-    const status = student.status || 'Verified';
-    const scholarshipName = student.scholarshipName || 'TES Scholarship Program';
+    const status = student.status || 'Approved';
+    const scholarshipName = student.scholarshipName || student.scholarship_name || 'TES Scholarship Program';
     const scholarshipId = student.scholarshipId || '';
     const docs = (typeof student.documents === 'object' && student.documents) ? student.documents : {};
-    const saVerificationStatus = docs.saVerificationStatus || (status === 'Verified' ? 'Verified' : 'Pending');
-    const idValidationStatus = docs.idValidationStatus || (status === 'Verified' ? 'Verified' : 'Pending');
+    const saVerificationStatus = docs.saVerificationStatus || docs.sa_verification_status || student.saVerificationStatus || (status === 'Approved' || status === 'Verified' ? 'Approved' : 'Pending');
+    const idValidationStatus = docs.idValidationStatus || docs.id_validation_status || student.idValidationStatus || (status === 'Approved' || status === 'Verified' ? 'Approved' : 'Pending');
     const requiresResubmission = student.requiresResubmission === true;
-    const adminRemarks = student.adminRemarks || 'Documents have been verified and endorsed for scholarship disbursement.';
+    const adminRemarks = student.adminRemarks || student.admin_remarks || 'Confirmed registered scholar grantee. Automatically approved.';
 
     // Update header
     const nameEl = document.getElementById('status-scholarship-name');
     if (nameEl) nameEl.textContent = scholarshipName;
 
     // Status badge
-    let badgeClass = 'badge-success', statusIcon = 'check-circle', statusLabel = 'Verified';
+    let badgeClass = 'badge-success', statusIcon = 'check-circle', statusLabel = 'Approved Scholar';
     if (status === 'Pending') {
         badgeClass = 'badge-pending'; statusIcon = 'hourglass'; statusLabel = 'Under Review';
     } else if (status === 'Rejected' || status === 'Missing') {
         badgeClass = 'badge-danger'; statusIcon = 'x-circle'; statusLabel = status;
+    } else if (status === 'Approved' || status === 'Verified') {
+        badgeClass = 'badge-success'; statusIcon = 'check-circle'; statusLabel = 'Approved Scholar';
     }
 
     const badgeEl = document.getElementById('status-overall-badge');

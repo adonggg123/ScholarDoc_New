@@ -6,16 +6,81 @@ const supabase = window.supabaseClient;
 // State
 let rawForm2Records = [];
 let rawForm3Records = [];
+let currentFilteredF2 = [];
+let currentFilteredF3 = [];
 let activeTab = 'f2'; // 'f2' or 'f3'
+
+// Known Program Acronym and Equivalent Mappings for robust filtering
+const PROGRAM_MAPPINGS = {
+    'bsit': ['bachelor of science in information technology', 'bs in information technology', 'information technology', 'bsit', 'bs-it', 'bs it'],
+    'bscs': ['bachelor of science in computer science', 'bs in computer science', 'computer science', 'bscs', 'bs-cs', 'bs cs'],
+    'bsee': ['bachelor of science in electrical engineering', 'bs in electrical engineering', 'electrical engineering', 'bsee', 'bs-ee', 'bs ee'],
+    'bsce': ['bachelor of science in civil engineering', 'bs in civil engineering', 'civil engineering', 'bsce', 'bs-ce', 'bs ce'],
+    'bsme': ['bachelor of science in mechanical engineering', 'bs in mechanical engineering', 'mechanical engineering', 'bsme', 'bs-me', 'bs me'],
+    'bsece': ['bachelor of science in electronics engineering', 'bs in electronics engineering', 'electronics engineering', 'bsece', 'bs-ece', 'bs ece'],
+    'bsba': ['bachelor of science in business administration', 'bs in business administration', 'business administration', 'bsba', 'bs-ba', 'bs ba'],
+    'bsed': ['bachelor of secondary education', 'bs in secondary education', 'secondary education', 'bsed', 'bs-ed', 'bs ed'],
+    'beed': ['bachelor of elementary education', 'bs in elementary education', 'elementary education', 'beed', 'bs-ed', 'be-ed', 'be ed'],
+    'bstm': ['bachelor of science in tourism management', 'tourism management', 'bstm', 'bs-tm', 'bs tm'],
+    'bshm': ['bachelor of science in hospitality management', 'hospitality management', 'bshm', 'bs-hm', 'bs hm'],
+    'bsa': ['bachelor of science in agriculture', 'agriculture', 'bsa', 'bs-a', 'bs a'],
+    'bscrim': ['bachelor of science in criminology', 'criminology', 'bs crim', 'bscrim', 'bs-crim'],
+    'btled': ['bachelor of technology and livelihood education', 'btled', 'bt-led', 'bt led']
+};
+
+/**
+ * Checks if a student's degree program matches the selected program filter.
+ */
+function isProgramMatch(recordProgram, selectedFilter) {
+    if (!selectedFilter || selectedFilter === 'All') return true;
+    if (!recordProgram) return false;
+
+    const rTrim = String(recordProgram).trim();
+    const fTrim = String(selectedFilter).trim();
+    if (!rTrim) return false;
+
+    const rNorm = rTrim.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const fNorm = fTrim.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Direct normalized match (e.g. "BS-IT" vs "bsit")
+    if (rNorm === fNorm) return true;
+
+    // 2. Direct substring match (e.g. "BSIT" inside "Bachelor of Science in Information Technology (BSIT)")
+    const rLower = rTrim.toLowerCase();
+    const fLower = fTrim.toLowerCase();
+    if (rLower.includes(fLower) || fLower.includes(rLower)) return true;
+
+    // 3. Synonym / mapping lookup
+    for (const [key, aliases] of Object.entries(PROGRAM_MAPPINGS)) {
+        const keyNorm = key.replace(/[^a-z0-9]/g, '');
+        const filterMatchesFamily = (fNorm === keyNorm) || aliases.some(a => {
+            const aNorm = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return fNorm === aNorm || fLower.includes(a) || a.includes(fLower);
+        });
+        const recordMatchesFamily = (rNorm === keyNorm) || aliases.some(a => {
+            const aNorm = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return rNorm === aNorm || rLower.includes(a) || a.includes(rLower);
+        });
+
+        if (filterMatchesFamily && recordMatchesFamily) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 // ── 1. Initialization ───────────────────────────────────────────────
 async function initViewAnnex() {
     setupEventListeners();
-    await populateDistinctAcademicYears();
+    await Promise.all([
+        populateDistinctAcademicYears(),
+        populateDistinctPrograms()
+    ]);
     await fetchRecordsFromSupabase();
 }
 
-// ── 2. Populate Distinct School Years from Database ─────────────────
+// ── 2. Populate Distinct School Years & Programs from Database ──────
 async function populateDistinctAcademicYears() {
     const selAY = document.getElementById('view-filter-ay');
     if (!selAY) return;
@@ -46,6 +111,73 @@ async function populateDistinctAcademicYears() {
         selAY.value = currentVal;
     } else if (sortedYears.length > 0) {
         selAY.value = sortedYears[0];
+    }
+}
+
+async function populateDistinctPrograms() {
+    const selProg = document.getElementById('view-filter-program');
+    if (!selProg) return;
+
+    const currentVal = selProg.value || 'All';
+    const basePrograms = new Set(['BSIT', 'BSCS', 'BSHM', 'BSTM', 'BSED', 'BEED']);
+
+    [...rawForm2Records, ...rawForm3Records].forEach(r => {
+        if (r.degree_program && r.degree_program.trim()) {
+            basePrograms.add(r.degree_program.trim());
+        }
+    });
+
+    try {
+        if (supabase) {
+            const [resF2, resF3] = await Promise.all([
+                supabase.from('annex_form_2').select('degree_program'),
+                supabase.from('annex_form_3').select('degree_program')
+            ]);
+            (resF2.data || []).forEach(r => {
+                if (r.degree_program && r.degree_program.trim()) basePrograms.add(r.degree_program.trim());
+            });
+            (resF3.data || []).forEach(r => {
+                if (r.degree_program && r.degree_program.trim()) basePrograms.add(r.degree_program.trim());
+            });
+        }
+    } catch (e) {
+        console.warn('Could not query distinct degree programs from Supabase:', e);
+    }
+
+    const sortedPrograms = Array.from(basePrograms).filter(Boolean).sort((a, b) => a.localeCompare(b));
+
+    selProg.innerHTML = `<option value="All">All Programs</option>` +
+        sortedPrograms.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    if (sortedPrograms.includes(currentVal) || currentVal === 'All') {
+        selProg.value = currentVal;
+    } else {
+        selProg.value = 'All';
+    }
+}
+
+function updateProgramDropdownFromLoadedRecords() {
+    const selProg = document.getElementById('view-filter-program');
+    if (!selProg) return;
+
+    const currentVal = selProg.value || 'All';
+    const existingOptions = new Set();
+    Array.from(selProg.options).forEach(opt => existingOptions.add(opt.value));
+
+    let hasNew = false;
+    [...rawForm2Records, ...rawForm3Records].forEach(r => {
+        const prog = (r.degree_program || '').trim();
+        if (prog && !existingOptions.has(prog)) {
+            existingOptions.add(prog);
+            hasNew = true;
+        }
+    });
+
+    if (hasNew) {
+        const sorted = Array.from(existingOptions).filter(v => v !== 'All').sort((a, b) => a.localeCompare(b));
+        selProg.innerHTML = `<option value="All">All Programs</option>` +
+            sorted.map(p => `<option value="${p}">${p}</option>`).join('');
+        selProg.value = currentVal;
     }
 }
 
@@ -88,6 +220,8 @@ async function fetchRecordsFromSupabase() {
         rawForm2Records = resF2.data || [];
         rawForm3Records = resF3.data || [];
 
+        updateProgramDropdownFromLoadedRecords();
+
         applyFiltersAndRender();
 
     } catch (err) {
@@ -114,15 +248,20 @@ function applyFiltersAndRender() {
     const searchInput = document.getElementById('view-search-input');
     const selBatch = document.getElementById('view-filter-batch');
     const selStatus = document.getElementById('view-filter-status');
+    const selProgram = document.getElementById('view-filter-program');
 
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
     const batchFilter = selBatch ? selBatch.value : 'All';
     const statusFilter = selStatus ? selStatus.value : 'All';
+    const programFilter = selProgram ? selProgram.value : 'All';
 
     // 1. Filter Form 2 Records
     const filteredF2 = rawForm2Records.filter(row => {
         const matchBatch = batchFilter === 'All' || String(row.tes_batch || '').toLowerCase().includes(batchFilter.toLowerCase());
         if (!matchBatch) return false;
+
+        const matchProgram = isProgramMatch(row.degree_program, programFilter);
+        if (!matchProgram) return false;
 
         if (!query) return true;
 
@@ -140,6 +279,9 @@ function applyFiltersAndRender() {
         const matchStatus = statusFilter === 'All' || String(row.status || '').toLowerCase() === statusFilter.toLowerCase();
         if (!matchStatus) return false;
 
+        const matchProgram = isProgramMatch(row.degree_program, programFilter);
+        if (!matchProgram) return false;
+
         if (!query) return true;
 
         const fullName = `${row.last_name || ''} ${row.given_name || ''} ${row.middle_initial || ''}`.toLowerCase();
@@ -152,8 +294,15 @@ function applyFiltersAndRender() {
         return fullName.includes(query) || id.includes(query) || sa.includes(query) || ctrl.includes(query) || prog.includes(query) || reason.includes(query);
     });
 
+    currentFilteredF2 = filteredF2;
+    currentFilteredF3 = filteredF3;
+
     // Update KPIs & badges
     updateKPIMetrics(filteredF2, filteredF3);
+
+    const selAY = document.getElementById('view-filter-ay');
+    const selSem = document.getElementById('view-filter-sem');
+    updateFilterBadge(selAY ? selAY.value : '2024-2025', selSem ? selSem.value : '1st Semester');
 
     // Render Tables
     renderForm2Table(filteredF2);
@@ -188,9 +337,16 @@ function updateFilterBadge(ay, sem) {
     const badge = document.getElementById('view-active-filter-badge');
     const subtext = document.getElementById('view-kpi-term-subtext');
 
-    const text = (ay === 'All' && sem === 'All')
+    const selProg = document.getElementById('view-filter-program');
+    const progVal = selProg ? selProg.value : 'All';
+
+    let text = (ay === 'All' && sem === 'All')
         ? 'All Terms & Semesters'
         : (ay === 'All' ? `${sem} (All Years)` : (sem === 'All' ? `A.Y. ${ay} (All Semesters)` : `A.Y. ${ay} • ${sem}`));
+
+    if (progVal && progVal !== 'All') {
+        text += ` • ${progVal}`;
+    }
 
     if (badge) {
         badge.innerHTML = `<i class="icon-calendar" style="font-size: 12px;"></i> ${text}`;
@@ -338,7 +494,8 @@ function renderForm3Table(rows) {
 async function exportForm2Excel() {
     const btn = document.getElementById('btn-view-export-f2');
     try {
-        if (rawForm2Records.length === 0) {
+        const recordsToExport = (currentFilteredF2 !== undefined && currentFilteredF2 !== null) ? currentFilteredF2 : rawForm2Records;
+        if (recordsToExport.length === 0) {
             alert('No Form 2 records available to export for the selected filters.');
             return;
         }
@@ -351,10 +508,12 @@ async function exportForm2Excel() {
 
         const selAY = document.getElementById('view-filter-ay');
         const selSem = document.getElementById('view-filter-sem');
+        const selProg = document.getElementById('view-filter-program');
         const ayStr = selAY ? selAY.value.replace(/[^a-zA-Z0-9]/g, '_') : '2024_2025';
         const semStr = selSem ? selSem.value.replace(/[^a-zA-Z0-9]/g, '_') : '1st_Sem';
+        const progStr = (selProg && selProg.value !== 'All') ? `_${selProg.value.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
 
-        const studentsToFill = rawForm2Records.map(row => ({
+        const studentsToFill = recordsToExport.map(row => ({
             studentId: row.student_number || '',
             saNumber: row.tes_application_number || '',
             fullName: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
@@ -371,7 +530,7 @@ async function exportForm2Excel() {
         }));
 
         const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-        downloadBlob(result.blob, `Archived_Annex5_Form2_${ayStr}_${semStr}.xlsx`);
+        downloadBlob(result.blob, `Archived_Annex5_Form2_${ayStr}_${semStr}${progStr}.xlsx`);
         if (window.showToast) window.showToast('Form 2 Excel downloaded successfully!', 'check-circle');
     } catch (err) {
         console.error('Export Form 2 error:', err);
@@ -384,7 +543,8 @@ async function exportForm2Excel() {
 async function exportForm3Excel() {
     const btn = document.getElementById('btn-view-export-f3');
     try {
-        if (rawForm3Records.length === 0) {
+        const recordsToExport = (currentFilteredF3 !== undefined && currentFilteredF3 !== null) ? currentFilteredF3 : rawForm3Records;
+        if (recordsToExport.length === 0) {
             alert('No Form 3 records available to export for the selected filters.');
             return;
         }
@@ -397,10 +557,12 @@ async function exportForm3Excel() {
 
         const selAY = document.getElementById('view-filter-ay');
         const selSem = document.getElementById('view-filter-sem');
+        const selProg = document.getElementById('view-filter-program');
         const ayStr = selAY ? selAY.value.replace(/[^a-zA-Z0-9]/g, '_') : '2024_2025';
         const semStr = selSem ? selSem.value.replace(/[^a-zA-Z0-9]/g, '_') : '1st_Sem';
+        const progStr = (selProg && selProg.value !== 'All') ? `_${selProg.value.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
 
-        const studentsToFill = rawForm3Records.map(row => ({
+        const studentsToFill = recordsToExport.map(row => ({
             studentId: row.student_number || '',
             saNumber: row.tes_application_number || '',
             fullName: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
@@ -416,7 +578,7 @@ async function exportForm3Excel() {
         }));
 
         const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-        downloadBlob(result.blob, `Archived_Annex5_Form3_${ayStr}_${semStr}.xlsx`);
+        downloadBlob(result.blob, `Archived_Annex5_Form3_${ayStr}_${semStr}${progStr}.xlsx`);
         if (window.showToast) window.showToast('Form 3 Excel downloaded successfully!', 'check-circle');
     } catch (err) {
         console.error('Export Form 3 error:', err);
@@ -469,6 +631,14 @@ function setupEventListeners() {
     const selBatch = document.getElementById('view-filter-batch');
     if (selBatch) {
         selBatch.addEventListener('change', () => {
+            applyFiltersAndRender();
+        });
+    }
+
+    // Degree Program filter
+    const selProg = document.getElementById('view-filter-program');
+    if (selProg) {
+        selProg.addEventListener('change', () => {
             applyFiltersAndRender();
         });
     }

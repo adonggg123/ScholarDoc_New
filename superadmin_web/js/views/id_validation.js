@@ -15,15 +15,15 @@ async function loadIdQueue() {
 
     try {
         let res = await supabase
-            .from('students')
+            .from('student_grantees')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (res.error) {
-            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+            res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
         }
         if (res.error) {
-            res = await supabase.from('students').select('*');
+            res = await supabase.from('student_grantees').select('*');
         }
         if (res.error) throw res.error;
         const data = res.data;
@@ -115,7 +115,7 @@ function filterIdQueue() {
         const name = (s.fullName || '').toLowerCase();
         const studentId = (s.studentId || s.id || '').toLowerCase();
         const course = (s.course || '').toUpperCase();
-        const status = s.documents?.idValidationStatus || 'Pending';
+        const status = s.documents?.idValidationStatus || s.documents?.id_validation_status || s.idValidationStatus || s.id_validation_status || s.status || 'Pending';
 
         const hasFront = !!(s.idFrontUrl || s.documents?.idFrontUrl);
         const hasBack = !!(s.idBackUrl || s.documents?.idBackUrl);
@@ -127,7 +127,7 @@ function filterIdQueue() {
         // Status Match
         let matchStatus = true;
         if (statusFilter === 'Pending') {
-            matchStatus = status === 'Pending' || (!s.documents?.idValidationStatus);
+            matchStatus = status === 'Pending';
         } else if (statusFilter === 'Verified') {
             matchStatus = status === 'Verified' || status === 'Approved';
         } else if (statusFilter === 'Missing') {
@@ -610,10 +610,10 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
     try {
         // 1. Update ID Validation Status (stored inside documents JSON)
         const currentDocs = s.documents || {};
-        const updatedDocs = { 
-            ...currentDocs, 
+        const updatedDocs = {
+            ...currentDocs,
             idValidationStatus: newStatus,
-            id_validation_status: newStatus 
+            id_validation_status: newStatus
         };
 
         const updatePayload = {
@@ -635,7 +635,7 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             updatePayload.status = newStatus;
         }
 
-        let updateRes = await supabase.from('students').update(updatePayload).eq('uid', s.uid);
+        let updateRes = await supabase.from('student_grantees').update(updatePayload).eq('uid', s.uid);
         if (updateRes.error) {
             // Fallback: update with reduced fields if schema difference
             const fallbackPayload = {
@@ -644,7 +644,7 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
                 updated_at: new Date().toISOString()
             };
             if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
-            updateRes = await supabase.from('students').update(fallbackPayload).eq('uid', s.uid);
+            updateRes = await supabase.from('student_grantees').update(fallbackPayload).eq('uid', s.uid);
             if (updateRes.error) throw updateRes.error;
         }
 
@@ -778,15 +778,15 @@ window.downloadAllIdDocuments = async function () {
 
         // Fetch all students from database
         let res = await supabase
-            .from('students')
+            .from('student_grantees')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (res.error) {
-            res = await supabase.from('students').select('*').order('createdAt', { ascending: false });
+            res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
         }
         if (res.error) {
-            res = await supabase.from('students').select('*');
+            res = await supabase.from('student_grantees').select('*');
         }
         if (res.error) throw res.error;
         const allStudents = res.data;
@@ -891,7 +891,7 @@ window.downloadAllIdDocuments = async function () {
 };
 
 // Google Document AI Scanner for Back ID validation sticker
-window.triggerDocumentAiScan = async function(imageUrl, studentIndex) {
+window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
     if (!imageUrl) return;
     const s = filteredIdStudents[studentIndex];
     if (!s) return;
@@ -950,6 +950,32 @@ window.triggerDocumentAiScan = async function(imageUrl, studentIndex) {
 window.loadIdQueue = loadIdQueue;
 window.filterIdQueue = filterIdQueue;
 
+let idRealtimeChannel = null;
+function setupRealtimeIdSubscription() {
+    if (!supabase || typeof supabase.channel !== 'function') return;
+    try {
+        if (idRealtimeChannel) {
+            supabase.removeChannel(idRealtimeChannel);
+            idRealtimeChannel = null;
+        }
+
+        idRealtimeChannel = supabase.channel('public:id_validation_realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'student_grantees' }, (payload) => {
+                console.log('[Realtime] students change event in id_validation:', payload.eventType);
+                loadIdQueue();
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] id_validation subscribed to students table');
+                }
+            });
+    } catch (e) {
+        console.warn('Could not establish realtime channel in id_validation:', e);
+    }
+}
+
 // Init
 loadIdQueue();
+setupRealtimeIdSubscription();
+
 

@@ -94,27 +94,29 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
     const isAdminAccount = !!adminData || userEmail.includes('admin') || userEmail.includes('superadmin');
 
     if (!isAdminAccount) {
-        // Check if student record exists in DB by uid or studentId or email
+        // Check if student record exists in DB (student_grantees or school_students)
         let studentData = null;
-        const { data: byUid } = await supabaseClient
-            .from('students')
-            .select('*')
-            .eq('uid', uid)
-            .limit(1);
-
-        if (byUid && byUid.length > 0) {
-            studentData = byUid[0];
-        } else {
+        try {
             const cleanId = rawIdentifier.trim();
-            const { data: byId } = await supabaseClient
-                .from('students')
+            const { data: byUid } = await supabaseClient
+                .from('student_grantees')
                 .select('*')
-                .or(`studentId.eq.${cleanId},authEmail.eq.${cleanId},email.eq.${cleanId}`)
+                .or(`uid.eq.${uid},student_no.eq.${cleanId},studentId.eq.${cleanId}`)
                 .limit(1);
-            if (byId && byId.length > 0) {
-                studentData = byId[0];
+
+            if (byUid && byUid.length > 0) {
+                studentData = byUid[0];
+            } else {
+                const { data: bySchool } = await supabaseClient
+                    .from('school_students')
+                    .select('*')
+                    .or(`student_no.eq.${cleanId},email_address.eq.${cleanId}`)
+                    .limit(1);
+                if (bySchool && bySchool.length > 0) {
+                    studentData = bySchool[0];
+                }
             }
-        }
+        } catch (_) {}
 
         // Log student activity
         try {

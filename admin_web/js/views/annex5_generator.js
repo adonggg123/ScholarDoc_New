@@ -18,11 +18,50 @@ let verifiedForm3List = [];
 let needsReviewList = [];
 
 let activeResolutionItem = null;
+let dbRealtimeChannel = null;
+
+// Helper to map school_students records
+function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
+    const sNo = String(s.student_no || s.studentId || '').trim();
+    const sName = String(s.full_name || s.fullName || '').trim().toLowerCase();
+    const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+    const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
+
+    return {
+        id: s.id,
+        uid: s.student_no || s.id,
+        studentNo: s.student_no || '',
+        studentId: s.student_no || '',
+        fullName: s.full_name || '',
+        name: s.full_name || '',
+        programName: s.program_name || '',
+        course: s.program_name || '',
+        yearLevel: s.year_level || '',
+        year: s.year_level || '',
+        dateOfBirth: s.date_of_birth || '',
+        birthdate: s.date_of_birth || '',
+        age: s.age || '',
+        gender: s.gender || '',
+        civilStatus: s.civil_status || 'Single',
+        religion: s.religion || '',
+        mobileNumber: s.mobile_number || '',
+        phone: s.mobile_number || '',
+        emailAddress: s.email_address || '',
+        email: s.email_address || '',
+        fatherFullName: s.father_full_name || '',
+        fatherOccupation: s.father_occupation || '',
+        motherFullName: s.mother_full_name || '',
+        motherOccupation: s.mother_occupation || '',
+        scholarship: scholarship,
+        scholarshipName: scholarship,
+        status: (matchedSt && matchedSt.status) || 'Enrolled'
+    };
+}
 
 // ── 1. Load Data from Supabase ───────────────────────────────────────
 async function loadInitialData() {
     try {
-        // 1. Fetch Super Admin Grantee Masterlist
+        // 1. Fetch Super Admin Grantee Masterlist (strictly from new_grantees_masterlist)
         let { data: masterlistData, error: errMasterlist } = await supabase
             .from('new_grantees_masterlist')
             .select('*')
@@ -41,34 +80,21 @@ async function loadInitialData() {
                 year: m.year || '1'
             }));
             const syncEl = document.getElementById('superadmin-sync-status');
-            if (syncEl) syncEl.innerHTML = `<i class="icon-check-circle-2" style="font-size: 14px;"></i> Synced with Super Admin Import`;
+            if (syncEl) syncEl.innerHTML = `<i class="icon-check-circle-2" style="font-size: 14px;"></i> Synced with Super Admin Import (${rawSuperAdminGrantees.length} records)`;
         } else {
-            // Seed from active grantees in database
-            const { data: seedStudents } = await supabase.from('students').select('*');
-            rawSuperAdminGrantees = (seedStudents || []).map(s => {
-                const norm = VerificationService.normalizeName(s.fullName);
-                return {
-                    id: s.uid || s.id,
-                    name: s.fullName,
-                    last_name: norm.lastName,
-                    first_name: norm.firstName,
-                    middle_name: norm.middleName,
-                    batch: s.batch || 'Batch 1',
-                    student_id: s.studentId,
-                    course: s.course,
-                    year: s.year,
-                    saNumber: s.saNumber || s.familyDetails?.saNumber
-                };
-            });
+            // When table is empty or deleted in Supabase, show strictly empty list
+            rawSuperAdminGrantees = [];
+            const syncEl = document.getElementById('superadmin-sync-status');
+            if (syncEl) syncEl.innerHTML = `<i class="icon-info" style="font-size: 14px;"></i> Database table empty (0 grantees)`;
         }
 
-        // 2. Fetch Default School Student Records (Institutional DB)
+        // 2. Fetch Default School Student Records (strictly from school_students)
         let { data: schoolDbData, error: errSchool } = await supabase
             .from('school_students')
             .select('*')
             .order('created_at', { ascending: false });
 
-        // Also fetch students table to ensure scholarship_name and latest profile updates are mapped
+        // Optional profile enrichment from students table
         let { data: studentsDbData } = await supabase
             .from('students')
             .select('*');
@@ -82,91 +108,34 @@ async function loadInitialData() {
         });
 
         if (!errSchool && schoolDbData && schoolDbData.length > 0) {
-            rawSchoolStudents = schoolDbData.map(s => {
-                const sNo = String(s.student_no || '').trim();
-                const sName = String(s.full_name || '').trim().toLowerCase();
-                const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
-
-                const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
-
-                return {
-                    id: s.id,
-                    uid: s.student_no || s.id,
-                    studentNo: s.student_no || '',
-                    studentId: s.student_no || '',
-                    fullName: s.full_name || '',
-                    name: s.full_name || '',
-                    programName: s.program_name || '',
-                    course: s.program_name || '',
-                    yearLevel: s.year_level || '',
-                    year: s.year_level || '',
-                    dateOfBirth: s.date_of_birth || '',
-                    birthdate: s.date_of_birth || '',
-                    age: s.age || '',
-                    gender: s.gender || '',
-                    civilStatus: s.civil_status || 'Single',
-                    religion: s.religion || '',
-                    mobileNumber: s.mobile_number || '',
-                    phone: s.mobile_number || '',
-                    emailAddress: s.email_address || '',
-                    email: s.email_address || '',
-                    fatherFullName: s.father_full_name || '',
-                    fatherOccupation: s.father_occupation || '',
-                    motherFullName: s.mother_full_name || '',
-                    motherOccupation: s.mother_occupation || '',
-                    scholarship: scholarship,
-                    scholarshipName: scholarship,
-                    status: (matchedSt && matchedSt.status) || 'Enrolled'
-                };
-            });
-        } else if (studentsDbData && studentsDbData.length > 0) {
-            // Fallback to students table if school_students is not yet populated
-            rawSchoolStudents = studentsDbData.map(s => {
-                const scholarship = s.scholarship_name || s.scholarshipProgram || s.scholarshipName || s.scholarship || 'TES';
-                return {
-                    id: s.id,
-                    uid: s.student_no || s.studentId || s.id,
-                    studentNo: s.student_no || s.studentId || '',
-                    studentId: s.student_no || s.studentId || '',
-                    fullName: s.full_name || s.fullName || '',
-                    name: s.full_name || s.fullName || '',
-                    programName: s.program_name || s.course || '',
-                    course: s.program_name || s.course || '',
-                    yearLevel: s.year_level || s.year || '',
-                    year: s.year_level || s.year || '',
-                    dateOfBirth: s.date_of_birth || s.birthdate || '',
-                    birthdate: s.date_of_birth || s.birthdate || '',
-                    age: s.age || '',
-                    gender: s.gender || '',
-                    civilStatus: s.civil_status || 'Single',
-                    religion: s.religion || '',
-                    mobileNumber: s.mobile_number || s.contactNumber || '',
-                    phone: s.mobile_number || s.contactNumber || '',
-                    emailAddress: s.email_address || s.email || '',
-                    email: s.email_address || s.email || '',
-                    fatherFullName: s.father_full_name || '',
-                    fatherOccupation: s.father_occupation || '',
-                    motherFullName: s.mother_full_name || '',
-                    motherOccupation: s.mother_occupation || '',
-                    scholarship: scholarship,
-                    scholarshipName: scholarship,
-                    status: s.status || 'Enrolled'
-                };
-            });
+            rawSchoolStudents = schoolDbData.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+        } else {
+            // When table is empty or deleted in Supabase, show strictly empty list
+            rawSchoolStudents = [];
         }
 
-        // 3. Automatic Restore from Supabase Database
+        // 3. Automatic Restore from Supabase Database for Form 2 & Form 3
         try {
             const dbSync = await AnnexSyncService.loadFromSupabase();
             if (dbSync && dbSync.fromDb) {
-                console.log(`[Auto-Restore] Loaded ${dbSync.form2List.length} Form 2 and ${dbSync.form3List.length} Form 3 records from Supabase.`);
-                AnnexSyncService.saveVerifiedData({
-                    form2List: dbSync.form2List || [],
-                    form3List: dbSync.form3List || [],
-                    needsReviewList: [],
-                    updatedBy: 'Supabase Auto-Restore',
-                    syncToDb: false
-                });
+                if ((!dbSync.form2List || dbSync.form2List.length === 0) && (!dbSync.form3List || dbSync.form3List.length === 0)) {
+                    // Database tables annex_form_2 and annex_form_3 are empty - clear local cache
+                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
+                    verifiedForm2List = [];
+                    verifiedForm3List = [];
+                    needsReviewList = [];
+                } else {
+                    verifiedForm2List = dbSync.form2List || [];
+                    verifiedForm3List = dbSync.form3List || [];
+                    needsReviewList = [];
+                    AnnexSyncService.saveVerifiedData({
+                        form2List: verifiedForm2List,
+                        form3List: verifiedForm3List,
+                        needsReviewList: [],
+                        updatedBy: 'Supabase Auto-Restore',
+                        syncToDb: false
+                    });
+                }
             }
         } catch (dbErr) {
             console.warn('Auto-restore check error:', dbErr);
@@ -185,10 +154,129 @@ async function loadInitialData() {
             }
         }
 
+        // Setup real-time listeners so Supabase deletions reflect immediately
+        setupDatabaseRealtimeListeners();
+
     } catch (e) {
         console.error('Error loading initial verification data:', e);
         showToast('Error loading records: ' + e.message, 'alert-triangle');
     }
+}
+
+// ── Database Realtime Listener Setup ────────────────────────────────
+function setupDatabaseRealtimeListeners() {
+    if (!supabase || typeof supabase.channel !== 'function') return;
+
+    if (window.__adminAnnex5RealtimeChannel) {
+        try { supabase.removeChannel(window.__adminAnnex5RealtimeChannel); } catch (_) {}
+        window.__adminAnnex5RealtimeChannel = null;
+    }
+    if (dbRealtimeChannel) {
+        try { supabase.removeChannel(dbRealtimeChannel); } catch (_) {}
+        dbRealtimeChannel = null;
+    }
+    if (typeof supabase.getChannels === 'function') {
+        const existing = supabase.getChannels();
+        existing.forEach(ch => {
+            if (ch.topic && ch.topic.includes('admin-annex5-realtime-sync')) {
+                try { supabase.removeChannel(ch); } catch (_) {}
+            }
+        });
+    }
+
+    const uniqueChannelName = `admin-annex5-realtime-sync-${Date.now()}`;
+    dbRealtimeChannel = supabase.channel(uniqueChannelName);
+    window.__adminAnnex5RealtimeChannel = dbRealtimeChannel;
+
+    dbRealtimeChannel
+        // 1. Listen for school_students changes
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'school_students' }, async (payload) => {
+            console.log('[Realtime] school_students change event:', payload.eventType);
+            const { data } = await supabase.from('school_students').select('*').order('created_at', { ascending: false });
+            rawSchoolStudents = (data || []).map(s => mapSchoolStudentRecord(s));
+            updateSourceCounts();
+            renderSchoolStudentsTable(rawSchoolStudents);
+            runCrossVerification();
+        })
+        // 2. Listen for new_grantees_masterlist changes
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'new_grantees_masterlist' }, async (payload) => {
+            console.log('[Realtime] new_grantees_masterlist change event:', payload.eventType);
+            const { data } = await supabase.from('new_grantees_masterlist').select('*').order('created_at', { ascending: false });
+            rawSuperAdminGrantees = (data || []).map(m => ({
+                id: m.id,
+                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
+                last_name: m.last_name,
+                first_name: m.first_name,
+                middle_name: m.middle_name,
+                batch: m.batch || 'Batch 1',
+                student_id: m.student_id || '',
+                course: m.course || m.program || '',
+                year: m.year || '1'
+            }));
+            updateSourceCounts();
+            populateSuperAdminBatchFilter();
+            renderSuperAdminGranteesTable(rawSuperAdminGrantees);
+            runCrossVerification();
+        })
+        // 3. Listen for annex_form_2 changes
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_2' }, async (payload) => {
+            console.log('[Realtime] annex_form_2 change event:', payload.eventType);
+            if (AnnexSyncService.isSavingToDb) return;
+            const dbSync = await AnnexSyncService.loadFromSupabase();
+            if (dbSync && dbSync.fromDb) {
+                if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
+                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
+                    verifiedForm2List = [];
+                    verifiedForm3List = [];
+                    needsReviewList = [];
+                    updateKPIMetrics();
+                    renderForm2Table(verifiedForm2List);
+                    renderForm3Table(verifiedForm3List);
+                    renderReviewQueue(needsReviewList);
+                } else {
+                    verifiedForm2List = dbSync.form2List || [];
+                    if (dbSync.form3List && dbSync.form3List.length > 0) verifiedForm3List = dbSync.form3List;
+                    runCrossVerification();
+                }
+            }
+        })
+        // 4. Listen for annex_form_3 changes
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_3' }, async (payload) => {
+            console.log('[Realtime] annex_form_3 change event:', payload.eventType);
+            if (AnnexSyncService.isSavingToDb) return;
+            const dbSync = await AnnexSyncService.loadFromSupabase();
+            if (dbSync && dbSync.fromDb) {
+                if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
+                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
+                    verifiedForm2List = [];
+                    verifiedForm3List = [];
+                    needsReviewList = [];
+                    updateKPIMetrics();
+                    renderForm2Table(verifiedForm2List);
+                    renderForm3Table(verifiedForm3List);
+                    renderReviewQueue(needsReviewList);
+                } else {
+                    verifiedForm3List = dbSync.form3List || [];
+                    if (dbSync.form2List && dbSync.form2List.length > 0) verifiedForm2List = dbSync.form2List;
+                    runCrossVerification();
+                }
+            }
+        })
+        // 5. Listen for students table changes
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, async (payload) => {
+            console.log('[Realtime] students change event:', payload.eventType);
+            // Refresh counts and verification if student record was removed
+            if (payload.eventType === 'DELETE') {
+                const deletedUid = payload.old?.uid || payload.old?.id;
+                const deletedNo = payload.old?.student_no || payload.old?.studentId;
+                if (deletedUid || deletedNo) {
+                    rawSchoolStudents = rawSchoolStudents.filter(s => s.id !== deletedUid && s.studentNo !== deletedNo);
+                    renderSchoolStudentsTable(rawSchoolStudents);
+                    updateSourceCounts();
+                }
+            }
+        })
+        .subscribe();
 }
 
 // ── 2. Update Source Counts & Status ────────────────────────────────
@@ -729,7 +817,7 @@ if (btnClearFile) {
         if (uploadPrompt) uploadPrompt.style.display = 'flex';
         if (fileInfo) fileInfo.style.display = 'none';
 
-        // Revert to database students (from school_students or students)
+        // Revert to database students (strictly from school_students)
         let { data: dbStudents } = await supabase
             .from('school_students')
             .select('*')
@@ -748,75 +836,10 @@ if (btnClearFile) {
         });
 
         if (dbStudents && dbStudents.length > 0) {
-            rawSchoolStudents = dbStudents.map(s => {
-                const sNo = String(s.student_no || '').trim();
-                const sName = String(s.full_name || '').trim().toLowerCase();
-                const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
-                const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
-
-                return {
-                    id: s.id,
-                    uid: s.student_no || s.id,
-                    studentNo: s.student_no || '',
-                    studentId: s.student_no || '',
-                    fullName: s.full_name || '',
-                    name: s.full_name || '',
-                    programName: s.program_name || '',
-                    course: s.program_name || '',
-                    yearLevel: s.year_level || '',
-                    year: s.year_level || '',
-                    dateOfBirth: s.date_of_birth || '',
-                    birthdate: s.date_of_birth || '',
-                    age: s.age || '',
-                    gender: s.gender || '',
-                    civilStatus: s.civil_status || 'Single',
-                    religion: s.religion || '',
-                    mobileNumber: s.mobile_number || '',
-                    phone: s.mobile_number || '',
-                    emailAddress: s.email_address || '',
-                    email: s.email_address || '',
-                    fatherFullName: s.father_full_name || '',
-                    fatherOccupation: s.father_occupation || '',
-                    motherFullName: s.mother_full_name || '',
-                    motherOccupation: s.mother_occupation || '',
-                    scholarship: scholarship,
-                    scholarshipName: scholarship,
-                    status: (matchedSt && matchedSt.status) || 'Enrolled'
-                };
-            });
-        } else if (fallbackStudents && fallbackStudents.length > 0) {
-            rawSchoolStudents = fallbackStudents.map(s => {
-                const scholarship = s.scholarship_name || s.scholarshipProgram || s.scholarshipName || s.scholarship || 'TES';
-                return {
-                    id: s.id,
-                    uid: s.student_no || s.studentId || s.id,
-                    studentNo: s.student_no || s.studentId || '',
-                    studentId: s.student_no || s.studentId || '',
-                    fullName: s.full_name || s.fullName || '',
-                    name: s.full_name || s.fullName || '',
-                    programName: s.program_name || s.course || '',
-                    course: s.program_name || s.course || '',
-                    yearLevel: s.year_level || s.year || '',
-                    year: s.year_level || s.year || '',
-                    dateOfBirth: s.date_of_birth || s.birthdate || '',
-                    birthdate: s.date_of_birth || s.birthdate || '',
-                    age: s.age || '',
-                    gender: s.gender || '',
-                    civilStatus: s.civil_status || 'Single',
-                    religion: s.religion || '',
-                    mobileNumber: s.mobile_number || s.contactNumber || '',
-                    phone: s.mobile_number || s.contactNumber || '',
-                    emailAddress: s.email_address || s.email || '',
-                    email: s.email_address || s.email || '',
-                    fatherFullName: s.father_full_name || '',
-                    fatherOccupation: s.father_occupation || '',
-                    motherFullName: s.mother_full_name || '',
-                    motherOccupation: s.mother_occupation || '',
-                    scholarship: scholarship,
-                    scholarshipName: scholarship,
-                    status: s.status || 'Enrolled'
-                };
-            });
+            rawSchoolStudents = dbStudents.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+        } else {
+            // When table is empty or deleted in Supabase, show strictly empty list
+            rawSchoolStudents = [];
         }
 
         updateSourceCounts();
@@ -1321,9 +1344,22 @@ function parseTextLinesToStudents(text) {
 
 // ── 4. Cross-Verification Engine Execution ──────────────────────────
 function runCrossVerification() {
+    // If either table is empty or deleted from Supabase, clear verification results
+    if (!rawSuperAdminGrantees || rawSuperAdminGrantees.length === 0 || !rawSchoolStudents || rawSchoolStudents.length === 0) {
+        verifiedForm2List = [];
+        verifiedForm3List = [];
+        needsReviewList = [];
+        AnnexSyncService.clearVerifiedData({ clearSupabase: false });
+        updateKPIMetrics();
+        renderForm2Table(verifiedForm2List);
+        renderForm3Table(verifiedForm3List);
+        renderReviewQueue(needsReviewList);
+        return;
+    }
+
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
-    // Check if we have previously verified/resolved data from Admin Review Queue
+    // Check if we have previously verified/resolved data from Admin Review Queue or Database
     const savedSync = AnnexSyncService.getVerifiedData();
     if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
         const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -1338,33 +1374,44 @@ function runCrossVerification() {
         for (const item of allItems) {
             const key = AnnexSyncService.getUniqueKey(item);
             if (processedKeys.has(key)) continue;
-            processedKeys.add(key);
 
-            if (resolvedForm2Map.has(key)) {
-                const saved = resolvedForm2Map.get(key);
-                combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
-            } else if (resolvedForm3Map.has(key)) {
-                const saved = resolvedForm3Map.get(key);
-                combinedForm3.push({ ...item, ...saved, classification: 'INACTIVE_FORM3', isEnrolled: false });
+            const savedF2 = resolvedForm2Map.get(key) || savedSync.form2List.find(s => AnnexSyncService.isSameStudent(s, item));
+            const savedF3 = resolvedForm3Map.get(key) || savedSync.form3List.find(s => AnnexSyncService.isSameStudent(s, item));
+
+            if (savedF2) {
+                processedKeys.add(key);
+                if (savedF2) processedKeys.add(AnnexSyncService.getUniqueKey(savedF2));
+                combinedForm2.push({ ...item, ...savedF2, classification: 'MATCHED_FORM2', isEnrolled: true });
+            } else if (savedF3) {
+                processedKeys.add(key);
+                if (savedF3) processedKeys.add(AnnexSyncService.getUniqueKey(savedF3));
+                combinedForm3.push({ ...item, ...savedF3, classification: 'INACTIVE_FORM3', isEnrolled: false });
             } else if (item.classification === 'MATCHED_FORM2') {
+                processedKeys.add(key);
                 combinedForm2.push(item);
             } else if (item.classification === 'INACTIVE_FORM3') {
+                processedKeys.add(key);
                 combinedForm3.push(item);
             } else {
+                processedKeys.add(key);
                 remainingReview.push(item);
             }
         }
 
         for (const savedItem of savedSync.form2List || []) {
             const key = AnnexSyncService.getUniqueKey(savedItem);
-            if (!processedKeys.has(key)) {
+            const alreadyInF2 = combinedForm2.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+            const stillExists = rawSuperAdminGrantees.some(g => AnnexSyncService.isSameStudent(savedItem, g));
+            if (!alreadyInF2 && stillExists) {
                 processedKeys.add(key);
                 combinedForm2.push(savedItem);
             }
         }
         for (const savedItem of savedSync.form3List || []) {
             const key = AnnexSyncService.getUniqueKey(savedItem);
-            if (!processedKeys.has(key)) {
+            const alreadyInF3 = combinedForm3.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+            const stillExists = rawSuperAdminGrantees.some(g => AnnexSyncService.isSameStudent(savedItem, g));
+            if (!alreadyInF3 && stillExists) {
                 processedKeys.add(key);
                 combinedForm3.push(savedItem);
             }
@@ -1381,12 +1428,13 @@ function runCrossVerification() {
         needsReviewList = deduped.needsReviewList;
     }
 
-    // Persist and broadcast state
+    // Persist and broadcast in-memory state without auto-upserting back to Supabase
     AnnexSyncService.saveVerifiedData({
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
-        updatedBy: window.currentAdmin?.username || 'Admin'
+        updatedBy: window.currentAdmin?.username || 'Admin',
+        syncToDb: false
     });
 
     updateKPIMetrics();
@@ -1811,25 +1859,25 @@ if (btnAutoResolveAll) {
 }
 
 // ── 11. Tab Switching Navigation ────────────────────────────────────
+const tabBtnRev = document.getElementById('tab-btn-review');
 const tabBtn2 = document.getElementById('tab-btn-form2');
 const tabBtn3 = document.getElementById('tab-btn-form3');
-const tabBtnRev = document.getElementById('tab-btn-review');
 
+const tabPaneRev = document.getElementById('tab-pane-review');
 const tabPane2 = document.getElementById('tab-pane-form2');
 const tabPane3 = document.getElementById('tab-pane-form3');
-const tabPaneRev = document.getElementById('tab-pane-review');
 
 function activateTab(activeBtn, activePane) {
-    [tabBtn2, tabBtn3, tabBtnRev].forEach(b => b && b.classList.remove('active'));
-    [tabPane2, tabPane3, tabPaneRev].forEach(p => p && (p.style.display = 'none'));
+    [tabBtnRev, tabBtn2, tabBtn3].forEach(b => b && b.classList.remove('active'));
+    [tabPaneRev, tabPane2, tabPane3].forEach(p => p && (p.style.display = 'none'));
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.style.display = 'block';
 }
 
+if (tabBtnRev) tabBtnRev.addEventListener('click', () => activateTab(tabBtnRev, tabPaneRev));
 if (tabBtn2) tabBtn2.addEventListener('click', () => activateTab(tabBtn2, tabPane2));
 if (tabBtn3) tabBtn3.addEventListener('click', () => activateTab(tabBtn3, tabPane3));
-if (tabBtnRev) tabBtnRev.addEventListener('click', () => activateTab(tabBtnRev, tabPaneRev));
 
 // ── 12. Search Filter Listeners ─────────────────────────────────────
 const searchF2 = document.getElementById('search-form2');

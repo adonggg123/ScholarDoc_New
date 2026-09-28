@@ -112,7 +112,7 @@ const viewTitles = {
     'audit_logs': 'Activity Logs',
     'reports': 'Reports & Analytics',
     'settings': 'System Settings',
-    'masterlist_import': 'Scholar Masterlist Import',
+    'masterlist_import': 'New Grantees Import',
     'annex5_generator': 'CHED Annex 5 TES Generator'
 };
 
@@ -127,7 +127,7 @@ const viewIcons = {
     'audit_logs': 'icon-history',
     'reports': 'icon-bar-chart-4',
     'settings': 'icon-settings',
-    'masterlist_import': 'icon-file-text',
+    'masterlist_import': 'icon-upload-cloud',
     'annex5_generator': 'icon-file-spreadsheet'
 };
 
@@ -144,12 +144,6 @@ async function loadView(viewName) {
         if (window.currentAdmin && !isSuperAdmin) {
             window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
             return;
-        }
-
-        // Redirect masterlist_import to reports view with import tab selected
-        if (viewName === 'masterlist_import') {
-            window.requestedReportTab = 'import';
-            viewName = 'reports';
         }
 
         // Fetch HTML partial
@@ -318,10 +312,7 @@ window.navigateToView = function(viewName, tabName) {
         return;
     }
 
-    if (viewName === 'masterlist_import') {
-        window.requestedReportTab = 'import';
-        viewName = 'reports';
-    } else if (tabName) {
+    if (tabName) {
         window.requestedReportTab = tabName;
     }
 
@@ -343,6 +334,10 @@ window.navigateToView = function(viewName, tabName) {
 };
 
 window.navigateToReportsTab = function(tabName) {
+    if (tabName === 'import') {
+        window.navigateToView('masterlist_import');
+        return;
+    }
     window.requestedReportTab = tabName;
     if (currentViewName === 'reports' && window.switchReportTab) {
         window.switchReportTab(tabName);

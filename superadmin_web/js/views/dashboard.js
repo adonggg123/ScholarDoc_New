@@ -5,7 +5,7 @@ const supabase = window.supabaseClient;
 function setupHeader() {
     const now = new Date();
     const hour = now.getHours();
-    
+
     let greeting = 'Good Evening';
     let icon = 'moon-star';
     if (hour < 12) {
@@ -34,13 +34,13 @@ function setupHeader() {
     const currentDay = now.getDay();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - currentDay);
-    
+
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
     const weekStartStr = startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const weekEndStr = endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
+
     const calWeekEl = document.getElementById('cal-week');
     if (calWeekEl) calWeekEl.textContent = `Week of ${weekStartStr} – ${weekEndStr}`;
 
@@ -88,7 +88,7 @@ function setupHeader() {
 // Fetch and render stats with animated count-up and ratio chips
 async function loadStats() {
     try {
-        const { data: students, error } = await supabase.from('students').select('status');
+        const { data: students, error } = await supabase.from('student_grantees').select('status');
         if (error) throw error;
 
         let total = students.length;
@@ -146,7 +146,7 @@ async function loadStats() {
 function animateCounter(elementId, targetValue) {
     const el = document.getElementById(elementId);
     if (!el) return;
-    
+
     const start = 0;
     const duration = 600;
     const startTime = performance.now();
@@ -225,7 +225,7 @@ function renderStatusDistribution(total, pending, approved, rejected) {
                     padding: 10,
                     cornerRadius: 8,
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             const value = context.raw;
                             const pct = Math.round((value / total) * 100);
                             return ` ${context.label}: ${value} (${pct}%)`;
@@ -250,7 +250,7 @@ async function loadActivity() {
             .select('*')
             .order('timestamp', { ascending: false })
             .limit(5);
-        
+
         if (error) throw error;
 
         const container = document.getElementById('activity-list');
@@ -270,7 +270,7 @@ async function loadActivity() {
         container.innerHTML = logs.map(log => {
             const action = log.action || 'Administrative action';
             const name = log.userName || log.adminName || 'Admin';
-            
+
             // Format time difference
             let timeStr = 'Just now';
             if (log.timestamp) {
@@ -324,7 +324,7 @@ async function loadActivity() {
                 </div>
             `;
         }).join('');
-        
+
         if (window.lucide) window.lucide.createIcons();
 
     } catch (e) {
@@ -335,19 +335,19 @@ async function loadActivity() {
 // Fetch and render Priority Pending Applications
 async function loadPending() {
     try {
-        let res = await supabase.from('students')
+        let res = await supabase.from('student_grantees')
             .select('*')
             .eq('status', 'Pending')
             .order('created_at', { ascending: false })
             .limit(4);
-        
+
         if (res.error) {
-            res = await supabase.from('students')
+            res = await supabase.from('student_grantees')
                 .select('*')
                 .eq('status', 'Pending')
                 .limit(4);
         }
-        
+
         const students = res.data || [];
 
         const container = document.getElementById('pending-list');
@@ -426,7 +426,7 @@ async function renderChart() {
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)';
 
     try {
-        let { data: students, error } = await supabase.from('students').select('*');
+        let { data: students, error } = await supabase.from('student_grantees').select('*');
         if (error) {
             students = [];
         }
@@ -512,16 +512,16 @@ async function renderChart() {
                     intersect: false,
                 },
                 plugins: {
-                    legend: { 
-                        display: true, 
-                        position: 'bottom', 
-                        labels: { 
-                            color: textColor, 
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            color: textColor,
                             font: { size: 11, weight: '600', family: 'Inter' },
                             usePointStyle: true,
                             boxWidth: 8,
                             padding: 16
-                        } 
+                        }
                     },
                     tooltip: {
                         backgroundColor: isDark ? '#1E293B' : '#0A1E3F',
@@ -532,12 +532,12 @@ async function renderChart() {
                     }
                 },
                 scales: {
-                    y: { 
-                        beginAtZero: true, 
+                    y: {
+                        beginAtZero: true,
                         grid: { color: gridColor },
                         ticks: { color: textColor, font: { size: 10 } }
                     },
-                    x: { 
+                    x: {
                         grid: { display: false },
                         ticks: { color: textColor, font: { size: 10 } }
                     }
