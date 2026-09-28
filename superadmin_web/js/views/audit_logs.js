@@ -27,7 +27,7 @@ async function loadLogs() {
 function applyFilters() {
     const searchVal = document.getElementById('log-search').value.toLowerCase();
     const dateVal = document.getElementById('log-date').value; // YYYY-MM-DD
-    
+
     // Toggle the 24H badge and clear button
     const badge24h = document.getElementById('filter-badge-24h');
     const btnClearDate = document.getElementById('clear-date-btn');
@@ -40,7 +40,7 @@ function applyFilters() {
     }
 
     const now = new Date();
-    
+
     const filtered = allLogs.filter(log => {
         // 1. Role Filter
         const rawRole = log.role || 'Admin';
@@ -67,8 +67,8 @@ function applyFilters() {
             if (!log.timestamp) return false;
             const logDate = new Date(log.timestamp);
             const targetDate = new Date(dateVal); // parses as UTC/local depending on browser, safe enough for YYYY-MM-DD
-            if (logDate.getFullYear() !== targetDate.getFullYear() || 
-                logDate.getMonth() !== targetDate.getMonth() || 
+            if (logDate.getFullYear() !== targetDate.getFullYear() ||
+                logDate.getMonth() !== targetDate.getMonth() ||
                 logDate.getDate() !== targetDate.getDate()) {
                 return false;
             }
@@ -88,7 +88,7 @@ function applyFilters() {
 
 function renderList(logs) {
     const container = document.getElementById('logs-container');
-    
+
     if (logs.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 60px;">

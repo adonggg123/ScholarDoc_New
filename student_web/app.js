@@ -188,8 +188,41 @@ if (loginForm) {
             let authResponse = null;
             const lowerId = rawIdentifier.toLowerCase();
 
+            // Strategy 0: Check if identifier matches an admin username (custom or default)
+            if (!rawIdentifier.includes('@')) {
+                let matchedAdminEmail = null;
+                if (lowerId === 'superadmin') {
+                    matchedAdminEmail = 'superadmin@scholardoc.com';
+                } else if (lowerId === 'admin') {
+                    matchedAdminEmail = 'admin@scholardoc.com';
+                } else {
+                    try {
+                        const { data: adminRows } = await supabaseClient
+                            .from('admins')
+                            .select('email, username')
+                            .ilike('username', rawIdentifier.trim())
+                            .limit(1);
+                        if (adminRows && adminRows.length > 0 && adminRows[0].email) {
+                            matchedAdminEmail = adminRows[0].email;
+                        }
+                    } catch (_) {}
+                }
+
+                if (matchedAdminEmail) {
+                    try {
+                        const { data, error } = await supabaseClient.auth.signInWithPassword({
+                            email: matchedAdminEmail,
+                            password: password,
+                        });
+                        if (!error && data.user) {
+                            authResponse = data;
+                        }
+                    } catch (_) {}
+                }
+            }
+
             // Strategy 1: Attempt Student login via ID email (e.g. 2023305311@scholardoc.com)
-            if (!rawIdentifier.includes('@') && lowerId !== 'admin' && lowerId !== 'superadmin') {
+            if (!authResponse && !rawIdentifier.includes('@') && lowerId !== 'admin' && lowerId !== 'superadmin') {
                 const studentEmail = getStudentEmail(rawIdentifier);
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -202,7 +235,7 @@ if (loginForm) {
                 } catch (_) {}
             }
 
-            // Strategy 2: Attempt Admin / Super Admin login (e.g. superadmin@scholardoc.com or admin@scholardoc.com)
+            // Strategy 2: Attempt Admin / Super Admin login fallback
             if (!authResponse) {
                 const adminEmail = getAdminEmail(rawIdentifier);
                 try {

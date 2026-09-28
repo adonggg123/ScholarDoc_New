@@ -1,11 +1,151 @@
-<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; height: 100%;">
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; padding-bottom: 60px;">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
         <div>
-            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">System Settings</h2>
-            <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage platform preferences and security configurations.</p>
+            <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800; color: var(--primary-color); letter-spacing: -0.5px;">System Settings</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px; font-weight: 500;">Manage platform credentials, administrator accounts, and security preferences.</p>
         </div>
     </div>
 
+    <!-- Administrator Accounts & Credentials Management -->
+    <div class="card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center;">
+                        <i class="icon-shield-check" style="font-size: 20px; color: var(--primary-color);"></i>
+                    </div>
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px;">Administrator Credentials</h3>
+                </div>
+                <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Edit login usernames and update passwords for both Superadmin and Admin accounts.</p>
+            </div>
+            
+            <!-- Account Selector Tabs -->
+            <div style="display: flex; gap: 6px; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 12px;" id="admin-account-tabs">
+                <button type="button" id="tab-account-superadmin" class="account-select-tab active" data-target="superadmin">
+                    <i class="icon-shield-check" style="font-size: 14px;"></i>
+                    <span>Super Admin</span>
+                </button>
+                <button type="button" id="tab-account-admin" class="account-select-tab" data-target="admin">
+                    <i class="icon-shield" style="font-size: 14px;"></i>
+                    <span>Admin</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Account Overview Bar -->
+        <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div id="target-account-avatar" style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #0F3260, #D4AF37); display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                    <i id="target-account-icon" class="icon-shield-check"></i>
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span id="target-account-role-name" style="font-size: 15px; font-weight: 800; color: var(--text-primary);">Super Admin</span>
+                        <span id="target-account-badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(212, 175, 55, 0.15); color: #B78103;">Platform Master</span>
+                    </div>
+                    <div id="target-account-email" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">superadmin@scholardoc.com</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="text-align: right;">
+                    <span style="font-size: 11px; color: var(--text-secondary); display: block; font-weight: 600;">Current Username:</span>
+                    <strong id="target-account-username-display" style="font-size: 15px; color: var(--primary-color);">superadmin</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two Column Forms: Username & Password -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;">
+            
+            <!-- Section 1: Edit Username -->
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; gap: 20px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <i class="icon-user" style="color: var(--primary-color); font-size: 16px;"></i>
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Change Username</h4>
+                    </div>
+                    <p style="margin: 0 0 16px 0; font-size: 12px; color: var(--text-secondary);">
+                        Used to log in to the portal instead of using the full email address.
+                    </p>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label for="input-edit-username" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">New Username</label>
+                        <div style="position: relative;">
+                            <i class="icon-at-sign" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                            <input type="text" id="input-edit-username" placeholder="e.g. superadmin" style="width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary); transition: border-color 0.2s;">
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-secondary);">Minimum 3 characters (letters, numbers, underscores).</span>
+                    </div>
+                </div>
+
+                <button type="button" id="btn-submit-username" class="btn-primary-action" style="padding: 11px 18px; border-radius: 10px; border: none; background: var(--primary-color); color: white; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(15,50,96,0.2);">
+                    <i class="icon-save" style="font-size: 15px;"></i>
+                    <span>Save Username</span>
+                </button>
+            </div>
+
+            <!-- Section 2: Edit Password -->
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <i class="icon-key" style="color: var(--primary-color); font-size: 16px;"></i>
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Change Password</h4>
+                    </div>
+                    <p style="margin: 0 0 16px 0; font-size: 12px; color: var(--text-secondary);">
+                        Update the login password for this account in Supabase Authentication.
+                    </p>
+
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Current Password -->
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <label for="input-current-password" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+                                Current Password <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);">(default: admin123)</span>
+                            </label>
+                            <div style="position: relative;">
+                                <i class="icon-lock" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                                <input type="password" id="input-current-password" placeholder="Enter current password" style="width: 100%; padding: 10px 38px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary);">
+                                <button type="button" class="btn-toggle-eye" data-target="input-current-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
+                                    <i class="icon-eye" style="font-size: 15px;"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- New Password -->
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <label for="input-new-password" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">New Password</label>
+                            <div style="position: relative;">
+                                <i class="icon-shield" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                                <input type="password" id="input-new-password" placeholder="Enter new password (min. 6 characters)" style="width: 100%; padding: 10px 38px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary);">
+                                <button type="button" class="btn-toggle-eye" data-target="input-new-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
+                                    <i class="icon-eye" style="font-size: 15px;"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Confirm New Password -->
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <label for="input-confirm-password" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Confirm New Password</label>
+                            <div style="position: relative;">
+                                <i class="icon-check" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                                <input type="password" id="input-confirm-password" placeholder="Repeat new password" style="width: 100%; padding: 10px 38px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary);">
+                                <button type="button" class="btn-toggle-eye" data-target="input-confirm-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
+                                    <i class="icon-eye" style="font-size: 15px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" id="btn-submit-password" class="btn-primary-action" style="padding: 11px 18px; border-radius: 10px; border: none; background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(15,50,96,0.25);">
+                    <i class="icon-lock" style="font-size: 15px;"></i>
+                    <span>Update Password</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Secondary Settings Grid -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 32px; align-items: start;">
         
         <div style="display: flex; flex-direction: column; gap: 32px;">
@@ -21,10 +161,10 @@
                         <input type="checkbox" id="set-mfa" style="width: 36px; height: 20px; accent-color: var(--primary-color); cursor: pointer;">
                     </label>
                     
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
+                    <div id="btn-quick-change-pw" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border-color); cursor: pointer;">
                         <div>
                             <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">Change Password</div>
-                            <div style="font-size: 12px; color: var(--text-secondary);">Last changed 45 days ago.</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">Direct access to password manager above.</div>
                         </div>
                         <i class="icon-chevron-right" style="color: var(--text-secondary);"></i>
                     </div>
@@ -85,6 +225,10 @@
                 </div>
                 <div style="padding-top: 14px; display: flex; flex-direction: column; gap: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 12px; color: var(--text-secondary);">Username:</span>
+                        <span id="settings-account-username" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">superadmin</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 12px; color: var(--text-secondary);">Access Scope:</span>
                         <span id="settings-access-scope" style="font-size: 12px; font-weight: 700; color: var(--primary-color);">Full Platform Management</span>
                     </div>
@@ -120,3 +264,36 @@
         
     </div>
 </div>
+
+<style>
+    .account-select-tab {
+        padding: 8px 16px;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+    .account-select-tab.active {
+        background: var(--primary-color);
+        color: white;
+        box-shadow: 0 2px 8px rgba(15, 50, 96, 0.2);
+    }
+    .btn-primary-action:hover {
+        opacity: 0.92;
+        transform: translateY(-1px);
+    }
+    .btn-primary-action:active {
+        transform: translateY(0);
+    }
+    .btn-toggle-eye:hover {
+        color: var(--text-primary) !important;
+    }
+</style>

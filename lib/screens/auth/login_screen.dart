@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../main_layout.dart';
+import '../admin/admin_main_layout.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -359,17 +360,29 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text.trim(),
         );
         if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const MainLayout()),
-          (route) => false,
-        );
+
+        final isUserAdmin = await _authService.isCurrentUserAdmin();
+        if (!mounted) return;
+
+        if (isUserAdmin) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminMainLayout()),
+            (route) => false,
+          );
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const MainLayout()),
+            (route) => false,
+          );
+        }
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Login failed: ${e.toString().replaceAll(RegExp(r'\[.*\]'), '').trim()}',
+              'Login failed: ${e.toString().replaceAll(RegExp(r'\[.*\]'), '').replaceAll('Exception: ', '').trim()}',
             ),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,

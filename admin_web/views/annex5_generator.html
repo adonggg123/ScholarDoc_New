@@ -265,7 +265,7 @@
             <!-- Left: Tab Buttons -->
             <div style="display: flex; align-items: center; flex-wrap: wrap;">
                 <button id="tab-btn-review" class="annex-tab-btn active">
-                    <i class="icon-alert-circle"></i> Needs Review Queue
+                    <i class="icon-alert-triangle"></i> Needs Review Queue
                     <span id="badge-review-count" class="annex-tab-badge">0</span>
                 </button>
                 <button id="tab-btn-form2" class="annex-tab-btn">
@@ -275,18 +275,6 @@
                 <button id="tab-btn-form3" class="annex-tab-btn">
                     <i class="icon-file-text"></i> Annex 5 - Form 3 (Not Included Students)
                     <span id="badge-form3-count" class="annex-tab-badge">0</span>
-                </button>
-            </div>
-
-            <!-- Right: Upper Table Two Auto-Fill Buttons -->
-            <div style="display: flex; gap: 10px; align-items: center; padding: 8px 16px; flex-wrap: wrap;">
-                <button id="btn-export-form2-top"
-                    style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
-                    <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
-                </button>
-                <button id="btn-export-form3-top"
-                    style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
-                    <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
                 </button>
             </div>
         </div>
@@ -343,6 +331,10 @@
                         <i class="icon-coins" style="font-size: 14px;"></i> <span id="stat-form2-amount">₱0.00 Total
                             Billing</span>
                     </div>
+                    <button id="btn-export-form2-top"
+                        style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
+                    </button>
                 </div>
             </div>
 
@@ -397,6 +389,10 @@
                         <i class="icon-user-x" style="font-size: 14px;"></i> <span id="stat-form3-count">0 Not Included
                             Grantees</span>
                     </div>
+                    <button id="btn-export-form3-top"
+                        style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
+                    </button>
                 </div>
             </div>
 

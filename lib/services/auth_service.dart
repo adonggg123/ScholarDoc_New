@@ -12,7 +12,9 @@ class AuthService {
 
   // Helper to generate a unique email based on student ID (for Supabase Auth)
   String _getAuthEmail(String studentId) {
-    return '${studentId.trim().replaceAll(' ', '_')}@scholardoc.com';
+    final clean = studentId.trim();
+    if (clean.contains('@')) return clean;
+    return '${clean.replaceAll(' ', '_')}@scholardoc.com';
   }
 
   // Sign up student
@@ -125,7 +127,28 @@ class AuthService {
   }) async {
     final String trimmedId = studentId.trim();
     final String trimmedPassword = password.trim();
-    final String authEmail = _getAuthEmail(trimmedId);
+    String authEmail = _getAuthEmail(trimmedId);
+
+    // Resolve admin emails if input is admin / superadmin or matches custom admin username
+    if (!trimmedId.contains('@')) {
+      final cleanLower = trimmedId.toLowerCase();
+      if (cleanLower == 'superadmin') {
+        authEmail = 'superadmin@scholardoc.com';
+      } else if (cleanLower == 'admin') {
+        authEmail = 'admin@scholardoc.com';
+      } else {
+        try {
+          final adminRes = await _supabase
+              .from('admins')
+              .select('email')
+              .ilike('username', trimmedId)
+              .limit(1);
+          if (adminRes.isNotEmpty && adminRes.first['email'] != null) {
+            authEmail = adminRes.first['email'] as String;
+          }
+        } catch (_) {}
+      }
+    }
 
     AuthResponse? authResponse;
 
@@ -163,16 +186,40 @@ class AuthService {
       }
     }
 
-    // --- Step 2: Fallback — look up student by ID in Supabase and try all linked credentials ---
+    // --- Step 2: Fallback — look up student by ID/Email in Supabase and try all linked credentials ---
     if (authResponse == null) {
       debugPrint(
         'AuthService: Step 2 - Falling back to Supabase lookup for ID: $trimmedId',
       );
       try {
-        final query = await _supabase
+        final filterParts = <String>{
+          'student_no.eq.$trimmedId',
+          'studentId.eq.$trimmedId',
+        };
+        if (trimmedId.contains('@')) {
+          filterParts.add('email_address.eq.$trimmedId');
+          filterParts.add('email.eq.$trimmedId');
+        }
+        var query = await _supabase
             .from('student_grantees')
             .select()
-            .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+            .or(filterParts.join(','));
+
+        if (query.isEmpty) {
+          final schoolFilter = <String>{
+            'student_no.eq.$trimmedId',
+          };
+          if (trimmedId.contains('@')) {
+            schoolFilter.add('email_address.eq.$trimmedId');
+          }
+          final schoolQuery = await _supabase
+              .from('school_students')
+              .select()
+              .or(schoolFilter.join(','));
+          if (schoolQuery.isNotEmpty) {
+            query = schoolQuery;
+          }
+        }
 
         if (query.isEmpty) {
           debugPrint(
@@ -328,45 +375,207 @@ class AuthService {
       }
     }
 
-    // --- Step 3: Verify the user record exists in Supabase students collection ---
+    // --- Step 3: Verify the user record exists in Supabase students or admins collection ---
     if (authResponse.user != null) {
       final uid = authResponse.user!.id;
-      debugPrint('AuthService: Step 3 - Verifying record for UID: $uid');
+      final userEmail = (authResponse.user!.email ?? '').toLowerCase();
+      debugPrint('AuthService: Step 3 - Verifying record for UID: $uid ($userEmail)');
 
       try {
+        // 3a. Check if this account is an Administrator
+        final isEmailAdmin = userEmail.contains('superadmin') ||
+            userEmail.contains('admin@') ||
+            trimmedId.toLowerCase() == 'admin' ||
+            trimmedId.toLowerCase() == 'superadmin';
+
+        if (isEmailAdmin) {
+          try {
+            final adminRows = await _supabase
+                .from('admins')
+                .select()
+                .or('uid.eq.$uid,email.eq.$userEmail')
+                .limit(1);
+            if (adminRows.isNotEmpty || isEmailAdmin) {
+              final adminRole = adminRows.isNotEmpty ? (adminRows.first['role'] ?? 'Admin') : 'Admin';
+              final adminName = adminRows.isNotEmpty ? (adminRows.first['username'] ?? 'Admin') : 'Admin';
+              debugPrint('AuthService: Step 3 - Admin account confirmed ($adminRole)');
+              try {
+                await _auditService.logActivity(
+                  action: 'Logged into Mobile App as Administrator',
+                  userName: adminName,
+                  role: adminRole,
+                );
+              } catch (_) {}
+              return authResponse;
+            }
+          } catch (_) {
+            if (isEmailAdmin) return authResponse;
+          }
+        }
+
+        // Also check admins table by username or UID for custom admin usernames
+        try {
+          final adminCheck = await _supabase
+              .from('admins')
+              .select()
+              .or('uid.eq.$uid,email.eq.$userEmail,username.ilike.$trimmedId')
+              .limit(1);
+          if (adminCheck.isNotEmpty) {
+            final adminRole = adminCheck.first['role'] ?? 'Admin';
+            final adminName = adminCheck.first['username'] ?? 'Admin';
+            debugPrint('AuthService: Step 3 - Custom Admin account confirmed ($adminRole)');
+            try {
+              await _auditService.logActivity(
+                action: 'Logged into Mobile App as Administrator',
+                userName: adminName,
+                role: adminRole,
+              );
+            } catch (_) {}
+            return authResponse;
+          }
+        } catch (_) {}
+
+        // 3b. Verify student in student_grantees
         List<Map<String, dynamic>> doc = await _supabase
             .from('student_grantees')
             .select()
             .eq('uid', uid);
 
-        // Fallback: If UID doesn't match yet, find by Student ID and automatically link UID
+        // Fallback: If UID doesn't match yet, find by Student ID / email and automatically link UID
         if (doc.isEmpty) {
           debugPrint(
-            'AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup by student ID: $trimmedId',
+            'AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup...',
           );
+
+          final cleanNo = trimmedId.replaceAll(' ', '');
+          final emailPrefix = userEmail.contains('@') ? userEmail.split('@').first.replaceAll('_', '') : '';
+          final filterParts = <String>{
+            'student_no.eq.$trimmedId',
+            'studentId.eq.$trimmedId',
+            'email_address.eq.$trimmedId',
+            'email.eq.$trimmedId',
+          };
+          if (cleanNo.isNotEmpty) filterParts.add('student_no.eq.$cleanNo');
+          if (emailPrefix.isNotEmpty) filterParts.add('student_no.eq.$emailPrefix');
+          if (userEmail.isNotEmpty) {
+            filterParts.add('email_address.eq.$userEmail');
+            filterParts.add('email.eq.$userEmail');
+          }
+
           final fallback = await _supabase
               .from('student_grantees')
               .select()
-              .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+              .or(filterParts.join(','));
 
           if (fallback.isNotEmpty) {
             debugPrint(
-              'AuthService: Step 3 - Found student record! Automatically linking UID $uid',
+              'AuthService: Step 3 - Found student record in student_grantees! Linking UID $uid',
             );
-            await _supabase
-                .from('student_grantees')
-                .update({'uid': uid})
-                .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+            try {
+              await _supabase
+                  .from('student_grantees')
+                  .update({'uid': uid})
+                  .eq('id', fallback.first['id']);
+            } catch (upErr) {
+              debugPrint('AuthService: Notice linking UID: $upErr');
+            }
             doc = fallback;
           }
         }
 
+        // 3c. If still not in student_grantees, check school_students table (e.g. from School Student Records import)
         if (doc.isEmpty) {
-          debugPrint('AuthService: Step 3 FAILED - No document for UID: $uid');
-          await _supabase.auth.signOut();
-          throw Exception(
-            'Student record not found. Please contact your administrator.',
-          );
+          try {
+            final cleanNo = trimmedId.replaceAll(' ', '');
+            final emailPrefix = userEmail.contains('@') ? userEmail.split('@').first.replaceAll('_', '') : '';
+            final schoolFilterParts = <String>{
+              'student_no.eq.$trimmedId',
+              'email_address.eq.$trimmedId',
+            };
+            if (cleanNo.isNotEmpty) schoolFilterParts.add('student_no.eq.$cleanNo');
+            if (emailPrefix.isNotEmpty) schoolFilterParts.add('student_no.eq.$emailPrefix');
+            if (userEmail.isNotEmpty) schoolFilterParts.add('email_address.eq.$userEmail');
+
+            final schoolDoc = await _supabase
+                .from('school_students')
+                .select()
+                .or(schoolFilterParts.join(','))
+                .limit(1);
+
+            if (schoolDoc.isNotEmpty) {
+              final s = schoolDoc.first;
+              debugPrint('AuthService: Step 3 - Found student in school_students! Provisioning into student_grantees...');
+              final newGrantee = {
+                'uid': uid,
+                'student_no': s['student_no'],
+                'studentId': s['student_no'],
+                'full_name': s['full_name'],
+                'fullName': s['full_name'],
+                'program_name': s['program_name'],
+                'course': s['program_name'],
+                'year_level': s['year_level'],
+                'year': s['year_level'],
+                'date_of_birth': s['date_of_birth'],
+                'birthdate': s['date_of_birth'],
+                'gender': s['gender'],
+                'civil_status': s['civil_status'],
+                'religion': s['religion'],
+                'mobile_number': s['mobile_number'],
+                'contactNumber': s['mobile_number'],
+                'email_address': s['email_address'],
+                'email': s['email_address'],
+                'status': 'Approved',
+                'scholarship_name': 'CHED TES',
+                'role': 'student',
+              };
+              final inserted = await _supabase.from('student_grantees').insert(newGrantee).select();
+              if (inserted.isNotEmpty) {
+                doc = List<Map<String, dynamic>>.from(inserted);
+              } else {
+                doc = [newGrantee];
+              }
+            }
+          } catch (schoolErr) {
+            debugPrint('AuthService: Step 3 - school_students check error: $schoolErr');
+          }
+        }
+
+        if (doc.isEmpty) {
+          debugPrint('AuthService: Step 3 - Auto-provisioning student profile for UID: $uid ($userEmail)');
+          final extractedId = userEmail.contains('@')
+              ? userEmail.split('@').first.replaceAll('_', ' ').trim()
+              : trimmedId;
+          final fallbackStudent = {
+            'uid': uid,
+            'student_no': extractedId,
+            'studentId': extractedId,
+            'full_name': authResponse.user?.userMetadata?['fullName'] ??
+                authResponse.user?.userMetadata?['full_name'] ??
+                extractedId,
+            'fullName': authResponse.user?.userMetadata?['fullName'] ??
+                authResponse.user?.userMetadata?['full_name'] ??
+                extractedId,
+            'program_name': 'CHED TES Scholar',
+            'course': 'CHED TES Scholar',
+            'year_level': '1',
+            'year': '1',
+            'email_address': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
+            'email': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
+            'status': 'Approved',
+            'scholarship_name': 'CHED TES',
+            'role': 'student',
+          };
+          try {
+            final inserted = await _supabase.from('student_grantees').insert(fallbackStudent).select();
+            if (inserted.isNotEmpty) {
+              doc = List<Map<String, dynamic>>.from(inserted);
+            } else {
+              doc = [fallbackStudent];
+            }
+          } catch (insertErr) {
+            debugPrint('AuthService: Auto-provision profile notice: $insertErr');
+            doc = [fallbackStudent];
+          }
         }
 
         // If multiple student records exist (e.g. legacy/duplicate), prioritize the active/complete one
@@ -388,12 +597,12 @@ class AuthService {
 
         final studentData = doc.first;
         // Cache uid on record if missing or mismatched
-        if (studentData['uid'] == null || studentData['uid'] != uid) {
+        if (studentData['id'] != null && (studentData['uid'] == null || studentData['uid'] != uid)) {
           try {
             await _supabase
                 .from('student_grantees')
                 .update({'uid': uid})
-                .or('student_no.eq.$trimmedId,studentId.eq.$trimmedId');
+                .eq('id', studentData['id']);
           } catch (_) {}
         }
 
@@ -401,16 +610,20 @@ class AuthService {
             studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
         debugPrint('AuthService: Step 3 SUCCESS - Found student: $displayName');
 
-        // Log Activity
-        await _auditService.logActivity(
-          action: 'Logged in using Student ID',
-          userName: displayName,
-          role: 'Student',
-          studentId: trimmedId,
-        );
+        // Log Activity safely
+        try {
+          await _auditService.logActivity(
+            action: 'Logged in using Student ID',
+            userName: displayName,
+            role: 'Student',
+            studentId: trimmedId,
+          );
+        } catch (_) {}
 
-        // Initialize Presence tracking
-        await _presenceService.setUserPresence(uid);
+        // Initialize Presence tracking safely
+        try {
+          await _presenceService.setUserPresence(uid);
+        } catch (_) {}
 
         // Send Welcome notification on first login
         try {
@@ -454,13 +667,27 @@ class AuthService {
     required String password,
   }) async {
     final String clean = username.trim().toLowerCase();
-    final String adminEmail = clean.contains('@')
+    String adminEmail = clean.contains('@')
         ? clean
         : (clean == 'superadmin'
               ? 'superadmin@scholardoc.com'
               : (clean == 'admin'
                     ? 'admin@scholardoc.com'
                     : '$clean@scholardoc.com'));
+
+    // Check if username exists in admins table to resolve custom admin usernames
+    if (!clean.contains('@') && clean != 'superadmin' && clean != 'admin') {
+      try {
+        final res = await _supabase
+            .from('admins')
+            .select('email')
+            .ilike('username', clean)
+            .limit(1);
+        if (res.isNotEmpty && res.first['email'] != null) {
+          adminEmail = res.first['email'] as String;
+        }
+      } catch (_) {}
+    }
 
     final bool isSuper = adminEmail.contains('superadmin');
     final String defaultRole = isSuper ? 'Super Admin' : 'Admin';
@@ -567,6 +794,24 @@ class AuthService {
       debugPrint('AuthService: Unexpected Admin Login error: $e');
       if (e.toString().contains('Exception:')) rethrow;
       throw Exception('Login failed. Please try again later.');
+    }
+  }
+
+  // Check if current authenticated user is an Administrator
+  Future<bool> isCurrentUserAdmin() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return false;
+    final email = (user.email ?? '').toLowerCase();
+    if (email.contains('superadmin') || email.contains('admin@')) return true;
+    try {
+      final doc = await _supabase
+          .from('admins')
+          .select('id, role')
+          .or('uid.eq.${user.id},email.eq.$email')
+          .limit(1);
+      return doc.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
