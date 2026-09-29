@@ -341,6 +341,7 @@ submitBtn?.addEventListener('click', async () => {
         const updates = {
             saNumber: saInput?.value?.trim() || '',
             submittedAt: new Date().toISOString(),
+            status: 'Submitted',
             documents: {
                 ...(profile?.documents || {}),
                 idFrontUrl: frontUrl,
@@ -350,10 +351,15 @@ submitBtn?.addEventListener('click', async () => {
                 signatureUrl: signatureDataUrl,
                 lastSubmittedAt: new Date().toISOString(),
                 lastSubmittedVia: 'web',
+                saVerificationStatus: 'Pending',
+                idValidationStatus: 'Pending'
             },
         };
 
         await sb.from('students').update(updates).eq('uid', uid);
+        try {
+            await sb.from('student_grantees').update(updates).eq('uid', uid);
+        } catch (_) {}
 
         // 6. Log activity
         await sb.from('audit_logs').insert({

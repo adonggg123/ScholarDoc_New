@@ -63,9 +63,17 @@ function applyFilters() {
         let matchStatus = status === 'All';
         if (!matchStatus) {
             const stLower = status.toLowerCase();
-            matchStatus = currentStatus === stLower ||
-                (stLower === 'verified' && (currentStatus === 'verified' || currentStatus === 'approved')) ||
-                (stLower === 'approved' && (currentStatus === 'verified' || currentStatus === 'approved'));
+            if (stLower === 'no submission yet') {
+                matchStatus = currentStatus === 'no submission yet' || currentStatus === 'pending' || !currentStatus;
+            } else if (stLower === 'submitted') {
+                matchStatus = currentStatus === 'submitted' || currentStatus === 'under review' || currentStatus === 'pending validation' || currentStatus === 'pending review' || currentStatus === 'late submission';
+            } else if (stLower === 'approved' || stLower === 'verified') {
+                matchStatus = currentStatus === 'verified' || currentStatus === 'approved';
+            } else if (stLower === 'rejected') {
+                matchStatus = currentStatus === 'rejected';
+            } else {
+                matchStatus = currentStatus === stLower;
+            }
         }
 
         const currentCourse = prog;
@@ -117,19 +125,35 @@ function applyFilters() {
 }
 
 function getStatusBadge(status) {
-    status = status || 'Pending';
-    let color = '#F57F17';
-    let bg = 'rgba(251, 192, 45, 0.1)';
+    status = status || 'No Submission Yet';
+    const sLower = status.toLowerCase();
+    let color = '#64748B'; // slate
+    let bg = 'rgba(100, 116, 139, 0.1)';
+    let border = 'rgba(100, 116, 139, 0.3)';
 
-    if (status.toLowerCase() === 'approved' || status.toLowerCase() === 'verified') {
+    if (sLower === 'approved' || sLower === 'verified') {
         color = 'var(--success, #43A047)';
         bg = 'rgba(67, 160, 71, 0.1)';
-    } else if (status.toLowerCase() === 'rejected') {
+        border = 'rgba(67, 160, 71, 0.3)';
+    } else if (sLower === 'rejected') {
         color = 'var(--error, #EF4444)';
         bg = 'rgba(239, 68, 68, 0.1)';
+        border = 'rgba(239, 68, 68, 0.3)';
+    } else if (sLower === 'submitted' || sLower === 'under review' || sLower === 'pending validation' || sLower === 'pending review') {
+        color = '#2563EB'; // vibrant blue
+        bg = 'rgba(37, 99, 235, 0.1)';
+        border = 'rgba(37, 99, 235, 0.3)';
+    } else if (sLower === 'late submission') {
+        color = '#EA580C'; // orange
+        bg = 'rgba(234, 88, 12, 0.1)';
+        border = 'rgba(234, 88, 12, 0.3)';
+    } else if (sLower === 'no submission yet' || sLower === 'pending' || sLower.includes('no submission')) {
+        color = '#64748B'; // neutral slate
+        bg = 'rgba(100, 116, 139, 0.1)';
+        border = 'rgba(100, 116, 139, 0.3)';
     }
 
-    return `<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; color: ${color}; background: ${bg}; border: 1px solid ${color}40;"><span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${color};"></span>${status}</span>`;
+    return `<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; color: ${color}; background: ${bg}; border: 1px solid ${border};"><span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${color};"></span>${status}</span>`;
 }
 
 function renderTable() {
@@ -645,9 +669,16 @@ function hideModal() {
 }
 
 window.approveStudent = async function (uid) {
-    if (!confirm('Are you sure you want to approve this student?')) return;
+    const student = allStudents.find(s => s.uid === uid);
+    const hasSubmitted = StudentSyncService.hasStudentSubmitted(student);
+    if (!hasSubmitted) {
+        if (!confirm('Notice: This grantee currently has "No Submission Yet" and has not uploaded any required documents.\n\nAre you sure you want to bypass requirements and manually approve this student?')) {
+            return;
+        }
+    } else if (!confirm('Are you sure you want to approve this student?')) {
+        return;
+    }
     try {
-        const student = allStudents.find(s => s.uid === uid);
         const currentDocs = student?.documents || {};
         const updatedDocs = {
             ...currentDocs,

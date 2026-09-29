@@ -14,44 +14,57 @@
         position: relative;
         overflow: hidden;
     }
+
     .import-drop-zone::before {
         content: '';
         position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         background: radial-gradient(circle at center, rgba(var(--primary-rgb), 0.08) 0%, transparent 70%);
         opacity: 0;
         transition: opacity 0.3s ease;
     }
+
     .import-drop-zone:hover {
         border-color: var(--primary-color);
         transform: translateY(-2px);
         box-shadow: 0 12px 24px -8px rgba(var(--primary-rgb), 0.15);
     }
+
     .import-drop-zone:hover::before {
         opacity: 1;
     }
+
     .import-drop-zone i {
         transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         position: relative;
         z-index: 1;
     }
+
     .import-drop-zone:hover i {
         transform: scale(1.15) translateY(-4px);
         color: var(--primary-color) !important;
         filter: drop-shadow(0 4px 6px rgba(var(--primary-rgb), 0.2));
     }
+
     .import-drop-zone p {
         position: relative;
         z-index: 1;
     }
-    
+
     .step-badge {
-        width: 32px; height: 32px; 
-        border-radius: 10px; 
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
         background: linear-gradient(135deg, var(--primary-color) 0%, #0a1e3f 100%);
-        color: white; 
-        display: flex; align-items: center; justify-content: center; 
-        font-weight: 800; font-size: 14px;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 14px;
         box-shadow: 0 4px 10px rgba(var(--primary-rgb), 0.25);
     }
 
@@ -69,6 +82,7 @@
         letter-spacing: 0.08em;
         border-bottom: 2px solid #f1f5f9;
     }
+
     .import-table td {
         padding: 14px 16px;
         border-bottom: 1px solid #f8fafc;
@@ -77,9 +91,11 @@
         font-weight: 500;
         vertical-align: middle;
     }
+
     .import-table tbody tr {
         transition: all 0.2s ease;
     }
+
     .import-table tbody tr:hover {
         background: #f8fafc;
         transform: scale(1.002);
@@ -94,11 +110,12 @@
         font-size: 13px;
         font-weight: 600;
         color: #334155;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
         cursor: pointer;
         outline: none;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
+
     .glass-filter:focus {
         border-color: var(--primary-color);
         box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
@@ -111,10 +128,12 @@
         box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.25);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
+
     .btn-gradient-save:hover {
         transform: translateY(-1px);
         box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.35);
     }
+
     .btn-gradient-save:active {
         transform: translateY(1px);
     }
@@ -123,16 +142,18 @@
         width: 100%;
         padding: 8px 12px;
         border: 1px solid transparent;
-        background: rgba(0,0,0,0.02);
+        background: rgba(0, 0, 0, 0.02);
         border-radius: 8px;
         font-family: inherit;
         font-size: 13px;
         font-weight: 500;
         transition: all 0.2s ease;
     }
+
     .input-clean:hover {
-        background: rgba(0,0,0,0.04);
+        background: rgba(0, 0, 0, 0.04);
     }
+
     .input-clean:focus {
         background: white;
         border-color: var(--primary-color);
@@ -144,13 +165,16 @@
         width: 8px;
         height: 8px;
     }
+
     .table-container::-webkit-scrollbar-track {
         background: transparent;
     }
+
     .table-container::-webkit-scrollbar-thumb {
         background: #cbd5e1;
         border-radius: 4px;
     }
+
     .table-container::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
     }
@@ -164,8 +188,9 @@
         border-radius: 16px;
         border: 1px solid var(--border-color);
         gap: 6px;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.03);
     }
+
     body.dark .source-segmented-switch {
         background: rgba(30, 41, 59, 0.7);
         border-color: rgba(255, 255, 255, 0.08);
@@ -187,10 +212,12 @@
         outline: none;
         user-select: none;
     }
+
     .source-switch-btn:hover:not(.active) {
         color: var(--text-primary);
         background: rgba(0, 0, 0, 0.04);
     }
+
     body.dark .source-switch-btn:hover:not(.active) {
         background: rgba(255, 255, 255, 0.05);
     }
@@ -211,10 +238,12 @@
         color: var(--text-secondary);
         transition: all 0.2s ease;
     }
+
     body.dark .source-switch-badge {
         background: rgba(255, 255, 255, 0.1);
         color: #93c5fd;
     }
+
     .source-switch-btn.active .source-switch-badge {
         background: rgba(255, 255, 255, 0.25);
         color: white;
@@ -225,51 +254,64 @@
     <!-- Header -->
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
         <div>
-            <h2 id="view-main-title" style="margin: 0 0 4px 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: #0f172a;">New Grantees Masterlist Import</h2>
-            <p id="view-main-desc" style="margin: 0; color: #64748b; font-size: 14px; font-weight: 500;">Upload new scholarship grantee lists (PDF, DOCX, XLSX, CSV) to register them in the masterlist table for Admin verification and Annex 5 TES generation.</p>
+            <h2 id="view-main-title"
+                style="margin: 0 0 4px 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: #0f172a;">
+                New Grantees Masterlist Import</h2>
+            <p id="view-main-desc" style="margin: 0; color: #64748b; font-size: 14px; font-weight: 500;">Upload new
+                scholarship grantee lists (PDF, DOCX, XLSX, CSV) to register them in the masterlist table for Admin
+                verification and Annex 5 TES generation.</p>
         </div>
         <div>
-            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(15,50,96,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: var(--primary-color);">
+            <span
+                style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(15,50,96,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: var(--primary-color);">
                 <i class="icon-shield-check"></i> Super Admin Portal
             </span>
         </div>
     </div>
 
     <!-- Summary Metrics Card -->
-    <div id="import-summary-card" class="card hidden" style="border-radius: 20px; padding: 20px 24px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);">
+    <div id="import-summary-card" class="card hidden"
+        style="border-radius: 20px; padding: 20px 24px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                <div
+                    style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
                     <i class="icon-bar-chart-2" style="font-size: 20px; color: #38bdf8;"></i>
                 </div>
                 <div>
                     <h4 style="margin: 0; font-size: 16px; font-weight: 800; color: white;">Import Summary</h4>
-                    <p id="summary-subtitle" style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Extraction results & duplicate filter status</p>
+                    <p id="summary-subtitle" style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Extraction
+                        results & duplicate filter status</p>
                 </div>
             </div>
             <div style="display: flex; gap: 24px; flex-wrap: wrap;">
                 <div style="text-align: center;">
                     <div id="summary-extracted" style="font-size: 20px; font-weight: 800; color: #38bdf8;">0</div>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Total Extracted</div>
+                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Total
+                        Extracted</div>
                 </div>
                 <div style="text-align: center;">
                     <div id="summary-imported" style="font-size: 20px; font-weight: 800; color: #4ade80;">0</div>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Auto-Saved to DB</div>
+                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
+                        Auto-Saved to DB</div>
                 </div>
                 <div style="text-align: center;">
                     <div id="summary-skipped" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0</div>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Duplicates (Skipped)</div>
+                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
+                        Duplicates (Skipped)</div>
                 </div>
                 <div style="text-align: center;">
                     <div id="summary-errors" style="font-size: 20px; font-weight: 800; color: #f87171;">0</div>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Errors</div>
+                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Errors
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Masterlist & School Student Source Toggle Switch -->
-    <div class="source-toggle-bar" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 0 0 2px 0;">
+    <div class="source-toggle-bar"
+        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 0 0 2px 0;">
         <div class="source-segmented-switch">
             <button id="toggle-source-grantees" type="button" class="source-switch-btn active">
                 <i class="icon-file-text" style="font-size: 15px;"></i>
@@ -284,9 +326,11 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px;">
+            <span
+                style="font-size: 12px; font-weight: 600; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px;">
                 <i class="icon-sparkles" style="color: var(--primary-color); font-size: 14px;"></i>
-                <span>Viewing: <strong id="source-active-label" style="color: var(--primary-color);">New Grantees Masterlist</strong></span>
+                <span>Viewing: <strong id="source-active-label" style="color: var(--primary-color);">New Grantees
+                        Masterlist</strong></span>
             </span>
         </div>
     </div>
@@ -294,63 +338,85 @@
     <!-- Step 1 & Step 2: Upload & Extracted Masterlist Table -->
     <div id="section-new-grantees" style="display: flex; gap: 24px; flex-wrap: wrap;">
         <!-- Upload Card -->
-        <div class="card" style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 20px; align-self: flex-start; padding: 28px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color);">
+        <div class="card"
+            style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 20px; align-self: flex-start; padding: 28px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color);">
             <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 2px;">
                 <div class="step-badge">1</div>
-                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">Upload New Grantees</h3>
+                <h3
+                    style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                    Upload New Grantees</h3>
             </div>
-            
+
             <div id="drop-zone" class="import-drop-zone">
                 <i class="icon-file-up" style="font-size: 40px; color: #94a3b8; margin-bottom: 12px;"></i>
-                <p style="margin: 0; font-weight: 700; font-size: 14px; color: var(--text-primary);">Drag & drop new grantee list here</p>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;">or click to browse (PDF, DOCX, XLSX, CSV)</p>
+                <p style="margin: 0; font-weight: 700; font-size: 14px; color: var(--text-primary);">Drag & drop new
+                    grantee list here</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;">or click
+                    to browse (PDF, DOCX, XLSX, CSV)</p>
                 <input type="file" id="file-input" accept=".pdf, .doc, .docx, .xlsx, .xls, .csv" style="display: none;">
             </div>
-            
-            <div id="file-info-container" class="hidden" style="position: relative; border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); background: var(--surface-color); display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color); display: flex; align-items: center; justify-content: center;">
+
+            <div id="file-info-container" class="hidden"
+                style="position: relative; border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); background: var(--surface-color); display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div
+                    style="width: 42px; height: 42px; border-radius: 10px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color); display: flex; align-items: center; justify-content: center;">
                     <i class="icon-file-text" style="font-size: 20px;"></i>
                 </div>
                 <div style="flex: 1; overflow: hidden;">
-                    <p id="file-name-display" style="margin: 0; font-weight: 700; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
-                    <p id="file-size-display" style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;"></p>
+                    <p id="file-name-display"
+                        style="margin: 0; font-weight: 700; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    </p>
+                    <p id="file-size-display"
+                        style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary); font-weight: 500;"></p>
                 </div>
-                <button id="btn-clear-file" class="icon-btn" style="color: #94a3b8; background: rgba(0,0,0,0.05); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
+                <button id="btn-clear-file" class="icon-btn"
+                    style="color: #94a3b8; background: rgba(0,0,0,0.05); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
                     <i class="icon-x" style="font-size: 13px;"></i>
                 </button>
             </div>
 
-            <button class="btn btn-primary" id="btn-extract" disabled style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; font-size: 13px; border-radius: 12px; display: none;">
+            <button class="btn btn-primary" id="btn-extract" disabled
+                style="width: 100%; justify-content: center; padding: 12px; font-weight: 700; font-size: 13px; border-radius: 12px; display: none;">
                 <i class="icon-settings" style="font-size: 16px;"></i> Extract Grantees Data
             </button>
             <div id="ocr-progress-container" class="hidden" style="margin-top: 2px;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">
+                <div
+                    style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">
                     <span id="ocr-status-text">Processing Document...</span>
                     <span id="ocr-progress-text"></span>
                 </div>
                 <div style="height: 6px; background: rgba(0,0,0,0.05); border-radius: 3px; overflow: hidden;">
-                    <div id="ocr-progress-bar" style="height: 100%; width: 100%; background: var(--primary-color); transition: width 0.2s; animation: pulse 1.5s infinite; border-radius: 3px;"></div>
+                    <div id="ocr-progress-bar"
+                        style="height: 100%; width: 100%; background: var(--primary-color); transition: width 0.2s; animation: pulse 1.5s infinite; border-radius: 3px;">
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Extraction Results Card -->
-        <div class="card table-container" style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 0; padding: 0; align-self: flex-start; max-height: 480px; min-height: 420px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); overflow: hidden;">
-            <div style="padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-color); background: var(--surface-color); z-index: 11;">
+        <div class="card table-container"
+            style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 0; padding: 0; align-self: flex-start; max-height: 480px; min-height: 420px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); overflow: hidden;">
+            <div
+                style="padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-color); background: var(--surface-color); z-index: 11;">
                 <div style="display: flex; align-items: center; gap: 16px;">
                     <div class="step-badge">2</div>
-                    <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">New Grantees Masterlist</h3>
+                    <h3
+                        style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                        New Grantees Masterlist</h3>
                     <select id="filter-batch" class="hidden glass-filter">
                         <option value="All Batches">All Batches</option>
                     </select>
                 </div>
-                <button id="btn-clear-masterlist" class="hidden" style="display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer; color: #ef4444; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.2s;" title="Permanently delete all records from this masterlist">
+                <button id="btn-clear-masterlist" class="hidden"
+                    style="display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer; color: #ef4444; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.2s;"
+                    title="Permanently delete all records from this masterlist">
                     <i class="icon-trash-2" style="font-size: 14px;"></i> Clear Masterlist
                 </button>
             </div>
-            
+
             <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: var(--surface-color);">
-                <table class="import-table" style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 650px; text-align: left;">
+                <table class="import-table"
+                    style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 650px; text-align: left;">
                     <thead>
                         <tr>
                             <th>Last Name</th>
@@ -358,19 +424,23 @@
                             <th>Middle Name</th>
                             <th>Course</th>
                             <th>Batch</th>
-                            <th>Status</th>
                             <th style="text-align: right;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="extracted-table-body">
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
+                            <td colspan="6"
+                                style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                                     <div style="position: relative;">
-                                        <i class="icon-file-search" style="font-size: 48px; color: #cbd5e1; opacity: 0.5;"></i>
-                                        <i class="icon-sparkles" style="font-size: 20px; color: var(--primary-color); position: absolute; top: -6px; right: -6px;"></i>
+                                        <i class="icon-file-search"
+                                            style="font-size: 48px; color: #cbd5e1; opacity: 0.5;"></i>
+                                        <i class="icon-sparkles"
+                                            style="font-size: 20px; color: var(--primary-color); position: absolute; top: -6px; right: -6px;"></i>
                                     </div>
-                                    <span style="font-size: 14px; max-width: 280px; line-height: 1.5; color: var(--text-secondary);">Upload a document to automatically extract and save new grantees.</span>
+                                    <span
+                                        style="font-size: 14px; max-width: 280px; line-height: 1.5; color: var(--text-secondary);">Upload
+                                        a document to automatically extract and save new grantees.</span>
                                 </div>
                             </td>
                         </tr>
@@ -383,19 +453,21 @@
     <!-- School Student Records (Source: School Registrar) -->
     <div class="card" id="card-source-school"
         style="padding: 24px; border-radius: 20px; border-top: 4px solid #1E88E5; display: none; flex-direction: column; gap: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); transition: all 0.3s ease; margin-top: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+        <div
+            style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
             <div>
                 <span
                     style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(30,136,229,0.1); color: #1E88E5;">
                     <i class="icon-school" style="font-size: 12px;"></i> SOURCE 1 • SCHOOL REGISTRAR
                 </span>
-                <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">School Student Records</h3>
-                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Upload official school Excel (.xlsx, .xls) or CSV (.csv) file or use institutional records.</p>
+                <h3 style="margin: 8px 0 2px; font-size: 17px; font-weight: 800; color: var(--text-primary);">School
+                    Student Records</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Upload official school Excel
+                    (.xlsx, .xls) or CSV (.csv) file or use institutional records.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="text-align: right;">
-                    <span id="school-students-count"
-                        style="font-size: 20px; font-weight: 800; color: #1E88E5;">0</span>
+                    <span id="school-students-count" style="font-size: 20px; font-weight: 800; color: #1E88E5;">0</span>
                     <div style="font-size: 10px; color: var(--text-secondary); font-weight: 600;">School Records</div>
                 </div>
                 <button id="btn-download-school-template" class="icon-btn" title="Download Excel Template"
@@ -419,8 +491,11 @@
                 style="display: flex; align-items: center; justify-content: center; gap: 10px;">
                 <i class="icon-upload-cloud" style="font-size: 18px; color: #1E88E5;"></i>
                 <div style="text-align: left;">
-                    <span style="font-size: 12px; font-weight: 700; color: #1E88E5;">Upload School Student Records (Excel / CSV)</span>
-                    <span style="display: inline-block; margin-left: 6px; font-size: 11px; color: var(--text-secondary);">(Click to browse .xlsx, .xls, .csv)</span>
+                    <span style="font-size: 12px; font-weight: 700; color: #1E88E5;">Upload School Student Records
+                        (Excel / CSV)</span>
+                    <span
+                        style="display: inline-block; margin-left: 6px; font-size: 11px; color: var(--text-secondary);">(Click
+                        to browse .xlsx, .xls, .csv)</span>
                 </div>
             </div>
             <div id="school-file-info"
@@ -434,7 +509,8 @@
                     </div>
                 </div>
                 <button id="btn-clear-school-file"
-                    style="background: rgba(244,67,54,0.1); border: none; color: #F44336; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">Clear File</button>
+                    style="background: rgba(244,67,54,0.1); border: none; color: #F44336; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">Clear
+                    File</button>
             </div>
         </div>
 
@@ -457,21 +533,38 @@
                             <input type="checkbox" id="school-select-all"
                                 style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
                         </th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Student No.</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Full Name</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Program Name</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">Year Level</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Date of Birth</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">Age</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Gender</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Civil Status</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Religion</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mobile Number</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Email Address</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s Full Name</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s Occupation</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s Full Name</th>
-                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s Occupation</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Student
+                            No.</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Full
+                            Name</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Program
+                            Name</th>
+                        <th
+                            style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">
+                            Year Level</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Date of
+                            Birth</th>
+                        <th
+                            style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap; text-align: center;">
+                            Age</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Gender
+                        </th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Civil
+                            Status</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Religion
+                        </th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mobile
+                            Number</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Email
+                            Address</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s
+                            Full Name</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Father’s
+                            Occupation</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s
+                            Full Name</th>
+                        <th style="padding: 10px 14px; font-weight: 700; font-size: 12px; white-space: nowrap;">Mother’s
+                            Occupation</th>
                     </tr>
                 </thead>
                 <tbody id="tbody-school-students">
@@ -485,7 +578,8 @@
     </div>
 
     <!-- Step 3: Annex 5 TES Verification & Dual Form Tables Section -->
-    <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color); border-radius: 20px; margin-top: 10px;">
+    <div class="card"
+        style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--border-color); border-radius: 20px; margin-top: 10px;">
         <!-- Tab Switcher & Upper Table Action Bar -->
         <div class="annex-tabs-header">
             <!-- Left: Tab Buttons -->
@@ -504,26 +598,37 @@
         <!-- Tab 1: Annex 5 - Form 2 Content -->
         <div id="sa-tab-pane-form2" style="display: block; padding: 20px 24px;">
             <!-- Form 2 Control Bar -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
-                    <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
-                    <input type="text" id="sa-search-form2" placeholder="Search Form 2 verified scholars by name, ID, or SA..." style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                <div
+                    style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 15px;"></i>
+                    <input type="text" id="sa-search-form2"
+                        placeholder="Search Form 2 verified scholars by name, ID, or SA..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16,185,129,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: #10b981;">
-                        <i class="icon-users" style="font-size: 14px;"></i> <span id="sa-stat-form2-count">0 Enrolled Grantees</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16,185,129,0.08); border-radius: 20px; font-size: 12px; font-weight: 700; color: #10b981;">
+                        <i class="icon-users" style="font-size: 14px;"></i> <span id="sa-stat-form2-count">0 Enrolled
+                            Grantees</span>
                     </div>
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
-                        <i class="icon-coins" style="font-size: 14px;"></i> <span id="sa-stat-form2-amount">₱0.00 Total Billing</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(76,175,80,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #2E7D32;">
+                        <i class="icon-coins" style="font-size: 14px;"></i> <span id="sa-stat-form2-amount">₱0.00 Total
+                            Billing</span>
                     </div>
-                    <button id="sa-btn-export-form2-top" style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
-                        <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)
+                    <button id="sa-btn-export-form2-top"
+                        style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Export Form 2 (.xlsx)
                     </button>
                 </div>
             </div>
 
             <!-- Form 2 Table -->
-            <div class="annex-table-wrap" style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
+            <div class="annex-table-wrap"
+                style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
                 <table class="annex-table">
                     <thead>
                         <tr>
@@ -546,7 +651,10 @@
                         </tr>
                     </thead>
                     <tbody id="sa-tbody-form2">
-                        <tr><td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading verified Form 2 records...</td></tr>
+                        <tr>
+                            <td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                                Loading verified Form 2 records...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -555,23 +663,32 @@
         <!-- Tab 2: Annex 5 - Form 3 Content -->
         <div id="sa-tab-pane-form3" style="display: none; padding: 20px 24px;">
             <!-- Form 3 Control Bar -->
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
-                    <i class="icon-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #FF8F00; font-size: 15px;"></i>
-                    <input type="text" id="sa-search-form3" placeholder="Search Form 3 applicants by name, ID, reason..." style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                <div
+                    style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #FF8F00; font-size: 15px;"></i>
+                    <input type="text" id="sa-search-form3"
+                        placeholder="Search Form 3 applicants by name, ID, reason..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
-                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not Included Grantees</span>
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
+                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not
+                            Included Grantees</span>
                     </div>
-                    <button id="sa-btn-export-form3-top" style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
-                        <i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)
+                    <button id="sa-btn-export-form3-top"
+                        style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-text" style="font-size: 15px;"></i> Export Form 3 (.xlsx)
                     </button>
                 </div>
             </div>
 
             <!-- Form 3 Table -->
-            <div class="annex-table-wrap" style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
+            <div class="annex-table-wrap"
+                style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
                 <table class="annex-table">
                     <thead>
                         <tr>
@@ -590,7 +707,10 @@
                         </tr>
                     </thead>
                     <tbody id="sa-tbody-form3">
-                        <tr><td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading Form 3 records...</td></tr>
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                                Loading Form 3 records...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -615,12 +735,15 @@
             <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee Name</label>
-                    <div id="sa-modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee
+                        Name</label>
+                    <div id="sa-modal-grantee-name"
+                        style="font-size: 15px; font-weight: 700; color: var(--text-primary);">--</div>
                 </div>
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize Target Form</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize
+                        Target Form</label>
                     <select id="sa-modal-target-form"
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
@@ -629,7 +752,8 @@
                 </div>
                 <div id="sa-modal-form3-reason-group">
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form 3 Status Reason</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form
+                        3 Status Reason</label>
                     <select id="sa-modal-form3-reason"
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                         <option value="Not enrolled">Not enrolled in current term</option>
@@ -642,7 +766,8 @@
                 </div>
                 <div>
                     <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative Remarks</label>
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative
+                        Remarks</label>
                     <input type="text" id="sa-modal-remarks" placeholder="Optional notes for CHED billing sheet..."
                         style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
                 </div>
@@ -650,7 +775,8 @@
                     <button id="sa-btn-cancel-resolution"
                         style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
                     <button id="sa-btn-confirm-resolution"
-                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save & Categorize</button>
+                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save
+                        & Categorize</button>
                 </div>
             </div>
         </div>

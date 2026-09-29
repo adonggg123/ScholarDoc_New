@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/academic_term_service.dart';
 import 'package:intl/intl.dart';
 
 class SubmissionHistoryScreen extends StatefulWidget {
@@ -69,6 +70,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     final fileName = item['fileName']!;
     final date = item['date']!;
     final status = item['status']!;
+    final term = item['term'];
 
     Color statusColor = const Color(0xFFF59E0B);
     IconData statusIcon = LucideIcons.hourglass;
@@ -110,13 +112,37 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  type,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Color(0xFF0F3260),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        type,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF0F3260),
+                        ),
+                      ),
+                    ),
+                    if (term != null && term.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          term,
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -295,12 +321,25 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           _profileData!['idFrontUrl'] != null ||
           docs['id_front_url'] != null;
 
+      // Academic Term detection for submission items
+      final String submissionTerm = (() {
+        final ay = _profileData!['academicYear'] ??
+            _profileData!['academic_year'] ??
+            docs['academicYear'] ??
+            docs['academic_year'];
+        final sem = _profileData!['semester'] ?? docs['semester'];
+        if (ay != null && sem != null) return 'AY $ay • $sem';
+        if (ay != null) return 'AY $ay';
+        return 'AY 2024-2025 • 1st Semester';
+      })();
+
       if (hasIdFiles || isIdVerified) {
         submissions.add({
           'type': 'ID Capture & Digital Signature',
           'fileName': (pdfName ?? 'ID_Submission_Document.pdf').toString(),
           'date': submittedAt,
           'status': idItemStatus,
+          'term': submissionTerm,
         });
       }
 
@@ -332,9 +371,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           'fileName': (atmCardFileName ?? (saNumber != null ? 'SA: $saNumber' : '$proofType File')).toString(),
           'date': submittedAt,
           'status': saItemStatus,
+          'term': submissionTerm,
         });
       }
     }
+
+    final currentTerm = AcademicTermService.currentTerm;
+    final studentAy = (_profileData?['academicYear'] ?? _profileData?['academic_year'] ?? '').toString();
+    final studentSem = (_profileData?['semester'] ?? '').toString();
+    final bool hasActiveTermSubmission = studentAy.isNotEmpty &&
+        AcademicTermService.isYearMatching(studentAy, currentTerm.academicYear) &&
+        (studentSem.isEmpty || AcademicTermService.isSemesterMatching(studentSem, currentTerm.semester));
 
     return Scaffold(
       appBar: AppBar(
@@ -378,6 +425,102 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Active Period Reset Notice Banner
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.surfaceC,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: hasActiveTermSubmission
+                                  ? const Color(0xFF10B981).withOpacity(0.3)
+                                  : const Color(0xFFF59E0B).withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                            boxShadow: AppTheme.softShadow,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: (hasActiveTermSubmission
+                                          ? const Color(0xFF10B981)
+                                          : const Color(0xFFF59E0B))
+                                      .withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  hasActiveTermSubmission ? LucideIcons.checkCircle : LucideIcons.clock,
+                                  color: hasActiveTermSubmission
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFF59E0B),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'ACTIVE SCHOOL PERIOD',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: context.textSec,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF10B981).withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'CURRENT',
+                                            style: TextStyle(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.w900,
+                                              color: Color(0xFF10B981),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      currentTerm.displayString,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: context.textPri,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      hasActiveTermSubmission
+                                          ? 'Submitted and recorded for current term.'
+                                          : 'Progress resets per semester. Awaiting upload for this period.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: hasActiveTermSubmission
+                                            ? const Color(0xFF10B981)
+                                            : const Color(0xFFF59E0B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                         const Text(
                           'Submitted Requirements',
                           style: TextStyle(

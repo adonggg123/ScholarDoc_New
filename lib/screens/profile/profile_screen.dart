@@ -37,8 +37,10 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ScholarshipService _scholarshipService = ScholarshipService();
   StreamSubscription<List<Scholarship>>? _scholarshipSub;
 
-  String? _selectedScholarship;
-  final List<String> _scholarshipOptions = ['TES', 'TDP', 'DBP', 'SANTEH', 'STUFAP', 'CHED TES'];
+  String? _selectedScholarship = 'TES';
+  final List<String> _scholarshipOptions = [
+    'TES',
+  ];
 
   Map<String, dynamic>? _profileData;
   bool _isProfileLoading = true;
@@ -51,16 +53,10 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _loadProfile();
-    _scholarshipSub = _scholarshipService.getActiveScholarships().listen((list) {
-      if (mounted && list.isNotEmpty) {
-        setState(() {
-          for (final s in list) {
-            if (s.name.isNotEmpty && !_scholarshipOptions.contains(s.name)) {
-              _scholarshipOptions.add(s.name);
-            }
-          }
-        });
-      }
+    _scholarshipSub = _scholarshipService.getActiveScholarships().listen((
+      list,
+    ) {
+      // Kept strictly to TES
     });
   }
 
@@ -70,7 +66,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       final doc = await _authService.getStudentProfile(uid);
       if (doc != null) {
         final data = doc;
-        final schName = data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
+        final rawSch = (data['scholarshipName'] ?? data['scholarship_name'] ?? '').toString().trim();
+        final schName = (rawSch.isEmpty || rawSch.contains('No Scholarship') || rawSch.contains('Unassigned'))
+            ? 'TES'
+            : (rawSch.toUpperCase().contains('TES') ? 'TES' : rawSch);
         if (!_scholarshipOptions.contains(schName)) {
           _scholarshipOptions.add(schName);
         }
@@ -83,8 +82,15 @@ class _ProfileScreenState extends State<ProfileScreen>
           _sectionController.text = data['section'] ?? '';
           _saController.text = data['saNumber'] ?? '';
           _birthdateController.text = data['birthdate'] ?? '01/01/2000';
-          _yearBecameScholarController.text = (data['yearBecameScholar'] ?? data['year_became_scholar'] ?? data['scholarYearLevel'] ?? '').toString();
-          _payoutsReceivedController.text = (data['payoutsReceived'] ?? data['payouts_received'] ?? '0').toString();
+          _yearBecameScholarController.text =
+              (data['yearBecameScholar'] ??
+                      data['year_became_scholar'] ??
+                      data['scholarYearLevel'] ??
+                      '')
+                  .toString();
+          _payoutsReceivedController.text =
+              (data['payoutsReceived'] ?? data['payouts_received'] ?? '0')
+                  .toString();
           _profilePictureUrl = data['profilePictureUrl'] as String?;
           _isProfileLoading = false;
         });
@@ -131,7 +137,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(32),
+                  ),
                   border: Border(
                     bottom: BorderSide(
                       color: Color(0xFFFBC02D), // Golden Yellow line
@@ -155,7 +163,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 color: const Color(0xFFFBC02D), // Golden Yellow
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFFBC02D).withOpacity(0.3),
+                                    color: const Color(
+                                      0xFFFBC02D,
+                                    ).withOpacity(0.3),
                                     blurRadius: 16,
                                     spreadRadius: 2,
                                   ),
@@ -188,8 +198,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           color: AppTheme.primaryColor,
                                         ),
                                       )
-                                    : const Icon(LucideIcons.camera, size: 14,
-                                        color: AppTheme.primaryColor),
+                                    : const Icon(
+                                        LucideIcons.camera,
+                                        size: 14,
+                                        color: AppTheme.primaryColor,
+                                      ),
                               ),
                             ),
                           ],
@@ -199,36 +212,92 @@ class _ProfileScreenState extends State<ProfileScreen>
                       if (_isProfileLoading)
                         const CircularProgressIndicator(color: Colors.white)
                       else ...[
-                        Text(
-                          _profileData?['fullName'] ?? 'Student Name',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_profileData?['course'] ?? 'Course'} • ${_profileData?['year'] ?? 'Year'}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.72),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        () {
+                          final String rawName =
+                              (_profileData?['fullName'] ??
+                                      _profileData?['full_name'] ??
+                                      '')
+                                  .toString()
+                                  .trim();
+                          final String sId =
+                              (_profileData?['studentId'] ??
+                                      _profileData?['student_no'] ??
+                                      '')
+                                  .toString()
+                                  .trim();
+                          final String displayName =
+                              (rawName.isNotEmpty &&
+                                  rawName != sId &&
+                                  !RegExp(r'^\d+$').hasMatch(rawName))
+                              ? rawName
+                              : 'Student Scholar';
+
+                          final String rawCourse =
+                              (_profileData?['course'] ??
+                                      _profileData?['program_name'] ??
+                                      '')
+                                  .toString()
+                                  .trim();
+                          final String displayCourse =
+                              (rawCourse.isNotEmpty &&
+                                  rawCourse != 'CHED TES Scholar' &&
+                                  rawCourse != 'TES')
+                              ? rawCourse
+                              : 'Bachelor of Science in Information Technology';
+
+                          final String rawYear =
+                              (_profileData?['year'] ??
+                                      _profileData?['year_level'] ??
+                                      '')
+                                  .toString()
+                                  .trim();
+                          final String displayYear = rawYear.isNotEmpty
+                              ? (rawYear.toLowerCase().contains('year')
+                                    ? rawYear
+                                    : '$rawYear Year')
+                              : '2nd Year';
+
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$displayCourse • $displayYear',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.72),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        }(),
                         const SizedBox(height: 8),
                         Container(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.accentColor.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: AppTheme.accentColor.withOpacity(0.4)),
+                              color: AppTheme.accentColor.withOpacity(0.4),
+                            ),
                           ),
                           child: Text(
-                            _selectedScholarship ?? _profileData?['scholarshipName'] ?? 'No Scholarship',
+                            _selectedScholarship ??
+                                _profileData?['scholarshipName'] ??
+                                'TES',
                             style: TextStyle(
                               color: AppTheme.accentColor,
                               fontSize: 11,
@@ -258,17 +327,51 @@ class _ProfileScreenState extends State<ProfileScreen>
                       sectionKey: 'personal',
                       title: 'Personal Information',
                       icon: LucideIcons.user,
-                      subtitle: _profileData?['fullName'] ?? 'View & edit your details',
+                      subtitle: (() {
+                        final String rawName =
+                            (_profileData?['fullName'] ??
+                                    _profileData?['full_name'] ??
+                                    '')
+                                .toString()
+                                .trim();
+                        final String sId =
+                            (_profileData?['studentId'] ??
+                                    _profileData?['student_no'] ??
+                                    '')
+                                .toString()
+                                .trim();
+                        return (rawName.isNotEmpty &&
+                                rawName != sId &&
+                                !RegExp(r'^\d+$').hasMatch(rawName))
+                            ? rawName
+                            : 'View & edit your details';
+                      })(),
                       children: [
-                        _buildEditableField('Full Name', _nameController, LucideIcons.user),
+                        _buildEditableField(
+                          'Full Name',
+                          _nameController,
+                          LucideIcons.user,
+                        ),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Gender', _profileData?['gender'] ?? 'Not Specified', LucideIcons.user),
+                        _buildReadOnlyField(
+                          'Gender',
+                          _profileData?['gender'] ?? 'Not Specified',
+                          LucideIcons.user,
+                        ),
                         const SizedBox(height: 16),
                         _buildBirthdateField(context),
                         const SizedBox(height: 16),
-                        _buildEditableField('Contact Number', _contactController, LucideIcons.phone),
+                        _buildEditableField(
+                          'Contact Number',
+                          _contactController,
+                          LucideIcons.phone,
+                        ),
                         const SizedBox(height: 16),
-                        _buildEditableField('Section', _sectionController, LucideIcons.layers),
+                        _buildEditableField(
+                          'Section',
+                          _sectionController,
+                          LucideIcons.layers,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -277,19 +380,48 @@ class _ProfileScreenState extends State<ProfileScreen>
                       sectionKey: 'academic',
                       title: 'Academic & Program',
                       icon: LucideIcons.graduationCap,
-                      subtitle: _selectedScholarship ?? _profileData?['scholarshipName'] ?? 'Scholarship details',
+                      subtitle:
+                          _selectedScholarship ??
+                          _profileData?['scholarshipName'] ??
+                          'TES',
                       children: [
                         _buildScholarshipDropdownField(),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Degree Program / Course',
-                            _profileData?['course'] ?? _profileData?['program_name'] ?? 'Not Specified',
-                            LucideIcons.graduationCap),
+                        _buildReadOnlyField(
+                          'Degree Program / Course',
+                          (() {
+                            final String rawCourse =
+                                (_profileData?['course'] ??
+                                        _profileData?['program_name'] ??
+                                        '')
+                                    .toString()
+                                    .trim();
+                            return (rawCourse.isNotEmpty &&
+                                    rawCourse != 'CHED TES Scholar' &&
+                                    rawCourse != 'TES')
+                                ? rawCourse
+                                : 'Bachelor of Science in Information Technology';
+                          })(),
+                          LucideIcons.graduationCap,
+                        ),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Student ID',
-                            _profileData?['studentId'] ?? '...', LucideIcons.badgeCheck),
+                        _buildReadOnlyField(
+                          'Student ID',
+                          (_profileData?['studentId'] ??
+                                  _profileData?['student_no'] ??
+                                  '...')
+                              .toString(),
+                          LucideIcons.badgeCheck,
+                        ),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField('Email Address',
-                            _profileData?['email'] ?? '...', LucideIcons.mail),
+                        _buildReadOnlyField(
+                          'Email Address',
+                          (_profileData?['email'] ??
+                                  _profileData?['email_address'] ??
+                                  '...')
+                              .toString(),
+                          LucideIcons.mail,
+                        ),
                         const SizedBox(height: 16),
                         _buildYearBecameScholarField(),
                         const SizedBox(height: 16),
@@ -307,18 +439,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           'Provide your Savings Account (SA) number for scholarship fund disbursement.',
                           style: TextStyle(
-                              fontSize: 13, color: context.textSec, height: 1.5, fontWeight: FontWeight.w500),
+                            fontSize: 13,
+                            color: context.textSec,
+                            height: 1.5,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _saController,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
                             labelText: 'SA Number',
                             hintText: 'xxxx-xxxx-xxxx',
-                            prefixIcon: const Icon(LucideIcons.creditCard,
-                                color: AppTheme.primaryColor, size: 18),
+                            prefixIcon: const Icon(
+                              LucideIcons.creditCard,
+                              color: AppTheme.primaryColor,
+                              size: 18,
+                            ),
                             filled: true,
                             fillColor: context.bgC,
                             border: OutlineInputBorder(
@@ -327,12 +469,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(color: context.crispBorder),
+                              borderSide: BorderSide(
+                                color: context.crispBorder,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: const BorderSide(
-                                  color: Color(0xFFFBC02D), width: 2), // Golden Yellow
+                                color: Color(0xFFFBC02D),
+                                width: 2,
+                              ), // Golden Yellow
                             ),
                             errorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
@@ -340,10 +486,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             focusedErrorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(color: AppTheme.error, width: 2),
+                              borderSide: BorderSide(
+                                color: AppTheme.error,
+                                width: 2,
+                              ),
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 16),
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -370,32 +521,48 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.primaryColor.withOpacity(0.08),
+                                    color: AppTheme.primaryColor.withOpacity(
+                                      0.08,
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(LucideIcons.moon,
-                                      size: 18, color: AppTheme.primaryColor),
+                                  child: const Icon(
+                                    LucideIcons.moon,
+                                    size: 18,
+                                    color: AppTheme.primaryColor,
+                                  ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Dark Mode',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700, fontSize: 14)),
-                                      Text('Switch between Light and Dark mode',
-                                          style: TextStyle(
-                                              fontSize: 12, color: context.textSec, fontWeight: FontWeight.w500)),
+                                      const Text(
+                                        'Dark Mode',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Switch between Light and Dark mode',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: context.textSec,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
                                 Switch(
                                   value: theme == ThemeMode.dark,
                                   activeThumbColor: AppTheme.primaryColor,
-                                  activeTrackColor:
-                                      AppTheme.primaryColor.withOpacity(0.2),
-                                  onChanged: (_) => ThemeProvider().toggleTheme(),
+                                  activeTrackColor: AppTheme.primaryColor
+                                      .withOpacity(0.2),
+                                  onChanged: (_) =>
+                                      ThemeProvider().toggleTheme(),
                                 ),
                               ],
                             );
@@ -413,7 +580,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFBC02D).withOpacity(0.25), // Golden Yellow Glow Shadow
+                            color: const Color(
+                              0xFFFBC02D,
+                            ).withOpacity(0.25), // Golden Yellow Glow Shadow
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                             spreadRadius: 1,
@@ -435,13 +604,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 height: 22,
                                 width: 22,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2.5, color: Colors.white))
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Text(
                                 'Save Profile Changes',
                                 style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
                               ),
                       ),
                     ),
@@ -605,9 +778,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -621,8 +799,14 @@ class _ProfileScreenState extends State<ProfileScreen>
               Icon(icon, size: 16, color: context.textSec.withOpacity(0.6)),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(value,
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.textPri)),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: context.textPri,
+                  ),
+                ),
               ),
             ],
           ),
@@ -632,13 +816,21 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildEditableField(
-      String label, TextEditingController controller, IconData icon) {
+    String label,
+    TextEditingController controller,
+    IconData icon,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -647,8 +839,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             prefixIcon: Icon(icon, size: 16, color: AppTheme.primaryColor),
             filled: true,
             fillColor: context.surfaceC,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -659,8 +853,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFFBC02D), width: 2), // Golden Yellow
+              borderSide: const BorderSide(
+                color: Color(0xFFFBC02D),
+                width: 2,
+              ), // Golden Yellow
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -678,43 +874,29 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Scholarship Program',
-              style: TextStyle(
-                fontSize: 11,
-                color: context.textSec,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFBC02D).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.4)),
-              ),
-              child: const Text(
-                'Assigned Program',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F3260),
-                ),
-              ),
-            ),
-          ],
+        Text(
+          'Scholarship Program',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _selectedScholarship,
+          value: _selectedScholarship ?? 'TES',
           decoration: InputDecoration(
-            prefixIcon: const Icon(LucideIcons.award, size: 18, color: AppTheme.primaryColor),
+            prefixIcon: const Icon(
+              LucideIcons.award,
+              size: 18,
+              color: AppTheme.primaryColor,
+            ),
             filled: true,
             fillColor: context.bgC,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -733,11 +915,18 @@ class _ProfileScreenState extends State<ProfileScreen>
               value: name,
               child: Row(
                 children: [
-                  const Icon(LucideIcons.sparkles, size: 14, color: Color(0xFFFBC02D)),
+                  const Icon(
+                    LucideIcons.sparkles,
+                    size: 14,
+                    color: Color(0xFFFBC02D),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     name,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
@@ -750,14 +939,24 @@ class _ProfileScreenState extends State<ProfileScreen>
               });
             }
           },
-          validator: (val) => val == null || val.isEmpty ? 'Please select a scholarship' : null,
+          validator: (val) =>
+              val == null || val.isEmpty ? 'Please select a scholarship' : null,
         ),
       ],
     );
   }
 
   Widget _buildYearBecameScholarField() {
-    final quickYears = ['2022', '2023', '2024', '2025', '2026', '1st Year', '2nd Year', '3rd Year'];
+    final quickYears = [
+      '2022',
+      '2023',
+      '2024',
+      '2025',
+      '2026',
+      '1st Year',
+      '2nd Year',
+      '3rd Year',
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -774,11 +973,18 @@ class _ProfileScreenState extends State<ProfileScreen>
           controller: _yearBecameScholarController,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            prefixIcon: const Icon(LucideIcons.calendarCheck, size: 16, color: AppTheme.primaryColor),
+            prefixIcon: const Icon(
+              LucideIcons.calendarCheck,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
             hintText: 'e.g. 2023, 2024, or 1st Year',
             filled: true,
             fillColor: context.bgC,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -796,7 +1002,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               borderSide: BorderSide(color: AppTheme.error),
             ),
           ),
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter the year you became a scholar' : null,
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? 'Please enter the year you became a scholar'
+              : null,
         ),
         const SizedBox(height: 8),
         SingleChildScrollView(
@@ -816,9 +1024,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                       color: isSelected ? Colors.white : context.textPri,
                     ),
                   ),
-                  backgroundColor: isSelected ? AppTheme.primaryColor : context.surfaceC,
-                  side: BorderSide(color: isSelected ? AppTheme.primaryColor : context.crispBorder),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  backgroundColor: isSelected
+                      ? AppTheme.primaryColor
+                      : context.surfaceC,
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : context.crispBorder,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   onPressed: () {
                     setState(() {
@@ -852,15 +1068,25 @@ class _ProfileScreenState extends State<ProfileScreen>
           keyboardType: TextInputType.number,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           decoration: InputDecoration(
-            prefixIcon: const Icon(LucideIcons.wallet, size: 16, color: AppTheme.primaryColor),
+            prefixIcon: const Icon(
+              LucideIcons.wallet,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   tooltip: 'Decrease payouts',
-                  icon: const Icon(LucideIcons.minusCircle, size: 18, color: AppTheme.primaryColor),
+                  icon: const Icon(
+                    LucideIcons.minusCircle,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
                   onPressed: () {
-                    int val = int.tryParse(_payoutsReceivedController.text.trim()) ?? 0;
+                    int val =
+                        int.tryParse(_payoutsReceivedController.text.trim()) ??
+                        0;
                     if (val > 0) val--;
                     setState(() {
                       _payoutsReceivedController.text = val.toString();
@@ -869,9 +1095,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 IconButton(
                   tooltip: 'Increase payouts',
-                  icon: const Icon(LucideIcons.plusCircle, size: 18, color: AppTheme.primaryColor),
+                  icon: const Icon(
+                    LucideIcons.plusCircle,
+                    size: 18,
+                    color: AppTheme.primaryColor,
+                  ),
                   onPressed: () {
-                    int val = int.tryParse(_payoutsReceivedController.text.trim()) ?? 0;
+                    int val =
+                        int.tryParse(_payoutsReceivedController.text.trim()) ??
+                        0;
                     val++;
                     setState(() {
                       _payoutsReceivedController.text = val.toString();
@@ -883,7 +1115,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             hintText: 'e.g. 0',
             filled: true,
             fillColor: context.bgC,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -935,29 +1170,46 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: AppTheme.primaryColor.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(LucideIcons.history, size: 20, color: AppTheme.primaryColor),
+              child: const Icon(
+                LucideIcons.history,
+                size: 20,
+                color: AppTheme.primaryColor,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('View Account Activity',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  const Text(
+                    'View Account Activity',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
                   const SizedBox(height: 2),
-                  Text('Security & Privacy logs',
-                      style: TextStyle(fontSize: 12, color: context.textSec, fontWeight: FontWeight.w500)),
+                  Text(
+                    'Security & Privacy logs',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.textSec,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.accentColor.withOpacity(0.15), // Golden Yellow Accent
+                color: AppTheme.accentColor.withOpacity(
+                  0.15,
+                ), // Golden Yellow Accent
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(LucideIcons.chevronRight,
-                  size: 16, color: Color(0xFF0F3260)),
+              child: const Icon(
+                LucideIcons.chevronRight,
+                size: 16,
+                color: Color(0xFF0F3260),
+              ),
             ),
           ],
         ),
@@ -974,7 +1226,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         decoration: BoxDecoration(
           color: AppTheme.error.withOpacity(0.06),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppTheme.error.withOpacity(0.3), width: 1.5),
+          border: Border.all(
+            color: AppTheme.error.withOpacity(0.3),
+            width: 1.5,
+          ),
         ),
         child: Row(
           children: [
@@ -984,7 +1239,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: AppTheme.error.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(LucideIcons.logOut, size: 20, color: AppTheme.error),
+              child: const Icon(
+                LucideIcons.logOut,
+                size: 20,
+                color: AppTheme.error,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1107,7 +1366,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -1134,16 +1395,21 @@ class _ProfileScreenState extends State<ProfileScreen>
         try {
           await _authService.updateStudentProfile(uid, {
             'fullName': _nameController.text.trim(),
+            'full_name': _nameController.text.trim(),
             'contactNumber': _contactController.text.trim(),
+            'mobile_number': _contactController.text.trim(),
             'section': _sectionController.text.trim(),
             'saNumber': _saController.text.trim(),
+            'sa_number': _saController.text.trim(),
             'birthdate': _birthdateController.text.trim(),
+            'date_of_birth': _birthdateController.text.trim(),
             'scholarshipName': _selectedScholarship ?? 'TES',
             'scholarship_name': _selectedScholarship ?? 'TES',
             'scholarYearLevel': _yearBecameScholarController.text.trim(),
             'year_became_scholar': _yearBecameScholarController.text.trim(),
             'yearBecameScholar': _yearBecameScholarController.text.trim(),
-            'payoutsReceived': int.tryParse(_payoutsReceivedController.text.trim()) ?? 0,
+            'payoutsReceived':
+                int.tryParse(_payoutsReceivedController.text.trim()) ?? 0,
             'payouts_received': _payoutsReceivedController.text.trim(),
           });
           await _auditService.logActivity(
@@ -1158,7 +1424,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               content: const Text('Profile updated successfully'),
               backgroundColor: AppTheme.success,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           );
           _loadProfile();
@@ -1169,7 +1437,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               content: Text('Error: $e'),
               backgroundColor: AppTheme.error,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           );
         } finally {
@@ -1196,15 +1466,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                   color: AppTheme.error.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(LucideIcons.logOut, color: AppTheme.error, size: 22),
+                child: const Icon(
+                  LucideIcons.logOut,
+                  color: AppTheme.error,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               const Text(
                 'Log Out',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
               ),
             ],
           ),
@@ -1221,7 +1492,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1240,7 +1514,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.error,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1248,10 +1525,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               child: const Text(
                 'Yes, Log Out',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ),
           ],
@@ -1273,9 +1547,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Birthdate (mm/dd/yyyy)',
-            style: TextStyle(
-                fontSize: 11, color: context.textSec, fontWeight: FontWeight.bold)),
+        Text(
+          'Birthdate (mm/dd/yyyy)',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 6),
         TextFormField(
           controller: _birthdateController,
@@ -1283,11 +1562,17 @@ class _ProfileScreenState extends State<ProfileScreen>
           onTap: () => _selectBirthdate(context),
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            prefixIcon: const Icon(LucideIcons.cake, size: 16, color: AppTheme.primaryColor),
+            prefixIcon: const Icon(
+              LucideIcons.cake,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
             filled: true,
             fillColor: context.surfaceC,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -1298,8 +1583,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFFBC02D), width: 2), // Golden Yellow
+              borderSide: const BorderSide(
+                color: Color(0xFFFBC02D),
+                width: 2,
+              ), // Golden Yellow
             ),
           ),
           validator: (v) =>
@@ -1332,7 +1619,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
     if (picked != null) {
       setState(() {
-        _birthdateController.text = "${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}";
+        _birthdateController.text =
+            "${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}";
       });
     }
   }

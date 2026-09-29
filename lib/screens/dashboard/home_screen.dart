@@ -11,6 +11,7 @@ import '../notifications/notification_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/announcement_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/academic_term_service.dart';
 import 'package:intl/intl.dart';
 import 'widgets/system_banner_carousel.dart';
 
@@ -495,9 +496,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _profileData != null
-                                      ? '${_profileData!['fullName']?.toString().split(' ').first}!'
-                                      : 'Student!',
+                                  (() {
+                                    if (_profileData != null) {
+                                      final raw = (_profileData!['fullName'] ?? _profileData!['full_name'] ?? '').toString().trim();
+                                      final sId = (_profileData!['studentId'] ?? _profileData!['student_no'] ?? '').toString().trim();
+                                      if (raw.isNotEmpty && raw != sId && !RegExp(r'^\d+$').hasMatch(raw)) {
+                                        return '${raw.split(' ').first}!';
+                                      }
+                                    }
+                                    return 'Scholar!';
+                                  })(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 26,
@@ -707,26 +715,59 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatusCard(BuildContext context) {
-    final String scholarshipName =
-        _profileData?['scholarshipName'] ?? 'No Scholarship Assigned';
-    final String status = _profileData?['status'] ?? 'Pending';
-    final String submittedDate = (() {
-      final ts = _profileData?['submittedAt'];
-      if (ts != null) {
-        try {
-          return DateTime.parse(ts.toString()).toString().split(' ')[0];
-        } catch (_) {}
-      }
-      return 'N/A';
-    })();
+    final String rawScholarship =
+        (_profileData?['scholarshipName'] ?? _profileData?['scholarship_name'] ?? '')
+            .toString()
+            .trim();
+    final String scholarshipName = (rawScholarship.isEmpty ||
+            rawScholarship.toLowerCase().contains('no scholarship') ||
+            rawScholarship.toLowerCase().contains('unassigned'))
+        ? 'TES'
+        : (rawScholarship.toUpperCase().contains('TES') ? 'TES' : rawScholarship);
+
+    final currentTerm = AcademicTermService.currentTerm;
+    final studentAy = (_profileData?['academicYear'] ?? _profileData?['academic_year'] ?? '').toString().trim();
+    final studentSem = (_profileData?['semester'] ?? '').toString().trim();
+    final rawSubmittedAt = _profileData?['submittedAt'] ?? _profileData?['submitted_at'];
+    final bool hasSubmission = rawSubmittedAt != null &&
+        rawSubmittedAt.toString().trim().isNotEmpty &&
+        rawSubmittedAt.toString().trim() != 'null';
+
+    final bool isForCurrentTerm = hasSubmission &&
+        studentAy.isNotEmpty &&
+        AcademicTermService.isYearMatching(studentAy, currentTerm.academicYear) &&
+        (studentSem.isEmpty || AcademicTermService.isSemesterMatching(studentSem, currentTerm.semester));
+
+    // Reset status by year and semester: If no submission for current active term, resets to Pending
+    final String status = isForCurrentTerm
+        ? (_profileData?['status'] ?? 'Pending')
+        : 'Pending';
+
+    final String statusDisplay = isForCurrentTerm
+        ? status
+        : 'Pending Submission';
+
+    final String submittedDate = isForCurrentTerm
+        ? (() {
+            final ts = rawSubmittedAt;
+            if (ts != null) {
+              try {
+                return DateTime.parse(ts.toString()).toString().split(' ')[0];
+              } catch (_) {}
+            }
+            return 'Submitted';
+          })()
+        : 'Awaiting ${currentTerm.semester} Upload';
 
     Color statusColor = const Color(
       0xFFF59E0B,
     ); // Vibrant Golden Yellow for Warning/Pending
     IconData statusIcon = LucideIcons.hourglass;
     if (status == 'Approved' || status == 'Verified') {
-      statusColor = const Color(0xFF10B981); // Vibrant Emerald Green
-      statusIcon = LucideIcons.badgeCheck;
+      if (isForCurrentTerm) {
+        statusColor = const Color(0xFF10B981); // Vibrant Emerald Green
+        statusIcon = LucideIcons.badgeCheck;
+      }
     }
     if (status == 'Rejected' || status == 'Needs Correction') {
       statusColor = const Color(0xFFEF4444); // Vibrant Crimson Red
@@ -747,161 +788,202 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFF1F5F9), // Clean, light border
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+          border: Border.all(
+            color: const Color(0xFFF1F5F9), // Clean, light border
+            width: 1.5,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          children: [
-            // Top Section with status-themed background color accent
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    statusColor.withValues(alpha: 0.05),
-                    statusColor.withValues(alpha: 0.01),
-                  ],
-                ),
-                border: const Border(
-                  bottom: BorderSide(
-                    color: Color(0xFFF1F5F9), // Subtle light grey divider
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'SCHOLARSHIP ACCOUNT',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: context.textSec.withValues(alpha: 0.6),
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          scholarshipName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF0F3260),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(statusIcon, size: 14, color: statusColor),
-                        const SizedBox(width: 6),
-                        Text(
-                          status,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Bottom Info Row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9), // Slate 100
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      LucideIcons.calendarCheck,
-                      size: 16,
-                      color: context.textSec.withValues(alpha: 0.7),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LAST SYNCHRONIZED',
-                        style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          color: context.textSec.withValues(alpha: 0.5),
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        submittedDate,
-                        style: const TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Icon(
-                    LucideIcons.chevronRight,
-                    size: 18,
-                    color: context.textSec.withValues(alpha: 0.4),
-                  ),
-                ],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            children: [
+              // Top Section with status-themed background color accent
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      statusColor.withValues(alpha: 0.05),
+                      statusColor.withValues(alpha: 0.01),
+                    ],
+                  ),
+                  border: const Border(
+                    bottom: BorderSide(
+                      color: Color(0xFFF1F5F9), // Subtle light grey divider
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SCHOLARSHIP ACCOUNT',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: context.textSec.withValues(alpha: 0.6),
+                              letterSpacing: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            scholarshipName,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF0F3260),
+                              letterSpacing: -0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  LucideIcons.calendar,
+                                  size: 10,
+                                  color: AppTheme.primaryColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    currentTerm.shortString,
+                                    style: const TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, size: 14, color: statusColor),
+                          const SizedBox(width: 5),
+                          Text(
+                            statusDisplay,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Bottom Info Row
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9), // Slate 100
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isForCurrentTerm ? LucideIcons.calendarCheck : LucideIcons.clock,
+                        size: 16,
+                        color: context.textSec.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isForCurrentTerm ? 'LAST SYNCHRONIZED' : 'STATUS FOR ${currentTerm.displayString.toUpperCase()}',
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              color: context.textSec.withValues(alpha: 0.5),
+                              letterSpacing: 0.8,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            submittedDate,
+                            style: const TextStyle(
+                              color: Color(0xFF1E293B),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      LucideIcons.chevronRight,
+                      size: 18,
+                      color: context.textSec.withValues(alpha: 0.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildVerificationBadge() {

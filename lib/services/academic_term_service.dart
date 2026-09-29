@@ -363,4 +363,55 @@ class AcademicTermService {
       isFlagged: true,
     );
   }
+
+  /// Checks if a record's year and semester match a target academic term.
+  static bool isTermMatching({
+    String? rawYear,
+    String? rawSemester,
+    required AcademicTerm target,
+  }) {
+    if (rawYear == null || rawYear.trim().isEmpty) return false;
+    final yearMatch = isYearMatching(rawYear, target.academicYear);
+    if (!yearMatch) return false;
+    if (rawSemester == null || rawSemester.trim().isEmpty) return true;
+    return isSemesterMatching(rawSemester, target.semester);
+  }
+
+  /// Returns a curated list of academic terms for filtering and tracking,
+  /// guaranteeing that the active term and any student historical term are included.
+  static List<AcademicTerm> getAvailableTerms({
+    String? studentYear,
+    String? studentSemester,
+  }) {
+    final List<AcademicTerm> terms = [];
+
+    void addUnique(AcademicTerm term) {
+      if (!terms.any((t) =>
+          isYearMatching(t.academicYear, term.academicYear) &&
+          isSemesterMatching(t.semester, term.semester))) {
+        terms.add(term);
+      }
+    }
+
+    // 1. Current active term always first
+    addUnique(_currentTerm);
+
+    // 2. Student record's specific historical term (if valid)
+    if (studentYear != null && studentYear.trim().isNotEmpty) {
+      addUnique(AcademicTerm(
+        academicYear: normalizeYear(studentYear),
+        semester: normalizeSemester(studentSemester ?? '1st Semester'),
+      ));
+    }
+
+    // 3. Standard school terms in reverse chronological order
+    addUnique(const AcademicTerm(academicYear: '2026-2027', semester: '1st Semester'));
+    addUnique(const AcademicTerm(academicYear: '2025-2026', semester: '2nd Semester'));
+    addUnique(const AcademicTerm(academicYear: '2025-2026', semester: '1st Semester'));
+    addUnique(const AcademicTerm(academicYear: '2024-2025', semester: '2nd Semester'));
+    addUnique(const AcademicTerm(academicYear: '2024-2025', semester: '1st Semester'));
+
+    return terms;
+  }
 }
+

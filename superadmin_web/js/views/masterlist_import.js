@@ -817,7 +817,7 @@ function renderTable() {
                 }
 
                 // Remove from array (find by id if present, or index)
-                const targetIndex = rec.id 
+                const targetIndex = rec.id
                     ? extractedRecords.findIndex(r => r.id === rec.id)
                     : idx;
                 if (targetIndex !== -1) {

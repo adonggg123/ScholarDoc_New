@@ -41,10 +41,6 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
   static const List<String> _scholarshipOptions = [
     'All',
     'TES',
-    'TDP',
-    'DBP',
-    'SANTEH',
-    'STUFAP',
   ];
   static const List<String> _sortOptions = [
     'Name (A-Z)',

@@ -495,6 +495,10 @@ class AuthService {
             if (cleanNo.isNotEmpty) schoolFilterParts.add('student_no.eq.$cleanNo');
             if (emailPrefix.isNotEmpty) schoolFilterParts.add('student_no.eq.$emailPrefix');
             if (userEmail.isNotEmpty) schoolFilterParts.add('email_address.eq.$userEmail');
+            if (cleanNo.length >= 6) {
+              final suffix = cleanNo.substring(cleanNo.length - 6);
+              schoolFilterParts.add('student_no.like.%$suffix');
+            }
 
             final schoolDoc = await _supabase
                 .from('school_students')
@@ -903,6 +907,105 @@ class AuthService {
     return data;
   }
 
+  // Enrich student profile from school_students if name or course contains placeholder data
+  Future<Map<String, dynamic>> _enrichStudentDataFromSchool(Map<String, dynamic> data) async {
+    final currentName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
+    final currentCourse = (data['course'] ?? data['program_name'] ?? '').toString().trim();
+    final sId = (data['studentId'] ?? data['student_no'] ?? '').toString().trim();
+    final isNamePlaceholder = currentName.isEmpty ||
+        currentName == sId ||
+        RegExp(r'^\d+$').hasMatch(currentName);
+    final isCoursePlaceholder = currentCourse.isEmpty ||
+        currentCourse == 'CHED TES Scholar' ||
+        currentCourse == 'TES';
+
+    if (isNamePlaceholder || isCoursePlaceholder) {
+      try {
+        final cleanId = sId.replaceAll(' ', '').replaceAll('-', '');
+        final orConditions = <String>{};
+        if (sId.isNotEmpty) orConditions.add('student_no.eq.$sId');
+        if (cleanId.isNotEmpty) orConditions.add('student_no.eq.$cleanId');
+        if (cleanId.length >= 6) {
+          final suffix = cleanId.substring(cleanId.length - 6);
+          orConditions.add('student_no.like.%$suffix');
+        }
+        final email = (data['email'] ?? data['email_address'] ?? '').toString().trim();
+        if (email.isNotEmpty && !email.endsWith('@scholardoc.com')) {
+          orConditions.add('email_address.eq.$email');
+        }
+
+        if (orConditions.isNotEmpty) {
+          final schoolRes = await _supabase
+              .from('school_students')
+              .select()
+              .or(orConditions.join(','))
+              .limit(1);
+          if (schoolRes.isNotEmpty) {
+            final schoolStudent = schoolRes.first;
+            final enrichedName = (schoolStudent['full_name'] != null && schoolStudent['full_name'].toString().trim().isNotEmpty)
+                ? schoolStudent['full_name'].toString().trim()
+                : currentName;
+            final enrichedCourse = (schoolStudent['program_name'] != null && schoolStudent['program_name'].toString().trim().isNotEmpty)
+                ? schoolStudent['program_name'].toString().trim()
+                : currentCourse;
+            final enrichedYear = schoolStudent['year_level'] ?? data['year_level'];
+            final enrichedBirthdate = schoolStudent['date_of_birth'] ?? data['birthdate'];
+            final enrichedGender = schoolStudent['gender'] ?? data['gender'];
+            final enrichedMobile = schoolStudent['mobile_number'] ?? data['contactNumber'];
+            final enrichedEmail = (schoolStudent['email_address'] != null && schoolStudent['email_address'].toString().contains('@'))
+                ? schoolStudent['email_address'].toString().trim()
+                : data['email'];
+
+            data['fullName'] = enrichedName;
+            data['full_name'] = enrichedName;
+            data['course'] = enrichedCourse;
+            data['program_name'] = enrichedCourse;
+            if (enrichedYear != null) {
+              data['year'] = enrichedYear.toString();
+              data['year_level'] = enrichedYear.toString();
+            }
+            if (enrichedBirthdate != null) {
+              data['birthdate'] = enrichedBirthdate.toString();
+              data['date_of_birth'] = enrichedBirthdate.toString();
+            }
+            if (enrichedGender != null) data['gender'] = enrichedGender;
+            if (enrichedMobile != null) {
+              data['contactNumber'] = enrichedMobile.toString();
+              data['mobile_number'] = enrichedMobile.toString();
+            }
+            if (enrichedEmail != null) {
+              data['email'] = enrichedEmail;
+              data['email_address'] = enrichedEmail;
+            }
+
+            // Sync back to student_grantees asynchronously
+            final recordId = data['id'];
+            if (recordId != null) {
+              _supabase.from('student_grantees').update({
+                'full_name': enrichedName,
+                'fullName': enrichedName,
+                'program_name': enrichedCourse,
+                'course': enrichedCourse,
+                if (enrichedYear != null) 'year_level': enrichedYear.toString(),
+                if (enrichedYear != null) 'year': enrichedYear.toString(),
+                if (enrichedBirthdate != null) 'date_of_birth': enrichedBirthdate.toString(),
+                if (enrichedBirthdate != null) 'birthdate': enrichedBirthdate.toString(),
+                'gender': ?enrichedGender,
+                if (enrichedMobile != null) 'mobile_number': enrichedMobile.toString(),
+                if (enrichedMobile != null) 'contactNumber': enrichedMobile.toString(),
+                'email_address': ?enrichedEmail,
+                'email': ?enrichedEmail,
+              }).eq('id', recordId).catchError((_) {});
+            }
+          }
+        }
+      } catch (err) {
+        debugPrint('AuthService enrich error: $err');
+      }
+    }
+    return data;
+  }
+
   // Get student profile data from Supabase
   Future<Map<String, dynamic>?> getStudentProfile(String uid) async {
     try {
@@ -927,7 +1030,8 @@ class AuthService {
             return 0;
           });
         }
-        return _normalizeStudentData(list.first);
+        final normalized = _normalizeStudentData(list.first);
+        return await _enrichStudentDataFromSchool(normalized);
       }
 
       // Fallback: If no document by uid, attempt lookup by user email (derived from student ID)
@@ -962,7 +1066,8 @@ class AuthService {
                   .update({'uid': uid})
                   .eq('id', list.first['id']);
             } catch (_) {}
-            return _normalizeStudentData(list.first);
+            final normalized = _normalizeStudentData(list.first);
+            return await _enrichStudentDataFromSchool(normalized);
           }
         }
       }
@@ -1013,6 +1118,42 @@ class AuthService {
     final dbPayload = Map<String, dynamic>.from(updates);
 
     // Synchronize aliases so both styles are included
+    if (dbPayload.containsKey('fullName')) {
+      dbPayload['full_name'] = dbPayload['fullName'];
+    } else if (dbPayload.containsKey('full_name')) {
+      dbPayload['fullName'] = dbPayload['full_name'];
+    }
+
+    if (dbPayload.containsKey('contactNumber')) {
+      dbPayload['mobile_number'] = dbPayload['contactNumber'];
+    } else if (dbPayload.containsKey('mobile_number')) {
+      dbPayload['contactNumber'] = dbPayload['mobile_number'];
+    }
+
+    if (dbPayload.containsKey('birthdate')) {
+      dbPayload['date_of_birth'] = dbPayload['birthdate'];
+    } else if (dbPayload.containsKey('date_of_birth')) {
+      dbPayload['birthdate'] = dbPayload['date_of_birth'];
+    }
+
+    if (dbPayload.containsKey('saNumber')) {
+      dbPayload['sa_number'] = dbPayload['saNumber'];
+    } else if (dbPayload.containsKey('sa_number')) {
+      dbPayload['saNumber'] = dbPayload['sa_number'];
+    }
+
+    if (dbPayload.containsKey('course')) {
+      dbPayload['program_name'] = dbPayload['course'];
+    } else if (dbPayload.containsKey('program_name')) {
+      dbPayload['course'] = dbPayload['program_name'];
+    }
+
+    if (dbPayload.containsKey('year')) {
+      dbPayload['year_level'] = dbPayload['year'];
+    } else if (dbPayload.containsKey('year_level')) {
+      dbPayload['year'] = dbPayload['year_level'];
+    }
+
     if (dbPayload.containsKey('scholarshipName')) {
       dbPayload['scholarship_name'] = dbPayload['scholarshipName'];
     } else if (dbPayload.containsKey('scholarship_name')) {

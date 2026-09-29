@@ -251,11 +251,34 @@ function filterAndRenderCards() {
                         <i class="icon-calendar" style="font-size: 12px;"></i>
                         <span>${escapeHtml(formattedDate)}</span>
                     </div>
+                    ${(() => {
+                        const deadlineMatch = (a.content || '').match(/\[Deadline:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}[^\]]*)\]/i);
+                        let deadlineDateStr = deadlineMatch ? deadlineMatch[1].trim() : null;
+                        if (!deadlineDateStr && a.type === 'Deadline') {
+                            const dateMatch = ((a.title || '') + ' ' + (a.content || '')).match(/(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i);
+                            if (dateMatch) deadlineDateStr = dateMatch[0];
+                        }
+                        if (deadlineDateStr) {
+                            const dDate = new Date(deadlineDateStr);
+                            const isPassed = !isNaN(dDate.getTime()) && new Date() > dDate;
+                            const formattedDDate = !isNaN(dDate.getTime())
+                                ? dDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                                : deadlineDateStr;
+                            return `
+                                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(220, 38, 38, 0.08); border: 1px solid rgba(220, 38, 38, 0.25); border-radius: 8px; font-size: 11.5px; font-weight: 700; color: #DC2626; margin-top: 8px;">
+                                    <i class="icon-calendar-clock" style="font-size: 13px;"></i>
+                                    <span>Cutoff: ${escapeHtml(formattedDDate)}</span>
+                                    <span style="font-size: 9.5px; background: ${isPassed ? '#DC2626' : '#059669'}; color: white; padding: 1px 6px; border-radius: 4px; margin-left: 2px;">${isPassed ? 'Passed' : 'Active'}</span>
+                                </div>
+                            `;
+                        }
+                        return '';
+                    })()}
                 </div>
 
                 <!-- Message Body -->
-                <div class="ann-card-content" title="${escapeHtml(a.content)}">
-                    ${escapeHtml(a.content)}
+                <div class="ann-card-content" title="${escapeHtml((a.content || '').replace(/\s*\[Deadline:\s*[^\]]+\]/gi, '').trim())}">
+                    ${escapeHtml((a.content || '').replace(/\s*\[Deadline:\s*[^\]]+\]/gi, '').trim())}
                 </div>
 
                 <!-- Footer & Actions -->
@@ -335,6 +358,11 @@ if (btnAddAnn) {
         const generalRadio = document.querySelector('input[name="ann-type"][value="General"]');
         if (generalRadio) generalRadio.checked = true;
         
+        const annDeadlineGroup = document.getElementById('ann-deadline-group');
+        const annInpDeadline = document.getElementById('ann-inp-deadline');
+        if (annDeadlineGroup) annDeadlineGroup.style.display = 'none';
+        if (annInpDeadline) annInpDeadline.value = '';
+
         updateCharCounter();
         modal.classList.remove('hidden');
         inpTitle.focus();
@@ -354,7 +382,21 @@ window.editAnnouncement = function(id) {
     if (modalAvatar) modalAvatar.style.background = style.gradient;
 
     inpTitle.value = a.title || '';
-    inpContent.value = a.content || '';
+    
+    // Check and populate deadline date if present
+    const deadlineMatch = (a.content || '').match(/\[Deadline:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}[^\]]*)\]/i);
+    const annDeadlineGroup = document.getElementById('ann-deadline-group');
+    const annInpDeadline = document.getElementById('ann-inp-deadline');
+    if (deadlineMatch && annInpDeadline) {
+        annInpDeadline.value = deadlineMatch[1].trim();
+    } else if (annInpDeadline) {
+        annInpDeadline.value = '';
+    }
+    if (annDeadlineGroup) {
+        annDeadlineGroup.style.display = a.type === 'Deadline' ? 'block' : 'none';
+    }
+
+    inpContent.value = (a.content || '').replace(/\s*\[Deadline:\s*[^\]]+\]/gi, '').trim();
 
     const r = document.querySelector(`input[name="ann-type"][value="${a.type}"]`);
     if (r) r.checked = true;
@@ -440,11 +482,15 @@ if (inpContent) {
     inpContent.addEventListener('input', updateCharCounter);
 }
 
-// Category Radio Change Listener to update modal avatar gradient
+// Category Radio Change Listener to update modal avatar gradient & deadline field
 document.querySelectorAll('input[name="ann-type"]').forEach(radio => {
     radio.addEventListener('change', () => {
         const style = getCategoryStyle(radio.value);
         if (modalAvatar) modalAvatar.style.background = style.gradient;
+        const annDeadlineGroup = document.getElementById('ann-deadline-group');
+        if (annDeadlineGroup) {
+            annDeadlineGroup.style.display = radio.value === 'Deadline' ? 'block' : 'none';
+        }
     });
 });
 
@@ -458,9 +504,15 @@ if (form) {
 
         try {
             const selectedType = document.querySelector('input[name="ann-type"]:checked')?.value || 'General';
+            const annInpDeadline = document.getElementById('ann-inp-deadline');
+            let contentVal = inpContent.value.trim().replace(/\s*\[Deadline:\s*[^\]]+\]/gi, '').trim();
+            if (selectedType === 'Deadline' && annInpDeadline && annInpDeadline.value) {
+                contentVal += `\n\n[Deadline: ${annInpDeadline.value}]`;
+            }
+
             const dataObj = {
                 title: inpTitle.value.trim(),
-                content: inpContent.value.trim(),
+                content: contentVal,
                 type: selectedType,
             };
 

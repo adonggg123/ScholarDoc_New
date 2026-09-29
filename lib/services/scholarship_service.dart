@@ -110,46 +110,6 @@ class ScholarshipService {
               'ID Front & Back + Signatures (PDF)',
             ],
           ),
-          Scholarship(
-            id: '',
-            name: 'TDP',
-            description: 'Tulong Dunong Program',
-            isActive: true,
-            requiredDocuments: [
-              'SA Number',
-              'ID Front & Back + Signatures (PDF)',
-            ],
-          ),
-          Scholarship(
-            id: '',
-            name: 'DBP',
-            description: 'DBP Rise Scholarship Program',
-            isActive: true,
-            requiredDocuments: [
-              'SA Number',
-              'ID Front & Back + Signatures (PDF)',
-            ],
-          ),
-          Scholarship(
-            id: '',
-            name: 'SANTEH',
-            description: 'SANTEH Aquaculture S&T Foundation',
-            isActive: true,
-            requiredDocuments: [
-              'SA Number',
-              'ID Front & Back + Signatures (PDF)',
-            ],
-          ),
-          Scholarship(
-            id: '',
-            name: 'STUFAP',
-            description: 'Student Financial Assistance Program',
-            isActive: true,
-            requiredDocuments: [
-              'SA Number',
-              'ID Front & Back + Signatures (PDF)',
-            ],
-          ),
         ];
 
         for (var s in defaults) {

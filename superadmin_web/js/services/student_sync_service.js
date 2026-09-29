@@ -83,9 +83,90 @@ export class StudentSyncService {
     }
 
     /**
+     * Determines whether the student has actually submitted required documents.
+     */
+    static hasStudentSubmitted(existing = {}, f2Match = null, ss = {}) {
+        if (!existing) return false;
+
+        // 1. Explicit submission timestamp
+        const submittedAt = existing.submittedAt || existing.submitted_at || existing.documents?.lastSubmittedAt;
+        if (submittedAt && String(submittedAt).trim() !== '' && String(submittedAt).trim() !== 'null') {
+            return true;
+        }
+
+        // 2. Uploaded document files
+        const docs = existing.documents || {};
+        const hasPdf = !!(existing.submissionPdfUrl || existing.submission_pdf_url || docs.submissionPdfUrl || docs.submission_pdf_url);
+        const hasFront = !!(existing.idFrontUrl || existing.id_front_url || docs.idFrontUrl || docs.id_front_url);
+        const hasBack = !!(existing.idBackUrl || existing.id_back_url || docs.idBackUrl || docs.id_back_url);
+        const hasAtm = !!(existing.atmCardUrl || existing.atm_card_url || docs.atmCardUrl || docs.atm_card_url);
+
+        if (hasPdf || hasFront || hasBack || hasAtm) {
+            return true;
+        }
+
+        // 3. Meaningful student-provided SA Number (distinct from default 'N/A' placeholder)
+        const sa = existing.saNumber || existing.sa_number || docs.saNumber || existing.familyDetails?.saNumber;
+        if (sa && String(sa).trim() !== '' && String(sa).trim().toUpperCase() !== 'N/A' && String(sa).trim() !== 'null') {
+            // Considered a submission if explicitly edited/saved with an SA number
+            if (existing.updated_at && existing.updated_at !== existing.created_at) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Computes dynamic status based on student document submission and Super Admin deadline.
+     * Flow:
+     * - No documents submitted: 'No Submission Yet'
+     * - Documents submitted, waiting for admin: 'Submitted' (or 'Late Submission' if past active deadline)
+     * - Admin reviewed & validated: 'Approved' / 'Verified' or 'Rejected'
+     */
+    static computeDynamicStatus(existing = {}, f2Match = null, ss = {}, activeDeadline = null) {
+        const hasSubmitted = this.hasStudentSubmitted(existing, f2Match, ss);
+
+        // CASE 1: Student has NOT submitted required documents yet
+        if (!hasSubmitted) {
+            return 'No Submission Yet';
+        }
+
+        // CASE 2: Student HAS submitted documents
+        const docs = existing.documents || {};
+        const rawSaStatus = (docs.saVerificationStatus || existing.saVerificationStatus || existing.sa_verification_status || '').toLowerCase();
+        const rawIdStatus = (docs.idValidationStatus || existing.idValidationStatus || existing.id_validation_status || '').toLowerCase();
+        const existingStatus = (existing.status || '').toLowerCase();
+
+        // 2a. Admin explicit Rejection
+        if (existingStatus === 'rejected' || rawSaStatus === 'rejected' || rawIdStatus === 'rejected') {
+            return 'Rejected';
+        }
+
+        // 2b. Admin Validation: both SA and ID validated/approved, or admin explicitly approved
+        const isSaApproved = rawSaStatus === 'approved' || rawSaStatus === 'verified';
+        const isIdApproved = rawIdStatus === 'approved' || rawIdStatus === 'verified';
+        if ((isSaApproved && isIdApproved) || (existingStatus === 'approved' || existingStatus === 'verified')) {
+            return 'Approved';
+        }
+
+        // 2c. Documents submitted, awaiting Admin review and validation
+        // Check if submitted before or after active deadline configured by Super Admin
+        const rawSubmittedAt = existing.submittedAt || existing.submitted_at || docs.lastSubmittedAt || existing.updated_at;
+        if (activeDeadline && rawSubmittedAt) {
+            const subDate = new Date(rawSubmittedAt);
+            if (!isNaN(subDate.getTime()) && subDate > activeDeadline) {
+                return 'Late Submission';
+            }
+        }
+
+        return 'Submitted';
+    }
+
+    /**
      * Maps and standardizes student fields for cross-view compatibility.
      */
-    static normalizeStudentRecord(ss = {}, f2Match = null, gmMatch = null, existing = {}) {
+    static normalizeStudentRecord(ss = {}, f2Match = null, gmMatch = null, existing = {}, activeDeadline = null) {
         ss = ss || {};
         existing = existing || {};
         const studentNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || 'N/A';
@@ -101,22 +182,28 @@ export class StudentSyncService {
 
         const scholarshipName = f2Match?.scholarship_name || ss.scholarship_name || existing.scholarship_name || existing.scholarshipProgram || 'CHED TES';
         
-        // Students registered in the system (school_students) and confirmed in student_grantees / Form 2
-        // are automatically approved as scholars with no manual approval required.
-        const isRegisteredInSystem = !!(ss && (ss.student_no || ss.id || ss.full_name));
-        const isConfirmedGrantee = !!(f2Match || (existing && (existing.student_no || existing.id)));
-        const shouldAutoApprove = isRegisteredInSystem && isConfirmedGrantee;
+        // Dynamically compute status based on actual submission and admin validation
+        const hasSubmitted = this.hasStudentSubmitted(existing, f2Match, ss);
+        const status = this.computeDynamicStatus(existing, f2Match, ss, activeDeadline);
 
-        // Auto-approve confirmed registered scholars; otherwise keep verified/approved or fallback
-        const status = shouldAutoApprove
-            ? 'Approved'
-            : ((existing.status && existing.status !== 'Pending')
-                ? existing.status
-                : (f2Match?.status || existing.status || 'Pending'));
+        const existingDocs = existing.documents || {};
+        let saVerificationStatus = 'No Submission Yet';
+        let idValidationStatus = 'No Submission Yet';
 
-        const subStatus = shouldAutoApprove
-            ? 'Approved'
-            : ((status === 'Approved' || status === 'Verified') ? 'Approved' : 'Pending');
+        if (status === 'Approved' || status === 'Verified') {
+            saVerificationStatus = 'Approved';
+            idValidationStatus = 'Approved';
+        } else if (status === 'Rejected') {
+            saVerificationStatus = 'Rejected';
+            idValidationStatus = 'Rejected';
+        } else if (hasSubmitted) {
+            saVerificationStatus = existingDocs.saVerificationStatus || existing.saVerificationStatus || 'Pending';
+            idValidationStatus = existingDocs.idValidationStatus || existing.idValidationStatus || 'Pending';
+        } else {
+            saVerificationStatus = 'No Submission Yet';
+            idValidationStatus = 'No Submission Yet';
+        }
+
         const batch = f2Match?.tes_batch || gmMatch?.batch || existing.batch || 'Batch 1';
 
         const fatherName = ss.father_full_name || existing.father_full_name || existing.familyDetails?.fatherName || 'N/A';
@@ -128,14 +215,6 @@ export class StudentSyncService {
         const lastName = f2Match?.last_name || (ss.full_name ? ss.full_name.split(' ').pop() : '');
         const firstName = f2Match?.given_name || (ss.full_name ? ss.full_name.split(' ').slice(0, -1).join(' ') : '');
         const mi = f2Match?.middle_initial || '';
-
-        const existingDocs = existing.documents || {};
-        const saVerificationStatus = shouldAutoApprove
-            ? 'Approved'
-            : (existing.saVerificationStatus || existingDocs.saVerificationStatus || subStatus);
-        const idValidationStatus = shouldAutoApprove
-            ? 'Approved'
-            : (existing.idValidationStatus || existingDocs.idValidationStatus || subStatus);
 
         const documents = {
             ...existingDocs,
@@ -241,6 +320,35 @@ export class StudentSyncService {
         }
 
         try {
+            // 0. Fetch active deadline announcement configured by Super Admin
+            let activeDeadline = null;
+            try {
+                const { data: annData } = await supabase
+                    .from('announcements')
+                    .select('*')
+                    .eq('isActive', true)
+                    .order('createdAt', { ascending: false });
+
+                if (Array.isArray(annData) && annData.length > 0) {
+                    const dlAnn = annData.find(a => a.type === 'Deadline') || annData[0];
+                    if (dlAnn) {
+                        const tagMatch = (dlAnn.content || '').match(/\[Deadline:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}[^\]]*)\]/i);
+                        if (tagMatch) {
+                            const parsed = new Date(tagMatch[1].trim());
+                            if (!isNaN(parsed.getTime())) activeDeadline = parsed;
+                        } else {
+                            const dateMatch = ((dlAnn.title || '') + ' ' + (dlAnn.content || '')).match(/(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i);
+                            if (dateMatch) {
+                                const parsed = new Date(dateMatch[0]);
+                                if (!isNaN(parsed.getTime())) activeDeadline = parsed;
+                            }
+                        }
+                    }
+                }
+            } catch (dlErr) {
+                console.warn('StudentSyncService: Could not check active deadline announcement:', dlErr);
+            }
+
             // 1. Fetch Form 2 records (ground truth for Student Grantees)
             let f2Query = supabase.from('annex_form_2').select('*');
             if (typeof f2Query.order === 'function') {
@@ -283,7 +391,7 @@ export class StudentSyncService {
                 if (Array.isArray(sgList) && sgList.length > 0) {
                     return sgList.map(sg => {
                         const ssMatch = Array.isArray(schoolStudents) ? schoolStudents.find(ss => this.isMatch(ss, sg)) : null;
-                        return this.normalizeStudentRecord(ssMatch || {}, null, null, sg);
+                        return this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
                     });
                 }
                 return [];
@@ -299,7 +407,7 @@ export class StudentSyncService {
                 const existingSg = Array.isArray(sgList)
                     ? sgList.find(sg => this.isMatch(sg, f2) || (ssMatch && this.isMatch(sg, ssMatch)))
                     : null;
-                const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, null, existingSg || {});
+                const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, null, existingSg || {}, activeDeadline);
 
                 if (!existingSg) {
                     toInsert.push({
@@ -325,7 +433,7 @@ export class StudentSyncService {
                         father_occupation: normalized.father_occupation,
                         mother_full_name: normalized.mother_full_name,
                         mother_occupation: normalized.mother_occupation,
-                        status: normalized.status,
+                        status: normalized.status, // "No Submission Yet" initially!
                         scholarship_name: normalized.scholarship_name,
                         role: 'student',
                         sa_number: normalized.sa_number,
@@ -341,31 +449,28 @@ export class StudentSyncService {
                         sa_verification_status: normalized.saVerificationStatus,
                         admin_remarks: normalized.admin_remarks
                     });
-                } else if (existingSg && ssMatch) {
-                    // Student is confirmed in student_grantees and registered in school_students:
-                    // Ensure their status in Supabase is automatically Approved with no manual approval needed
-                    const needsApproval = existingSg.status !== 'Approved' ||
-                        existingSg.saVerificationStatus !== 'Approved' ||
-                        existingSg.idValidationStatus !== 'Approved' ||
-                        existingSg.documents?.saVerificationStatus !== 'Approved' ||
-                        existingSg.documents?.idValidationStatus !== 'Approved';
+                } else if (existingSg) {
+                    // Update database record if status differs from dynamic computed status
+                    const needsStatusSync = existingSg.status !== normalized.status ||
+                        existingSg.saVerificationStatus !== normalized.saVerificationStatus ||
+                        existingSg.idValidationStatus !== normalized.idValidationStatus;
 
-                    if (needsApproval) {
+                    if (needsStatusSync) {
                         toUpdate.push({
                             id: existingSg.id,
                             uid: existingSg.uid,
-                            status: 'Approved',
-                            saVerificationStatus: 'Approved',
-                            sa_verification_status: 'Approved',
-                            idValidationStatus: 'Approved',
-                            id_validation_status: 'Approved',
+                            status: normalized.status,
+                            saVerificationStatus: normalized.saVerificationStatus,
+                            sa_verification_status: normalized.saVerificationStatus,
+                            idValidationStatus: normalized.idValidationStatus,
+                            id_validation_status: normalized.idValidationStatus,
                             documents: {
                                 ...(existingSg.documents || {}),
-                                saVerificationStatus: 'Approved',
-                                idValidationStatus: 'Approved',
+                                saVerificationStatus: normalized.saVerificationStatus,
+                                idValidationStatus: normalized.idValidationStatus,
                                 saNumber: normalized.saNumber
                             },
-                            admin_remarks: existingSg.admin_remarks || 'Automatically approved as confirmed scholar grantee.',
+                            admin_remarks: normalized.admin_remarks,
                             updated_at: new Date().toISOString()
                         });
                     }
@@ -388,7 +493,7 @@ export class StudentSyncService {
                 }
             }
 
-            // Automatically update existing grantees to Approved in Supabase
+            // Automatically update existing grantees status in Supabase
             if (toUpdate.length > 0) {
                 for (const item of toUpdate) {
                     try {
@@ -399,10 +504,10 @@ export class StudentSyncService {
                             await supabase.from('student_grantees').update(updateFields).eq('uid', item.uid);
                         }
                     } catch (updErr) {
-                        console.warn('StudentSyncService: Could not auto-approve existing grantee in Supabase:', updErr);
+                        console.warn('StudentSyncService: Could not sync grantee status in Supabase:', updErr);
                     }
                 }
-                console.log(`StudentSyncService: Auto-approved ${toUpdate.length} confirmed registered grantees in Supabase.`);
+                console.log(`StudentSyncService: Synced ${toUpdate.length} student grantee statuses in Supabase.`);
             }
 
             return result;

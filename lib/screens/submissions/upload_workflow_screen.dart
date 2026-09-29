@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'id_capture_screen.dart';
+import '../../services/academic_term_service.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
   const UploadWorkflowScreen({super.key});
@@ -1401,9 +1402,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             'atm_proof_type': _atmProofType,
             'documents': documents,
             'pdfVerified': true,
-            'academicYear': _stickerAcademicYear ?? 'AY 2026-2027',
-            'academic_year': _stickerAcademicYear ?? 'AY 2026-2027',
-            'semester': _stickerSemester ?? '1st Semester',
+            'academicYear': _stickerAcademicYear ?? AcademicTermService.currentTerm.academicYear,
+            'academic_year': _stickerAcademicYear ?? AcademicTermService.currentTerm.academicYear,
+            'semester': _stickerSemester ?? AcademicTermService.currentTerm.semester,
             'stickerValidated': _stickerValidated ?? true,
             'sticker_validated': _stickerValidated ?? true,
             'createdAt': DateTime.now().toUtc().toIso8601String(),

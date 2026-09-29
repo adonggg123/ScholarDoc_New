@@ -536,7 +536,7 @@ async function exportForm2Excel() {
         console.error('Export Form 2 error:', err);
         alert('Failed to export Form 2: ' + err.message);
     } finally {
-        if (btn) btn.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)';
+        if (btn) btn.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Export Form 2 (.xlsx)';
     }
 }
 
@@ -584,7 +584,7 @@ async function exportForm3Excel() {
         console.error('Export Form 3 error:', err);
         alert('Failed to export Form 3: ' + err.message);
     } finally {
-        if (btn) btn.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)';
+        if (btn) btn.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Export Form 3 (.xlsx)';
     }
 }
 

@@ -2212,8 +2212,8 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         'frontBytes': frontBytes,
                         'backBytes': backBytes,
                         'stickerResult': _stickerResult,
-                        'academicYear': _stickerResult?.academicYear ?? 'AY 2026-2027',
-                        'semester': _stickerResult?.semester ?? '1st Semester',
+                        'academicYear': _stickerResult?.academicYear ?? AcademicTermService.currentTerm.academicYear,
+                        'semester': _stickerResult?.semester ?? AcademicTermService.currentTerm.semester,
                         'stickerValidated': _stickerResult?.isValid == true || _stickerOverriddenForAdmin,
                         'stickerOverriddenForAdmin': _stickerOverriddenForAdmin,
                       });

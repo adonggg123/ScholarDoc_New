@@ -1,54 +1,128 @@
 <div class="view-content" style="display: flex; flex-direction: column; gap: 24px; padding-bottom: 60px;">
 
+    <!-- Page Header -->
     <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
         <div>
             <h2
                 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800; color: var(--primary-color); letter-spacing: -0.5px;">
                 Operation Logs</h2>
             <p style="margin: 0; color: var(--text-secondary); font-size: 13px; font-weight: 500;">Complete audit trail
-                of system activities and user actions.</p>
+                of system activities, administrative overrides, and scholar actions.</p>
         </div>
-        <button class="icon-btn" onclick="loadLogs()" title="Refresh Logs" style="color: var(--primary-color);">
-            <i class="icon-refresh-cw"></i>
-        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="btn btn-secondary" onclick="exportAuditLogsCsv()" title="Export Filtered Logs as CSV"
+                style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer;">
+                <i class="icon-download" style="font-size: 15px;"></i>
+                <span>Export CSV</span>
+            </button>
+            <button class="icon-btn" onclick="loadLogs()" title="Refresh Logs"
+                style="color: var(--primary-color); background: rgba(15, 50, 96, 0.08); padding: 10px; border-radius: 12px;">
+                <i class="icon-refresh-cw"></i>
+            </button>
+        </div>
     </div>
 
     <!-- Filters Section -->
-    <div
-        style="background: rgba(255,255,255,0.02); padding: 16px; border-radius: 16px; border: 1px solid var(--border-color);">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="padding: 8px; background: rgba(15, 50, 96, 0.1); border-radius: 50%;">
-                    <i class="icon-filter" style="font-size: 14px; color: var(--primary-color);"></i>
+    <div class="card"
+        style="background: var(--card-bg, #ffffff); padding: 20px; border-radius: 18px; border: 1px solid var(--border-color); box-shadow: 0 4px 16px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- Header Row inside Filter Box -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div
+                    style="width: 34px; height: 34px; border-radius: 10px; background: rgba(15, 50, 96, 0.1); display: flex; align-items: center; justify-content: center;">
+                    <i class="icon-filter" style="font-size: 15px; color: var(--primary-color);"></i>
                 </div>
-                <span style="font-weight: 700; font-size: 15px;">Refine Trail</span>
+                <span style="font-weight: 800; font-size: 15px; color: var(--text-primary);">Refine Trail</span>
             </div>
-            <div id="filter-badge-24h"
-                style="padding: 4px 10px; background: rgba(255, 193, 7, 0.1); border-radius: 20px; display: flex; align-items: center;">
-                <span style="font-size: 9px; color: #FFA000; font-weight: 900; letter-spacing: 0.5px;">24H WINDOW</span>
+
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <!-- Dynamic Active Date Badge -->
+                <div id="filter-badge-window"
+                    style="padding: 5px 12px; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.2); border-radius: 20px; display: flex; align-items: center; gap: 6px;">
+                    <i class="icon-calendar" style="font-size: 12px; color: var(--primary-color);"></i>
+                    <span id="badge-window-text"
+                        style="font-size: 11px; color: var(--primary-color); font-weight: 800; letter-spacing: 0.3px;">THIS
+                        MONTH</span>
+                </div>
+                <!-- Count Badge -->
+                <div id="log-count-badge"
+                    style="padding: 5px 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 20px; font-size: 11px; color: #10B981; font-weight: 800;">
+                    Loading logs...
+                </div>
             </div>
         </div>
 
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-            <div style="flex: 1; min-width: 200px; position: relative;">
-                <i class="icon-search"
-                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 18px;"></i>
-                <input type="text" id="log-search" placeholder="Search by user, action, or Student ID..."
-                    style="width: 100%; padding: 12px 12px 12px 40px; border-radius: 12px; border: none; background: rgba(0,0,0,0.05); font-family: inherit; font-size: 13px; outline: none;">
+        <!-- Search Bar -->
+        <div style="position: relative;">
+            <i class="icon-search"
+                style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 16px;"></i>
+            <input type="text" id="log-search" placeholder="Search by user, role, action details, or Student ID..."
+                style="width: 100%; padding: 12px 14px 12px 42px; border-radius: 12px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); font-family: inherit; font-size: 13.5px; outline: none; transition: border-color 0.2s; color: var(--text-primary);">
+        </div>
+
+        <!-- Date Range Filter Row -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <span
+                    style="font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px;">Date
+                    Filter (Default: By Month)</span>
+                <span id="date-range-caption"
+                    style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary);"></span>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="date" id="log-date"
-                    style="padding: 12px; border-radius: 12px; border: none; background: rgba(0,0,0,0.05); font-family: inherit; font-size: 13px; outline: none; cursor: pointer;">
-                <button class="icon-btn" id="clear-date-btn" style="display: none;" title="Clear Date Filter"><i
-                        class="icon-x"></i></button>
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <!-- Preset Range Chips -->
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="date-presets">
+                    <button class="date-chip active" data-range="this-month" title="Filter to current calendar month">
+                        <i class="icon-calendar" style="font-size: 12px;"></i>
+                        <span>This Month</span>
+                    </button>
+                    <button class="date-chip" data-range="last-month" title="Filter to previous month">
+                        <span>Last Month</span>
+                    </button>
+                    <button class="date-chip" data-range="today" title="Filter to today only">
+                        <span>Today</span>
+                    </button>
+                    <button class="date-chip" data-range="7days" title="Past 7 days">
+                        <span>Last 7 Days</span>
+                    </button>
+                    <button class="date-chip" data-range="all" title="View all logs without date restriction">
+                        <span>All Time</span>
+                    </button>
+                </div>
+
+                <!-- Custom Date Inputs (From / To) -->
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div
+                        style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.03); padding: 6px 12px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <span
+                            style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">From</span>
+                        <input type="date" id="log-date-from"
+                            style="border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                    </div>
+                    <div
+                        style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.03); padding: 6px 12px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <span
+                            style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">To</span>
+                        <input type="date" id="log-date-to"
+                            style="border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                    </div>
+                    <button class="icon-btn" id="reset-date-btn" title="Reset to This Month (Default)"
+                        style="color: var(--primary-color); background: rgba(15, 50, 96, 0.08); padding: 8px 10px; border-radius: 10px; font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <i class="icon-rotate-ccw" style="font-size: 13px;"></i>
+                        <span style="font-weight: 700; font-size: 11px;">Reset</span>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div style="display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap;">
-            <span style="font-size: 14px; font-weight: 600;">Role:</span>
+        <!-- Role Filter Row -->
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
+            <span
+                style="font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px;">Role:</span>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="role-filters">
-                <button class="role-chip active" data-role="All">All</button>
+                <button class="role-chip active" data-role="All">All Roles</button>
                 <button class="role-chip" data-role="Super Admin">Super Admin</button>
                 <button class="role-chip" data-role="Admin">Admin</button>
                 <button class="role-chip" data-role="Student">Student</button>
@@ -57,30 +131,63 @@
     </div>
 
     <!-- Data List -->
-    <div class="card" style="padding: 0; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
+    <div class="card"
+        style="padding: 0; overflow: hidden; border-radius: 18px; border: 1px solid var(--border-color); box-shadow: 0 4px 16px rgba(0,0,0,0.04); background: var(--card-bg, #ffffff);">
         <div id="logs-container" style="display: flex; flex-direction: column;">
-            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading logs...</div>
+            <div style="text-align: center; padding: 60px; color: var(--text-secondary);">
+                <i class="icon-refresh-cw"
+                    style="font-size: 28px; animation: spin 1.2s linear infinite; display: inline-block; margin-bottom: 12px; color: var(--primary-color);"></i>
+                <div style="font-weight: 600; font-size: 14px;">Loading operation logs...</div>
+            </div>
         </div>
     </div>
 </div>
 
 <style>
-    .role-chip {
-        padding: 6px 12px;
+    .role-chip,
+    .date-chip {
+        padding: 7px 14px;
         border-radius: 10px;
-        border: none;
-        background: rgba(0, 0, 0, 0.05);
+        border: 1px solid var(--border-color);
+        background: rgba(0, 0, 0, 0.03);
         color: var(--text-primary);
         font-weight: 600;
         font-size: 12px;
         cursor: pointer;
         font-family: inherit;
-        transition: all 0.2s;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    .role-chip.active {
+    .role-chip:hover,
+    .date-chip:hover {
+        background: rgba(15, 50, 96, 0.08);
+        border-color: rgba(15, 50, 96, 0.2);
+    }
+
+    .role-chip.active,
+    .date-chip.active {
         background: var(--primary-color);
         color: white;
         font-weight: 800;
+        border-color: var(--primary-color);
+        box-shadow: 0 2px 8px rgba(15, 50, 96, 0.25);
+    }
+
+    .role-chip.active i,
+    .date-chip.active i {
+        color: white;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
     }
 </style>

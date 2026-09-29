@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'screens/auth/splash_screen.dart';
+import 'services/academic_term_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
@@ -16,8 +17,9 @@ void main() async {
       anonKey:
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk',
     );
+    await AcademicTermService.initialize();
   } catch (e) {
-    debugPrint('Supabase init error: $e');
+    debugPrint('Supabase/AcademicTerm init error: $e');
   }
   runApp(const ScholarDocApp());
 }

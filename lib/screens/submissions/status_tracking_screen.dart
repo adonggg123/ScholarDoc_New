@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/academic_term_service.dart';
 import 'upload_workflow_screen.dart';
 import 'submission_history_screen.dart';
 
@@ -23,6 +24,9 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   Map<String, dynamic>? _studentData;
   bool _isLoading = true;
   String? _errorMessage;
+
+  AcademicTerm _activeTerm = AcademicTermService.currentTerm;
+  AcademicTerm? _selectedTerm;
 
   StreamSubscription<List<Map<String, dynamic>>>? _streamSubscription;
   late AnimationController _animController;
@@ -55,6 +59,16 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       }
       return;
     }
+
+    try {
+      await AcademicTermService.initialize();
+      if (mounted) {
+        setState(() {
+          _activeTerm = AcademicTermService.currentTerm;
+          _selectedTerm ??= _activeTerm;
+        });
+      }
+    } catch (_) {}
 
     // 1. Initial direct load to guarantee instant rendering
     await _fetchProfile(user.id);
@@ -101,6 +115,14 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   }
 
   Future<void> _refresh() async {
+    try {
+      await AcademicTermService.syncFromSupabase();
+      if (mounted) {
+        setState(() {
+          _activeTerm = AcademicTermService.currentTerm;
+        });
+      }
+    } catch (_) {}
     final user = _authService.currentUser;
     if (user != null) {
       await _fetchProfile(user.id);
@@ -200,25 +222,15 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   Widget _buildBody(BuildContext context) {
     final data = _studentData;
 
-    final String status = data?['status'] ?? 'Pending';
-    final bool isApproved = status == 'Approved' || status == 'Verified';
-    final bool isRejected = status == 'Rejected';
+    final targetTerm = _selectedTerm ?? _activeTerm;
+    final bool isViewingActiveTerm = (targetTerm == _activeTerm);
+
+    final String rawStatus = data?['status'] ?? 'Pending';
     final bool requiresResubmission = data?['requiresResubmission'] == true;
 
-    final String scholarshipName = data?['scholarshipName'] ??
-        data?['scholarship_name'] ??
-        'TES Scholarship Program';
+    final String scholarshipName = 'TES';
 
     final String? remarks = (data?['adminRemarks'] ?? data?['admin_remarks'])?.toString().trim();
-
-    var submittedDate = 'N/A';
-    final dateVal = data?['submittedAt'] ?? data?['submitted_at'] ?? data?['createdAt'] ?? data?['created_at'];
-    if (dateVal != null) {
-      try {
-        final ts = DateTime.parse(dateVal.toString());
-        submittedDate = DateFormat('MMM d, yyyy').format(ts);
-      } catch (_) {}
-    }
 
     // Documents & verification details
     Map<String, dynamic> docs = {};
@@ -231,83 +243,150 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       } catch (_) {}
     }
 
-    final String saVerificationStatus = (docs['saVerificationStatus'] ??
+    // Has the student actually submitted required documents?
+    final dynamic rawSubmittedAt = data?['submittedAt'] ?? data?['submitted_at'];
+    final bool hasSubmittedTimestamp = rawSubmittedAt != null &&
+        rawSubmittedAt.toString().trim().isNotEmpty &&
+        rawSubmittedAt.toString().trim() != 'null';
+
+    final String? pdfUrl = data?['submissionPdfUrl'] ??
+        data?['submission_pdf_url'] ??
+        docs['submissionPdfUrl'] ??
+        docs['submission_pdf_url'];
+    final bool hasIdPdf = pdfUrl != null && pdfUrl.toString().trim().isNotEmpty;
+
+    final String? atmUrl = data?['atmCardUrl'] ??
+        data?['atm_card_url'] ??
+        docs['atmCardUrl'] ??
+        docs['atm_card_url'];
+    final bool hasAtmProof = atmUrl != null && atmUrl.toString().trim().isNotEmpty;
+    final String atmProofType = (data?['atmProofType'] ??
+            docs['atmProofType'] ??
+            docs['atm_proof_type'] ??
+            'ATM Card')
+        .toString();
+
+    final bool hasFrontBack = ((docs['idFrontUrl'] ?? data?['idFrontUrl']) != null &&
+            (docs['idFrontUrl'] ?? data?['idFrontUrl']).toString().trim().isNotEmpty) ||
+        ((docs['idBackUrl'] ?? data?['idBackUrl']) != null &&
+            (docs['idBackUrl'] ?? data?['idBackUrl']).toString().trim().isNotEmpty);
+
+    final bool hasRawSubmission = hasSubmittedTimestamp || hasIdPdf || hasAtmProof || hasFrontBack;
+
+    // Academic Year & Semester matching check
+    final String studentAy = (data?['academicYear'] ??
+            data?['academic_year'] ??
+            docs['academicYear'] ??
+            docs['academic_year'] ??
+            '')
+        .toString()
+        .trim();
+    final String studentSem = (data?['semester'] ?? docs['semester'] ?? '')
+        .toString()
+        .trim();
+
+    final bool termMatches = studentAy.isNotEmpty &&
+        AcademicTermService.isYearMatching(studentAy, targetTerm.academicYear) &&
+        (studentSem.isEmpty || AcademicTermService.isSemesterMatching(studentSem, targetTerm.semester));
+
+    // CRITICAL: Progress & Status reset by Year and Semester!
+    // If the student has not submitted requirements for the selected academic term,
+    // hasSubmitted is FALSE, which resets progress to 25% (Awaiting Requirements Submission).
+    final bool hasSubmitted = hasRawSubmission && termMatches;
+
+    var submittedDate = 'Awaiting Submission';
+    if (hasSubmitted && hasSubmittedTimestamp) {
+      try {
+        final ts = DateTime.parse(rawSubmittedAt.toString());
+        submittedDate = DateFormat('MMM d, yyyy').format(ts);
+      } catch (_) {
+        submittedDate = rawSubmittedAt.toString();
+      }
+    }
+
+    // Check presence of individual requirements
+    final String? saNum = data?['saNumber'] ??
+        data?['sa_number'] ??
+        docs['saNumber'] ??
+        docs['sa_number'];
+    final bool hasSa = saNum != null &&
+        saNum.toString().trim().isNotEmpty &&
+        saNum.toString().trim().toUpperCase() != 'N/A' &&
+        saNum.toString().trim() != 'null';
+
+    final String rawSaStatus = (docs['saVerificationStatus'] ??
             docs['sa_verification_status'] ??
             data?['saVerificationStatus'] ??
             data?['sa_verification_status'] ??
-            (isApproved ? 'Verified' : 'Pending'))
+            'Pending')
         .toString();
 
-    final String idValidationStatus = (docs['idValidationStatus'] ??
+    final String rawIdStatus = (docs['idValidationStatus'] ??
             docs['id_validation_status'] ??
             data?['idValidationStatus'] ??
             data?['id_validation_status'] ??
-            (isApproved ? 'Verified' : 'Pending'))
+            'Pending')
         .toString();
 
-    final bool isSaVerified = saVerificationStatus.toLowerCase() == 'verified' ||
-        saVerificationStatus.toLowerCase() == 'approved' ||
-        isApproved;
+    final bool isSaApproved = rawSaStatus.toLowerCase() == 'verified' ||
+        rawSaStatus.toLowerCase() == 'approved';
+    final bool isSaRejected = rawSaStatus.toLowerCase() == 'rejected';
+    final bool isSaMissing = !hasSa || rawSaStatus.toLowerCase() == 'missing';
+    final bool isSaVerified = hasSubmitted && hasSa && isSaApproved;
 
-    final bool isIdVerified = idValidationStatus.toLowerCase() == 'verified' ||
-        idValidationStatus.toLowerCase() == 'approved' ||
-        isApproved;
+    final bool isIdApproved = rawIdStatus.toLowerCase() == 'verified' ||
+        rawIdStatus.toLowerCase() == 'approved';
+    final bool isIdRejected = rawIdStatus.toLowerCase() == 'rejected';
+    final bool isIdMissing = rawIdStatus.toLowerCase() == 'missing';
+    final bool isIdVerified = hasSubmitted && isIdApproved;
 
-    // Check presence of individual requirements
-    final String? saNum = data?['saNumber'] ?? data?['sa_number'] ?? docs['saNumber'] ?? docs['sa_number'];
-    final bool hasSa = saNum != null && saNum.trim().isNotEmpty && saNum.trim().toUpperCase() != 'N/A';
-
-    final String? pdfUrl = data?['submissionPdfUrl'] ?? data?['submission_pdf_url'] ?? docs['submissionPdfUrl'] ?? docs['submission_pdf_url'];
-    final bool hasIdPdf = pdfUrl != null && pdfUrl.isNotEmpty;
-
-    final String? atmUrl = data?['atmCardUrl'] ?? data?['atm_card_url'] ?? docs['atmCardUrl'] ?? docs['atm_card_url'];
-    final bool hasAtmProof = atmUrl != null && atmUrl.isNotEmpty;
-    final String atmProofType = (data?['atmProofType'] ?? docs['atmProofType'] ?? docs['atm_proof_type'] ?? 'ATM Card').toString();
-
-    final bool hasFrontBack = (docs['idFrontUrl'] ?? data?['idFrontUrl']) != null &&
-        (docs['idBackUrl'] ?? data?['idBackUrl']) != null;
-
-    final bool hasAnySubmission = hasSa || hasIdPdf || hasAtmProof || hasFrontBack || isApproved;
-
-    // Calculate verification timeline progress (4 stages)
-    final bool isBothRequirementsVerified = isSaVerified && isIdVerified;
-
-    int completedStages = 1; // Stage 1 (Account Registration) is always verified
-    if (hasAnySubmission) completedStages++;
+    // 4 stages in the verification timeline
+    int completedStages = 1; // Stage 1 (Account Registration & Eligibility) is verified
+    if (hasSubmitted) completedStages++;
     if (isSaVerified) completedStages++;
     if (isIdVerified) completedStages++;
 
-    final double progressValue = (isBothRequirementsVerified || isApproved) ? 1.0 : (completedStages / 4.0);
-    final String progressLabel = (isBothRequirementsVerified || isApproved)
+    final bool allStagesVerified = hasSubmitted && isSaVerified && isIdVerified;
+    final double progressValue = completedStages / 4.0;
+
+    final String progressLabel = allStagesVerified
         ? 'All Requirements Verified (100%)'
-        : (requiresResubmission
+        : (requiresResubmission && hasSubmitted
             ? 'Action Required: Resubmission needed'
-            : '$completedStages of 4 verification stages completed');
+            : (!hasSubmitted
+                ? 'Pending Requirements Submission for ${targetTerm.shortString} (25%)'
+                : '$completedStages of 4 verification stages completed (${(progressValue * 100).toInt()}%)'));
+
+    final String effectiveStatus = hasSubmitted ? rawStatus : 'Pending';
 
     Color statusColor = AppTheme.warning;
-    if (isBothRequirementsVerified || isApproved) {
+    if (allStagesVerified) {
       statusColor = AppTheme.success;
-    } else if (isRejected || requiresResubmission) {
+    } else if (hasSubmitted && (effectiveStatus == 'Rejected' || requiresResubmission || isSaRejected || isIdRejected)) {
       statusColor = AppTheme.error;
+    } else if (!hasSubmitted) {
+      statusColor = AppTheme.primaryColor;
     }
 
-    final bool needsAction = requiresResubmission ||
-        isRejected ||
-        !hasAnySubmission ||
-        saVerificationStatus.toLowerCase() == 'missing' ||
-        saVerificationStatus.toLowerCase() == 'rejected' ||
-        idValidationStatus.toLowerCase() == 'missing' ||
-        idValidationStatus.toLowerCase() == 'rejected';
+    final bool needsAction = !hasSubmitted ||
+        requiresResubmission ||
+        effectiveStatus == 'Rejected' ||
+        isSaMissing ||
+        isSaRejected ||
+        isIdMissing ||
+        isIdRejected;
 
     return Column(
       children: [
         _buildHeader(
           context: context,
           scholarshipName: scholarshipName,
-          status: status,
+          status: effectiveStatus,
+          allStagesVerified: allStagesVerified,
           requiresResubmission: requiresResubmission,
-          saStatus: saVerificationStatus,
-          idStatus: idValidationStatus,
+          saStatus: rawSaStatus,
+          idStatus: rawIdStatus,
+          targetTerm: targetTerm,
           onRefresh: _refresh,
         ),
         Expanded(
@@ -316,24 +395,44 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // 0. Academic Period Bar (Term Selector & Reset Status)
+                      _buildAcademicTermBar(
+                        context: context,
+                        targetTerm: targetTerm,
+                        isViewingActiveTerm: isViewingActiveTerm,
+                        hasSubmittedForTerm: hasSubmitted,
+                        hasAnySubmission: hasRawSubmission,
+                        studentAy: studentAy,
+                        studentSem: studentSem,
+                      ),
+                      const SizedBox(height: 16),
+
+                      if (!isViewingActiveTerm) ...[
+                        _buildArchiveWarningBanner(context),
+                        const SizedBox(height: 16),
+                      ],
+
                       // 1. Main Status Indicator Banner
                       _buildMainStatusCard(
                         context: context,
-                        status: status,
+                        status: effectiveStatus,
                         requiresResubmission: requiresResubmission,
                         submittedDate: submittedDate,
-                        hasAnySubmission: hasAnySubmission,
-                        saStatus: saVerificationStatus,
-                        idStatus: idValidationStatus,
+                        hasSubmitted: hasSubmitted,
+                        allStagesVerified: allStagesVerified,
+                        isSaRejected: isSaRejected,
+                        isIdRejected: isIdRejected,
+                        targetTerm: targetTerm,
+                        isViewingActiveTerm: isViewingActiveTerm,
                       ),
                       const SizedBox(height: 24),
 
-                      // 2. Official Remarks (if present)
-                      if (remarks != null && remarks.isNotEmpty) ...[
+                      // 2. Official Remarks (if present and submitted for this term)
+                      if (hasSubmitted && remarks != null && remarks.isNotEmpty) ...[
                         _buildRemarksCard(remarks, statusColor),
                         const SizedBox(height: 24),
                       ],
@@ -345,16 +444,18 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                       // 4. Verification Timeline Component
                       _buildVerticalTimeline(
                         context: context,
-                        saStatus: saVerificationStatus,
-                        idStatus: idValidationStatus,
-                        overallStatus: status,
-                        hasSubmission: hasAnySubmission,
+                        isSaVerified: isSaVerified,
+                        isIdVerified: isIdVerified,
+                        rawSaStatus: rawSaStatus,
+                        rawIdStatus: rawIdStatus,
+                        hasSubmitted: hasSubmitted,
                         hasSa: hasSa,
                         saNum: saNum,
                         hasIdPdf: hasIdPdf,
                         hasAtmProof: hasAtmProof,
                         atmProofType: atmProofType,
                         requiresResubmission: requiresResubmission,
+                        targetTerm: targetTerm,
                       ),
                       const SizedBox(height: 28),
 
@@ -362,15 +463,17 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                       if (needsAction) ...[
                         _buildActionButton(
                           context,
-                          label: !hasAnySubmission ? 'SUBMIT REQUIREMENTS NOW' : 'RESUBMIT / FIX REQUIREMENTS',
-                          icon: !hasAnySubmission ? LucideIcons.uploadCloud : LucideIcons.refreshCw,
+                          label: !hasSubmitted
+                              ? 'SUBMIT REQUIREMENTS FOR ${targetTerm.academicYear.toUpperCase()}'
+                              : 'RESUBMIT / FIX REQUIREMENTS',
+                          icon: !hasSubmitted ? LucideIcons.uploadCloud : LucideIcons.refreshCw,
                           color: const Color(0xFFF59E0B),
                           onTap: () => _navigateToUpload(context),
                         ),
                         const SizedBox(height: 12),
                       ],
 
-                      if (hasAnySubmission) ...[
+                      if (hasSubmitted || hasRawSubmission) ...[
                         _buildSecondaryButton(
                           context,
                           label: 'VIEW SUBMISSION HISTORY',
@@ -393,20 +496,22 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     required BuildContext context,
     required String scholarshipName,
     required String status,
+    required bool allStagesVerified,
     required bool requiresResubmission,
     required String saStatus,
     required String idStatus,
+    required AcademicTerm targetTerm,
     required VoidCallback onRefresh,
   }) {
     final topPadding = MediaQuery.of(context).padding.top;
     final canPop = Navigator.canPop(context);
 
     IconData headerIcon = LucideIcons.clock;
-    if (status == 'Approved' || status == 'Verified') {
+    if (allStagesVerified) {
       headerIcon = LucideIcons.shieldCheck;
     } else if (status == 'Rejected') {
       headerIcon = LucideIcons.xCircle;
-    } else if (requiresResubmission || saStatus == 'Missing' || idStatus == 'Missing') {
+    } else if (requiresResubmission || saStatus.toLowerCase() == 'missing' || idStatus.toLowerCase() == 'missing') {
       headerIcon = LucideIcons.alertTriangle;
     }
 
@@ -448,15 +553,28 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  scholarshipName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.75),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      scholarshipName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '• ${targetTerm.shortString}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFFFBC02D),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -484,9 +602,12 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     required String status,
     required bool requiresResubmission,
     required String submittedDate,
-    required bool hasAnySubmission,
-    required String saStatus,
-    required String idStatus,
+    required bool hasSubmitted,
+    required bool allStagesVerified,
+    required bool isSaRejected,
+    required bool isIdRejected,
+    required AcademicTerm targetTerm,
+    required bool isViewingActiveTerm,
   }) {
     Color cardColor;
     Gradient cardGradient;
@@ -495,20 +616,18 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     String statusSubtitle;
     Color iconBgColor;
 
-    final bool isBothRequirementsVerified =
-        (saStatus.toLowerCase() == 'verified' || saStatus.toLowerCase() == 'approved' || status == 'Approved' || status == 'Verified') &&
-        (idStatus.toLowerCase() == 'verified' || idStatus.toLowerCase() == 'approved' || status == 'Approved' || status == 'Verified');
-
-    if (status == 'Approved' || status == 'Verified' || isBothRequirementsVerified) {
-      cardColor = const Color(0xFF10B981);
+    if (!hasSubmitted) {
+      cardColor = const Color(0xFF0F3260);
       cardGradient = const LinearGradient(
-        colors: [Color(0xFF059669), Color(0xFF10B981)],
+        colors: [Color(0xFF0A2540), Color(0xFF1E3A8A)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
-      icon = LucideIcons.badgeCheck;
-      statusTitle = 'Requirements Verified';
-      statusSubtitle = 'Your submitted scholarship requirements are verified and approved by the administrator.';
+      icon = LucideIcons.uploadCloud;
+      statusTitle = 'Pending Submission';
+      statusSubtitle = isViewingActiveTerm
+          ? 'Submissions for ${targetTerm.displayString} are open. Your progress has reset for this semester. Please submit your updated ID sticker and requirements.'
+          : 'No document submission recorded for ${targetTerm.displayString}. Requirements reset every academic year and semester.';
       iconBgColor = Colors.white24;
     } else if (requiresResubmission) {
       cardColor = const Color(0xFFD97706);
@@ -521,7 +640,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       statusTitle = 'Action Required';
       statusSubtitle = 'One or more documents require your revision. Please review official remarks and resubmit.';
       iconBgColor = Colors.white24;
-    } else if (status == 'Rejected') {
+    } else if (status == 'Rejected' || isSaRejected || isIdRejected) {
       cardColor = const Color(0xFFDC2626);
       cardGradient = const LinearGradient(
         colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
@@ -532,16 +651,16 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       statusTitle = 'Submission Denied';
       statusSubtitle = 'Your application was not approved. Review administrator remarks or visit the scholarship desk.';
       iconBgColor = Colors.white24;
-    } else if (!hasAnySubmission) {
-      cardColor = const Color(0xFF0F3260);
+    } else if (allStagesVerified) {
+      cardColor = const Color(0xFF10B981);
       cardGradient = const LinearGradient(
-        colors: [Color(0xFF0A2540), Color(0xFF1E3A8A)],
+        colors: [Color(0xFF059669), Color(0xFF10B981)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
-      icon = LucideIcons.uploadCloud;
-      statusTitle = 'Pending Submission';
-      statusSubtitle = 'You have not submitted your scholarship requirements yet. Tap below to upload and sign.';
+      icon = LucideIcons.badgeCheck;
+      statusTitle = 'Requirements Verified';
+      statusSubtitle = 'Your submitted scholarship requirements are verified and approved for ${targetTerm.shortString}.';
       iconBgColor = Colors.white24;
     } else {
       cardColor = const Color(0xFF3B82F6);
@@ -552,7 +671,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       );
       icon = LucideIcons.clock;
       statusTitle = 'Under Evaluation';
-      statusSubtitle = 'Your documents are in the review queue. You will be notified immediately once verified.';
+      statusSubtitle = 'Your documents for ${targetTerm.shortString} are in the review queue. You will be notified immediately once verified.';
       iconBgColor = Colors.white24;
     }
 
@@ -609,7 +728,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            hasAnySubmission ? 'Submitted on $submittedDate' : 'Awaiting Student Action',
+                            hasSubmitted ? 'Submitted on $submittedDate' : 'Awaiting Submission • ${targetTerm.shortString}',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.75),
                               fontSize: 11,
@@ -739,18 +858,19 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
 
   Widget _buildVerticalTimeline({
     required BuildContext context,
-    required String saStatus,
-    required String idStatus,
-    required String overallStatus,
-    required bool hasSubmission,
+    required bool isSaVerified,
+    required bool isIdVerified,
+    required String rawSaStatus,
+    required String rawIdStatus,
+    required bool hasSubmitted,
     required bool hasSa,
     required String? saNum,
     required bool hasIdPdf,
     required bool hasAtmProof,
     required String atmProofType,
     required bool requiresResubmission,
+    required AcademicTerm targetTerm,
   }) {
-    final bool isApproved = overallStatus == 'Approved' || overallStatus == 'Verified';
     final String maskedSa = (saNum != null && saNum.isNotEmpty) ? _formatMaskedSa(saNum) : '';
 
     return Container(
@@ -783,8 +903,8 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Official Protocol',
-                  style: TextStyle(
+                  targetTerm.shortString,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.primaryColor,
@@ -808,44 +928,50 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
           _buildTimelineNode(
             context: context,
             title: 'Requirements & Proof Submission',
-            subtitle: hasSubmission
-                ? 'Signed ID document, photo capture, and $atmProofType proof submitted.'
-                : 'Pending initial upload of ID, digital signature, and $atmProofType proof.',
-            state: hasSubmission ? 'verified' : (requiresResubmission ? 'missing' : 'pending'),
+            subtitle: hasSubmitted
+                ? 'Signed ID document, photo capture, and $atmProofType proof submitted for ${targetTerm.shortString}.'
+                : 'Pending upload of ID, digital signature, and $atmProofType proof for ${targetTerm.shortString}.',
+            state: hasSubmitted ? 'verified' : (requiresResubmission ? 'missing' : 'pending'),
             isLast: false,
-            onTap: !hasSubmission || requiresResubmission ? () => _navigateToUpload(context) : null,
+            onTap: !hasSubmitted || requiresResubmission ? () => _navigateToUpload(context) : null,
           ),
 
           // Stage 3: SA Number Verification
           _buildTimelineNode(
             context: context,
             title: 'Savings Account (SA) Number Verification',
-            subtitle: (saStatus == 'Verified' || isApproved)
-                ? (maskedSa.isNotEmpty ? 'SA Number ($maskedSa) confirmed with official bank records.' : 'Savings account officially verified.')
-                : (saStatus == 'Missing' || saStatus == 'Rejected'
+            subtitle: isSaVerified
+                ? (maskedSa.isNotEmpty
+                    ? 'SA Number ($maskedSa) confirmed with official bank records.'
+                    : 'Savings account officially verified.')
+                : (rawSaStatus.toLowerCase() == 'rejected'
                     ? 'Attention required: SA number rejected or invalid.'
-                    : (hasSa ? 'Submitted ($maskedSa) and awaiting bank verification.' : 'Official bank account number required.')),
-            state: (saStatus == 'Verified' || isApproved)
+                    : (hasSubmitted && hasSa
+                        ? 'Submitted ($maskedSa) and awaiting bank verification.'
+                        : 'Official bank account number required for ${targetTerm.shortString}.')),
+            state: isSaVerified
                 ? 'verified'
-                : (saStatus == 'Missing' || saStatus == 'Rejected' ? 'missing' : 'pending'),
+                : (rawSaStatus.toLowerCase() == 'rejected' ? 'missing' : 'pending'),
             isLast: false,
-            onTap: saStatus != 'Verified' && !isApproved ? () => _navigateToUpload(context) : null,
+            onTap: !isSaVerified ? () => _navigateToUpload(context) : null,
           ),
 
           // Stage 4: ID Card & Signature Validation
           _buildTimelineNode(
             context: context,
             title: 'ID Card & Digital Signature Validation',
-            subtitle: (idStatus == 'Verified' || isApproved)
-                ? 'ID front/back capture and digital specimen signature approved.'
-                : (idStatus == 'Missing' || idStatus == 'Rejected'
+            subtitle: isIdVerified
+                ? 'ID front/back capture and digital specimen signature approved for ${targetTerm.shortString}.'
+                : (rawIdStatus.toLowerCase() == 'rejected'
                     ? 'Attention required: ID image unreadable or signature missing.'
-                    : (hasIdPdf ? 'Uploaded credentials under examination by scholarship desk.' : 'ID scans and signature required.')),
-            state: (idStatus == 'Verified' || isApproved)
+                    : (hasSubmitted
+                        ? 'Uploaded credentials under examination by scholarship desk.'
+                        : 'ID scans with valid ${targetTerm.academicYear} sticker required.')),
+            state: isIdVerified
                 ? 'verified'
-                : (idStatus == 'Missing' || idStatus == 'Rejected' ? 'missing' : 'pending'),
+                : (rawIdStatus.toLowerCase() == 'rejected' ? 'missing' : 'pending'),
             isLast: true,
-            onTap: idStatus != 'Verified' && !isApproved ? () => _navigateToUpload(context) : null,
+            onTap: !isIdVerified ? () => _navigateToUpload(context) : null,
           ),
         ],
       ),
@@ -1051,4 +1177,377 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       MaterialPageRoute(builder: (_) => const SubmissionHistoryScreen()),
     );
   }
+
+  Widget _buildAcademicTermBar({
+    required BuildContext context,
+    required AcademicTerm targetTerm,
+    required bool isViewingActiveTerm,
+    required bool hasSubmittedForTerm,
+    required bool hasAnySubmission,
+    required String studentAy,
+    required String studentSem,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.surfaceC,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isViewingActiveTerm
+              ? AppTheme.primaryColor.withOpacity(0.25)
+              : context.crispBorder,
+          width: 1.5,
+        ),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isViewingActiveTerm
+                  ? const Color(0xFF10B981).withOpacity(0.12)
+                  : const Color(0xFF3B82F6).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              isViewingActiveTerm ? LucideIcons.calendarCheck : LucideIcons.history,
+              color: isViewingActiveTerm ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      'ACADEMIC PERIOD',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: context.textSec,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isViewingActiveTerm
+                            ? const Color(0xFF10B981).withOpacity(0.15)
+                            : Colors.grey.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isViewingActiveTerm ? 'CURRENT CYCLE' : 'ARCHIVE',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: isViewingActiveTerm
+                              ? const Color(0xFF10B981)
+                              : context.textSec,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  targetTerm.displayString,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                    color: context.textPri,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasSubmittedForTerm
+                      ? '✓ Submission records found for this term'
+                      : (isViewingActiveTerm
+                          ? 'Progress reset • Awaiting new semester upload'
+                          : 'No submission recorded for this term'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: hasSubmittedForTerm
+                        ? const Color(0xFF10B981)
+                        : (isViewingActiveTerm ? const Color(0xFFF59E0B) : context.textSec),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _showTermSelectorSheet(
+                context,
+                targetTerm,
+                studentAy,
+                studentSem,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Term',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(LucideIcons.chevronDown, size: 14, color: AppTheme.primaryColor),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArchiveWarningBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B82F6).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.info, size: 16, color: Color(0xFF3B82F6)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Viewing historical period archive. Progress resets every semester.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: context.textPri,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedTerm = _activeTerm;
+              });
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Back to Active',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF3B82F6),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTermSelectorSheet(
+    BuildContext context,
+    AcademicTerm currentSelected,
+    String studentAy,
+    String studentSem,
+  ) {
+    final terms = AcademicTermService.getAvailableTerms(
+      studentYear: studentAy,
+      studentSemester: studentSem,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.surfaceC,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(LucideIcons.calendar, size: 18, color: AppTheme.primaryColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select Academic Period',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: context.textPri,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Status & verification progress reset per semester',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.textSec,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ...terms.map((term) {
+                  final isCurrentActive = (term == _activeTerm);
+                  final isSelected = (term == currentSelected);
+                  final hasRecord = studentAy.isNotEmpty &&
+                      AcademicTermService.isYearMatching(studentAy, term.academicYear) &&
+                      (studentSem.isEmpty || AcademicTermService.isSemesterMatching(studentSem, term.semester));
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectedTerm = term;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppTheme.primaryColor.withOpacity(0.08)
+                              : context.bgC,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : context.crispBorder,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        term.displayString,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                          color: isSelected
+                                              ? AppTheme.primaryColor
+                                              : context.textPri,
+                                        ),
+                                      ),
+                                      if (isCurrentActive) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF10B981).withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'ACTIVE',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              color: Color(0xFF10B981),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    hasRecord
+                                        ? 'Submission records on file'
+                                        : (isCurrentActive
+                                            ? 'Current school cycle • Awaiting submission (25%)'
+                                            : 'No submission for this term'),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: hasRecord
+                                          ? const Color(0xFF10B981)
+                                          : context.textSec,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(LucideIcons.checkCircle2, color: AppTheme.primaryColor, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
+
