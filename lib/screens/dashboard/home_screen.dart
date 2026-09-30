@@ -400,20 +400,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  child: StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _notificationStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        debugPrint('HomeScreen bell badge error: ${snapshot.error}');
-                        return const Icon(
-                          LucideIcons.bell,
-                          color: Color(0xFF0F3260),
-                          size: 20,
-                        );
-                      }
-                      final notifications = snapshot.data ?? [];
-                      final unreadCount = notifications.where((n) => !(n['isRead'] ?? true)).length;
-
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: NotificationService.unreadCountNotifier,
+                    builder: (context, unreadCount, _) {
                       return Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -438,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 child: Center(
                                   child: Text(
-                                    '$unreadCount',
+                                    unreadCount > 99 ? '99+' : '$unreadCount',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 8,
