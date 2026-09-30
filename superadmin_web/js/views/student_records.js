@@ -1,5 +1,6 @@
 // js/views/student_records.js
 import { StudentSyncService } from '../services/student_sync_service.js';
+import { EmailNotificationService } from '../services/email_notification_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -14,6 +15,8 @@ const filterScholarship = document.getElementById('filter-scholarship');
 const sortBy = document.getElementById('sort-by');
 const pageInfo = document.getElementById('pagination-info');
 const addStudentBtn = document.getElementById('add-student-btn');
+const notifyAllGranteesBtn = document.getElementById('notify-all-grantees-btn');
+const pendingEmailBadge = document.getElementById('pending-email-badge');
 const filterAy = document.getElementById('filter-ay');
 const ayDisplay = document.getElementById('ay-display');
 const refreshStudentsBtn = document.getElementById('refresh-students-btn');
@@ -28,7 +31,7 @@ const modalContent = document.getElementById('modal-content');
 async function loadStudents() {
     try {
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
                 <i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i>
                 <div>Loading student records...</div>
             </td></tr>`;
@@ -37,10 +40,21 @@ async function loadStudents() {
 
         allStudents = await StudentSyncService.loadAndSyncStudents();
         applyFilters();
+
+        // Update pending email notifications badge
+        if (pendingEmailBadge) {
+            const pendingCount = allStudents.filter(s => !s.email_sent_at && !s.emailSentAt && (s.email_address || s.email)).length;
+            if (pendingCount > 0) {
+                pendingEmailBadge.textContent = pendingCount;
+                pendingEmailBadge.style.display = 'inline-block';
+            } else {
+                pendingEmailBadge.style.display = 'none';
+            }
+        }
     } catch (e) {
         console.error('Error loading students:', e);
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
         }
     }
 }
@@ -64,9 +78,9 @@ function applyFilters() {
         if (!matchStatus) {
             const stLower = status.toLowerCase();
             if (stLower === 'no submission yet') {
-                matchStatus = currentStatus === 'no submission yet' || currentStatus === 'pending' || !currentStatus;
-            } else if (stLower === 'submitted') {
-                matchStatus = currentStatus === 'submitted' || currentStatus === 'under review' || currentStatus === 'pending validation' || currentStatus === 'pending review' || currentStatus === 'late submission';
+                matchStatus = currentStatus === 'no submission yet' || !currentStatus;
+            } else if (stLower === 'pending' || stLower === 'submitted') {
+                matchStatus = currentStatus === 'pending' || currentStatus === 'submitted' || currentStatus === 'under review' || currentStatus === 'pending validation' || currentStatus === 'pending review' || currentStatus === 'late submission';
             } else if (stLower === 'approved' || stLower === 'verified') {
                 matchStatus = currentStatus === 'verified' || currentStatus === 'approved';
             } else if (stLower === 'rejected') {
@@ -139,15 +153,15 @@ function getStatusBadge(status) {
         color = '#DC2626'; // red
         bg = 'rgba(239, 68, 68, 0.12)';
         border = 'rgba(239, 68, 68, 0.35)';
-    } else if (sLower === 'submitted' || sLower === 'under review' || sLower === 'pending validation' || sLower === 'pending review') {
-        color = '#2563EB'; // vibrant blue
-        bg = 'rgba(37, 99, 235, 0.12)';
-        border = 'rgba(37, 99, 235, 0.35)';
+    } else if (sLower === 'pending' || sLower === 'submitted' || sLower === 'under review' || sLower === 'pending validation' || sLower === 'pending review') {
+        color = '#D97706'; // warm amber for Pending
+        bg = 'rgba(245, 158, 11, 0.12)';
+        border = 'rgba(245, 158, 11, 0.35)';
     } else if (sLower === 'late submission') {
         color = '#EA580C'; // orange
         bg = 'rgba(234, 88, 12, 0.12)';
         border = 'rgba(234, 88, 12, 0.35)';
-    } else if (sLower === 'no submission yet' || sLower === 'pending' || sLower.includes('no submission')) {
+    } else if (sLower === 'no submission yet' || sLower.includes('no submission')) {
         color = '#64748B'; // neutral slate
         bg = 'rgba(100, 116, 139, 0.12)';
         border = 'rgba(100, 116, 139, 0.3)';
@@ -158,7 +172,7 @@ function getStatusBadge(status) {
 
 function renderTable() {
     if (filteredStudents.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
             <i class="icon-users" style="font-size: 32px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>
             No students found matching your filters.
         </td></tr>`;
@@ -185,6 +199,7 @@ function renderTable() {
                </div>`;
 
         const isApproved = (s.status || '').toLowerCase() === 'approved' || (s.status || '').toLowerCase() === 'verified';
+        const isNotified = Boolean(s.email_sent_at || s.emailSentAt);
 
         return `
             <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
@@ -197,14 +212,18 @@ function renderTable() {
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${program} - ${yearLevel}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || yearLevel || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
+                <td style="padding: 12px;">${EmailNotificationService.renderStatusBadge(s)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${birthdate}</td>
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; gap: 8px;">
                         <button class="view-btn" data-id="${s.uid}" title="View Details" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-eye" style="font-size: 14px;"></i>
+                        </button>
+                        <button class="email-btn" data-id="${s.uid}" title="${isNotified ? 'Resend Grantee Email Notification' : 'Send Grantee Email Notification'}" style="background: ${isNotified ? 'rgba(21, 128, 61, 0.1)' : 'rgba(15, 50, 96, 0.08)'}; border: 1px solid ${isNotified ? 'rgba(21, 128, 61, 0.25)' : 'rgba(15, 50, 96, 0.2)'}; color: ${isNotified ? '#15803d' : '#0F3260'}; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                            <i class="icon-mail" style="font-size: 14px;"></i>
                         </button>
                         <button class="approve-btn" data-id="${s.uid}" title="${isApproved ? 'Approved Scholar' : 'Approve Student'}" style="background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)'}; border: 1px solid rgba(34, 197, 94, 0.3); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="${isApproved ? 'icon-check-circle' : 'icon-check-square'}" style="font-size: 14px;"></i>
@@ -226,6 +245,14 @@ function renderTable() {
             const uid = e.currentTarget.getAttribute('data-id');
             const student = allStudents.find(st => st.uid === uid);
             if (student) showStudentModal(student);
+        });
+    });
+
+    // Attach email listeners
+    document.querySelectorAll('.email-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const uid = e.currentTarget.getAttribute('data-id');
+            window.sendGranteeEmail(uid);
         });
     });
 
@@ -297,6 +324,8 @@ addStudentBtn.addEventListener('click', () => {
     document.getElementById('modal-save-btn').textContent = 'Add Student';
 
     studentForm.reset();
+    inpScholarYear.value = '';
+    inpPayouts.value = '';
     modal.classList.remove('hidden');
 });
 
@@ -316,12 +345,19 @@ studentForm.addEventListener('submit', async (e) => {
                 existingFamilyDetails = { ...existingStudent.familyDetails };
             }
         }
+        const pVal = inpPayouts.value.trim();
+        const pNum = pVal !== '' ? parseInt(pVal) : null;
+        const sYearVal = inpScholarYear.value.trim() || null;
 
         const familyDetails = {
             ...existingFamilyDetails,
             saNumber: inpSa.value.trim(),
             fatherEduStatus: inpFatherEdu.value,
-            motherEduStatus: inpMotherEdu.value
+            motherEduStatus: inpMotherEdu.value,
+            scholarYearLevel: sYearVal,
+            yearBecameScholar: sYearVal,
+            payoutsReceived: pNum,
+            payouts_received: pVal !== '' ? pVal : null
         };
 
         const fullNameClean = inpName.value.trim();
@@ -344,13 +380,19 @@ studentForm.addEventListener('submit', async (e) => {
             year: yearClean,
             year_level: yearClean,
             gender: genderClean,
-            scholarYearLevel: inpScholarYear.value,
-            payoutsReceived: parseInt(inpPayouts.value) || 0,
             familyDetails: familyDetails,
             saNumber: saClean,
             sa_number: saClean,
             role: 'student'
         };
+        if (sYearVal) {
+            studentData.scholarYearLevel = sYearVal;
+            studentData.yearBecameScholar = sYearVal;
+        }
+        if (pNum !== null) {
+            studentData.payoutsReceived = pNum;
+            studentData.payouts_received = pVal;
+        }
 
         if (modalMode === 'add') {
             // Check if student is already registered in the system (school_students)
@@ -363,6 +405,14 @@ studentForm.addEventListener('submit', async (e) => {
                     .limit(1);
                 if (ssCheck && ssCheck.length > 0) isRegistered = true;
             } catch (_) {}
+
+            if (isRegistered && ssCheck && ssCheck.length > 0) {
+                const reg = ssCheck[0];
+                studentData.email_address = studentData.email_address || reg.email_address || reg.email;
+                studentData.email = studentData.email_address;
+                studentData.mobile_number = studentData.mobile_number || reg.mobile_number || reg.contactNumber;
+                studentData.contactNumber = studentData.mobile_number;
+            }
 
             const autoStatus = 'No Submission Yet';
             studentData.status = autoStatus;
@@ -380,8 +430,12 @@ studentForm.addEventListener('submit', async (e) => {
             studentData.created_at = new Date().toISOString();
             studentData.uid = crypto.randomUUID();
 
-            const { data: newDoc, error } = await supabase.from('student_grantees').insert([studentData]).select().single();
-            if (error) throw error;
+            let insRes = await supabase.from('student_grantees').insert([studentData]).select().maybeSingle();
+            if (insRes.error && (insRes.error.code === 'PGRST204' || (insRes.error.message && insRes.error.message.includes('column')))) {
+                const { scholarYearLevel, yearBecameScholar, year_became_scholar, payoutsReceived, payouts_received, ...safeData } = studentData;
+                insRes = await supabase.from('student_grantees').insert([safeData]).select().maybeSingle();
+            }
+            if (insRes.error) throw insRes.error;
 
             // Log activity matching audit_logs schema
             await supabase.from('audit_logs').insert([{
@@ -395,7 +449,17 @@ studentForm.addEventListener('submit', async (e) => {
             }]);
 
             if (isRegistered) {
-                alert(`${studentData.fullName} is registered in the system and has been automatically approved as a scholar.`);
+                const targetEmail = studentData.email_address || studentData.email;
+                if (targetEmail && targetEmail.includes('@')) {
+                    EmailNotificationService.notifyGrantee(studentData.uid).then(eRes => {
+                        console.log('[GranteeNotification] Notification result:', eRes);
+                    }).catch(eErr => {
+                        console.warn('[GranteeNotification] Notification failed:', eErr);
+                    });
+                    alert(`${studentData.fullName} is registered in the system and has been confirmed as a scholar grantee.\n\nAn automated email notification with the ScholarDoc download link has been sent to ${targetEmail}.`);
+                } else {
+                    alert(`${studentData.fullName} is registered in the system and has been confirmed as a scholar.`);
+                }
             } else {
                 alert(`${studentData.fullName} has been added successfully.`);
             }
@@ -403,8 +467,12 @@ studentForm.addEventListener('submit', async (e) => {
         else if (modalMode === 'edit') {
             studentData.updatedAt = new Date().toISOString();
             studentData.updated_at = new Date().toISOString();
-            const { error } = await supabase.from('student_grantees').update(studentData).eq('uid', currentEditUid);
-            if (error) throw error;
+            let updRes = await supabase.from('student_grantees').update(studentData).eq('uid', currentEditUid);
+            if (updRes.error && (updRes.error.code === 'PGRST204' || (updRes.error.message && updRes.error.message.includes('column')))) {
+                const { scholarYearLevel, yearBecameScholar, year_became_scholar, payoutsReceived, payouts_received, ...safeData } = studentData;
+                updRes = await supabase.from('student_grantees').update(safeData).eq('uid', currentEditUid);
+            }
+            if (updRes.error) throw updRes.error;
 
             await supabase.from('audit_logs').insert([{
                 userName: 'Admin',
@@ -459,7 +527,8 @@ function showStudentModal(student) {
     const fullName = student.full_name || student.fullName || 'Unknown Student';
     const studentNo = student.student_no || student.studentId || 'N/A';
     const program = student.program_name || student.course || 'BSIT';
-    const yearLevel = student.year_level || student.year || '1';
+    const yearLevel = student.year_level || student.year;
+    const scholarYear = student.scholarYearLevel || student.yearBecameScholar || student.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || null;
     const birthdate = student.date_of_birth || student.birthdate || 'N/A';
     const email = student.email_address || student.email || 'N/A';
     const mobile = student.mobile_number || student.contactNumber || 'N/A';
@@ -468,7 +537,11 @@ function showStudentModal(student) {
     const age = student.age || 'N/A';
     const scholarshipName = student.scholarship_name || student.scholarshipProgram || student.scholarshipName || 'CHED TES';
     const saNumber = student.sa_number || student.saNumber || fam.saNumber || 'N/A';
-    const payouts = student.payoutsReceived || student.payouts || '0';
+
+    // Resolve payouts without dummy fallbacks - distinguish between 0 payouts (set) vs unentered (null/empty)
+    const rawPayouts = student.payoutsReceived ?? fam.payoutsReceived ?? student.payouts_received ?? fam.payouts_received ?? student.payouts;
+    const hasPayouts = rawPayouts !== null && rawPayouts !== undefined && String(rawPayouts).trim() !== '';
+    const payouts = hasPayouts ? String(rawPayouts).trim() : null;
 
     const fatherName = student.father_full_name || fam.fatherName || 'N/A';
     const fatherOcc = student.father_occupation || fam.fatherOccupation || 'N/A';
@@ -498,7 +571,7 @@ function showStudentModal(student) {
 
     const statusBadge = getStatusBadge(student.status);
     const isApproved = (student.status || '').toLowerCase() === 'approved' || (student.status || '').toLowerCase() === 'verified';
-    const isNoSubmission = (student.status || '').toLowerCase().includes('no submission') || (student.status || '').toLowerCase() === 'pending' || !student.status;
+    const isNoSubmission = (student.status || '').toLowerCase().includes('no submission') || !student.status;
 
     // Helper to render doc item
     function renderDocItem(title, url, iconName = 'icon-image') {
@@ -578,9 +651,15 @@ function showStudentModal(student) {
                 </div>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;">
-                    <div style="grid-column: 1 / -1;">
-                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Email Address</span>
-                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); word-break: break-all;">${email}</span>
+                    <div style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Email Address</span>
+                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); word-break: break-all;">${email}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Grantee Notification</span>
+                            ${EmailNotificationService.renderStatusBadge(student)}
+                        </div>
                     </div>
                     <div>
                         <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Mobile / Contact</span>
@@ -638,12 +717,18 @@ function showStudentModal(student) {
                         </div>
                         <div>
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Year Level</span>
-                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">Year ${yearLevel}</span>
+                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${yearLevel ? (String(yearLevel).toLowerCase().includes('year') ? yearLevel : `Year ${yearLevel}`) : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}</span>
                         </div>
                         <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Scholar Year</span>
+                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${scholarYear ? scholarYear : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}</span>
+                        </div>
+                        <div style="grid-column: 1 / -1;">
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Payouts Received</span>
                             <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
-                                <i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts}
+                                ${hasPayouts 
+                                    ? `<i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts} ${payouts === '1' ? 'Payout' : 'Payouts'}` 
+                                    : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}
                             </span>
                         </div>
                     </div>
@@ -724,7 +809,10 @@ function showStudentModal(student) {
 
     actionsDiv.innerHTML = `
         ${noticeHtml}
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px;">
+        <div style="display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px;">
+            <button type="button" onclick="sendGranteeEmail('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: #0F3260; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.2); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(15, 50, 96, 0.14)'" onmouseout="this.style.background='rgba(15, 50, 96, 0.08)'">
+                <i class="icon-mail" style="font-size: 15px;"></i> ${student.email_sent_at || student.emailSentAt ? 'Resend Grantee Email' : 'Send Grantee Email'}
+            </button>
             <button type="button" class="btn btn-outline" onclick="hideModal()" style="padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer;">
                 Close
             </button>
@@ -796,8 +884,11 @@ window.editStudent = function (uid) {
     inpYear.value = student.year || '1st Year';
     inpGender.value = student.gender || 'Male';
     inpSa.value = student.saNumber || fam.saNumber || '';
-    inpScholarYear.value = student.scholarYearLevel || '1st Year';
-    inpPayouts.value = student.payoutsReceived || '0';
+    inpScholarYear.value = student.scholarYearLevel || fam.scholarYearLevel || fam.yearBecameScholar || '';
+    const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '') 
+        ? student.payoutsReceived 
+        : ((fam.payoutsReceived !== undefined && fam.payoutsReceived !== null && String(fam.payoutsReceived).trim() !== '') ? fam.payoutsReceived : '');
+    inpPayouts.value = currentPayouts;
     inpFatherEdu.value = fam.fatherEduStatus || 'Non-graduate';
     inpMotherEdu.value = fam.motherEduStatus || 'Non-graduate';
 
@@ -884,9 +975,54 @@ window.approveStudent = async function (uid) {
         alert('Student approved successfully.');
         hideModal();
         loadStudents();
+
+        // Optional prompt to dispatch grantee email notification immediately upon approval
+        if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification email to ${student?.fullName || 'this student'} now?`)) {
+            window.sendGranteeEmail(uid, true);
+        }
     } catch (err) {
         console.error('Error approving student:', err);
         alert('Failed to approve student.');
+    }
+};
+
+window.sendGranteeEmail = async function (uid, force = false) {
+    const student = allStudents.find(s => s.uid === uid);
+    if (!student) {
+        alert('Student record not found.');
+        return;
+    }
+
+    const email = student.email_address || student.email;
+    if (!email || !email.includes('@')) {
+        alert(`Cannot send email: No valid email address registered for ${student.fullName || student.full_name || 'this student'}.`);
+        return;
+    }
+
+    const alreadySent = Boolean(student.email_sent_at || student.emailSentAt);
+    if (alreadySent && !force) {
+        const dateStr = new Date(student.email_sent_at || student.emailSentAt).toLocaleString();
+        if (!confirm(`Notice: An acceptance notification was already sent to ${student.fullName || student.full_name} on ${dateStr}.\n\nWould you like to resend the email notification?`)) {
+            return;
+        }
+        force = true;
+    } else if (!force) {
+        if (!confirm(`Send official scholarship grantee notification email to:\n\nStudent: ${student.fullName || student.full_name}\nEmail: ${email}\nScholarship: ${student.scholarship_name || student.scholarshipName || 'CHED TES'}\n\nProceed?`)) {
+            return;
+        }
+    }
+
+    try {
+        const res = await EmailNotificationService.notifyGrantee(uid, { force });
+        if (res.success) {
+            alert(`Scholarship notification email successfully sent to ${email}!`);
+            loadStudents();
+        } else {
+            alert(`Failed to send email: ${res.error || res.message || 'Unknown error'}`);
+        }
+    } catch (err) {
+        console.error('Error sending email notification:', err);
+        alert(`Failed to send email: ${err.message || 'Network error'}`);
     }
 };
 
@@ -935,6 +1071,35 @@ window.rejectStudent = async function (uid) {
 };
 
 // Event Listeners
+if (notifyAllGranteesBtn) {
+    notifyAllGranteesBtn.addEventListener('click', async () => {
+        const stats = await EmailNotificationService.getNotificationStats();
+        if (stats.pending === 0) {
+            alert('All registered grantees have already been sent email notifications.');
+            return;
+        }
+
+        const confirmMsg = `Send official scholarship grantee emails and ScholarDoc mobile app download links to ${stats.pending} unnotified grantees?\n\nThis will send personalized emails via Gmail SMTP to each confirmed grantee.`;
+        if (!confirm(confirmMsg)) return;
+
+        const originalText = notifyAllGranteesBtn.innerHTML;
+        notifyAllGranteesBtn.disabled = true;
+        notifyAllGranteesBtn.innerHTML = `<i class="icon-loader" style="font-size: 16px; animation: spin 1s linear infinite;"></i> Sending Emails...`;
+
+        try {
+            const res = await EmailNotificationService.notifyAllPendingGrantees({ limit: 100 });
+            alert(res.message || `Processed emails. Sent: ${res.sent}, Failed: ${res.failed}`);
+            loadStudents();
+        } catch (err) {
+            console.error('Batch email error:', err);
+            alert(`Error triggering email batch: ${err.message}`);
+        } finally {
+            notifyAllGranteesBtn.disabled = false;
+            notifyAllGranteesBtn.innerHTML = originalText;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+}
 if (searchInput) searchInput.addEventListener('input', applyFilters);
 if (filterStatus) filterStatus.addEventListener('change', applyFilters);
 if (filterCourse) filterCourse.addEventListener('change', applyFilters);

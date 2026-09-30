@@ -29,7 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _emailController = TextEditingController();
   final _birthdateController = TextEditingController();
   final _yearBecameScholarController = TextEditingController();
-  final _payoutsReceivedController = TextEditingController(text: '0');
+  final _payoutsReceivedController = TextEditingController();
 
   final AuthService _authService = AuthService();
   final AuditService _auditService = AuditService();
@@ -81,16 +81,26 @@ class _ProfileScreenState extends State<ProfileScreen>
           _contactController.text = data['contactNumber'] ?? '';
           _sectionController.text = data['section'] ?? '';
           _saController.text = data['saNumber'] ?? '';
-          _birthdateController.text = data['birthdate'] ?? '01/01/2000';
+          final fam = (data['familyDetails'] is Map)
+              ? (data['familyDetails'] as Map)
+              : {};
           _yearBecameScholarController.text =
               (data['yearBecameScholar'] ??
                       data['year_became_scholar'] ??
                       data['scholarYearLevel'] ??
+                      fam['yearBecameScholar'] ??
+                      fam['scholarYearLevel'] ??
                       '')
                   .toString();
-          _payoutsReceivedController.text =
-              (data['payoutsReceived'] ?? data['payouts_received'] ?? '0')
-                  .toString();
+          final rawPayouts = data['payoutsReceived'] ??
+              data['payouts_received'] ??
+              fam['payoutsReceived'] ??
+              fam['payouts_received'];
+          if (rawPayouts != null && rawPayouts.toString().trim().isNotEmpty) {
+            _payoutsReceivedController.text = rawPayouts.toString().trim();
+          } else {
+            _payoutsReceivedController.text = '';
+          }
           _profilePictureUrl = data['profilePictureUrl'] as String?;
           _isProfileLoading = false;
         });
@@ -1044,9 +1054,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               borderSide: BorderSide(color: AppTheme.error),
             ),
           ),
-          validator: (v) => (v == null || v.trim().isEmpty)
-              ? 'Please enter the year you became a scholar'
-              : null,
+          validator: null,
         ),
         const SizedBox(height: 8),
         SingleChildScrollView(
@@ -1179,7 +1187,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
           validator: (v) {
-            if (v == null || v.trim().isEmpty) return 'Enter number of payouts';
+            if (v == null || v.trim().isEmpty) return null;
             final n = int.tryParse(v.trim());
             if (n == null || n < 0) return 'Must be a non-negative number';
             return null;
@@ -1451,8 +1459,13 @@ class _ProfileScreenState extends State<ProfileScreen>
             'year_became_scholar': _yearBecameScholarController.text.trim(),
             'yearBecameScholar': _yearBecameScholarController.text.trim(),
             'payoutsReceived':
-                int.tryParse(_payoutsReceivedController.text.trim()) ?? 0,
-            'payouts_received': _payoutsReceivedController.text.trim(),
+                _payoutsReceivedController.text.trim().isNotEmpty
+                    ? (int.tryParse(_payoutsReceivedController.text.trim()) ?? 0)
+                    : null,
+            'payouts_received':
+                _payoutsReceivedController.text.trim().isNotEmpty
+                    ? _payoutsReceivedController.text.trim()
+                    : null,
           });
           await _auditService.logActivity(
             action: 'Updated Profile (Academic & Program, SA number)',

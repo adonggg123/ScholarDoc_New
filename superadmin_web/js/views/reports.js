@@ -74,8 +74,8 @@ function getFilteredStudents() {
         const sSchol = (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES').toLowerCase();
         const matchScholarship = scholarship === 'All Scholarships' || sSchol.includes(scholarship.toLowerCase());
         
-        const sYear = String(s.scholarYearLevel || s.year_level || s.year || '');
-        const matchYear = year === 'All Year Levels' || sYear === year || (year.charAt(0) === sYear.charAt(0));
+        const sYear = String(s.year_level || s.year || s.scholarYearLevel || '');
+        const matchYear = year === 'All Year Levels' || sYear === year || sYear.toLowerCase().includes(year.toLowerCase()) || (year.charAt(0) === sYear.charAt(0));
 
         const sFatherEdu = (s.father_occupation || family.fatherEduStatus || '').toLowerCase();
         const matchFather = fatherEdu === 'All (Father)' || !fatherEdu || sFatherEdu.includes(fatherEdu.toLowerCase());
@@ -131,10 +131,26 @@ function renderMasterTable(students) {
         }
 
         const family = s.familyDetails || {};
+        const rawScholarYear = s.scholarYearLevel || s.yearBecameScholar || s.year_became_scholar || family.scholarYearLevel || family.yearBecameScholar || family.year_became_scholar;
+        const scholarYear = (rawScholarYear !== null && rawScholarYear !== undefined && String(rawScholarYear).trim() !== '') ? String(rawScholarYear).trim() : null;
+
+        const rawPayouts = (s.payoutsReceived !== null && s.payoutsReceived !== undefined && String(s.payoutsReceived).trim() !== '')
+            ? s.payoutsReceived
+            : ((family.payoutsReceived !== null && family.payoutsReceived !== undefined && String(family.payoutsReceived).trim() !== '')
+                ? family.payoutsReceived
+                : ((s.payouts_received !== null && s.payouts_received !== undefined && String(s.payouts_received).trim() !== '')
+                    ? s.payouts_received
+                    : ((family.payouts_received !== null && family.payouts_received !== undefined && String(family.payouts_received).trim() !== '')
+                        ? family.payouts_received
+                        : null)));
+
         const isChecked = selectedStudentIds.has(s.uid || s.id) ? 'checked' : '';
-        const statusColor = (s.status || '').toLowerCase() === 'verified' ? 'var(--success)' :
-            (s.status || '').toLowerCase() === 'approved' ? 'var(--success)' :
-                (s.status || '').toLowerCase() === 'pending' ? '#FBC02D' : 'var(--error)';
+        const st = s.status || 'Pending';
+        const stLower = st.toLowerCase();
+        let statusColor = '#D97706'; // warm amber for Pending
+        if (stLower === 'verified' || stLower === 'approved') statusColor = 'var(--success)';
+        else if (stLower === 'rejected') statusColor = 'var(--error)';
+        else if (stLower === 'no submission yet') statusColor = '#64748B';
 
         const studentNo = s.student_no || s.studentId || 'N/A';
         const email = s.email_address || s.email || 'N/A';
@@ -163,11 +179,11 @@ function renderMasterTable(students) {
                 <td style="padding: 14px; font-size: 13px;">${program}</td>
                 <td style="padding: 14px; font-size: 13px;">${yr} - ${s.section || ''}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.scholarYearLevel || yr || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${s.payoutsReceived || 0}</td>
+                <td style="padding: 14px; font-size: 13px;">${scholarYear ? scholarYear : '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
+                <td style="padding: 14px; font-size: 13px;">${rawPayouts !== null ? rawPayouts : '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 14px; font-size: 13px;">${phone}</td>
                 <td style="padding: 14px;">
-                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 4px 10px; border-radius: 16px;">${s.status || 'Pending'}</span>
+                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}18; padding: 4px 10px; border-radius: 16px;">${st}</span>
                 </td>
                 <td style="padding: 14px; font-size: 13px;">${fatherName}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.father_occupation || family.fatherEduStatus || 'N/A'}</td>
@@ -417,6 +433,16 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
         }
 
         const fam = s.familyDetails || {};
+        const rawSy = s.scholarYearLevel || s.yearBecameScholar || s.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || fam.year_became_scholar || '';
+        const rawPayouts = (s.payoutsReceived !== null && s.payoutsReceived !== undefined && String(s.payoutsReceived).trim() !== '')
+            ? s.payoutsReceived
+            : ((fam.payoutsReceived !== null && fam.payoutsReceived !== undefined && String(fam.payoutsReceived).trim() !== '')
+                ? fam.payoutsReceived
+                : ((s.payouts_received !== null && s.payouts_received !== undefined && String(s.payouts_received).trim() !== '')
+                    ? s.payouts_received
+                    : ((fam.payouts_received !== null && fam.payouts_received !== undefined && String(fam.payouts_received).trim() !== '')
+                        ? fam.payouts_received
+                        : '')));
         return [
             nameParts.last,
             nameParts.first,
@@ -426,9 +452,9 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
             s.year_level || s.year || '',
             s.gender || '',
             s.scholarship_name || s.scholarshipProgram || s.scholarshipName || '',
-            s.status || '',
-            s.scholarYearLevel || '',
-            s.payoutsReceived || 0,
+            s.status || 'Pending',
+            rawSy || '',
+            rawPayouts !== null && rawPayouts !== undefined ? rawPayouts : '',
             s.saNumber || fam.saNumber || '',
             fam.fatherEduStatus || '',
             fam.motherEduStatus || ''
@@ -479,21 +505,27 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
             <table>
                 <thead>
                     <tr>
-                        <th>Name</th><th>Student ID</th><th>Course</th><th>Year</th><th>Gender</th><th>Scholarship</th><th>Status</th>
+                        <th>Name</th><th>Student ID</th><th>Course</th><th>Year Level</th><th>Scholar Year</th><th>Payouts</th><th>Scholarship</th><th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${allStudents.map(s => `
+                    ${allStudents.map(s => {
+                        const fam = s.familyDetails || {};
+                        const sy = s.scholarYearLevel || s.yearBecameScholar || s.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || fam.year_became_scholar || 'Not specified';
+                        const py = (s.payoutsReceived !== null && s.payoutsReceived !== undefined && String(s.payoutsReceived).trim() !== '') ? s.payoutsReceived : (fam.payoutsReceived ?? s.payouts_received ?? fam.payouts_received ?? 'Not specified');
+                        return `
                         <tr>
                             <td>${s.full_name || s.fullName || ''}</td>
                             <td>${s.student_no || s.studentId || ''}</td>
                             <td>${s.program_name || s.course || ''}</td>
                             <td>${s.year_level || s.year || ''}</td>
-                            <td>${s.gender || ''}</td>
+                            <td>${sy}</td>
+                            <td>${py}</td>
                             <td>${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || ''}</td>
-                            <td>${s.status || ''}</td>
+                            <td>${s.status || 'Pending'}</td>
                         </tr>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </tbody>
             </table>
         </body>

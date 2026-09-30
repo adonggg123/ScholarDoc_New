@@ -8,7 +8,6 @@ import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/image_quality_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'id_capture_screen.dart';
@@ -70,40 +69,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           }
         });
       }
-    }
-    await _loadDraft();
-  }
-
-  Future<void> _loadDraft() async {
-    final prefs = await SharedPreferences.getInstance();
-    final draftSA = prefs.getString('draft_saNumber');
-    if (draftSA != null && draftSA.isNotEmpty && _saController.text.isEmpty) {
-      setState(() {
-        _saController.text = draftSA;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Offline Draft Loaded'),
-            backgroundColor: AppTheme.primaryColor,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _saveDraftOffline() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('draft_saNumber', _saController.text.trim());
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Draft saved locally. You can finish later even offline.',
-          ),
-          backgroundColor: AppTheme.success,
-        ),
-      );
     }
   }
 
@@ -1388,7 +1353,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           }
 
           final Map<String, dynamic> studentPayload = {
-            'status': 'Submitted',
+            'status': 'Pending',
             'saNumber': _saController.text.trim(),
             'sa_number': _saController.text.trim(),
             'submissionPdfUrl': _submissionPdfUrl,
@@ -1602,22 +1567,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ],
               ),
             ),
-
-          // Draft Actions
-          Row(
-            key: const ValueKey('draft_actions'),
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton.icon(
-                onPressed: _saveDraftOffline,
-                icon: const Icon(LucideIcons.save, size: 15),
-                label: const Text('Save Draft Offline', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primaryColor,
-                ),
-              ),
-            ],
-          ),
 
           // SA Number Field
           Container(

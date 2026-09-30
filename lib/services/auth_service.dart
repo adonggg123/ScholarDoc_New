@@ -890,20 +890,28 @@ class AuthService {
     data['contactNumber'] = contact;
     data['mobile_number'] = contact;
 
+    final fam = (data['familyDetails'] is Map) ? (data['familyDetails'] as Map) : {};
+
     // Normalize Year became a scholar
     final scholarYear =
         data['scholarYearLevel'] ??
         data['year_became_scholar'] ??
         data['yearBecameScholar'] ??
+        fam['scholarYearLevel'] ??
+        fam['year_became_scholar'] ??
+        fam['yearBecameScholar'] ??
         '';
     data['scholarYearLevel'] = scholarYear;
     data['year_became_scholar'] = scholarYear;
     data['yearBecameScholar'] = scholarYear;
 
-    // Normalize Payouts received
-    final payouts = data['payoutsReceived'] ?? data['payouts_received'] ?? 0;
-    data['payoutsReceived'] = payouts;
-    data['payouts_received'] = payouts;
+    // Normalize Payouts received without forcing dummy 0
+    final rawPayouts = data['payoutsReceived'] ??
+        data['payouts_received'] ??
+        fam['payoutsReceived'] ??
+        fam['payouts_received'];
+    data['payoutsReceived'] = rawPayouts;
+    data['payouts_received'] = rawPayouts?.toString();
 
     // Merge user metadata if available
     final userMeta = _supabase.auth.currentUser?.userMetadata;
@@ -917,9 +925,9 @@ class AuthService {
         data['yearBecameScholar'] = val;
       }
       if (userMeta['payoutsReceived'] != null &&
-          (data['payoutsReceived'] == 0 || data['payoutsReceived'] == null)) {
+          data['payoutsReceived'] == null) {
         data['payoutsReceived'] = userMeta['payoutsReceived'];
-        data['payouts_received'] = userMeta['payoutsReceived'];
+        data['payouts_received'] = userMeta['payoutsReceived'].toString();
       }
       if (userMeta['scholarshipName'] != null) {
         data['scholarshipName'] = userMeta['scholarshipName'];
@@ -1194,6 +1202,47 @@ class AuthService {
     if (dbPayload.containsKey('payoutsReceived')) {
       dbPayload['payouts_received'] = dbPayload['payoutsReceived'].toString();
     }
+
+    // Ensure scholarYearLevel and payoutsReceived are also embedded in familyDetails JSON so they persist reliably
+    Map<String, dynamic> famDetails = {};
+    if (dbPayload['familyDetails'] is Map) {
+      famDetails = Map<String, dynamic>.from(dbPayload['familyDetails'] as Map);
+    } else {
+      try {
+        final existingRes = await _supabase
+            .from('student_grantees')
+            .select('familyDetails')
+            .eq('uid', uid)
+            .maybeSingle();
+        if (existingRes != null && existingRes['familyDetails'] is Map) {
+          famDetails = Map<String, dynamic>.from(existingRes['familyDetails'] as Map);
+        }
+      } catch (_) {}
+    }
+
+    if (updates.containsKey('scholarYearLevel') || updates.containsKey('yearBecameScholar')) {
+      final sYear = (updates['scholarYearLevel'] ?? updates['yearBecameScholar'])?.toString();
+      if (sYear != null && sYear.isNotEmpty) {
+        famDetails['scholarYearLevel'] = sYear;
+        famDetails['yearBecameScholar'] = sYear;
+        famDetails['year_became_scholar'] = sYear;
+      } else {
+        famDetails.remove('scholarYearLevel');
+        famDetails.remove('yearBecameScholar');
+        famDetails.remove('year_became_scholar');
+      }
+    }
+    if (updates.containsKey('payoutsReceived') || updates.containsKey('payouts_received')) {
+      final pVal = updates['payoutsReceived'] ?? updates['payouts_received'];
+      if (pVal != null && pVal.toString().isNotEmpty) {
+        famDetails['payoutsReceived'] = pVal;
+        famDetails['payouts_received'] = pVal.toString();
+      } else {
+        famDetails.remove('payoutsReceived');
+        famDetails.remove('payouts_received');
+      }
+    }
+    dbPayload['familyDetails'] = famDetails;
 
     // Always persist to Supabase Auth user metadata as an instant fail-safe
     try {

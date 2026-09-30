@@ -114,6 +114,14 @@ export class StudentSyncService {
             }
         }
 
+        // 4. Explicit status flag
+        if (existing.status) {
+            const s = String(existing.status).trim().toLowerCase();
+            if (s === 'pending' || s === 'submitted' || s === 'under review') {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -121,7 +129,7 @@ export class StudentSyncService {
      * Computes dynamic status based on student document submission and Super Admin deadline.
      * Flow:
      * - No documents submitted: 'No Submission Yet'
-     * - Documents submitted, waiting for admin: 'Submitted' (or 'Late Submission' if past active deadline)
+     * - Documents submitted, waiting for admin: 'Pending' (or 'Late Submission' if past active deadline)
      * - Admin reviewed & validated: 'Approved' / 'Verified' or 'Rejected'
      */
     static computeDynamicStatus(existing = {}, f2Match = null, ss = {}, activeDeadline = null) {
@@ -160,7 +168,7 @@ export class StudentSyncService {
             }
         }
 
-        return 'Submitted';
+        return 'Pending';
     }
 
     /**
@@ -216,6 +224,18 @@ export class StudentSyncService {
         const firstName = f2Match?.given_name || (ss.full_name ? ss.full_name.split(' ').slice(0, -1).join(' ') : '');
         const mi = f2Match?.middle_initial || '';
 
+        const existingFam = existing.familyDetails || {};
+        const resolvedScholarYear = existing.scholarYearLevel || existing.yearBecameScholar || existing.year_became_scholar || existingFam.scholarYearLevel || existingFam.yearBecameScholar || null;
+        const rawPayouts = (existing.payoutsReceived !== undefined && existing.payoutsReceived !== null && String(existing.payoutsReceived).trim() !== '')
+            ? existing.payoutsReceived
+            : ((existingFam.payoutsReceived !== undefined && existingFam.payoutsReceived !== null && String(existingFam.payoutsReceived).trim() !== '')
+                ? existingFam.payoutsReceived
+                : ((existing.payouts_received !== undefined && existing.payouts_received !== null && String(existing.payouts_received).trim() !== '')
+                    ? existing.payouts_received
+                    : ((existingFam.payouts_received !== undefined && existingFam.payouts_received !== null && String(existingFam.payouts_received).trim() !== '')
+                        ? existingFam.payouts_received
+                        : null)));
+
         const documents = {
             ...existingDocs,
             saVerificationStatus: saVerificationStatus,
@@ -249,9 +269,10 @@ export class StudentSyncService {
             scholarship_name: scholarshipName,
             scholarshipName: scholarshipName,
             scholarshipProgram: scholarshipName,
-            scholarYearLevel: f2Match?.year_level || ss.year_level || yearLevel || '1',
-            payouts_received: existing.payouts_received || existing.payoutsReceived || 1,
-            payoutsReceived: existing.payoutsReceived || existing.payouts_received || 1,
+            scholarYearLevel: resolvedScholarYear,
+            yearBecameScholar: resolvedScholarYear,
+            payouts_received: rawPayouts,
+            payoutsReceived: rawPayouts,
             status: status,
             documents: documents,
             saVerificationStatus: saVerificationStatus,
@@ -287,14 +308,19 @@ export class StudentSyncService {
             mother_full_name: motherName,
             mother_occupation: motherEdu,
             familyDetails: {
+                ...existingFam,
                 fatherName: fatherName,
                 fatherEduStatus: fatherEdu,
                 motherName: motherName,
                 motherEduStatus: motherEdu,
-                yearlyIncome: existing.familyDetails?.yearlyIncome || '₱120,000',
+                yearlyIncome: existingFam.yearlyIncome || '₱120,000',
                 religion: religion,
-                tribe: existing.familyDetails?.tribe || 'N/A',
-                saNumber: saNumber
+                tribe: existingFam.tribe || 'N/A',
+                saNumber: saNumber,
+                scholarYearLevel: resolvedScholarYear,
+                yearBecameScholar: resolvedScholarYear,
+                payoutsReceived: rawPayouts,
+                payouts_received: rawPayouts
             },
 
             // Profile Picture
@@ -447,7 +473,9 @@ export class StudentSyncService {
                         id_validation_status: normalized.idValidationStatus,
                         saVerificationStatus: normalized.saVerificationStatus,
                         sa_verification_status: normalized.saVerificationStatus,
-                        admin_remarks: normalized.admin_remarks
+                        admin_remarks: normalized.admin_remarks,
+                        email_status: 'pending',
+                        email_sent_at: null
                     });
                 } else if (existingSg) {
                     // Update database record if status differs from dynamic computed status

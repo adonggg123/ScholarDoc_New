@@ -83,7 +83,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
     final idCtrl = TextEditingController();
     final birthdateCtrl = TextEditingController();
     final saCtrl = TextEditingController();
-    final payoutsReceivedCtrl = TextEditingController(text: '0');
+    final payoutsReceivedCtrl = TextEditingController();
     String selectedCourse = _courseAddOptions.first;
     String selectedYear = _yearOptions.first;
     String selectedScholarYearLevel = _yearOptions.first;
@@ -230,15 +230,6 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 items: _yearOptions,
                                 onChanged: (val) => setDialogState(() {
                                   selectedScholarYearLevel = val!;
-                                  int payouts = 0;
-                                  if (val.contains('2nd')) {
-                                    payouts = 1;
-                                  } else if (val.contains('3rd'))
-                                    payouts = 2;
-                                  else if (val.contains('4th') ||
-                                      val.contains('5th'))
-                                    payouts = 3;
-                                  payoutsReceivedCtrl.text = payouts.toString();
                                 }),
                               ),
                             ),
@@ -1333,6 +1324,20 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                       data['familyDetails']?['saNumber'] ??
                       'Not Provided';
 
+                  final fam = (data['familyDetails'] is Map)
+                      ? (data['familyDetails'] as Map)
+                      : {};
+                  final rawScholarYear = data['scholarYearLevel'] ??
+                      data['yearBecameScholar'] ??
+                      data['year_became_scholar'] ??
+                      fam['scholarYearLevel'] ??
+                      fam['yearBecameScholar'] ??
+                      fam['year_became_scholar'];
+                  final String scholarYearVal = (rawScholarYear != null &&
+                          rawScholarYear.toString().trim().isNotEmpty)
+                      ? rawScholarYear.toString().trim()
+                      : 'Not Specified';
+
                   return _buildDataRow(
                     context,
                     data,
@@ -1341,7 +1346,7 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                     studentId,
                     '$course - $year',
                     data['scholarshipName'] ?? 'N/A',
-                    data['scholarYearLevel'] ?? 'N/A',
+                    scholarYearVal,
                     status,
                     saNumber,
                     birthdate,
@@ -1868,8 +1873,38 @@ class _StudentRecordsScreenState extends State<StudentRecordsScreen> {
                                 _buildProfileInfoCard(LucideIcons.users, 'Gender', data['gender'] ?? 'Not Specified'),
                                 _buildProfileInfoCard(LucideIcons.cake, 'Birthdate', data['birthdate'] ?? '01/01/2000'),
                                 _buildProfileInfoCard(LucideIcons.clock, 'Registration Date', registeredOn),
-                                _buildProfileInfoCard(LucideIcons.calendarDays, 'Scholar Year', data['scholarYearLevel'] ?? 'N/A'),
-                                _buildProfileInfoCard(LucideIcons.wallet, 'Payouts Received', data['payoutsReceived']?.toString() ?? '0'),
+                                _buildProfileInfoCard(
+                                  LucideIcons.calendarDays,
+                                  'Scholar Year',
+                                  (() {
+                                    final fam = (data['familyDetails'] is Map)
+                                        ? (data['familyDetails'] as Map)
+                                        : {};
+                                    final sy = data['scholarYearLevel'] ??
+                                        data['yearBecameScholar'] ??
+                                        fam['scholarYearLevel'] ??
+                                        fam['yearBecameScholar'];
+                                    return (sy != null && sy.toString().trim().isNotEmpty)
+                                        ? sy.toString().trim()
+                                        : 'Not Specified';
+                                  })(),
+                                ),
+                                _buildProfileInfoCard(
+                                  LucideIcons.wallet,
+                                  'Payouts Received',
+                                  (() {
+                                    final fam = (data['familyDetails'] is Map)
+                                        ? (data['familyDetails'] as Map)
+                                        : {};
+                                    final pr = data['payoutsReceived'] ??
+                                        data['payouts_received'] ??
+                                        fam['payoutsReceived'] ??
+                                        fam['payouts_received'];
+                                    return (pr != null && pr.toString().trim().isNotEmpty)
+                                        ? '${pr.toString().trim()} ${pr.toString().trim() == "1" ? "Payout" : "Payouts"}'
+                                        : 'Not Specified';
+                                  })(),
+                                ),
                               ],
                             ),
 

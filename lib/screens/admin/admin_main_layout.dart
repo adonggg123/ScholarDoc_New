@@ -46,7 +46,9 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   Stream<List<Map<String, dynamic>>>? _notificationStream;
   OverlayEntry? _currentToastEntry;
   final Set<String> _shownNotificationIds = {};
-  final DateTime _sessionStartTime = DateTime.now().subtract(const Duration(seconds: 1));
+  final DateTime _sessionStartTime = DateTime.now().subtract(
+    const Duration(seconds: 1),
+  );
   bool _isInitialLoad = true;
 
   @override
@@ -66,68 +68,80 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   void _setupNotificationListener() {
     if (_notificationStream == null) {
-      _notificationStream = NotificationService().getNotificationsStream('admin').asBroadcastStream();
-      _notificationStream?.listen((notifications) {
-        if (!mounted) return;
-        
-        final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
-        
-        // Mark all historical unread notifications as already shown so they never spam on startup
-        for (var n in unread) {
-          final String? id = n['id']?.toString();
-          final String? tsStr = n['timestamp']?.toString();
-          DateTime? notifTime;
-          if (tsStr != null) {
-            try {
-              notifTime = DateTime.parse(tsStr);
-            } catch (_) {}
-          }
-          if (notifTime == null || notifTime.isBefore(_sessionStartTime)) {
-            if (id != null) _shownNotificationIds.add(id);
-          }
-        }
+      _notificationStream = NotificationService()
+          .getNotificationsStream('admin')
+          .asBroadcastStream();
+      _notificationStream?.listen(
+        (notifications) {
+          if (!mounted) return;
 
-        if (_isInitialLoad) {
+          final unread = notifications
+              .where((n) => !(n['isRead'] ?? true))
+              .toList();
+
+          // Mark all historical unread notifications as already shown so they never spam on startup
           for (var n in unread) {
             final String? id = n['id']?.toString();
-            if (id != null) {
-              _shownNotificationIds.add(id);
+            final String? tsStr = n['timestamp']?.toString();
+            DateTime? notifTime;
+            if (tsStr != null) {
+              try {
+                notifTime = DateTime.parse(tsStr);
+              } catch (_) {}
+            }
+            if (notifTime == null || notifTime.isBefore(_sessionStartTime)) {
+              if (id != null) _shownNotificationIds.add(id);
             }
           }
-          _isInitialLoad = false;
-          return;
-        }
 
-        for (var n in unread) {
-          final String? id = n['id']?.toString();
-          final String? tsStr = n['timestamp']?.toString();
-          DateTime? notifTime;
-          if (tsStr != null) {
-            try {
-              notifTime = DateTime.parse(tsStr);
-            } catch (_) {}
+          if (_isInitialLoad) {
+            for (var n in unread) {
+              final String? id = n['id']?.toString();
+              if (id != null) {
+                _shownNotificationIds.add(id);
+              }
+            }
+            _isInitialLoad = false;
+            return;
           }
 
-          final bool isLive = notifTime == null ||
-              notifTime.isAfter(_sessionStartTime) ||
-              notifTime.isAtSameMomentAs(_sessionStartTime);
+          for (var n in unread) {
+            final String? id = n['id']?.toString();
+            final String? tsStr = n['timestamp']?.toString();
+            DateTime? notifTime;
+            if (tsStr != null) {
+              try {
+                notifTime = DateTime.parse(tsStr);
+              } catch (_) {}
+            }
 
-          if (id != null && !_shownNotificationIds.contains(id) && isLive) {
-            _shownNotificationIds.add(id);
-            _showToastPopup(
-              n['title'] ?? 'Notification',
-              n['message'] ?? '',
-              n,
-            );
+            final bool isLive =
+                notifTime == null ||
+                notifTime.isAfter(_sessionStartTime) ||
+                notifTime.isAtSameMomentAs(_sessionStartTime);
+
+            if (id != null && !_shownNotificationIds.contains(id) && isLive) {
+              _shownNotificationIds.add(id);
+              _showToastPopup(
+                n['title'] ?? 'Notification',
+                n['message'] ?? '',
+                n,
+              );
+            }
           }
-        }
-      }, onError: (err) {
-        debugPrint('AdminMainLayout notifications listener error: $err');
-      });
+        },
+        onError: (err) {
+          debugPrint('AdminMainLayout notifications listener error: $err');
+        },
+      );
     }
   }
 
-  void _showToastPopup(String title, String message, Map<String, dynamic> notification) {
+  void _showToastPopup(
+    String title,
+    String message,
+    Map<String, dynamic> notification,
+  ) {
     if (_currentToastEntry != null) {
       _currentToastEntry!.remove();
       _currentToastEntry = null;
@@ -160,7 +174,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                   _handleNotificationClick(notification);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -246,9 +263,9 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   void _handleNotificationClick(Map<String, dynamic> notification) async {
     final String title = notification['title'] ?? '';
     final String id = notification['id'] ?? '';
-    
+
     await NotificationService().markAsRead(id);
-    
+
     if (title.contains('SA Number')) {
       setState(() {
         _selectedIndex = 3;
@@ -314,27 +331,34 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 }
                 return ListView.separated(
                   itemCount: notifs.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final n = notifs[index];
                     final bool isRead = n['isRead'] ?? true;
                     final String title = n['title'] ?? 'Notification';
                     final String msg = n['message'] ?? '';
-                    
+
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(vertical: 4),
                       leading: CircleAvatar(
-                        backgroundColor: (isRead ? const Color(0xFF0F3260) : Colors.amber).withOpacity(0.1),
+                        backgroundColor:
+                            (isRead ? const Color(0xFF0F3260) : Colors.amber)
+                                .withOpacity(0.1),
                         child: Icon(
                           isRead ? LucideIcons.bell : LucideIcons.bellRing,
-                          color: isRead ? const Color(0xFF0F3260) : Colors.amber,
+                          color: isRead
+                              ? const Color(0xFF0F3260)
+                              : Colors.amber,
                           size: 18,
                         ),
                       ),
                       title: Text(
                         title,
                         style: TextStyle(
-                          fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                          fontWeight: isRead
+                              ? FontWeight.normal
+                              : FontWeight.bold,
                           fontSize: 13,
                         ),
                       ),
@@ -939,7 +963,9 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                 stream: _notificationStream,
                 builder: (context, snapshot) {
                   final notifications = snapshot.data ?? [];
-                  final unreadCount = notifications.where((n) => !(n['isRead'] ?? true)).length;
+                  final unreadCount = notifications
+                      .where((n) => !(n['isRead'] ?? true))
+                      .length;
 
                   return Stack(
                     clipBehavior: Clip.none,
@@ -958,7 +984,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
                             decoration: BoxDecoration(
                               color: AppTheme.error,
                               shape: BoxShape.circle,
-                              border: Border.all(color: context.surfaceC, width: 1.5),
+                              border: Border.all(
+                                color: context.surfaceC,
+                                width: 1.5,
+                              ),
                             ),
                             constraints: const BoxConstraints(
                               minWidth: 14,

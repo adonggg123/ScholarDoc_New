@@ -341,7 +341,7 @@ submitBtn?.addEventListener('click', async () => {
         const updates = {
             saNumber: saInput?.value?.trim() || '',
             submittedAt: new Date().toISOString(),
-            status: 'Submitted',
+            status: 'Pending',
             documents: {
                 ...(profile?.documents || {}),
                 idFrontUrl: frontUrl,

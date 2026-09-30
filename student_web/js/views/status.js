@@ -47,7 +47,7 @@ async function loadStatusData() {
 
     // Status badge
     let badgeClass = 'badge-success', statusIcon = 'check-circle', statusLabel = 'Approved Scholar';
-    if (status === 'Pending') {
+    if (status === 'Pending' || status === 'Submitted') {
         badgeClass = 'badge-pending'; statusIcon = 'hourglass'; statusLabel = 'Under Review';
     } else if (status === 'Rejected' || status === 'Missing') {
         badgeClass = 'badge-danger'; statusIcon = 'x-circle'; statusLabel = status;

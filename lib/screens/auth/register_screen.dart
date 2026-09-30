@@ -47,9 +47,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedGender;
   Scholarship? _selectedScholarship;
   String? _selectedScholarYearLevel;
-  final TextEditingController _payoutsController = TextEditingController(
-    text: '0',
-  );
+  final TextEditingController _payoutsController = TextEditingController();
   List<Scholarship> _scholarships = [];
   String? _selectedFatherEdu;
   String? _selectedMotherEdu;
@@ -427,16 +425,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           .toList(),
                       onChanged: (val) => setState(() {
                         _selectedScholarYearLevel = val;
-                        if (val != null) {
-                          int payouts = 0;
-                          if (val.contains('2nd')) {
-                            payouts = 1;
-                          } else if (val.contains('3rd'))
-                            payouts = 2;
-                          else if (val.contains('4th') || val.contains('5th'))
-                            payouts = 3;
-                          _payoutsController.text = payouts.toString();
-                        }
                       }),
                       validator: (val) =>
                           val == null ? 'Please select a year' : null,
@@ -451,9 +439,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value == null || value.isEmpty)
-                          return 'Please enter a number';
-                        final n = int.tryParse(value);
+                        if (value == null || value.trim().isEmpty) return null;
+                        final n = int.tryParse(value.trim());
                         if (n == null || n < 0) return 'Enter a valid number';
                         return null;
                       },
@@ -666,11 +653,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 'scholarshipId': _selectedScholarship?.id,
                                 'scholarshipName': _selectedScholarship?.name,
                                 'scholarYearLevel': _selectedScholarYearLevel,
+                                'yearBecameScholar': _selectedScholarYearLevel,
                                 'payoutsReceived':
-                                    int.tryParse(
-                                      _payoutsController.text.trim(),
-                                    ) ??
-                                    0,
+                                    _payoutsController.text.trim().isNotEmpty
+                                        ? (int.tryParse(
+                                              _payoutsController.text.trim(),
+                                            ) ??
+                                            0)
+                                        : null,
+                                'payouts_received':
+                                    _payoutsController.text.trim().isNotEmpty
+                                        ? _payoutsController.text.trim()
+                                        : null,
                                 'contactNumber': _contactController.text.trim(),
                                 'role': 'student',
                                 'status': 'No Submission Yet',
@@ -691,6 +685,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   'yearlyIncome': _incomeController.text.trim(),
                                   'religion': _religionController.text.trim(),
                                   'tribe': _tribeController.text.trim(),
+                                  'scholarYearLevel': _selectedScholarYearLevel,
+                                  'yearBecameScholar': _selectedScholarYearLevel,
+                                  'payoutsReceived':
+                                      _payoutsController.text.trim().isNotEmpty
+                                        ? (int.tryParse(
+                                              _payoutsController.text.trim(),
+                                            ) ??
+                                            0)
+                                        : null,
+                                  'payouts_received':
+                                      _payoutsController.text.trim().isNotEmpty
+                                        ? _payoutsController.text.trim()
+                                        : null,
                                 },
                               };
 

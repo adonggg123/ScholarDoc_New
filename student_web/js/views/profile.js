@@ -14,8 +14,8 @@ let profileData = window.currentStudentProfile || {
     contactNumber: '09123456789',
     section: '3A',
     email: 'jude.student@ustp.edu.ph',
-    scholarYearLevel: '2024 - 2025',
-    payoutsReceived: 3,
+    scholarYearLevel: '',
+    payoutsReceived: null,
     saNumber: '1234-5678-9012'
 };
 
@@ -86,9 +86,13 @@ async function loadProfile() {
     // Read-only fields
     document.getElementById('input-scholarship').value = profileData.scholarshipName || 'TES Scholarship Program';
     document.getElementById('input-studentid').value = profileData.studentId || '2024-00123';
-    document.getElementById('input-email').value = profileData.email || 'jude.student@ustp.edu.ph';
-    document.getElementById('input-scholar-year').value = profileData.scholarYearLevel || '2024 - 2025';
-    document.getElementById('input-payouts').value = profileData.payoutsReceived?.toString() || '3 Grantees Completed';
+    const fam = profileData.familyDetails || {};
+    const scholarYr = profileData.scholarYearLevel || profileData.yearBecameScholar || profileData.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || fam.year_became_scholar || '';
+    const pRec = profileData.payoutsReceived ?? fam.payoutsReceived ?? profileData.payouts_received ?? fam.payouts_received;
+    const hasP = pRec !== null && pRec !== undefined && String(pRec).trim() !== '';
+
+    document.getElementById('input-scholar-year').value = scholarYr;
+    document.getElementById('input-payouts').value = hasP ? pRec : '';
 
     if (window.lucide) window.lucide.createIcons();
 }
@@ -163,21 +167,64 @@ saveBtn?.addEventListener('click', async () => {
     saveSpinner?.classList.remove('hidden');
 
     try {
+        const scholarYearVal = document.getElementById('input-scholar-year')?.value.trim() || '';
+        const payoutsVal = document.getElementById('input-payouts')?.value.trim() || '';
+        const pNum = payoutsVal !== '' ? parseInt(payoutsVal, 10) : null;
+
+        const currentFam = profileData.familyDetails || {};
+        const updatedFam = {
+            ...currentFam,
+            saNumber: document.getElementById('input-sa').value.trim(),
+        };
+
+        if (scholarYearVal) {
+            updatedFam.scholarYearLevel = scholarYearVal;
+            updatedFam.yearBecameScholar = scholarYearVal;
+            updatedFam.year_became_scholar = scholarYearVal;
+        } else {
+            delete updatedFam.scholarYearLevel;
+            delete updatedFam.yearBecameScholar;
+            delete updatedFam.year_became_scholar;
+        }
+
+        if (pNum !== null) {
+            updatedFam.payoutsReceived = pNum;
+            updatedFam.payouts_received = payoutsVal;
+        } else {
+            delete updatedFam.payoutsReceived;
+            delete updatedFam.payouts_received;
+        }
+
         const updates = {
             fullName: document.getElementById('input-fullname').value.trim(),
+            full_name: document.getElementById('input-fullname').value.trim(),
             contactNumber: document.getElementById('input-contact').value.trim(),
+            mobile_number: document.getElementById('input-contact').value.trim(),
             section: document.getElementById('input-section').value.trim(),
             saNumber: document.getElementById('input-sa').value.trim(),
+            sa_number: document.getElementById('input-sa').value.trim(),
+            scholarYearLevel: scholarYearVal || null,
+            yearBecameScholar: scholarYearVal || null,
+            year_became_scholar: scholarYearVal || null,
+            payoutsReceived: pNum,
+            payouts_received: payoutsVal !== '' ? payoutsVal : null,
+            familyDetails: updatedFam
         };
 
         const birthdateVal = document.getElementById('input-birthdate').value;
         if (birthdateVal) {
             const d = new Date(birthdateVal);
             updates.birthdate = `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}/${d.getFullYear()}`;
+            updates.date_of_birth = updates.birthdate;
         }
 
         if (uid && sb) {
-            await sb.from('students').update(updates).eq('uid', uid);
+            try {
+                await sb.from('students').update(updates).eq('uid', uid);
+            } catch (_) {}
+            try {
+                await sb.from('student_grantees').update(updates).eq('uid', uid);
+            } catch (_) {}
         }
 
         window.currentStudentProfile = { ...(window.currentStudentProfile || {}), ...updates };
