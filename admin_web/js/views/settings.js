@@ -81,8 +81,8 @@ function updateProfileCard() {
     if (emailEl) emailEl.textContent = admin.email || (isSuper ? 'superadmin@scholardoc.com' : 'admin@scholardoc.com');
     if (usernameEl) usernameEl.textContent = admin.username || (isSuper ? 'superadmin' : 'admin');
     if (scopeEl) {
-        scopeEl.textContent = isSuper 
-            ? 'Full Platform Management' 
+        scopeEl.textContent = isSuper
+            ? 'Full Platform Management'
             : 'Annex 5 TES Generator & Settings';
     }
 }
@@ -167,7 +167,7 @@ async function handleSaveUsername() {
                 role: window.currentAdmin?.displayRole || 'Admin',
                 timestamp: new Date().toISOString()
             }]);
-        } catch (_) {}
+        } catch (_) { }
 
         showToast(`Username for ${acc.role} updated successfully!`, 'success');
     } catch (err) {
@@ -264,7 +264,7 @@ async function handleSavePassword() {
                 role: window.currentAdmin?.displayRole || 'Admin',
                 timestamp: new Date().toISOString()
             }]);
-        } catch (_) {}
+        } catch (_) { }
 
         showToast(`Password for ${acc.role} successfully changed!`, 'success');
         if (curPwInput) curPwInput.value = '';
@@ -345,5 +345,7 @@ function setupListeners() {
 }
 
 // Init
+setupListeners();
+loadAdminsData();
 setupListeners();
 loadAdminsData();

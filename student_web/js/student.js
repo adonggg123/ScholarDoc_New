@@ -4,7 +4,51 @@
 // ─── Supabase Initialization ───
 const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
-window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+// Storage configuration for Student Portal
+const STUDENT_STORAGE_KEY = 'scholardoc_student_auth_token';
+
+// Migrate legacy session if present and belongs to student
+try {
+    if (!localStorage.getItem(STUDENT_STORAGE_KEY) && !sessionStorage.getItem(STUDENT_STORAGE_KEY)) {
+        const legacy = localStorage.getItem('sb-ywavesulvkqwpsejprxp-auth-token');
+        if (legacy) {
+            const parsed = JSON.parse(legacy);
+            const email = (parsed?.user?.email || '').toLowerCase();
+            if (!email.includes('admin') && !email.includes('superadmin')) {
+                localStorage.setItem(STUDENT_STORAGE_KEY, legacy);
+                sessionStorage.setItem(STUDENT_STORAGE_KEY, legacy);
+            }
+        }
+    }
+} catch (_) {}
+
+const studentStorage = {
+    getItem: (key) => {
+        try {
+            return sessionStorage.getItem(key) || localStorage.getItem(key);
+        } catch (_) {
+            return null;
+        }
+    },
+    setItem: (key, value) => {
+        try { sessionStorage.setItem(key, value); } catch (_) {}
+        try { localStorage.setItem(key, value); } catch (_) {}
+    },
+    removeItem: (key) => {
+        try { sessionStorage.removeItem(key); } catch (_) {}
+        try { localStorage.removeItem(key); } catch (_) {}
+    }
+};
+
+window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        storageKey: STUDENT_STORAGE_KEY,
+        storage: studentStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    }
+});
 
 // ─── Session Check ───
 async function checkSession() {
@@ -181,6 +225,10 @@ async function handleLogout() {
         }
         await window.supabaseClient.auth.signOut();
     } catch (_) { }
+    try {
+        localStorage.removeItem(STUDENT_STORAGE_KEY);
+        sessionStorage.removeItem(STUDENT_STORAGE_KEY);
+    } catch (_) {}
     window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
 }
 

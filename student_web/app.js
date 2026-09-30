@@ -1,7 +1,18 @@
 // ScholarDoc Unified Web Login Controller
 const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
-const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+// Isolated storage keys per role
+const SUPERADMIN_STORAGE_KEY = 'scholardoc_superadmin_auth_token';
+const ADMIN_STORAGE_KEY = 'scholardoc_admin_auth_token';
+const STUDENT_STORAGE_KEY = 'scholardoc_student_auth_token';
+
+// During login check, avoid auto-writing to shared storage until role is verified
+const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false
+    }
+}) : null;
 
 // Initialize Lucide Icons
 if (window.lucide) {
@@ -130,6 +141,14 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
 
         await new Promise(r => setTimeout(r, 300));
 
+        // Save Student session to student storage key
+        if (authSession) {
+            try {
+                localStorage.setItem(STUDENT_STORAGE_KEY, JSON.stringify(authSession));
+                sessionStorage.setItem(STUDENT_STORAGE_KEY, JSON.stringify(authSession));
+            } catch (_) {}
+        }
+
         // Route to Student Dashboard with session tokens in hash
         const tokenHash = authSession ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}&student_id=${encodeURIComponent(studentData?.studentId || rawIdentifier)}` : '';
 
@@ -152,6 +171,19 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
                 studentId: isSuper ? 'superadmin' : 'admin',
             });
         } catch (_) {}
+
+        // Persist session to the specific role's isolated storage
+        if (authSession) {
+            try {
+                if (isSuper) {
+                    localStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                    sessionStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                } else {
+                    localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                    sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                }
+            } catch (_) {}
+        }
 
         await new Promise(r => setTimeout(r, 300));
         

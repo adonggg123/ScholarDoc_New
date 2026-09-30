@@ -2,8 +2,52 @@
 const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
 
-// Initialize global supabase client
-window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+// Storage configuration for Admin (isolates Admin session from Super Admin & Student portals)
+const ADMIN_STORAGE_KEY = 'scholardoc_admin_auth_token';
+
+// Migrate legacy session if present and belongs to admin
+try {
+    if (!localStorage.getItem(ADMIN_STORAGE_KEY) && !sessionStorage.getItem(ADMIN_STORAGE_KEY)) {
+        const legacy = localStorage.getItem('sb-ywavesulvkqwpsejprxp-auth-token');
+        if (legacy) {
+            const parsed = JSON.parse(legacy);
+            const email = (parsed?.user?.email || '').toLowerCase();
+            if (!email.includes('superadmin') && (email.includes('admin') || parsed?.user?.user_metadata?.role === 'Admin')) {
+                localStorage.setItem(ADMIN_STORAGE_KEY, legacy);
+                sessionStorage.setItem(ADMIN_STORAGE_KEY, legacy);
+            }
+        }
+    }
+} catch (_) {}
+
+const adminStorage = {
+    getItem: (key) => {
+        try {
+            return sessionStorage.getItem(key) || localStorage.getItem(key);
+        } catch (_) {
+            return null;
+        }
+    },
+    setItem: (key, value) => {
+        try { sessionStorage.setItem(key, value); } catch (_) {}
+        try { localStorage.setItem(key, value); } catch (_) {}
+    },
+    removeItem: (key) => {
+        try { sessionStorage.removeItem(key); } catch (_) {}
+        try { localStorage.removeItem(key); } catch (_) {}
+    }
+};
+
+// Initialize global supabase client with isolated storage
+window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        storageKey: ADMIN_STORAGE_KEY,
+        storage: adminStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    }
+});
 
 // Global Current Admin State
 window.currentAdmin = null;
@@ -282,7 +326,13 @@ if (profilePill && profileDropdown) {
 if (dropdownLogoutBtn) {
     dropdownLogoutBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to log out of the Admin Panel?')) {
-            await window.supabaseClient.auth.signOut();
+            try {
+                await window.supabaseClient.auth.signOut();
+            } catch (_) {}
+            try {
+                localStorage.removeItem(ADMIN_STORAGE_KEY);
+                sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+            } catch (_) {}
             window.location.href = 'login.html';
         }
     });
