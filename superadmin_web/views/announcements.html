@@ -183,6 +183,25 @@
                 <textarea id="ann-inp-content" required rows="5" placeholder="Type the complete details of the announcement here..." style="width: 100%; padding: 12px 14px; border: 1.5px solid var(--border-color); border-radius: 12px; background: var(--background-color); outline: none; font-family: inherit; font-size: 13px; color: var(--text-primary); resize: vertical; line-height: 1.5; transition: all 0.2s;" onfocus="this.style.borderColor='var(--primary-color)'; this.style.boxShadow='0 0 0 3px rgba(15, 50, 96, 0.08)';" onblur="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';"></textarea>
             </div>
 
+            <!-- Push Notification Option -->
+            <div style="padding: 12px 14px; background: rgba(15, 50, 96, 0.04); border: 1.5px solid rgba(15, 50, 96, 0.12); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; margin-top: 2px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #0F3260; color: white; display: flex; align-items: center; justify-content: center; font-size: 15px;">
+                        <i class="icon-bell"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                            <span>Push Notification</span>
+                            <span style="font-size: 10px; background: #10B981; color: white; padding: 1px 6px; border-radius: 6px; font-weight: 800;">AUTO</span>
+                        </div>
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">Send alert to registered students' mobile phones</div>
+                    </div>
+                </div>
+                <label style="position: relative; display: inline-flex; align-items: center; cursor: pointer; margin: 0;">
+                    <input type="checkbox" id="ann-inp-send-push" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: #0F3260;">
+                </label>
+            </div>
+
             <!-- Actions -->
             <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 6px;">
                 <button type="button" class="btn" id="ann-modal-cancel-btn" style="padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; background: var(--surface-color); color: var(--text-secondary); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s;">Cancel</button>

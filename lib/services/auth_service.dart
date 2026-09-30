@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'audit_service.dart';
 import 'notification_service.dart';
 import 'presence_service.dart';
+import 'push_notification_service.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -112,6 +113,14 @@ class AuthService {
           message: 'New student $fullName has registered in the system.',
           type: 'info',
         );
+
+        // Sync FCM Push Notification token for the newly registered student
+        try {
+          await PushNotificationService().syncToken(
+            response.user!.id,
+            studentId: studentId,
+          );
+        } catch (_) {}
       }
 
       return response;
@@ -655,6 +664,16 @@ class AuthService {
             'AuthService: Welcome notification check notice: $notifErr',
           );
         }
+
+        // Sync FCM Push Notification token on successful student login
+        try {
+          await PushNotificationService().syncToken(
+            uid,
+            studentId: trimmedId,
+          );
+        } catch (pushErr) {
+          debugPrint('AuthService: Push token sync notice: $pushErr');
+        }
       } catch (e) {
         debugPrint('AuthService: Step 3 - Supabase fetch FAILED ($e)');
         await _supabase.auth.signOut();
@@ -824,6 +843,9 @@ class AuthService {
     final uid = _supabase.auth.currentUser?.id;
     if (uid != null) {
       await _presenceService.setOffline(uid);
+      try {
+        await PushNotificationService().clearToken(uid);
+      } catch (_) {}
     }
     await _supabase.auth.signOut();
   }

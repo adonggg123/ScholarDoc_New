@@ -225,6 +225,297 @@ function callOcrSpace(base64Image) {
     });
 }
 
+// ── Google OAuth2 Access Token for FCM HTTP v1 ───────────────────────────
+async function getGoogleAccessToken() {
+    // 1. Check for serviceAccountKey.json
+    const serviceAccountPath = path.join(ROOT, 'serviceAccountKey.json');
+    if (fs.existsSync(serviceAccountPath)) {
+        try {
+            const { GoogleAuth } = require('google-auth-library');
+            const auth = new GoogleAuth({
+                keyFile: serviceAccountPath,
+                scopes: ['https://www.googleapis.com/auth/firebase.messaging']
+            });
+            const client = await auth.getClient();
+            const tokenResponse = await client.getAccessToken();
+            if (tokenResponse && tokenResponse.token) {
+                return tokenResponse.token;
+            }
+        } catch (e) {
+            console.warn('[Push Notification] serviceAccountKey.json auth error:', e.message);
+        }
+    }
+
+    // 2. Check local Firebase CLI authenticated session
+    try {
+        const os = require('os');
+        const configPath = path.join(os.homedir(), '.config', 'configstore', 'firebase-tools.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const tokens = config.tokens;
+            if (tokens) {
+                if (tokens.access_token && tokens.expires_at && tokens.expires_at > Date.now() + 60000) {
+                    return tokens.access_token;
+                }
+                if (tokens.refresh_token) {
+                    const clientId = '563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com';
+                    const clientSecret = 'j9iVZfS8kkCEFUPaAeJV0sAi';
+                    const body = new URLSearchParams({
+                        client_id: clientId,
+                        client_secret: clientSecret,
+                        refresh_token: tokens.refresh_token,
+                        grant_type: 'refresh_token'
+                    });
+                    const res = await fetch('https://oauth2.googleapis.com/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        tokens.access_token = data.access_token;
+                        tokens.expires_at = Date.now() + (data.expires_in * 1000);
+                        try {
+                            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                        } catch (_) {}
+                        return data.access_token;
+                    }
+                }
+                return tokens.access_token;
+            }
+        }
+    } catch (e) {
+        console.warn('[Push Notification] Local Firebase CLI token error:', e.message);
+    }
+
+    return null;
+}
+
+// ── Push Notification & In-App Notification Broadcast Engine ─────────────
+const SUPABASE_REST_URL = 'https://ywavesulvkqwpsejprxp.supabase.co/rest/v1';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
+
+async function broadcastAnnouncementNotification({ announcementId, title, content, type, forceResend }) {
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    };
+
+    // 1. Deduplication check: check if already sent
+    if (announcementId && !forceResend) {
+        try {
+            const checkRes = await fetch(`${SUPABASE_REST_URL}/announcements?id=eq.${announcementId}&select=id,title,push_sent`, { headers });
+            const checkData = await checkRes.json();
+            if (checkData && checkData.length > 0 && checkData[0].push_sent) {
+                console.log(`[Push Notification] Duplicate prevented for announcement ${announcementId}`);
+                return {
+                    success: true,
+                    duplicatePrevented: true,
+                    message: 'Push notification was already sent for this announcement.'
+                };
+            }
+        } catch (checkErr) {
+            console.warn('[Push Notification] Warning checking duplicate:', checkErr.message);
+        }
+    }
+
+    // Clean preview message (up to 140 chars)
+    const cleanPreview = (content || '')
+        .replace(/\[Deadline:\s*[^\]]+\]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const shortMessage = cleanPreview.length > 140 ? cleanPreview.slice(0, 137) + '...' : cleanPreview;
+
+    let notificationHistoryCount = 0;
+
+    // 2. In-App Notification History: Fan-out notification records to all registered students
+    try {
+        const rpcRes = await fetch(`${SUPABASE_REST_URL}/rpc/broadcast_announcement_to_notifications`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                p_announcement_id: String(announcementId || ''),
+                p_title: title || 'New Announcement',
+                p_content: content || '',
+                p_type: type || 'General'
+            })
+        });
+
+        if (rpcRes.ok) {
+            notificationHistoryCount = await rpcRes.json();
+            console.log(`[Push Notification] Fanned out ${notificationHistoryCount} student notifications via RPC.`);
+        } else {
+            // Direct query fallback: query student grantees and batch insert
+            const studentsRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=uid&uid=not.is.null`, { headers });
+            const students = await studentsRes.json();
+
+            if (Array.isArray(students) && students.length > 0) {
+                const uniqueUids = [...new Set(students.map(s => s.uid).filter(Boolean))];
+                const notifBatch = uniqueUids.map(uid => ({
+                    studentId: uid,
+                    title: title || 'New Announcement',
+                    message: shortMessage || 'A new announcement has been posted.',
+                    type: type === 'Deadline' ? 'warning' : 'info',
+                    isRead: false,
+                    timestamp: new Date().toISOString(),
+                    announcementId: String(announcementId || '')
+                }));
+
+                const batchRes = await fetch(`${SUPABASE_REST_URL}/notifications`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(notifBatch)
+                });
+                if (batchRes.ok) {
+                    notificationHistoryCount = uniqueUids.length;
+                    console.log(`[Push Notification] Fanned out ${uniqueUids.length} in-app notification rows.`);
+                }
+            }
+        }
+    } catch (histErr) {
+        console.error('[Push Notification] Error inserting in-app notification history:', histErr);
+    }
+
+    // 3. Mark announcement as push_sent in database
+    if (announcementId) {
+        try {
+            await fetch(`${SUPABASE_REST_URL}/announcements?id=eq.${announcementId}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({
+                    push_sent: true,
+                    push_sent_at: new Date().toISOString()
+                })
+            });
+        } catch (_) {}
+    }
+
+    // 4. Retrieve FCM tokens from user_fcm_tokens
+    let tokens = [];
+    try {
+        const tokensRes = await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?select=fcm_token`, { headers });
+        if (tokensRes.ok) {
+            const tokenRows = await tokensRes.json();
+            if (Array.isArray(tokenRows)) {
+                tokens = [...new Set(tokenRows.map(r => r.fcm_token).filter(Boolean))];
+            }
+        }
+    } catch (tokErr) {
+        console.warn('[Push Notification] user_fcm_tokens query note:', tokErr.message);
+    }
+
+    // 5. Send FCM Push Notification directly to student mobile devices (HTTP v1)
+    let pushSentCount = 0;
+    const accessToken = await getGoogleAccessToken();
+
+    if (!accessToken) {
+        console.warn('[Push Notification] No Google OAuth2 access token available for FCM v1. Please configure serviceAccountKey.json or ensure Firebase CLI is logged in.');
+    } else {
+        const fcmAndroid = {
+            priority: 'high',
+            notification: {
+                channel_id: 'scholardoc_announcements',
+                icon: 'ic_notification',
+                color: '#0F3260',
+                sound: 'default',
+                default_sound: true,
+                default_vibrate_timings: true,
+                click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            }
+        };
+
+        const notificationData = {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            announcementId: String(announcementId || ''),
+            title: title || '',
+            message: shortMessage || '',
+            content: content || '',
+            type: type || 'General'
+        };
+
+        // A) Send to every registered student device token
+        for (const token of tokens) {
+            try {
+                const fcmRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        message: {
+                            token,
+                            notification: {
+                                title: title || 'ScholarDoc Announcement',
+                                body: shortMessage || 'A new scholarship update has been posted.'
+                            },
+                            data: notificationData,
+                            android: fcmAndroid
+                        }
+                    })
+                });
+
+                if (fcmRes.ok) {
+                    pushSentCount++;
+                    const resJson = await fcmRes.json().catch(() => ({}));
+                    console.log(`[Push Notification] Delivered to device (${token.slice(0, 15)}...):`, resJson.name);
+                } else {
+                    const errJson = await fcmRes.json().catch(() => ({}));
+                    console.warn(`[Push Notification] Device ${token.slice(0, 15)}... delivery error:`, errJson.error?.message || fcmRes.status);
+                    // If unregistered/expired token, automatically clean it from database
+                    if (errJson.error?.details?.[0]?.errorCode === 'UNREGISTERED' || errJson.error?.status === 'NOT_FOUND') {
+                        await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?fcm_token=eq.${token}`, { method: 'DELETE', headers });
+                        console.log(`[Push Notification] Cleaned up unregistered token ${token.slice(0, 15)}...`);
+                    }
+                }
+            } catch (devErr) {
+                console.warn('[Push Notification] Error sending to device token:', devErr.message);
+            }
+        }
+
+        // B) Also broadcast to topic 'all_students'
+        try {
+            const topicRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                    message: {
+                        topic: 'all_students',
+                        notification: {
+                            title: title || 'ScholarDoc Announcement',
+                            body: shortMessage || 'A new scholarship update has been posted.'
+                        },
+                        data: notificationData,
+                        android: fcmAndroid
+                    }
+                })
+            });
+            if (topicRes.ok) {
+                console.log('[Push Notification] Topic broadcast delivered to "all_students" successfully.');
+            } else {
+                console.warn('[Push Notification] Topic broadcast note:', await topicRes.text());
+            }
+        } catch (topErr) {
+            console.warn('[Push Notification] Topic broadcast error:', topErr.message);
+        }
+    }
+
+    console.log(`[Push Notification] Broadcast complete. Devices reached: ${pushSentCount}/${tokens.length}. In-app history created for ${notificationHistoryCount} student(s).`);
+
+    return {
+        success: true,
+        tokensCount: tokens.length,
+        notificationHistoryCount,
+        pushSentCount,
+        message: `Notification broadcasted to ${tokens.length} device(s) and recorded in student notification histories.`
+    };
+}
+
 const server = http.createServer((req, res) => {
     // Enable CORS for all incoming requests
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -253,6 +544,25 @@ const server = http.createServer((req, res) => {
             semester: activeSemester,
             displayString: `AY ${activeAcademicYear} • ${activeSemester}`
         }));
+        return;
+    }
+
+    // ── API: Push Notification Broadcast for Announcements ───────────────
+    if (urlPath === '/api/notifications/broadcast-announcement' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const result = await broadcastAnnouncementNotification(parsed);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                console.error('[API broadcast-announcement error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
         return;
     }
 

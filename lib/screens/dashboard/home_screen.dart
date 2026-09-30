@@ -12,8 +12,10 @@ import '../../services/auth_service.dart';
 import '../../services/announcement_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/academic_term_service.dart';
+import '../../services/push_notification_service.dart';
 import 'package:intl/intl.dart';
 import 'widgets/system_banner_carousel.dart';
+import 'widgets/announcement_detail_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -99,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
               n['title'] ?? 'Notification',
               n['message'] ?? '',
               id,
+              announcementId: n['announcementId']?.toString(),
             );
           }
         }
@@ -106,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showToastPopup(String title, String message, String notificationId) {
+  void _showToastPopup(String title, String message, String notificationId, {String? announcementId}) {
     if (_currentToastEntry != null) {
       _currentToastEntry!.remove();
       _currentToastEntry = null;
@@ -138,13 +141,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                   // Mark as read immediately on click
                   _notificationService.markAsRead(notificationId);
-                  // Redirect to Notifications screen
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NotificationScreen(),
-                    ),
-                  );
+                  
+                  if (announcementId != null && announcementId.isNotEmpty) {
+                    PushNotificationService().openAnnouncementById(announcementId, context: context);
+                  } else {
+                    // Redirect to Notifications screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationScreen(),
+                      ),
+                    );
+                  }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -243,7 +251,17 @@ class _HomeScreenState extends State<HomeScreen> {
         // Trigger welcome toast on first login
         final displayName = (doc['full_name'] ?? doc['fullName'] ?? 'Scholar').toString().trim();
         _checkAndShowFirstLoginWelcome(uid, displayName);
+
+        // Sync FCM device push notification token
+        final studentNo = (doc['student_no'] ?? doc['studentId'])?.toString();
+        PushNotificationService().syncToken(uid, studentId: studentNo);
       }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          PushNotificationService().processPendingNotification(context);
+        }
+      });
     }
 
     _announcementService.getActiveAnnouncements().listen(
@@ -1235,6 +1253,35 @@ class _HomeScreenState extends State<HomeScreen> {
                                   : TextOverflow.ellipsis,
                             ),
                           ),
+                          if (isExpanded) ...[
+                            const SizedBox(height: 12),
+                            InkWell(
+                              onTap: () => AnnouncementDetailDialog.show(context, a),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: typeColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.maximize2, size: 12, color: typeColor),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'View Full Details',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: typeColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

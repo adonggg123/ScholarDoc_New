@@ -243,6 +243,12 @@ function filterAndRenderCards() {
                         <span class="ann-status-dot"></span>
                         <span>ARCHIVED</span>
                     </div>` : ''}
+
+                    ${a.push_sent ? `
+                    <div class="ann-status-pill" style="background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;" title="Push notification sent to registered students">
+                        <i class="icon-bell" style="font-size: 10px;"></i>
+                        <span>PUSH SENT</span>
+                    </div>` : ''}
                 </div>
 
                 <!-- Title & Meta -->
@@ -292,6 +298,10 @@ function filterAndRenderCards() {
 
                     <!-- Action Buttons -->
                     <div class="ann-card-actions">
+                        <button class="ann-btn-action" title="Broadcast Push Notification to Mobile App" onclick="broadcastPush('${a.id}')" style="color: #0F3260;">
+                            <i class="icon-bell" style="font-size: 13px;"></i>
+                            <span>Push</span>
+                        </button>
                         <button class="ann-btn-action" title="Edit Announcement" onclick="editAnnouncement('${a.id}')">
                             <i class="icon-pencil" style="font-size: 13px;"></i>
                             <span>Edit</span>
@@ -520,9 +530,18 @@ if (form) {
             if (modalMode === 'add') {
                 dataObj.isActive = true;
                 dataObj.createdAt = new Date().toISOString();
-                const { error } = await supabase.from('announcements').insert([dataObj]);
+                const sendPushChecked = document.getElementById('ann-inp-send-push')?.checked ?? true;
+
+                const { data: newDocs, error } = await supabase.from('announcements').insert([dataObj]).select();
                 if (error) throw error;
+                const createdDoc = newDocs && newDocs[0] ? newDocs[0] : dataObj;
+
                 if (window.showToast) window.showToast('Announcement posted successfully!', 'check-circle');
+
+                // Trigger push notification if enabled
+                if (sendPushChecked) {
+                    await triggerAnnouncementPush(createdDoc);
+                }
             } else {
                 const { error } = await supabase.from('announcements').update(dataObj).eq('id', currentEditId);
                 if (error) throw error;
@@ -593,5 +612,46 @@ if (refreshBtn) {
     });
 }
 
+// ── Push Notification Trigger Functions ──────────────────────────────
+async function triggerAnnouncementPush(announcement, forceResend = false) {
+    if (!announcement || !announcement.id) return;
+    try {
+        const res = await fetch('/api/notifications/broadcast-announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                announcementId: announcement.id,
+                title: announcement.title,
+                content: announcement.content,
+                type: announcement.type,
+                forceResend: !!forceResend
+            })
+        });
+
+        const result = await res.json();
+        if (result.success && !result.duplicatePrevented) {
+            if (window.showToast) {
+                window.showToast(result.message || 'Push notification sent to students mobile app!', 'bell');
+            }
+        } else if (result.duplicatePrevented) {
+            console.log('Push notification duplicate skipped for announcement:', announcement.id);
+        }
+    } catch (e) {
+        console.warn('Could not trigger announcement push broadcast:', e);
+    }
+}
+
+window.broadcastPush = async function(id) {
+    const announcement = allAnnouncements.find(a => String(a.id) === String(id));
+    if (!announcement) return;
+
+    if (!confirm(`Broadcast push notification for "${announcement.title}" to all students mobile devices?`)) return;
+
+    if (window.showToast) window.showToast('Broadcasting push notification...', 'send');
+    await triggerAnnouncementPush(announcement, true);
+    await loadAnnouncements();
+};
+
 // Initial Load
 loadAnnouncements();
+

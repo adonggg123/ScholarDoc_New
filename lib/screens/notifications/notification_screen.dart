@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/push_notification_service.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -199,6 +200,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       data['timestamp'],
                       data['type'] ?? 'info',
                       !(data['isRead'] ?? true),
+                      announcementId: data['announcementId']?.toString(),
                     );
                   },
                 );
@@ -217,8 +219,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
     String message,
     dynamic timestamp,
     String type,
-    bool isNew,
-  ) {
+    bool isNew, {
+    String? announcementId,
+  }) {
     IconData icon = LucideIcons.info;
     Color color = AppTheme.primaryColor;
 
@@ -253,7 +256,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     return InkWell(
-      onTap: isNew ? () => _notificationService.markAsRead(docId) : null,
+      onTap: () {
+        if (isNew) {
+          _notificationService.markAsRead(docId);
+        }
+        if (announcementId != null && announcementId.isNotEmpty) {
+          PushNotificationService().openAnnouncementById(announcementId, context: context);
+        }
+      },
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(16),

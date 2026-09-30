@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'screens/auth/splash_screen.dart';
 import 'services/academic_term_service.dart';
+import 'services/push_notification_service.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +27,18 @@ void main() async {
   } catch (e) {
     debugPrint('Supabase/AcademicTerm init error: $e');
   }
+
+  // Initialize Firebase and Push Notification Service
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await PushNotificationService().initialize(navKey: rootNavigatorKey);
+  } catch (e) {
+    debugPrint('Firebase/Push initialization error: $e');
+  }
+
   runApp(const ScholarDocApp());
 }
 
@@ -33,6 +51,7 @@ class ScholarDocApp extends StatelessWidget {
       valueListenable: ThemeProvider().themeNotifier,
       builder: (_, ThemeMode currentMode, _) {
         return MaterialApp(
+          navigatorKey: rootNavigatorKey,
           title: 'ScholarDoc',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
