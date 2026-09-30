@@ -528,7 +528,7 @@ class AuthService {
                 'contactNumber': s['mobile_number'],
                 'email_address': s['email_address'],
                 'email': s['email_address'],
-                'status': 'Approved',
+                'status': 'No Submission Yet',
                 'scholarship_name': 'CHED TES',
                 'role': 'student',
               };
@@ -565,7 +565,7 @@ class AuthService {
             'year': '1',
             'email_address': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
             'email': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
-            'status': 'Approved',
+            'status': 'No Submission Yet',
             'scholarship_name': 'CHED TES',
             'role': 'student',
           };
@@ -1287,7 +1287,7 @@ class AuthService {
 
     for (final data in studentsData) {
       data.remove('isUpdated'); // Remove internal flags
-      data['status'] = data['status'] ?? 'Pending';
+      data['status'] = data['status'] ?? 'No Submission Yet';
       toUpsert.add(data);
     }
 

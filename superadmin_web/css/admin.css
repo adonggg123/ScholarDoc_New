@@ -2550,6 +2550,11 @@ body.dark .ann-type-box {
     color: #DC2626;
 }
 
+.dash-legend-pill.nosub {
+    background: rgba(148, 163, 184, 0.15);
+    color: #64748B;
+}
+
 .dash-legend-dot {
     width: 7px;
     height: 7px;

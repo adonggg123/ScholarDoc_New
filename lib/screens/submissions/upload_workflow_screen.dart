@@ -1388,7 +1388,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           }
 
           final Map<String, dynamic> studentPayload = {
-            'status': 'Pending',
+            'status': 'Submitted',
             'saNumber': _saController.text.trim(),
             'sa_number': _saController.text.trim(),
             'submissionPdfUrl': _submissionPdfUrl,

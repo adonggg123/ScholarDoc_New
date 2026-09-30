@@ -633,7 +633,7 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="6" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>No records match the selected batch.</span>
@@ -650,9 +650,9 @@ function renderTable() {
             tr.style.background = 'rgba(254, 243, 199, 0.3)';
         }
 
-        const statusBadge = record.isDuplicate
-            ? `<span title="${record.duplicateReason}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
-            : `<span style="background: rgba(16, 185, 129, 0.15); color: #059669; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i class="icon-check-circle-2" style="font-size: 12px;"></i> Saved to DB</span>`;
+        const duplicateBadge = record.isDuplicate
+            ? `<span title="${record.duplicateReason || 'Duplicate'}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; margin-right: 8px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
+            : '';
 
         tr.innerHTML = `
             <td style="padding: 6px 12px;">
@@ -670,10 +670,8 @@ function renderTable() {
             <td style="padding: 6px 12px;">
                 <input type="text" class="input-clean edit-batch" data-index="${index}" value="${record.batch}" style="width: 90px;">
             </td>
-            <td style="padding: 6px 12px; font-size: 12px;">
-                ${statusBadge}
-            </td>
-            <td style="padding: 6px 12px; text-align: right;">
+            <td style="padding: 6px 12px; text-align: right; white-space: nowrap;">
+                ${duplicateBadge}
                 <button class="icon-btn text-danger btn-remove" data-index="${index}" title="Remove" style="background: rgba(244, 67, 54, 0.1); border-radius: 8px;">
                     <i class="icon-trash-2" style="font-size: 16px; color: #ef4444;"></i>
                 </button>
@@ -1587,110 +1585,14 @@ async function parseSchoolExcelOrCsv(file) {
     });
 }
 
-// Upload & Process School Students File
+// Upload & Process School Students File (Disabled for Super Admin - View-Only Access)
 async function handleSchoolFile(file) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
-        alert('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
-        if (window.showToast) window.showToast('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.', 'alert-triangle');
-        if (schoolFileInput) schoolFileInput.value = '';
-        return;
+    console.warn('Super Admin has view-only access to School Student Records. Upload and import is restricted to School Admin.');
+    if (window.showToast) {
+        window.showToast('Super Admin has view-only access. School student records can only be uploaded by the School Admin.', 'alert-triangle');
     }
-
-    uploadedSchoolFile = file;
-    if (schoolFileNameDisplay) schoolFileNameDisplay.textContent = file.name;
-    if (schoolFileSizeDisplay) schoolFileSizeDisplay.textContent = `${(file.size / 1024).toFixed(1)} KB`;
-
-    if (schoolUploadPrompt) schoolUploadPrompt.style.display = 'none';
-    if (schoolFileInfo) schoolFileInfo.style.display = 'flex';
-
-    try {
-        const parsedStudents = await parseSchoolExcelOrCsv(file);
-
-        if (parsedStudents.length > 0) {
-            schoolStudents = parsedStudents.map(s => mapSchoolStudentRecord(s));
-            renderSchoolStudentsTable(schoolStudents);
-
-            // Prepare records for database table 'school_students'
-            const dbRecords = parsedStudents.map(s => {
-                const ageNum = parseInt(s.age, 10);
-                return {
-                    student_no: s.studentNo || s.studentId || null,
-                    full_name: s.fullName || `${s.last_name || ''} ${s.first_name || ''}`.trim() || 'Unknown',
-                    program_name: s.programName || s.course || null,
-                    year_level: s.yearLevel || s.year || null,
-                    date_of_birth: s.dateOfBirth || s.birthdate || null,
-                    age: !isNaN(ageNum) ? ageNum : null,
-                    gender: s.gender || null,
-                    civil_status: s.civilStatus || 'Single',
-                    religion: s.religion || null,
-                    mobile_number: s.mobileNumber || s.phone || null,
-                    email_address: s.emailAddress || s.email || null,
-                    father_full_name: s.fatherFullName || null,
-                    father_occupation: s.fatherOccupation || null,
-                    mother_full_name: s.motherFullName || null,
-                    mother_occupation: s.motherOccupation || null,
-                    scholarship_name: s.scholarship || s.scholarshipName || 'TES',
-                    updated_at: new Date().toISOString()
-                };
-            }).filter(r => r.full_name && r.full_name !== 'Unknown');
-
-            try {
-                const batchSize = 100;
-                let storedCount = 0;
-                for (let i = 0; i < dbRecords.length; i += batchSize) {
-                    const batch = dbRecords.slice(i, i + batchSize);
-                    let { error: upsertErr } = await window.supabaseClient
-                        .from('school_students')
-                        .upsert(batch, { onConflict: 'student_no' });
-
-                    if (upsertErr) {
-                        console.warn('Upsert on school_students failed, falling back without scholarship_name:', upsertErr);
-                        const strippedBatch = batch.map(({ scholarship_name, ...rest }) => rest);
-                        const { error: retryErr } = await window.supabaseClient
-                            .from('school_students')
-                            .upsert(strippedBatch, { onConflict: 'student_no' });
-                        if (retryErr) {
-                            const { error: insertErr } = await window.supabaseClient
-                                .from('school_students')
-                                .insert(strippedBatch);
-                            if (insertErr) throw insertErr;
-                        }
-                    }
-                    storedCount += batch.length;
-                }
-
-                if (window.showToast) {
-                    window.showToast(`Loaded and stored ${storedCount} records in school_students database!`, 'check-circle');
-                }
-            } catch (dbErr) {
-                console.error('Database store error:', dbErr);
-                if (window.showToast) {
-                    window.showToast(`Parsed ${parsedStudents.length} records. (Database: ${dbErr.message || 'Check school_students table'})`, 'alert-triangle');
-                }
-            }
-
-            // Re-verify with current grantees
-            const granteesForVerification = (extractedRecords || []).map(m => ({
-                id: m.id,
-                name: m.name || `${m.last_name || m.lastName || ''}, ${m.first_name || m.firstName || ''} ${m.middle_name || m.middleName || ''}`.trim(),
-                last_name: m.last_name || m.lastName,
-                first_name: m.first_name || m.firstName,
-                middle_name: m.middle_name || m.middleName,
-                batch: m.batch || 'Batch 1',
-                student_id: m.student_id || m.studentId || '',
-                course: m.course || 'BSIT',
-                year: m.year || '1'
-            }));
-            await loadSchoolStudentsAndVerify(granteesForVerification);
-
-        } else {
-            alert('Could not extract student records from the file. Make sure it has student names and IDs.');
-        }
-    } catch (err) {
-        console.error('File parsing error:', err);
-        alert('Error parsing school student file: ' + err.message);
-    }
+    alert('Super Admin has view-only access to School Student Records. Only the Admin has permission to upload or import these records.');
+    return;
 }
 
 async function loadSchoolStudentsAndVerify(grantees) {
@@ -2143,7 +2045,7 @@ function switchSourceSection(section) {
         if (sectionNewGrantees) sectionNewGrantees.style.display = 'none';
         if (cardSourceSchool) cardSourceSchool.style.display = 'flex';
         if (sourceActiveLabel) {
-            sourceActiveLabel.textContent = 'School Student Records';
+            sourceActiveLabel.textContent = 'School Student Records (View-Only)';
             sourceActiveLabel.style.color = '#1E88E5';
         }
     }

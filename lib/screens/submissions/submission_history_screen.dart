@@ -80,6 +80,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     } else if (status == 'Rejected' || status == 'Needs Correction' || status == 'Missing') {
       statusColor = const Color(0xFFEF4444);
       statusIcon = LucideIcons.alertTriangle;
+    } else if (status == 'No Submission Yet') {
+      statusColor = const Color(0xFF64748B);
+      statusIcon = LucideIcons.fileClock;
     }
 
     return Container(
@@ -255,7 +258,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         return s == 'rejected' || s == 'missing' || s == 'invalid';
       }
 
-      final String overallStatus = (_profileData!['status'] ?? 'Pending').toString();
+      final String overallStatus = (_profileData!['status'] ?? 'No Submission Yet').toString();
       final bool isOverallVerified = isFieldVerified(overallStatus);
 
       Map<String, dynamic> docs = {};

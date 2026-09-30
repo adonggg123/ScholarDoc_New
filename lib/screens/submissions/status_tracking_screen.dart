@@ -354,10 +354,10 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
         : (requiresResubmission && hasSubmitted
             ? 'Action Required: Resubmission needed'
             : (!hasSubmitted
-                ? 'Pending Requirements Submission for ${targetTerm.shortString} (25%)'
+                ? 'Awaiting Requirements Submission for ${targetTerm.shortString} (25%)'
                 : '$completedStages of 4 verification stages completed (${(progressValue * 100).toInt()}%)'));
 
-    final String effectiveStatus = hasSubmitted ? rawStatus : 'Pending';
+    final String effectiveStatus = hasSubmitted ? rawStatus : 'No Submission Yet';
 
     Color statusColor = AppTheme.warning;
     if (allStagesVerified) {
@@ -365,7 +365,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     } else if (hasSubmitted && (effectiveStatus == 'Rejected' || requiresResubmission || isSaRejected || isIdRejected)) {
       statusColor = AppTheme.error;
     } else if (!hasSubmitted) {
-      statusColor = AppTheme.primaryColor;
+      statusColor = AppTheme.textSecondary;
     }
 
     final bool needsAction = !hasSubmitted ||
@@ -617,16 +617,16 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
     Color iconBgColor;
 
     if (!hasSubmitted) {
-      cardColor = const Color(0xFF0F3260);
+      cardColor = const Color(0xFF475569);
       cardGradient = const LinearGradient(
-        colors: [Color(0xFF0A2540), Color(0xFF1E3A8A)],
+        colors: [Color(0xFF334155), Color(0xFF475569)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
-      icon = LucideIcons.uploadCloud;
-      statusTitle = 'Pending Submission';
+      icon = LucideIcons.fileClock;
+      statusTitle = 'No Submission Yet';
       statusSubtitle = isViewingActiveTerm
-          ? 'Submissions for ${targetTerm.displayString} are open. Your progress has reset for this semester. Please submit your updated ID sticker and requirements.'
+          ? 'Submissions for ${targetTerm.displayString} are open. Please upload your required documents and ID sticker to complete your application.'
           : 'No document submission recorded for ${targetTerm.displayString}. Requirements reset every academic year and semester.';
       iconBgColor = Colors.white24;
     } else if (requiresResubmission) {

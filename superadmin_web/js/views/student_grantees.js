@@ -128,32 +128,32 @@ function getStatusBadge(status) {
     status = status || 'No Submission Yet';
     const sLower = status.toLowerCase();
     let color = '#64748B'; // slate
-    let bg = 'rgba(100, 116, 139, 0.1)';
+    let bg = 'rgba(100, 116, 139, 0.12)';
     let border = 'rgba(100, 116, 139, 0.3)';
 
     if (sLower === 'approved' || sLower === 'verified') {
-        color = 'var(--success, #43A047)';
-        bg = 'rgba(67, 160, 71, 0.1)';
-        border = 'rgba(67, 160, 71, 0.3)';
+        color = '#059669'; // emerald
+        bg = 'rgba(16, 185, 129, 0.12)';
+        border = 'rgba(16, 185, 129, 0.35)';
     } else if (sLower === 'rejected') {
-        color = 'var(--error, #EF4444)';
-        bg = 'rgba(239, 68, 68, 0.1)';
-        border = 'rgba(239, 68, 68, 0.3)';
+        color = '#DC2626'; // red
+        bg = 'rgba(239, 68, 68, 0.12)';
+        border = 'rgba(239, 68, 68, 0.35)';
     } else if (sLower === 'submitted' || sLower === 'under review' || sLower === 'pending validation' || sLower === 'pending review') {
         color = '#2563EB'; // vibrant blue
-        bg = 'rgba(37, 99, 235, 0.1)';
-        border = 'rgba(37, 99, 235, 0.3)';
+        bg = 'rgba(37, 99, 235, 0.12)';
+        border = 'rgba(37, 99, 235, 0.35)';
     } else if (sLower === 'late submission') {
         color = '#EA580C'; // orange
-        bg = 'rgba(234, 88, 12, 0.1)';
-        border = 'rgba(234, 88, 12, 0.3)';
+        bg = 'rgba(234, 88, 12, 0.12)';
+        border = 'rgba(234, 88, 12, 0.35)';
     } else if (sLower === 'no submission yet' || sLower === 'pending' || sLower.includes('no submission')) {
         color = '#64748B'; // neutral slate
-        bg = 'rgba(100, 116, 139, 0.1)';
+        bg = 'rgba(100, 116, 139, 0.12)';
         border = 'rgba(100, 116, 139, 0.3)';
     }
 
-    return `<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; color: ${color}; background: ${bg}; border: 1px solid ${border};"><span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${color};"></span>${status}</span>`;
+    return `<span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 700; color: ${color}; background: ${bg}; border: 1px solid ${border}; white-space: nowrap; flex-shrink: 0;"><span style="width: 7px; height: 7px; border-radius: 50%; background-color: ${color}; flex-shrink: 0;"></span>${status}</span>`;
 }
 
 function renderTable() {
@@ -269,7 +269,17 @@ let currentEditUid = null;
 addStudentBtn.addEventListener('click', () => {
     modalMode = 'add';
     modalTitle.textContent = 'Add New Student';
+    const subTitleEl = document.getElementById('modal-subtitle');
+    if (subTitleEl) subTitleEl.textContent = 'Fill in the information below';
     document.getElementById('modal-icon').className = 'icon-user-plus';
+    const iconContainer = document.getElementById('modal-icon-container');
+    if (iconContainer) iconContainer.style.background = 'rgba(15, 50, 96, 0.08)';
+
+    const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
+    if (modalCard) {
+        modalCard.style.maxWidth = '560px';
+        modalCard.style.padding = '24px';
+    }
 
     // Ensure the form is visible
     studentForm.style.display = 'flex';
@@ -354,7 +364,7 @@ studentForm.addEventListener('submit', async (e) => {
                 if (ssCheck && ssCheck.length > 0) isRegistered = true;
             } catch (_) {}
 
-            const autoStatus = isRegistered ? 'Approved' : 'Pending';
+            const autoStatus = 'No Submission Yet';
             studentData.status = autoStatus;
             studentData.saVerificationStatus = autoStatus;
             studentData.sa_verification_status = autoStatus;
@@ -421,9 +431,23 @@ studentForm.addEventListener('submit', async (e) => {
 function showStudentModal(student) {
     modalMode = 'view';
     modalTitle.textContent = 'Student Details';
-    document.getElementById('modal-icon').className = 'icon-user';
+    const subTitleEl = document.getElementById('modal-subtitle');
+    if (subTitleEl) subTitleEl.textContent = 'Comprehensive Grantee Profile & Documentary Status';
 
-    // Hide the entire form instead of iterating inputs
+    const modalIconEl = document.getElementById('modal-icon');
+    if (modalIconEl) modalIconEl.className = 'icon-user-check';
+
+    const iconContainer = document.getElementById('modal-icon-container');
+    if (iconContainer) iconContainer.style.background = 'linear-gradient(135deg, rgba(15, 50, 96, 0.1), rgba(59, 130, 246, 0.15))';
+
+    // Expand modal to wide, comfortable desktop dimensions
+    const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
+    if (modalCard) {
+        modalCard.style.maxWidth = '840px';
+        modalCard.style.padding = '28px 32px';
+    }
+
+    // Hide input form
     studentForm.style.display = 'none';
 
     // Show View details container
@@ -432,167 +456,287 @@ function showStudentModal(student) {
     const fam = student.familyDetails || {};
     const picUrl = student.profilePictureUrl || student.profileImageUrl || student.photoUrl || student.photoURL;
 
-    const profilePicHtml = picUrl
-        ? `<div style="position: relative; width: 80px; height: 80px; border-radius: 50%; padding: 4px; background: linear-gradient(135deg, #FFC107, #F57F17); box-shadow: 0 8px 16px rgba(245, 127, 23, 0.2);">
-             <img src="${picUrl}" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; border: 3px solid white; object-fit: cover; background: white;">
-           </div>`
-        : `<div style="width: 80px; height: 80px; border-radius: 50%; background: rgba(15, 50, 96, 0.05); display: flex; align-items: center; justify-content: center; border: 2px dashed rgba(15, 50, 96, 0.2);">
-             <i class="icon-user" style="font-size: 32px; color: var(--primary-color);"></i>
-           </div>`;
-
-    const statusBadge = getStatusBadge(student.status);
-
-    const fullName = student.full_name || student.fullName || 'Unknown';
+    const fullName = student.full_name || student.fullName || 'Unknown Student';
     const studentNo = student.student_no || student.studentId || 'N/A';
-    const program = student.program_name || student.course || 'N/A';
-    const yearLevel = student.year_level || student.year || 'N/A';
+    const program = student.program_name || student.course || 'BSIT';
+    const yearLevel = student.year_level || student.year || '1';
     const birthdate = student.date_of_birth || student.birthdate || 'N/A';
     const email = student.email_address || student.email || 'N/A';
     const mobile = student.mobile_number || student.contactNumber || 'N/A';
     const civilStatus = student.civil_status || fam.civilStatus || 'Single';
     const religion = student.religion || fam.religion || 'N/A';
     const age = student.age || 'N/A';
+    const scholarshipName = student.scholarship_name || student.scholarshipProgram || student.scholarshipName || 'CHED TES';
+    const saNumber = student.sa_number || student.saNumber || fam.saNumber || 'N/A';
+    const payouts = student.payoutsReceived || student.payouts || '0';
+
     const fatherName = student.father_full_name || fam.fatherName || 'N/A';
     const fatherOcc = student.father_occupation || fam.fatherOccupation || 'N/A';
     const motherName = student.mother_full_name || fam.motherName || 'N/A';
     const motherOcc = student.mother_occupation || fam.motherOccupation || 'N/A';
 
+    // Documents resolution
+    const docs = student.documents || {};
+    const atmUrl = student.atmCardUrl || student.atm_card_url || docs.atmCardUrl || docs.atm_card_url;
+    const frontUrl = student.idFrontUrl || student.id_front_url || docs.idFrontUrl || docs.id_front_url;
+    const backUrl = student.idBackUrl || student.id_back_url || docs.idBackUrl || docs.id_back_url;
+    const pdfUrl = student.submissionPdfUrl || student.submission_pdf_url || docs.submissionPdfUrl || docs.submission_pdf_url;
+
+    // Avatar generation with aspect-ratio protection and initial fallback
+    const nameParts = fullName.replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(Boolean);
+    const initials = nameParts.length >= 2 
+        ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+        : (nameParts[0] ? nameParts[0].slice(0, 2).toUpperCase() : 'GD');
+
+    const profilePicHtml = picUrl
+        ? `<div style="position: relative; width: 80px; height: 80px; min-width: 80px; min-height: 80px; aspect-ratio: 1/1; border-radius: 50%; padding: 3px; background: linear-gradient(135deg, #F59E0B, #D97706); box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25); flex-shrink: 0;">
+             <img src="${picUrl}" alt="${fullName}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #FFFFFF; display: block;">
+           </div>`
+        : `<div style="width: 80px; height: 80px; min-width: 80px; min-height: 80px; aspect-ratio: 1/1; border-radius: 50%; background: linear-gradient(135deg, #0F3260 0%, #1E3A8A 100%); color: #FFFFFF; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(15, 50, 96, 0.2); border: 3px solid #FFFFFF; flex-shrink: 0; letter-spacing: 0.5px;">
+             ${initials}
+           </div>`;
+
+    const statusBadge = getStatusBadge(student.status);
+    const isApproved = (student.status || '').toLowerCase() === 'approved' || (student.status || '').toLowerCase() === 'verified';
+    const isNoSubmission = (student.status || '').toLowerCase().includes('no submission') || (student.status || '').toLowerCase() === 'pending' || !student.status;
+
+    // Helper to render doc item
+    function renderDocItem(title, url, iconName = 'icon-image') {
+        if (url) {
+            return `
+                <div style="background: var(--card-bg, #FFFFFF); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                        <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); color: #2563EB; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i class="${iconName}" style="font-size: 15px;"></i>
+                        </div>
+                        <div style="min-width: 0;">
+                            <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; display: block;">${title}</span>
+                            <span style="font-size: 12px; font-weight: 600; color: #16A34A; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-check-circle" style="font-size: 12px;"></i> Attached
+                            </span>
+                        </div>
+                    </div>
+                    <a href="${url}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #2563EB; background: rgba(37, 99, 235, 0.08); text-decoration: none; border: 1px solid rgba(37, 99, 235, 0.2); transition: background 0.2s; white-space: nowrap;" onmouseover="this.style.background='rgba(37,99,235,0.15)'" onmouseout="this.style.background='rgba(37,99,235,0.08)'">
+                        <span>View</span>
+                        <i class="icon-external-link" style="font-size: 12px;"></i>
+                    </a>
+                </div>
+            `;
+        }
+        return `
+            <div style="background: rgba(0, 0, 0, 0.015); border: 1px dashed var(--border-color, #E2E8F0); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(100, 116, 139, 0.06); color: #94A3B8; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="${iconName}" style="font-size: 15px;"></i>
+                    </div>
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; display: block;">${title}</span>
+                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">No file uploaded</span>
+                    </div>
+                </div>
+                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; color: #64748B; background: rgba(100, 116, 139, 0.08); white-space: nowrap;">
+                    <i class="icon-clock" style="font-size: 11px;"></i> Missing
+                </span>
+            </div>
+        `;
+    }
+
     dynamicDetails.innerHTML = `
-        <!-- Profile Header -->
-        <div style="display: flex; align-items: center; gap: 20px; padding: 24px; background: linear-gradient(to right, rgba(0,0,0,0.01), rgba(0,0,0,0.03)); border-radius: 16px; margin-bottom: 8px;">
+        <!-- Profile Hero Banner -->
+        <div style="display: flex; align-items: center; gap: 20px; padding: 22px 24px; background: linear-gradient(135deg, rgba(15, 50, 96, 0.03) 0%, rgba(59, 130, 246, 0.06) 100%); border: 1px solid var(--border-color, #E2E8F0); border-radius: 16px; margin-bottom: 20px; position: relative; overflow: hidden;">
+            <div style="position: absolute; right: -25px; top: -25px; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%); pointer-events: none;"></div>
             ${profilePicHtml}
-            <div style="flex: 1;">
-                <h3 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${fullName}</h3>
-                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); font-weight: 500;">
-                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-hash" style="font-size: 14px;"></i> ${studentNo}</span>
-                    <span style="width: 4px; height: 4px; border-radius: 50%; background: var(--border-color);"></span>
-                    <span style="display: flex; align-items: center; gap: 4px;"><i class="icon-graduation-cap" style="font-size: 14px;"></i> ${program} - ${yearLevel}</span>
+            <div style="flex: 1; min-width: 0;">
+                <h3 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; line-height: 1.25; word-break: break-word;">${fullName}</h3>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 700; color: var(--text-primary); background: rgba(0, 0, 0, 0.05); padding: 4px 10px; border-radius: 8px;">
+                        <i class="icon-hash" style="color: var(--text-secondary); font-size: 13px;"></i> ${studentNo}
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--primary-color); background: rgba(15, 50, 96, 0.06); padding: 4px 10px; border-radius: 8px;">
+                        <i class="icon-graduation-cap" style="font-size: 14px;"></i> ${program}
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #B45309; background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 8px;">
+                        Year ${yearLevel}
+                    </span>
                 </div>
             </div>
-            <div>
+            <div style="flex-shrink: 0; align-self: flex-start;">
                 ${statusBadge}
             </div>
         </div>
 
-        <!-- Information Grid -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 8px;">
+        <!-- 2-Column Information Layout -->
+        <div style="display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 18px; margin-bottom: 20px;">
             
-            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; grid-column: 1 / -1;">
-                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Personal Information</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Email Address</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${email}</p>
+            <!-- Left: Personal Information Card -->
+            <div style="background: var(--card-bg, #FFFFFF); border: 1px solid var(--border-color, #E2E8F0); border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #E2E8F0);">
+                    <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="icon-user" style="color: var(--primary-color); font-size: 15px;"></i>
+                    </div>
+                    <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Personal Information</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;">
+                    <div style="grid-column: 1 / -1;">
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Email Address</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); word-break: break-all;">${email}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mobile / Contact</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${mobile}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Mobile / Contact</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${mobile}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Date of Birth</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${birthdate}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Gender</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${student.gender || 'N/A'}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Age</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${age}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Date of Birth</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${birthdate}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Gender</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.gender || 'N/A'}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Age</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${age}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Civil Status</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${civilStatus}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Civil Status</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${civilStatus}</span>
                     </div>
                     <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Religion</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${religion}</p>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Religion</span>
+                        <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${religion}</span>
                     </div>
                 </div>
             </div>
 
-            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
-                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Scholarship & Academic Data</p>
-                <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Program Name</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${program}</p>
+            <!-- Right Column: Academic & Family Cards -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                
+                <!-- Scholarship & Academic Card -->
+                <div style="background: var(--card-bg, #FFFFFF); border: 1px solid var(--border-color, #E2E8F0); border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #E2E8F0);">
+                        <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i class="icon-award" style="color: #D97706; font-size: 15px;"></i>
+                        </div>
+                        <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Scholarship & Academic</span>
                     </div>
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Scholarship Program</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.scholarship_name || student.scholarshipProgram || student.scholarshipName || 'CHED TES'}</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div style="grid-column: 1 / -1;">
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Degree Program</span>
+                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${program}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Scholarship</span>
+                            <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: #047857; background: #ECFDF5; border: 1px solid #A7F3D0; padding: 3px 9px; border-radius: 6px;">
+                                <i class="icon-check-circle" style="font-size: 13px;"></i> ${scholarshipName}
+                            </span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">SA Number</span>
+                            <span style="display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--text-primary); background: rgba(0,0,0,0.05); padding: 3px 8px; border-radius: 6px;">${saNumber}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Year Level</span>
+                            <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">Year ${yearLevel}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Payouts Received</span>
+                            <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                                <i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts}
+                            </span>
+                        </div>
                     </div>
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">SA Number</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 14px; color: var(--text-primary); font-family: monospace;">${student.saNumber || fam.saNumber || 'N/A'}</p>
+                </div>
+
+                <!-- Family Background Card -->
+                <div style="background: var(--card-bg, #FFFFFF); border: 1px solid var(--border-color, #E2E8F0); border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #E2E8F0);">
+                        <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(5, 150, 105, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i class="icon-users" style="color: #059669; font-size: 15px;"></i>
+                        </div>
+                        <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Family Background</span>
                     </div>
+                    
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <div>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Year Level</p>
-                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${yearLevel}</p>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Father's Name</span>
+                            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${fatherName}</span>
                         </div>
                         <div>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Payouts</p>
-                            <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${student.payoutsReceived || '0'}</p>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Occupation</span>
+                            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${fatherOcc}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Mother's Name</span>
+                            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${motherName}</span>
+                        </div>
+                        <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Occupation</span>
+                            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${motherOcc}</span>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
-                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Family Background</p>
-                <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Full Name</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fatherName}</p>
-                    </div>
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Father's Occupation</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${fatherOcc}</p>
-                    </div>
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Full Name</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${motherName}</p>
-                    </div>
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 2px 0;">Mother's Occupation</p>
-                        <p style="font-weight: 600; margin: 0; font-size: 13px; color: var(--text-primary);">${motherOcc}</p>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; grid-column: 1 / -1;">
-                <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin: 0 0 12px 0; font-weight: 600;">Documents</p>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                    <div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 6px 0;">ATM Card Proof</p>
-                        ${(student.atmCardUrl || (student.documents && student.documents.atmCardUrl))
-            ? `<a href="${student.atmCardUrl || student.documents.atmCardUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; color: #3B82F6; font-weight: 600; font-size: 13px; text-decoration: none; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.15); transition: all 0.2s;"><i class="icon-image" style="font-size: 16px;"></i> View Attached Document</a>`
-            : '<div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color); font-size: 13px; color: var(--text-secondary); font-weight: 500;"><i class="icon-file-x-2"></i> Not Submitted</div>'}
-                    </div>
-                </div>
             </div>
 
         </div>
+
+        <!-- Submitted Documents Card -->
+        <div style="background: var(--card-bg, #FFFFFF); border: 1px solid var(--border-color, #E2E8F0); border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #E2E8F0);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(37, 99, 235, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="icon-file-text" style="color: #2563EB; font-size: 15px;"></i>
+                    </div>
+                    <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Documentary Requirements</span>
+                </div>
+                <span style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary);">
+                    ${(atmUrl || frontUrl || backUrl || pdfUrl) ? 'Files Uploaded' : 'Awaiting Submissions'}
+                </span>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+                ${renderDocItem('ATM Card Proof', atmUrl, 'icon-credit-card')}
+                ${renderDocItem('Student ID (Front)', frontUrl, 'icon-image')}
+                ${renderDocItem('Student ID (Back)', backUrl, 'icon-image')}
+                ${renderDocItem('Application PDF', pdfUrl, 'icon-file-text')}
+            </div>
+        </div>
     `;
 
-    // Inject action buttons at the bottom of dynamicDetails
+    // Action buttons bar at bottom
     const actionsDiv = document.createElement('div');
-    actionsDiv.style.display = "flex";
-    actionsDiv.style.gap = "16px";
-    actionsDiv.style.marginTop = "8px";
-    actionsDiv.style.padding = "0 8px";
+    actionsDiv.style.paddingTop = "18px";
+    actionsDiv.style.borderTop = "1px solid var(--border-color, #E2E8F0)";
 
-    const isApproved = (student.status || '').toLowerCase() === 'approved' || (student.status || '').toLowerCase() === 'verified';
+    let noticeHtml = '';
+    if (isNoSubmission) {
+        noticeHtml = `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(100, 116, 139, 0.06); border: 1px solid rgba(100, 116, 139, 0.2); border-radius: 12px; margin-bottom: 16px;">
+                <i class="icon-info" style="color: #64748B; font-size: 18px; flex-shrink: 0;"></i>
+                <div style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.45;">
+                    <strong style="color: var(--text-primary);">Notice:</strong> This student currently has <strong>No Submission Yet</strong>. Document requirements should be submitted and verified before approving the application.
+                </div>
+            </div>
+        `;
+    }
+
     actionsDiv.innerHTML = `
-        <button type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 600; font-size: 14px; color: white; background: #22C55E; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2); transition: transform 0.2s, box-shadow 0.2s;" onclick="approveStudent('${student.uid}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(34, 197, 94, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(34, 197, 94, 0.2)'">
-            <i class="icon-check-circle"></i> ${isApproved ? 'Approved Scholar' : 'Approve Student'}
-        </button>
-        <button type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 600; font-size: 14px; color: white; background: #EF4444; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); transition: transform 0.2s, box-shadow 0.2s;" onclick="rejectStudent('${student.uid}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(239, 68, 68, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.2)'">
-            <i class="icon-x-circle"></i> Reject Application
-        </button>
+        ${noticeHtml}
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px;">
+            <button type="button" class="btn btn-outline" onclick="hideModal()" style="padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer;">
+                Close
+            </button>
+            <button type="button" onclick="rejectStudent('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #EF4444, #DC2626); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(239, 68, 68, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.2)'">
+                <i class="icon-x-circle" style="font-size: 15px;"></i> Reject Application
+            </button>
+            <button type="button" onclick="approveStudent('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 24px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #10B981, #059669); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(16, 185, 129, 0.35)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.25)'">
+                <i class="icon-check-circle" style="font-size: 15px;"></i> ${isApproved ? 'Approved Scholar' : 'Approve Student'}
+            </button>
+        </div>
     `;
+
     dynamicDetails.appendChild(actionsDiv);
 
     if (window.lucide) window.lucide.createIcons();
@@ -607,7 +751,17 @@ window.editStudent = function (uid) {
     modalMode = 'edit';
     currentEditUid = uid;
     modalTitle.textContent = 'Edit Student';
+    const subTitleEl = document.getElementById('modal-subtitle');
+    if (subTitleEl) subTitleEl.textContent = 'Update student information';
     document.getElementById('modal-icon').className = 'icon-pencil';
+    const iconContainer = document.getElementById('modal-icon-container');
+    if (iconContainer) iconContainer.style.background = 'rgba(15, 50, 96, 0.08)';
+
+    const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
+    if (modalCard) {
+        modalCard.style.maxWidth = '560px';
+        modalCard.style.padding = '24px';
+    }
 
     // Ensure the form is visible
     studentForm.style.display = 'flex';
@@ -666,6 +820,11 @@ window.deleteStudent = async function (uid) {
 
 function hideModal() {
     modal.classList.add('hidden');
+    const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
+    if (modalCard) {
+        modalCard.style.maxWidth = '560px';
+        modalCard.style.padding = '24px';
+    }
 }
 
 window.approveStudent = async function (uid) {

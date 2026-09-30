@@ -673,7 +673,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     0,
                                 'contactNumber': _contactController.text.trim(),
                                 'role': 'student',
-                                'status': 'Pending',
+                                'status': 'No Submission Yet',
                                 'documents': {},
                                 'familyDetails': {
                                   'fatherName': _fatherNameController.text

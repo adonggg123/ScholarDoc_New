@@ -34,10 +34,12 @@ if (currentProf) {
     if (nameEl) nameEl.textContent = `${firstName}!`;
 
     // Verification badge
-    const status = currentProf.status || 'Verified';
-    let badgeClass = 'badge-success', badgeIcon = 'badge-check', badgeText = 'Verified Scholar';
-    if (status === 'Pending') {
-        badgeClass = 'badge-pending'; badgeIcon = 'hourglass'; badgeText = 'Pending Approval';
+    const status = currentProf.status || 'No Submission Yet';
+    let badgeClass = 'badge-pending', badgeIcon = 'clock', badgeText = 'No Submission Yet';
+    if (status === 'Verified' || status === 'Approved') {
+        badgeClass = 'badge-success'; badgeIcon = 'badge-check'; badgeText = 'Verified Scholar';
+    } else if (status === 'Submitted' || status === 'Pending') {
+        badgeClass = 'badge-pending'; badgeIcon = 'hourglass'; badgeText = 'Submitted (Pending Review)';
     } else if (status === 'Rejected' || status === 'Needs Correction') {
         badgeClass = 'badge-danger'; badgeIcon = 'alert-triangle'; badgeText = 'Needs Correction';
     }
@@ -64,13 +66,15 @@ function renderStatusCard() {
 
     const prof = window.currentStudentProfile || profile;
     const scholarshipName = prof?.scholarshipName || 'TES Scholarship Program';
-    const status = prof?.status || 'Verified';
+    const status = prof?.status || 'No Submission Yet';
     const submittedDate = prof?.submittedAt 
         ? new Date(prof.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-        : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        : 'Awaiting Document Upload';
 
-    let badgeClass = 'badge-success', statusIcon = 'badge-check';
-    if (status === 'Pending') {
+    let badgeClass = 'badge-pending', statusIcon = 'clock';
+    if (status === 'Verified' || status === 'Approved') {
+        badgeClass = 'badge-success'; statusIcon = 'badge-check';
+    } else if (status === 'Submitted' || status === 'Pending') {
         badgeClass = 'badge-pending'; statusIcon = 'hourglass';
     } else if (status === 'Rejected' || status === 'Needs Correction') {
         badgeClass = 'badge-danger'; statusIcon = 'alert-triangle';

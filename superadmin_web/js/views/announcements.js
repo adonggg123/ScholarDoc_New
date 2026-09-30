@@ -238,10 +238,11 @@ function filterAndRenderCards() {
                         <span>${escapeHtml(a.type || 'General')}</span>
                     </div>
 
-                    <div class="ann-status-pill ${isActive ? 'live' : 'archived'}">
+                    ${!isActive ? `
+                    <div class="ann-status-pill archived">
                         <span class="ann-status-dot"></span>
-                        <span>${isActive ? 'LIVE' : 'ARCHIVED'}</span>
-                    </div>
+                        <span>ARCHIVED</span>
+                    </div>` : ''}
                 </div>
 
                 <!-- Title & Meta -->

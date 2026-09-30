@@ -95,12 +95,19 @@ async function loadStats() {
         let pending = 0;
         let approved = 0;
         let rejected = 0;
+        let noSubmission = 0;
 
         students.forEach(s => {
             const status = (s.status || '').toLowerCase();
-            if (status === 'pending') pending++;
-            else if (status === 'verified' || status === 'approved') approved++;
-            else if (status === 'rejected' || status === 'flagged') rejected++;
+            if (status === 'pending' || status === 'submitted' || status === 'late submission') {
+                pending++;
+            } else if (status === 'verified' || status === 'approved') {
+                approved++;
+            } else if (status === 'rejected' || status === 'flagged' || status === 'needs correction') {
+                rejected++;
+            } else {
+                noSubmission++;
+            }
         });
 
         // Set text numbers
@@ -136,7 +143,7 @@ async function loadStats() {
         const barRejected = document.getElementById('bar-rejected');
         if (barRejected) barRejected.style.width = `${rejectedPct}%`;
 
-        renderStatusDistribution(total, pending, approved, rejected);
+        renderStatusDistribution(total, pending, approved, rejected, noSubmission);
     } catch (e) {
         console.error('Error loading stats:', e);
     }
@@ -166,7 +173,7 @@ function animateCounter(elementId, targetValue) {
 }
 
 // Render Status Distribution Donut Chart
-function renderStatusDistribution(total, pending, approved, rejected) {
+function renderStatusDistribution(total, pending, approved, rejected, noSubmission = 0) {
     const ctx = document.getElementById('statusPieChart');
     const noData = document.getElementById('pie-no-data');
     const legend = document.getElementById('pie-legend');
@@ -179,6 +186,7 @@ function renderStatusDistribution(total, pending, approved, rejected) {
             <div class="dash-legend-pill approved"><span class="dash-legend-dot"></span> Approved 0%</div>
             <div class="dash-legend-pill pending"><span class="dash-legend-dot"></span> Pending 0%</div>
             <div class="dash-legend-pill flagged"><span class="dash-legend-dot"></span> Flagged 0%</div>
+            <div class="dash-legend-pill nosub"><span class="dash-legend-dot"></span> No Sub 0%</div>
         `;
         return;
     }
@@ -194,15 +202,26 @@ function renderStatusDistribution(total, pending, approved, rejected) {
     const appPct = Math.round((approved / total) * 100);
     const penPct = Math.round((pending / total) * 100);
     const rejPct = Math.round((rejected / total) * 100);
+    const noSubPct = Math.round((noSubmission / total) * 100);
 
     const isDark = document.body.classList.contains('dark');
     const borderCol = isDark ? '#1E293B' : '#FFFFFF';
 
+    const labels = ['Approved', 'Submitted / Pending', 'Flagged'];
+    const dataVals = [approved, pending, rejected];
+    const bgColors = ['#10B981', '#F59E0B', '#EF4444'];
+
+    if (noSubmission > 0) {
+        labels.push('No Submission Yet');
+        dataVals.push(noSubmission);
+        bgColors.push('#94A3B8');
+    }
+
     const data = {
-        labels: ['Approved', 'Pending', 'Flagged'],
+        labels: labels,
         datasets: [{
-            data: [approved, pending, rejected],
-            backgroundColor: ['#10B981', '#F59E0B', '#EF4444'],
+            data: dataVals,
+            backgroundColor: bgColors,
             borderWidth: 2,
             borderColor: borderCol,
             hoverOffset: 6
@@ -240,6 +259,7 @@ function renderStatusDistribution(total, pending, approved, rejected) {
         <div class="dash-legend-pill approved"><span class="dash-legend-dot"></span> Approved ${appPct}%</div>
         <div class="dash-legend-pill pending"><span class="dash-legend-dot"></span> Pending ${penPct}%</div>
         <div class="dash-legend-pill flagged"><span class="dash-legend-dot"></span> Flagged ${rejPct}%</div>
+        ${noSubmission > 0 ? `<div class="dash-legend-pill nosub"><span class="dash-legend-dot"></span> No Sub ${noSubPct}%</div>` : ''}
     `;
 }
 

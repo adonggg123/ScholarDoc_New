@@ -738,14 +738,14 @@ class _HomeScreenState extends State<HomeScreen> {
         AcademicTermService.isYearMatching(studentAy, currentTerm.academicYear) &&
         (studentSem.isEmpty || AcademicTermService.isSemesterMatching(studentSem, currentTerm.semester));
 
-    // Reset status by year and semester: If no submission for current active term, resets to Pending
+    // Reset status by year and semester: If no submission for current active term, resets to No Submission Yet
     final String status = isForCurrentTerm
-        ? (_profileData?['status'] ?? 'Pending')
-        : 'Pending';
+        ? (_profileData?['status'] ?? 'No Submission Yet')
+        : 'No Submission Yet';
 
     final String statusDisplay = isForCurrentTerm
         ? status
-        : 'Pending Submission';
+        : 'No Submission Yet';
 
     final String submittedDate = isForCurrentTerm
         ? (() {
@@ -760,17 +760,19 @@ class _HomeScreenState extends State<HomeScreen> {
         : 'Awaiting ${currentTerm.semester} Upload';
 
     Color statusColor = const Color(
-      0xFFF59E0B,
-    ); // Vibrant Golden Yellow for Warning/Pending
-    IconData statusIcon = LucideIcons.hourglass;
+      0xFF64748B,
+    ); // Slate Gray for No Submission Yet
+    IconData statusIcon = LucideIcons.fileClock;
     if (status == 'Approved' || status == 'Verified') {
       if (isForCurrentTerm) {
         statusColor = const Color(0xFF10B981); // Vibrant Emerald Green
         statusIcon = LucideIcons.badgeCheck;
       }
-    }
-    if (status == 'Rejected' || status == 'Needs Correction') {
-      statusColor = const Color(0xFFEF4444); // Vibrant Crimson Red
+    } else if (status == 'Submitted' || status == 'Pending') {
+      statusColor = const Color(0xFFF59E0B);
+      statusIcon = LucideIcons.hourglass;
+    } else if (status == 'Rejected' || status == 'Needs Correction') {
+      statusColor = const Color(0xFFEF4444);
       statusIcon = LucideIcons.alertTriangle;
     }
 
@@ -987,7 +989,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildVerificationBadge() {
-    final status = _profileData?['status'] ?? 'Pending';
+    final status = _profileData?['status'] ?? 'No Submission Yet';
     Color badgeColor;
     IconData badgeIcon;
     String badgeText;
@@ -996,14 +998,18 @@ class _HomeScreenState extends State<HomeScreen> {
       badgeColor = const Color(0xFF10B981); // Vibrant Emerald Green
       badgeIcon = LucideIcons.badgeCheck;
       badgeText = 'Verified Scholar';
+    } else if (status == 'Submitted' || status == 'Pending') {
+      badgeColor = const Color(0xFFF59E0B); // Vibrant Golden Yellow
+      badgeIcon = LucideIcons.hourglass;
+      badgeText = 'Pending Approval';
     } else if (status == 'Rejected' || status == 'Needs Correction') {
       badgeColor = const Color(0xFFEF4444); // Vibrant Crimson Red
       badgeIcon = LucideIcons.alertTriangle;
       badgeText = 'Needs Correction';
     } else {
-      badgeColor = const Color(0xFFF59E0B); // Vibrant Golden Yellow
-      badgeIcon = LucideIcons.hourglass;
-      badgeText = 'Pending Approval';
+      badgeColor = const Color(0xFF64748B); // Slate Neutral
+      badgeIcon = LucideIcons.fileClock;
+      badgeText = 'No Submission Yet';
     }
 
     return Container(
