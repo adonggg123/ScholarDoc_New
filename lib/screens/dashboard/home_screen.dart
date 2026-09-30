@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -40,7 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Stream<List<Map<String, dynamic>>>? _notificationStream;
   StreamSubscription<List<Map<String, dynamic>>>? _notificationSubscription;
+  StreamSubscription<List<Announcement>>? _announcementsSubscription;
   final Set<String> _shownNotificationIds = {};
+  final DateTime _sessionStartTime = DateTime.now().subtract(const Duration(seconds: 1));
   bool _isInitialLoad = true;
   OverlayEntry? _currentToastEntry;
 
@@ -64,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _announcementsSubscription?.cancel();
     if (_currentToastEntry != null) {
       _currentToastEntry!.remove();
       _currentToastEntry = null;
@@ -80,8 +84,22 @@ class _HomeScreenState extends State<HomeScreen> {
         
         final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
         
+        // Mark all historical unread notifications as already shown so they never spam on startup
+        for (var n in unread) {
+          final String? id = n['id']?.toString();
+          final String? tsStr = n['timestamp']?.toString();
+          DateTime? notifTime;
+          if (tsStr != null) {
+            try {
+              notifTime = DateTime.parse(tsStr);
+            } catch (_) {}
+          }
+          if (notifTime == null || notifTime.isBefore(_sessionStartTime)) {
+            if (id != null) _shownNotificationIds.add(id);
+          }
+        }
+
         if (_isInitialLoad) {
-          // Initialize shown set with all current unread IDs to prevent startup spam
           for (var n in unread) {
             final String? id = n['id']?.toString();
             if (id != null) {
@@ -92,16 +110,40 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
 
-        // Detect new unread notifications
+        // Detect new unread notifications that arrived strictly after this session started
         for (var n in unread) {
           final String? id = n['id']?.toString();
-          if (id != null && !_shownNotificationIds.contains(id)) {
+          final String? tsStr = n['timestamp']?.toString();
+          DateTime? notifTime;
+          if (tsStr != null) {
+            try {
+              notifTime = DateTime.parse(tsStr);
+            } catch (_) {}
+          }
+
+          final bool isLive = notifTime == null ||
+              notifTime.isAfter(_sessionStartTime) ||
+              notifTime.isAtSameMomentAs(_sessionStartTime);
+
+          if (id != null && !_shownNotificationIds.contains(id) && isLive) {
             _shownNotificationIds.add(id);
+
+            // Skip Welcome notifications here since _checkAndShowFirstLoginWelcome handles it cleanly
+            if (n['title']?.toString().contains('Welcome') == true) {
+              continue;
+            }
+
             _showToastPopup(
               n['title'] ?? 'Notification',
               n['message'] ?? '',
               id,
               announcementId: n['announcementId']?.toString(),
+            );
+            // Also trigger system push notification banner
+            PushNotificationService().showLocalNotification(
+              title: n['title'] ?? 'ScholarDoc Notification',
+              body: n['message'] ?? '',
+              payload: {'id': id, 'announcementId': n['announcementId']},
             );
           }
         }
@@ -264,7 +306,8 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    _announcementService.getActiveAnnouncements().listen(
+    _announcementsSubscription?.cancel();
+    _announcementsSubscription = _announcementService.getActiveAnnouncements().listen(
       (list) {
         if (mounted) {
           setState(() {
@@ -293,6 +336,76 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Handles swipe downward / pull-to-refresh to reload entire system state
+  Future<void> _handleSwipeRefresh() async {
+    try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+
+    final uid = _authService.currentUser?.id;
+    final List<Future<dynamic>> futures = [];
+
+    // 1. Sync active academic term
+    futures.add(AcademicTermService.syncFromSupabase());
+
+    // 2. Fetch latest student profile from Supabase
+    if (uid != null) {
+      futures.add(_authService.getStudentProfile(uid).then((doc) {
+        if (doc != null && mounted) {
+          setState(() {
+            _profileData = doc;
+          });
+        }
+      }));
+
+      // 3. Refresh notification counters
+      futures.add(_notificationService.refreshNotificationCounts(uid));
+    }
+
+    // 4. Fetch announcements once for instant update
+    futures.add(_announcementService.getActiveAnnouncementsOnce().then((list) {
+      if (mounted) {
+        setState(() {
+          _announcements = list;
+          _isLoading = false;
+        });
+      }
+    }));
+
+    try {
+      await Future.wait(futures).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('HomeScreen refresh error: $e');
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(LucideIcons.checkCheck, color: Color(0xFFFBC02D), size: 18),
+              SizedBox(width: 10),
+              Text(
+                'System refreshed successfully',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F3260),
+          duration: const Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        ),
+      );
+    }
+  }
+
   Future<void> _checkAndShowFirstLoginWelcome(String uid, String displayName) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -307,6 +420,12 @@ class _HomeScreenState extends State<HomeScreen> {
               'Welcome to ScholarDoc! 👋',
               'Welcome, $displayName! Your scholarship portal is ready.',
               'welcome_$uid',
+            );
+            // Trigger device push notification banner on first login
+            PushNotificationService().showLocalNotification(
+              title: 'Welcome to ScholarDoc! 👋',
+              body: 'Welcome, $displayName! Your scholarship portal is ready.',
+              payload: {'type': 'welcome', 'studentId': uid},
             );
           }
         });
@@ -447,8 +566,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        color: const Color(0xFF0F3260),
+        backgroundColor: Colors.white,
+        strokeWidth: 2.6,
+        displacement: 40,
+        onRefresh: _handleSwipeRefresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          slivers: [
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -717,6 +845,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
         ],
+        ),
       ),
     );
   }

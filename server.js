@@ -566,6 +566,44 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // ── API: Delete Announcement and Purge Associated Notifications ───────
+    if (urlPath === '/api/announcements/delete' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { id } = JSON.parse(body || '{}');
+                if (!id) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Missing announcement id' }));
+                    return;
+                }
+                const headers = {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                };
+                // 1. Delete announcement
+                await fetch(`${SUPABASE_REST_URL}/announcements?id=eq.${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers
+                });
+                // 2. Permanently delete all associated notifications
+                await fetch(`${SUPABASE_REST_URL}/notifications?announcementId=eq.${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers
+                });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Announcement and notifications permanently deleted' }));
+            } catch (err) {
+                console.error('[API announcement delete error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
     // ── API: Google Document AI Sticker Scanner ──────────────────────────
     if (urlPath === '/api/document-ai/scan-sticker' && req.method === 'POST') {
         let body = '';

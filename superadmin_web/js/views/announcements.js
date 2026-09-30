@@ -440,6 +440,13 @@ window.toggleStatus = async function(id, newState) {
 
         if (error) throw error;
 
+        // If archived/deactivated, remove associated notifications so students do not see inactive notices
+        if (!newState) {
+            try {
+                await supabase.from('notifications').delete().eq('announcementId', String(id));
+            } catch (_) {}
+        }
+
         if (window.showToast) {
             window.showToast(
                 `Announcement ${newState ? 'restored to Live' : 'archived'}`,
@@ -463,11 +470,28 @@ window.deleteAnnouncement = async function(id) {
     if (!confirm(`Are you sure you want to permanently delete "${title}"? This action cannot be undone.`)) return;
 
     try {
+        // 1. Delete announcement record from Supabase
         const { error } = await supabase.from('announcements').delete().eq('id', id);
         if (error) throw error;
 
+        // 2. Permanently delete all notifications tied to this announcement
+        try {
+            await supabase.from('notifications').delete().eq('announcementId', String(id));
+        } catch (notifErr) {
+            console.warn('Could not delete notifications for announcement:', notifErr);
+        }
+
+        // 3. Inform server API for backend purge
+        try {
+            await fetch('/api/announcements/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+        } catch (_) {}
+
         if (window.showToast) {
-            window.showToast('Announcement deleted successfully', 'trash-2');
+            window.showToast('Announcement and notifications permanently deleted', 'trash-2');
         }
         await loadAnnouncements();
     } catch (err) {

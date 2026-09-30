@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:intl/intl.dart';
@@ -31,6 +32,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (user != null) {
       _notificationStream = _notificationService.getNotificationsStream(user.id);
     }
+  }
+
+  Future<void> _handleRefresh(String userId) async {
+    try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+    setState(() {
+      _locallyClearedAll = false;
+      _notificationStream = _notificationService.getNotificationsStream(userId);
+    });
+    await _notificationService.refreshNotificationCounts(userId);
   }
 
   Future<bool?> _confirmDeleteSingle(BuildContext context, String title) {
@@ -378,75 +390,99 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           _buildHeader(context),
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _notificationStream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: RefreshIndicator(
+              color: AppTheme.primaryColor,
+              backgroundColor: context.surfaceC,
+              onRefresh: () => _handleRefresh(user.id),
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _notificationStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                if (snapshot.hasError) {
-                  debugPrint('NotificationScreen: Supabase Error -> ${snapshot.error}');
-                  return const Center(child: Text('Error loading notifications'));
-                }
-
-                if (_locallyClearedAll) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.bellOff, size: 48, color: Colors.grey.withValues(alpha: 0.5)),
-                        const SizedBox(height: 16),
-                        const Text('No notifications yet.', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
-                }
-
-                List<Map<String, dynamic>> rawDocs = snapshot.data?.toList() ?? [];
-                List<Map<String, dynamic>> docs = rawDocs
-                    .where((d) => !_locallyDeletedIds.contains(d['id']?.toString()))
-                    .toList();
-
-                docs.sort((a, b) {
-                  final tA = a['timestamp']?.toString() ?? '';
-                  final tB = b['timestamp']?.toString() ?? '';
-                  return tB.compareTo(tA);
-                });
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.bellOff, size: 48, color: Colors.grey.withValues(alpha: 0.5)),
-                        const SizedBox(height: 16),
-                        const Text('No notifications yet.', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(24),
-                  itemCount: docs.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    final data = docs[index];
-
-                    return _buildNotificationItem(
-                      context,
-                      data['id']?.toString() ?? '',
-                      data['title'] ?? 'Notification',
-                      data['message'] ?? '',
-                      data['timestamp'],
-                      data['type'] ?? 'info',
-                      !(data['isRead'] ?? true),
-                      announcementId: data['announcementId']?.toString(),
+                  if (snapshot.hasError) {
+                    debugPrint('NotificationScreen: Supabase Error -> ${snapshot.error}');
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      child: SizedBox(
+                        height: 350,
+                        child: const Center(child: Text('Error loading notifications. Pull down to retry.')),
+                      ),
                     );
-                  },
-                );
-              },
+                  }
+
+                  if (_locallyClearedAll) {
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      child: SizedBox(
+                        height: 350,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.bellOff, size: 48, color: Colors.grey.withValues(alpha: 0.5)),
+                              const SizedBox(height: 16),
+                              const Text('No notifications yet.', style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  List<Map<String, dynamic>> rawDocs = snapshot.data?.toList() ?? [];
+                  List<Map<String, dynamic>> docs = rawDocs
+                      .where((d) => !_locallyDeletedIds.contains(d['id']?.toString()))
+                      .toList();
+
+                  docs.sort((a, b) {
+                    final tA = a['timestamp']?.toString() ?? '';
+                    final tB = b['timestamp']?.toString() ?? '';
+                    return tB.compareTo(tA);
+                  });
+
+                  if (docs.isEmpty) {
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      child: SizedBox(
+                        height: 350,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.bellOff, size: 48, color: Colors.grey.withValues(alpha: 0.5)),
+                              const SizedBox(height: 16),
+                              const Text('No notifications yet.', style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    padding: const EdgeInsets.all(24),
+                    itemCount: docs.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final data = docs[index];
+
+                      return _buildNotificationItem(
+                        context,
+                        data['id']?.toString() ?? '',
+                        data['title'] ?? 'Notification',
+                        data['message'] ?? '',
+                        data['timestamp'],
+                        data['type'] ?? 'info',
+                        !(data['isRead'] ?? true),
+                        announcementId: data['announcementId']?.toString(),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],

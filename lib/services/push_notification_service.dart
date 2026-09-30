@@ -234,6 +234,49 @@ class PushNotificationService {
     );
   }
 
+  /// Trigger a local heads-up push notification banner on the device
+  Future<void> showLocalNotification({
+    required String title,
+    required String body,
+    Map<String, dynamic>? payload,
+  }) async {
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        _channel.id,
+        _channel.name,
+        channelDescription: _channel.description,
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@drawable/ic_notification',
+        color: const Color(0xFF0F3260),
+        playSound: true,
+        enableVibration: true,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+        ),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+      final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      await _localNotifications.show(
+        notifId,
+        title,
+        body,
+        details,
+        payload: payload != null ? jsonEncode(payload) : null,
+      );
+    } catch (e) {
+      debugPrint('ScholarDoc Push: Error showing local notification: $e');
+    }
+  }
+
   /// Synchronize the student's FCM token to Supabase `user_fcm_tokens` table
   Future<void> syncToken(String userId, {String? studentId}) async {
     try {
@@ -335,33 +378,49 @@ class PushNotificationService {
 
       if (response != null && ctx != null && ctx.mounted) {
         final announcement = Announcement.fromMap(response);
-        await AnnouncementDetailDialog.show(ctx, announcement);
+        if (announcement.isActive) {
+          await AnnouncementDetailDialog.show(ctx, announcement);
+          return;
+        }
+      }
+
+      // If announcement does not exist or is inactive, it was deleted/archived by superadmin
+      // Purge orphan notifications for this announcement from DB
+      try {
+        await _supabase.from('notifications').delete().eq('announcementId', announcementId);
+      } catch (_) {}
+
+      if (ctx != null && ctx.mounted) {
+        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.info_outline, color: Color(0xFFFBC02D), size: 18),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'This announcement was removed by the administrator.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF0F3260),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+            duration: const Duration(seconds: 3),
+          ),
+        );
         return;
       }
     } catch (e) {
       debugPrint('ScholarDoc Push: Error fetching announcement for modal: $e');
-    }
-
-    // Resilient fallback: If database returned null or is delayed, render using notification payload data directly
-    if (fallbackData != null &&
-        fallbackData['title'] != null &&
-        fallbackData['title'].toString().isNotEmpty &&
-        ctx != null &&
-        ctx.mounted) {
-      final fallbackAnnouncement = Announcement(
-        id: announcementId,
-        title: fallbackData['title']?.toString() ?? 'Announcement',
-        content: (fallbackData['content'] ??
-                fallbackData['message'] ??
-                fallbackData['body'] ??
-                '')
-            .toString(),
-        type: fallbackData['type']?.toString() ?? 'General',
-        createdAt: DateTime.now(),
-        isActive: true,
-      );
-      await AnnouncementDetailDialog.show(ctx, fallbackAnnouncement);
-      return;
     }
 
     // Fallback: Navigate to notifications screen

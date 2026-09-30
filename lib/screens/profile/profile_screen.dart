@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
@@ -98,6 +98,39 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<void> _handleProfileRefresh() async {
+    try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+    await _loadProfile();
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(LucideIcons.checkCheck, color: Color(0xFFFBC02D), size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Profile refreshed successfully',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F3260),
+          duration: const Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _scholarshipSub?.cancel();
@@ -116,9 +149,17 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.bgC,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
+      body: RefreshIndicator(
+        color: AppTheme.primaryColor,
+        backgroundColor: context.surfaceC,
+        strokeWidth: 2.6,
+        displacement: 40,
+        onRefresh: _handleProfileRefresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          slivers: [
           // --- Profile Header ---
           SliverAppBar(
             expandedHeight: 260,
@@ -631,6 +672,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }

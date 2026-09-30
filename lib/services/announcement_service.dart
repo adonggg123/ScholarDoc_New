@@ -53,6 +53,20 @@ class AnnouncementService {
         .map((data) => data.map((doc) => Announcement.fromMap(doc)).toList());
   }
 
+  // Get active announcements once (for pull-to-refresh)
+  Future<List<Announcement>> getActiveAnnouncementsOnce() async {
+    try {
+      final data = await _supabase
+          .from('announcements')
+          .select()
+          .eq('isActive', true)
+          .order('createdAt', ascending: false);
+      return (data as List).map((doc) => Announcement.fromMap(doc)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   // Get all announcements
   Stream<List<Announcement>> getAllAnnouncements() {
     return _supabase
@@ -72,13 +86,19 @@ class AnnouncementService {
     await _supabase.from('announcements').update(updates).eq('id', id);
   }
 
-  // Archive an announcement
+  // Archive an announcement and purge notifications
   Future<void> archiveAnnouncement(String id) async {
     await _supabase.from('announcements').update({'isActive': false}).eq('id', id);
+    try {
+      await _supabase.from('notifications').delete().eq('announcementId', id);
+    } catch (_) {}
   }
 
-  // Delete an announcement
+  // Delete an announcement permanently and purge all associated notifications
   Future<void> deleteAnnouncement(String id) async {
     await _supabase.from('announcements').delete().eq('id', id);
+    try {
+      await _supabase.from('notifications').delete().eq('announcementId', id);
+    } catch (_) {}
   }
 }

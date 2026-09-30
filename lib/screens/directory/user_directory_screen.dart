@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../theme/app_theme.dart';
@@ -142,6 +143,14 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
     );
   }
 
+  Future<void> _handleRefresh() async {
+    try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+    setState(() {});
+    await Future.delayed(const Duration(milliseconds: 600));
+  }
+
   Widget _buildUserList() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _authService.getStudentsStream(),
@@ -151,7 +160,18 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
         }
 
         if (snapshot.hasError) {
-          return const Center(child: Text('Error loading directory'));
+          return RefreshIndicator(
+            color: AppTheme.primaryColor,
+            backgroundColor: context.surfaceC,
+            onRefresh: _handleRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              child: SizedBox(
+                height: 300,
+                child: const Center(child: Text('Error loading directory. Pull down to retry.')),
+              ),
+            ),
+          );
         }
 
         final docs = snapshot.data ?? [];
@@ -162,25 +182,42 @@ class _UserDirectoryScreenState extends State<UserDirectoryScreen> with TickerPr
         }).toList();
 
         if (filteredDocs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(LucideIcons.searchX, size: 64, color: context.textSec.withValues(alpha: 0.2)),
-                const SizedBox(height: 16),
-                Text('No scholars found', style: TextStyle(color: context.textSec)),
-              ],
+          return RefreshIndicator(
+            color: AppTheme.primaryColor,
+            backgroundColor: context.surfaceC,
+            onRefresh: _handleRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              child: SizedBox(
+                height: 300,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.searchX, size: 64, color: context.textSec.withValues(alpha: 0.2)),
+                      const SizedBox(height: 16),
+                      Text('No scholars found', style: TextStyle(color: context.textSec)),
+                    ],
+                  ),
+                ),
+              ),
             ),
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          itemCount: filteredDocs.length,
-          itemBuilder: (context, index) {
-            final data = filteredDocs[index];
-            return _buildUserCard(context, data);
-          },
+        return RefreshIndicator(
+          color: AppTheme.primaryColor,
+          backgroundColor: context.surfaceC,
+          onRefresh: _handleRefresh,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            itemCount: filteredDocs.length,
+            itemBuilder: (context, index) {
+              final data = filteredDocs[index];
+              return _buildUserCard(context, data);
+            },
+          ),
         );
       },
     );

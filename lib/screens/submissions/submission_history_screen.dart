@@ -1,7 +1,7 @@
-// lib/screens/submissions/submission_history_screen.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -35,6 +35,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   Future<void> _loadProfile() async {
+    try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+    try {
+      await AcademicTermService.syncFromSupabase();
+    } catch (_) {}
     final uid = _authService.currentUser?.id;
     if (uid != null) {
       final doc = await _authService.getStudentProfile(uid);

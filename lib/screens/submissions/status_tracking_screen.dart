@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
@@ -116,6 +117,9 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
 
   Future<void> _refresh() async {
     try {
+      HapticFeedback.lightImpact();
+    } catch (_) {}
+    try {
       await AcademicTermService.syncFromSupabase();
       if (mounted) {
         setState(() {
@@ -150,14 +154,16 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
       backgroundColor: context.bgC,
       body: _isLoading
           ? _buildLoadingState()
-          : (_studentData == null && _errorMessage != null
-              ? _buildErrorState()
-              : RefreshIndicator(
-                  color: AppTheme.primaryColor,
-                  backgroundColor: context.surfaceC,
-                  onRefresh: _refresh,
-                  child: _buildBody(context),
-                )),
+          : RefreshIndicator(
+              color: AppTheme.primaryColor,
+              backgroundColor: context.surfaceC,
+              strokeWidth: 2.6,
+              displacement: 40,
+              onRefresh: _refresh,
+              child: (_studentData == null && _errorMessage != null)
+                  ? _buildErrorState()
+                  : _buildBody(context),
+            ),
     );
   }
 
@@ -182,38 +188,44 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
   }
 
   Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(LucideIcons.alertTriangle, size: 48, color: AppTheme.error),
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.alertTriangle, size: 48, color: AppTheme.error),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  _errorMessage ?? 'Unable to load status',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
+                  label: const Text('Try Again'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            Text(
-              _errorMessage ?? 'Unable to load status',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _refresh,
-              icon: const Icon(LucideIcons.refreshCw, size: 16),
-              label: const Text('Try Again'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

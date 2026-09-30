@@ -847,6 +847,7 @@ class AuthService {
         await PushNotificationService().clearToken(uid);
       } catch (_) {}
     }
+    NotificationService.reset();
     await _supabase.auth.signOut();
   }
 

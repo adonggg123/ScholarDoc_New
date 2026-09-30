@@ -46,6 +46,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   Stream<List<Map<String, dynamic>>>? _notificationStream;
   OverlayEntry? _currentToastEntry;
   final Set<String> _shownNotificationIds = {};
+  final DateTime _sessionStartTime = DateTime.now().subtract(const Duration(seconds: 1));
   bool _isInitialLoad = true;
 
   @override
@@ -71,6 +72,21 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
         
         final unread = notifications.where((n) => !(n['isRead'] ?? true)).toList();
         
+        // Mark all historical unread notifications as already shown so they never spam on startup
+        for (var n in unread) {
+          final String? id = n['id']?.toString();
+          final String? tsStr = n['timestamp']?.toString();
+          DateTime? notifTime;
+          if (tsStr != null) {
+            try {
+              notifTime = DateTime.parse(tsStr);
+            } catch (_) {}
+          }
+          if (notifTime == null || notifTime.isBefore(_sessionStartTime)) {
+            if (id != null) _shownNotificationIds.add(id);
+          }
+        }
+
         if (_isInitialLoad) {
           for (var n in unread) {
             final String? id = n['id']?.toString();
@@ -84,7 +100,19 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
         for (var n in unread) {
           final String? id = n['id']?.toString();
-          if (id != null && !_shownNotificationIds.contains(id)) {
+          final String? tsStr = n['timestamp']?.toString();
+          DateTime? notifTime;
+          if (tsStr != null) {
+            try {
+              notifTime = DateTime.parse(tsStr);
+            } catch (_) {}
+          }
+
+          final bool isLive = notifTime == null ||
+              notifTime.isAfter(_sessionStartTime) ||
+              notifTime.isAtSameMomentAs(_sessionStartTime);
+
+          if (id != null && !_shownNotificationIds.contains(id) && isLive) {
             _shownNotificationIds.add(id);
             _showToastPopup(
               n['title'] ?? 'Notification',
