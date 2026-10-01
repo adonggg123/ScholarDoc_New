@@ -19,6 +19,13 @@ ALTER TABLE public.students
     ADD COLUMN IF NOT EXISTS "atmCardUrl" TEXT,
     ADD COLUMN IF NOT EXISTS atm_card_url TEXT,
     ADD COLUMN IF NOT EXISTS "atmCardFileName" TEXT,
+    ADD COLUMN IF NOT EXISTS atm_card_file_name TEXT,
+    ADD COLUMN IF NOT EXISTS "depositSlipUrl" TEXT,
+    ADD COLUMN IF NOT EXISTS deposit_slip_url TEXT,
+    ADD COLUMN IF NOT EXISTS "depositSlipFileName" TEXT,
+    ADD COLUMN IF NOT EXISTS deposit_slip_file_name TEXT,
+    ADD COLUMN IF NOT EXISTS "atmProofType" TEXT,
+    ADD COLUMN IF NOT EXISTS atm_proof_type TEXT,
     ADD COLUMN IF NOT EXISTS "pdfVerified" BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS "academicYear" TEXT,
     ADD COLUMN IF NOT EXISTS academic_year TEXT,
@@ -54,6 +61,14 @@ BEGIN
     NEW.id_back_url             := COALESCE(NEW.id_back_url, NEW."idBackUrl");
     NEW."atmCardUrl"            := COALESCE(NEW."atmCardUrl", NEW.atm_card_url);
     NEW.atm_card_url            := COALESCE(NEW.atm_card_url, NEW."atmCardUrl");
+    NEW."atmCardFileName"       := COALESCE(NEW."atmCardFileName", NEW.atm_card_file_name);
+    NEW.atm_card_file_name      := COALESCE(NEW.atm_card_file_name, NEW."atmCardFileName");
+    NEW."depositSlipUrl"        := COALESCE(NEW."depositSlipUrl", NEW.deposit_slip_url);
+    NEW.deposit_slip_url        := COALESCE(NEW.deposit_slip_url, NEW."depositSlipUrl");
+    NEW."depositSlipFileName"   := COALESCE(NEW."depositSlipFileName", NEW.deposit_slip_file_name);
+    NEW.deposit_slip_file_name  := COALESCE(NEW.deposit_slip_file_name, NEW."depositSlipFileName");
+    NEW."atmProofType"          := COALESCE(NEW."atmProofType", NEW.atm_proof_type);
+    NEW.atm_proof_type          := COALESCE(NEW.atm_proof_type, NEW."atmProofType");
     NEW."academicYear"          := COALESCE(NEW."academicYear", NEW.academic_year);
     NEW.academic_year           := COALESCE(NEW.academic_year, NEW."academicYear");
     NEW."stickerValidated"      := COALESCE(NEW."stickerValidated", NEW.sticker_validated);

@@ -9,6 +9,7 @@ let currentStep = 0;
 let frontImageFile = null;
 let backImageFile = null;
 let atmImageFile = null;
+let depositSlipFile = null;
 let signatureDataUrl = null;
 
 // ─── Load existing SA ───
@@ -81,12 +82,14 @@ document.getElementById('next-step-1')?.addEventListener('click', () => {
 document.getElementById('prev-step-2')?.addEventListener('click', () => goToStep(1));
 
 // ─── File Upload Handlers ───
-function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, setter) {
+function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, setter, docInfoId, docNameId) {
     const input = document.getElementById(inputId);
     const preview = document.getElementById(previewId);
     const previewImg = document.getElementById(previewImgId);
     const zone = document.getElementById(zoneId);
     const badge = document.getElementById(badgeId);
+    const docInfo = docInfoId ? document.getElementById(docInfoId) : null;
+    const docName = docNameId ? document.getElementById(docNameId) : null;
 
     input?.addEventListener('change', (e) => {
         const file = e.target.files?.[0];
@@ -94,15 +97,20 @@ function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, sett
         
         setter(file);
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            if (previewImg) previewImg.src = ev.target.result;
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+        if (isPdf) {
+            if (previewImg) previewImg.classList.add('hidden');
+            if (docInfo) {
+                docInfo.classList.remove('hidden');
+                if (docName) docName.textContent = `${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+            }
             preview?.classList.remove('hidden');
             zone?.classList.add('has-file');
             if (zone) {
                 zone.innerHTML = `
-                    <i data-lucide="check-circle" style="color: var(--success);"></i>
-                    <h4 style="color: var(--success);">Image Selected</h4>
+                    <i data-lucide="file-check" style="color: var(--success); width: 22px; height: 22px;"></i>
+                    <h4 style="color: var(--success); margin: 4px 0 2px;">Document Selected</h4>
                     <p>${file.name} (${(file.size / 1024).toFixed(0)} KB)</p>
                 `;
             }
@@ -111,8 +119,31 @@ function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, sett
                 badge.innerHTML = '<i data-lucide="check-circle"></i> Ready';
             }
             if (window.lucide) window.lucide.createIcons();
-        };
-        reader.readAsDataURL(file);
+        } else {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                if (docInfo) docInfo.classList.add('hidden');
+                if (previewImg) {
+                    previewImg.src = ev.target.result;
+                    previewImg.classList.remove('hidden');
+                }
+                preview?.classList.remove('hidden');
+                zone?.classList.add('has-file');
+                if (zone) {
+                    zone.innerHTML = `
+                        <i data-lucide="check-circle" style="color: var(--success); width: 22px; height: 22px;"></i>
+                        <h4 style="color: var(--success); margin: 4px 0 2px;">Image Selected</h4>
+                        <p>${file.name} (${(file.size / 1024).toFixed(0)} KB)</p>
+                    `;
+                }
+                if (badge) {
+                    badge.className = 'badge badge-success';
+                    badge.innerHTML = '<i data-lucide="check-circle"></i> Ready';
+                }
+                if (window.lucide) window.lucide.createIcons();
+            };
+            reader.readAsDataURL(file);
+        }
     });
 
     // Drag & drop
@@ -122,7 +153,7 @@ function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, sett
         e.preventDefault();
         zone.classList.remove('dragover');
         const file = e.dataTransfer.files?.[0];
-        if (file && file.type.startsWith('image/')) {
+        if (file && (file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
             const dt = new DataTransfer();
             dt.items.add(file);
             input.files = dt.files;
@@ -133,7 +164,8 @@ function setupFileUpload(inputId, previewId, previewImgId, zoneId, badgeId, sett
 
 setupFileUpload('front-file-input', 'front-preview', 'front-preview-img', 'front-upload-zone', 'front-badge', (f) => { frontImageFile = f; });
 setupFileUpload('back-file-input', 'back-preview', 'back-preview-img', 'back-upload-zone', 'back-badge', (f) => { backImageFile = f; });
-setupFileUpload('atm-file-input', 'atm-preview', 'atm-preview-img', 'atm-upload-zone', null, (f) => { atmImageFile = f; });
+setupFileUpload('atm-file-input', 'atm-preview', 'atm-preview-img', 'atm-upload-zone', 'atm-badge', (f) => { atmImageFile = f; }, 'atm-doc-info', 'atm-doc-name');
+setupFileUpload('deposit-file-input', 'deposit-preview', 'deposit-preview-img', 'deposit-upload-zone', 'deposit-badge', (f) => { depositSlipFile = f; }, 'deposit-doc-info', 'deposit-doc-name');
 
 // ─── Signature Pad ───
 const canvas = document.getElementById('signature-canvas');
@@ -228,7 +260,8 @@ function populateReview() {
         { label: 'ID Front', value: frontImageFile?.name || 'Not selected', icon: 'image', ok: !!frontImageFile },
         { label: 'ID Back', value: backImageFile?.name || 'Not selected', icon: 'image', ok: !!backImageFile },
         { label: 'Digital Signature', value: signatureDataUrl ? 'Captured' : 'Not provided', icon: 'pen-tool', ok: !!signatureDataUrl },
-        { label: 'ATM Card', value: atmImageFile?.name || 'Not provided (optional)', icon: 'credit-card', ok: atmImageFile !== null, optional: true },
+        { label: 'ATM Proof', value: atmImageFile?.name || 'Not provided (optional)', icon: 'credit-card', ok: atmImageFile !== null, optional: true },
+        { label: 'Deposit Slip', value: depositSlipFile?.name || 'Not provided (optional)', icon: 'receipt', ok: depositSlipFile !== null, optional: true },
     ];
 
     container.innerHTML = items.map(item => `
@@ -325,16 +358,36 @@ submitBtn?.addEventListener('click', async () => {
             pdfUrl = pdfResult.secure_url;
         }
 
-        // 4. Upload ATM card if provided
+        // 4. Upload ATM proof if provided
         let atmUrl = null;
         if (atmImageFile) {
+            const isPdf = atmImageFile.type === 'application/pdf' || atmImageFile.name.toLowerCase().endsWith('.pdf');
+            const endpoint = isPdf 
+                ? 'https://api.cloudinary.com/v1_1/dc2wi71nx/raw/upload'
+                : 'https://api.cloudinary.com/v1_1/dc2wi71nx/image/upload';
             const atmFormData = new FormData();
             atmFormData.append('file', atmImageFile);
             atmFormData.append('upload_preset', 'scholardoc_profiles');
             atmFormData.append('folder', `submissions/${uid}`);
-            const atmResp = await fetch('https://api.cloudinary.com/v1_1/dc2wi71nx/image/upload', { method: 'POST', body: atmFormData });
+            const atmResp = await fetch(endpoint, { method: 'POST', body: atmFormData });
             const atmResult = await atmResp.json();
             atmUrl = atmResult.secure_url;
+        }
+
+        // Upload Deposit slip if provided
+        let depositSlipUrl = null;
+        if (depositSlipFile) {
+            const isPdf = depositSlipFile.type === 'application/pdf' || depositSlipFile.name.toLowerCase().endsWith('.pdf');
+            const endpoint = isPdf 
+                ? 'https://api.cloudinary.com/v1_1/dc2wi71nx/raw/upload'
+                : 'https://api.cloudinary.com/v1_1/dc2wi71nx/image/upload';
+            const depFormData = new FormData();
+            depFormData.append('file', depositSlipFile);
+            depFormData.append('upload_preset', 'scholardoc_profiles');
+            depFormData.append('folder', `submissions/${uid}`);
+            const depResp = await fetch(endpoint, { method: 'POST', body: depFormData });
+            const depResult = await depResp.json();
+            depositSlipUrl = depResult.secure_url;
         }
 
         // 5. Update student record
@@ -347,7 +400,11 @@ submitBtn?.addEventListener('click', async () => {
                 idFrontUrl: frontUrl,
                 idBackUrl: backUrl,
                 submissionPdfUrl: pdfUrl,
-                atmCardUrl: atmUrl,
+                atmCardUrl: atmUrl || profile?.documents?.atmCardUrl || null,
+                depositSlipUrl: depositSlipUrl || profile?.documents?.depositSlipUrl || null,
+                atmCardFileName: atmImageFile ? atmImageFile.name : profile?.documents?.atmCardFileName,
+                depositSlipFileName: depositSlipFile ? depositSlipFile.name : profile?.documents?.depositSlipFileName,
+                atmProofType: (atmUrl && depositSlipUrl) ? 'both' : (depositSlipUrl ? 'deposit_slip' : 'atm_card'),
                 signatureUrl: signatureDataUrl,
                 lastSubmittedAt: new Date().toISOString(),
                 lastSubmittedVia: 'web',

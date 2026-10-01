@@ -352,7 +352,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         });
       }
 
-      // Check ATM/Deposit Slip submission presence
+      // Check ATM Proof submission presence
       final atmCardFileName = _profileData!['atmCardFileName'] ??
           docs['atmCardFileName'] ??
           _profileData!['atm_card_file_name'] ??
@@ -370,14 +370,30 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           (saNumber != null && saNumber.toString().trim().isNotEmpty && saNumber.toString().trim().toUpperCase() != 'N/A');
 
       if (hasAtmFiles || isSaVerified) {
-        final proofType = _profileData!['atmProofType'] ??
-            docs['atmProofType'] ??
-            _profileData!['atm_proof_type'] ??
-            docs['atm_proof_type'] ??
-            'ATM Card / Deposit Slip';
         submissions.add({
-          'type': '$proofType Proof',
-          'fileName': (atmCardFileName ?? (saNumber != null ? 'SA: $saNumber' : '$proofType File')).toString(),
+          'type': 'ATM Card Proof',
+          'fileName': (atmCardFileName ?? (saNumber != null ? 'SA: $saNumber' : 'ATM Card Proof')).toString(),
+          'date': submittedAt,
+          'status': saItemStatus,
+          'term': submissionTerm,
+        });
+      }
+
+      // Check Deposit Slip submission presence
+      final depositSlipFileName = _profileData!['depositSlipFileName'] ??
+          docs['depositSlipFileName'] ??
+          _profileData!['deposit_slip_file_name'] ??
+          docs['deposit_slip_file_name'];
+      final depositSlipUrl = _profileData!['depositSlipUrl'] ??
+          docs['depositSlipUrl'] ??
+          _profileData!['deposit_slip_url'] ??
+          docs['deposit_slip_url'];
+      final bool hasDepositFiles = depositSlipFileName != null || depositSlipUrl != null;
+
+      if (hasDepositFiles) {
+        submissions.add({
+          'type': 'Deposit Slip Proof',
+          'fileName': (depositSlipFileName ?? 'Deposit Slip Proof').toString(),
           'date': submittedAt,
           'status': saItemStatus,
           'term': submissionTerm,

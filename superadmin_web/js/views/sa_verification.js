@@ -438,6 +438,54 @@ function renderPanel() {
         `;
     }
 
+    // Deposit Slip Proof Box
+    let depositSlipHtml = '';
+    const depositSlipUrl = s.depositSlipUrl || s.deposit_slip_url || (s.documents && (s.documents.depositSlipUrl || s.documents.deposit_slip_url));
+    const depositSlipFileName = s.depositSlipFileName || s.deposit_slip_file_name || (s.documents && (s.documents.depositSlipFileName || s.documents.deposit_slip_file_name)) || 'Deposit_Slip_Proof.jpg';
+
+    if (depositSlipUrl) {
+        depositSlipHtml = `
+            <div style="margin-bottom: 16px; padding: 14px; border: 1px solid var(--border-color); border-radius: 12px; background: rgba(15, 50, 96, 0.02);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <div style="font-size: 12px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                        <i class="icon-file-text" style="font-size: 14px; color: var(--primary-color);"></i> Deposit Slip Document Proof
+                    </div>
+                    <span style="font-size: 10px; font-weight: 700; color: #10B981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 12px;">ATTACHED</span>
+                </div>
+
+                <div style="display: flex; gap: 14px; align-items: center; background: var(--surface-color); padding: 10px; border-radius: 10px; border: 1px solid var(--border-color);">
+                    <div style="position: relative; width: 100px; height: 65px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); flex-shrink: 0; cursor: pointer;"
+                         onclick="openSaLightbox('${depositSlipUrl}', '${name} - Deposit Slip Proof')">
+                        ${depositSlipFileName.toLowerCase().endsWith('.pdf') ? `
+                            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(239, 68, 68, 0.08);">
+                                <i class="icon-file-text" style="font-size: 24px; color: #EF4444;"></i>
+                            </div>
+                        ` : `
+                            <img src="${depositSlipUrl}" alt="Deposit Slip" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        `}
+                        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                            <i class="icon-zoom-in" style="color: white; font-size: 18px;"></i>
+                        </div>
+                    </div>
+
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${depositSlipFileName}">${depositSlipFileName}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Bank Deposit Slip / Receipt</div>
+                        
+                        <div style="display: flex; gap: 8px; margin-top: 6px;">
+                            <button onclick="openSaLightbox('${depositSlipUrl}', '${name} - Deposit Slip Proof')" style="padding: 4px 10px; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 6px; font-size: 11px; font-weight: 700; color: var(--primary-color); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-maximize-2" style="font-size: 11px;"></i> Lightbox
+                            </button>
+                            <a href="${depositSlipUrl}" target="_blank" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-external-link" style="font-size: 11px;"></i> Full Tab
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
         <!-- Sticky Navigation Bar -->
         <div style="padding: 12px 18px; border-bottom: 1px solid var(--border-color); background: rgba(15, 50, 96, 0.03); display: flex; align-items: center; justify-content: space-between;">
@@ -494,8 +542,9 @@ function renderPanel() {
             <!-- Duplicate Security Integrity Status -->
             ${duplicateBannerHtml}
 
-            <!-- ATM Card Document Proof Preview -->
+            <!-- ATM Card & Deposit Slip Document Proof Previews -->
             ${atmCardHtml}
+            ${depositSlipHtml}
 
             <!-- Quick Remarks Preset Chips -->
             <div style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">

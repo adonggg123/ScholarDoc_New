@@ -136,26 +136,67 @@
         </div>
     </div>
 
-    <!-- Optional ATM Card Photo -->
-    <div class="card mb-lg">
-        <div class="card-header">
-            <div class="card-title">
-                <i data-lucide="credit-card" style="width: 18px; height: 18px; color: var(--primary);"></i>
-                ATM Card Photo
-            </div>
-            <span class="badge badge-info"><i data-lucide="info"></i> Optional</span>
-        </div>
-        <div class="card-body">
-            <div class="upload-zone" id="atm-upload-zone" onclick="document.getElementById('atm-file-input').click()">
-                <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--info-soft); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;">
-                    <i data-lucide="credit-card" style="width: 20px; height: 20px; color: var(--info);"></i>
+    <!-- Banking Proof: ATM Proof & Deposit Slip (Separate Requirements) -->
+    <div class="grid-2 mb-lg">
+        <!-- ATM Proof Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <i data-lucide="credit-card" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                    ATM Proof
                 </div>
-                <div style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Upload ATM Card Photo</div>
-                <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG)</p>
-                <input type="file" id="atm-file-input" accept="image/*" style="display: none;">
+                <span class="badge badge-info" id="atm-badge"><i data-lucide="info"></i> Optional</span>
             </div>
-            <div id="atm-preview" class="hidden mt-md text-center">
-                <img id="atm-preview-img" style="max-width: 100%; max-height: 180px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
+            <div class="card-body">
+                <div class="upload-zone" id="atm-upload-zone" onclick="document.getElementById('atm-file-input').click()">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--info-soft); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;">
+                        <i data-lucide="credit-card" style="width: 20px; height: 20px; color: var(--info);"></i>
+                    </div>
+                    <div style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Upload ATM Proof</div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG, PDF)</p>
+                    <input type="file" id="atm-file-input" accept="image/*,application/pdf" style="display: none;">
+                </div>
+                <div id="atm-preview" class="hidden mt-md text-center">
+                    <img id="atm-preview-img" class="hidden" style="max-width: 100%; max-height: 180px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
+                    <div id="atm-doc-info" class="hidden" style="padding: 14px; background: var(--bg-alt); border-radius: var(--radius-lg); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <i data-lucide="file-text" style="width: 24px; height: 24px; color: var(--primary);"></i>
+                        <span id="atm-doc-name" style="font-size: 13px; font-weight: 700; color: var(--text-primary);"></span>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm mt-sm" onclick="event.stopPropagation(); document.getElementById('atm-file-input').click();">
+                        <i data-lucide="refresh-cw"></i> Change File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deposit Slip Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <i data-lucide="receipt" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                    Deposit Slip
+                </div>
+                <span class="badge badge-info" id="deposit-badge"><i data-lucide="info"></i> Optional</span>
+            </div>
+            <div class="card-body">
+                <div class="upload-zone" id="deposit-upload-zone" onclick="document.getElementById('deposit-file-input').click()">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--info-soft); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;">
+                        <i data-lucide="receipt" style="width: 20px; height: 20px; color: var(--info);"></i>
+                    </div>
+                    <div style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Upload Deposit Slip</div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">Click or drag file (JPG, PNG, PDF)</p>
+                    <input type="file" id="deposit-file-input" accept="image/*,application/pdf" style="display: none;">
+                </div>
+                <div id="deposit-preview" class="hidden mt-md text-center">
+                    <img id="deposit-preview-img" class="hidden" style="max-width: 100%; max-height: 180px; border-radius: var(--radius-lg); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin: 0 auto;">
+                    <div id="deposit-doc-info" class="hidden" style="padding: 14px; background: var(--bg-alt); border-radius: var(--radius-lg); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <i data-lucide="file-text" style="width: 24px; height: 24px; color: var(--primary);"></i>
+                        <span id="deposit-doc-name" style="font-size: 13px; font-weight: 700; color: var(--text-primary);"></span>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm mt-sm" onclick="event.stopPropagation(); document.getElementById('deposit-file-input').click();">
+                        <i data-lucide="refresh-cw"></i> Change File
+                    </button>
+                </div>
             </div>
         </div>
     </div>

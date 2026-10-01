@@ -272,10 +272,19 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
         docs['atmCardUrl'] ??
         docs['atm_card_url'];
     final bool hasAtmProof = atmUrl != null && atmUrl.toString().trim().isNotEmpty;
+
+    final String? depositUrl = data?['depositSlipUrl'] ??
+        data?['deposit_slip_url'] ??
+        docs['depositSlipUrl'] ??
+        docs['deposit_slip_url'];
+    final bool hasDepositSlip = depositUrl != null && depositUrl.toString().trim().isNotEmpty;
+
     final String atmProofType = (data?['atmProofType'] ??
             docs['atmProofType'] ??
             docs['atm_proof_type'] ??
-            'ATM Card')
+            ((hasAtmProof && hasDepositSlip)
+                ? 'ATM Card & Deposit Slip'
+                : (hasDepositSlip ? 'Deposit Slip' : 'ATM Card')))
         .toString();
 
     final bool hasFrontBack = ((docs['idFrontUrl'] ?? data?['idFrontUrl']) != null &&
@@ -283,7 +292,7 @@ class _StatusTrackingScreenState extends State<StatusTrackingScreen>
         ((docs['idBackUrl'] ?? data?['idBackUrl']) != null &&
             (docs['idBackUrl'] ?? data?['idBackUrl']).toString().trim().isNotEmpty);
 
-    final bool hasRawSubmission = hasSubmittedTimestamp || hasIdPdf || hasAtmProof || hasFrontBack;
+    final bool hasRawSubmission = hasSubmittedTimestamp || hasIdPdf || hasAtmProof || hasDepositSlip || hasFrontBack;
 
     // Academic Year & Semester matching check
     final String studentAy = (data?['academicYear'] ??

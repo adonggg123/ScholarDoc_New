@@ -84,6 +84,26 @@ async function loadHistory() {
         });
     }
 
+    if (docs.atmCardUrl) {
+        items.push({
+            type: 'ATM Card Proof',
+            fileName: docs.atmCardFileName || 'ATM_Card_Proof.jpg',
+            date: docs.lastSubmittedAt || targetProfile.submittedAt,
+            status: docs.saVerificationStatus || 'Verified',
+            url: docs.atmCardUrl,
+        });
+    }
+
+    if (docs.depositSlipUrl) {
+        items.push({
+            type: 'Deposit Slip Proof',
+            fileName: docs.depositSlipFileName || 'Deposit_Slip_Proof.jpg',
+            date: docs.lastSubmittedAt || targetProfile.submittedAt,
+            status: docs.saVerificationStatus || 'Verified',
+            url: docs.depositSlipUrl,
+        });
+    }
+
     if (docs.submissionPdfUrl) {
         items.push({
             type: 'Combined Submission Package',
@@ -118,6 +138,7 @@ async function loadHistory() {
             if (item.type.includes('ID')) typeIcon = 'id-card';
             if (item.type.includes('SA') || item.type.includes('Savings')) typeIcon = 'landmark';
             if (item.type.includes('ATM')) typeIcon = 'credit-card';
+            if (item.type.includes('Deposit')) typeIcon = 'receipt';
             if (item.type.includes('Package') || item.type.includes('PDF')) typeIcon = 'file-text';
 
             const dateStr = item.date

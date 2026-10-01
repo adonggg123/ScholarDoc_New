@@ -1,3 +1,5 @@
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -8,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/image_quality_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'id_capture_screen.dart';
@@ -34,11 +37,20 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   String? _pdfFeedback;
   String? _pdfFileName;
 
+  // ATM Card / Proof State
   String? _atmCardUrl;
   String? _atmCardFeedback;
   String? _atmCardFileName;
-  String _atmProofType = 'ATM Card'; // 'ATM Card' or 'Deposit Slip'
   Uint8List? _atmProofBytes;
+  bool _atmProofIsPdf = false;
+
+  // Deposit Slip State
+  String? _depositSlipUrl;
+  String? _depositSlipFeedback;
+  String? _depositSlipFileName;
+  Uint8List? _depositSlipBytes;
+  bool _depositSlipIsPdf = false;
+
   final ImagePicker _imagePicker = ImagePicker();
 
   String? _idFrontUrl;
@@ -61,11 +73,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       final doc = await _authService.getStudentProfile(uid);
       if (doc != null) {
         final data = doc;
+        final docs = (data['documents'] is Map) ? data['documents'] : {};
         setState(() {
-          _saController.text = data['saNumber'] ?? '';
-          final existingType = (data['documents'] is Map ? data['documents']['atmProofType'] : null) ?? data['atmProofType'];
-          if (existingType != null && existingType.toString().isNotEmpty) {
-            _atmProofType = existingType.toString();
+          _saController.text = (data['saNumber'] ?? data['sa_number'] ?? docs['saNumber'] ?? docs['sa_number'] ?? '').toString();
+
+          final existingAtm = data['atmCardUrl'] ?? data['atm_card_url'] ?? docs['atmCardUrl'] ?? docs['atm_card_url'];
+          if (existingAtm != null && existingAtm.toString().isNotEmpty) {
+            _atmCardUrl = existingAtm.toString();
+            _atmCardFileName = (data['atmCardFileName'] ?? data['atm_card_file_name'] ?? docs['atmCardFileName'] ?? docs['atm_card_file_name'] ?? 'ATM_Proof.jpg').toString();
+            _atmCardFeedback = "✅ ATM Proof Ready";
+            _atmProofIsPdf = _atmCardFileName!.toLowerCase().endsWith('.pdf');
+          }
+
+          final existingDeposit = data['depositSlipUrl'] ?? data['deposit_slip_url'] ?? docs['depositSlipUrl'] ?? docs['deposit_slip_url'];
+          if (existingDeposit != null && existingDeposit.toString().isNotEmpty) {
+            _depositSlipUrl = existingDeposit.toString();
+            _depositSlipFileName = (data['depositSlipFileName'] ?? data['deposit_slip_file_name'] ?? docs['depositSlipFileName'] ?? docs['deposit_slip_file_name'] ?? 'Deposit_Slip.jpg').toString();
+            _depositSlipFeedback = "✅ Deposit Slip Ready";
+            _depositSlipIsPdf = _depositSlipFileName!.toLowerCase().endsWith('.pdf');
           }
         });
       }
@@ -156,256 +181,175 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     }
   }
 
-  void _showAtmProofSelectionSheet() {
-    String selectedType = _atmProofType;
+
+  void _showDocumentSelectionSheet(String docType) {
+    final bool isDeposit = docType == 'Deposit Slip';
+    final IconData headerIcon = isDeposit ? LucideIcons.fileText : LucideIcons.creditCard;
+    final String subtitleText = isDeposit
+        ? 'Choose submission method for bank deposit slip or receipt'
+        : 'Choose submission method for Landbank ATM card proof';
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => Container(
-          decoration: BoxDecoration(
-            color: context.bgC,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.18),
-                blurRadius: 24,
-                offset: const Offset(0, -6),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.35),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0F3260), Color(0xFF1E4E8C)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0F3260).withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(LucideIcons.creditCard, color: Colors.white, size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ATM / Bank Proof',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17,
-                            color: context.textPri,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Choose document type and submission option',
-                          style: TextStyle(fontSize: 12, color: context.textSec),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Document Type Selector Chips
-              Text(
-                'DOCUMENT TYPE',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: context.textSec,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildDocTypeChip(
-                      title: 'ATM Card',
-                      subtitle: 'Landbank Card',
-                      icon: LucideIcons.creditCard,
-                      isSelected: selectedType == 'ATM Card',
-                      onTap: () {
-                        setSheetState(() => selectedType = 'ATM Card');
-                        setState(() => _atmProofType = 'ATM Card');
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildDocTypeChip(
-                      title: 'Deposit Slip',
-                      subtitle: 'Bank Slip / Receipt',
-                      icon: LucideIcons.fileText,
-                      isSelected: selectedType == 'Deposit Slip',
-                      onTap: () {
-                        setSheetState(() => selectedType = 'Deposit Slip');
-                        setState(() => _atmProofType = 'Deposit Slip');
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
-
-              // Capture Methods: 2 Options
-              Text(
-                'SUBMISSION METHOD',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: context.textSec,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Option 1: Scanning ATM card / Deposit slip
-              _buildMethodCard(
-                title: 'Scan $selectedType',
-                subtitle: 'Use camera to scan your physical document',
-                badgeText: 'Option 1: Camera',
-                badgeColor: const Color(0xFF0F3260),
-                icon: LucideIcons.camera,
-                iconBg: const Color(0xFF0F3260),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _captureAtmProof(ImageSource.camera, selectedType);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // Option 2: Upload a Photo
-              _buildMethodCard(
-                title: 'Upload a Photo',
-                subtitle: 'Choose an existing photo from your gallery',
-                badgeText: 'Option 2: Gallery',
-                badgeColor: const Color(0xFF10B981),
-                icon: LucideIcons.image,
-                iconBg: const Color(0xFF10B981),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _captureAtmProof(ImageSource.gallery, selectedType);
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Helpful guidance note
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: context.bgC,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 24,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFBC02D).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.3)),
+                  color: Colors.grey.withOpacity(0.35),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.info, size: 16, color: Color(0xFFB78103)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Ensure your full name and account number are sharply visible and not blurred.',
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0F3260), Color(0xFF1E4E8C)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0F3260).withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(headerIcon, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        docType,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
                           color: context.textPri,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDocTypeChip({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF0F3260).withOpacity(0.08)
-              : context.surfaceC,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF0F3260) : context.crispBorder,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: isSelected ? const Color(0xFF0F3260) : context.textSec,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                      fontSize: 13,
-                      color: isSelected ? const Color(0xFF0F3260) : context.textPri,
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        style: TextStyle(fontSize: 12, color: context.textSec),
+                      ),
+                    ],
                   ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 10, color: context.textSec),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+
+            Text(
+              'SUBMISSION METHOD',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: context.textSec,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Option 1: File Picker (Documents / PDF / Images)
+            _buildMethodCard(
+              title: 'Browse Files / Documents',
+              subtitle: 'Select a PDF document or image file from your device',
+              badgeText: 'Option 1: Files',
+              badgeColor: const Color(0xFF2563EB),
+              icon: LucideIcons.fileUp,
+              iconBg: const Color(0xFF2563EB),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickProofFromFile(docType);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Option 2: Gallery Photo
+            _buildMethodCard(
+              title: 'Upload Photo from Gallery',
+              subtitle: 'Choose an existing photo from your gallery',
+              badgeText: 'Option 2: Gallery',
+              badgeColor: const Color(0xFF10B981),
+              icon: LucideIcons.image,
+              iconBg: const Color(0xFF10B981),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickProofFromGallery(docType);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Option 3: Camera
+            _buildMethodCard(
+              title: 'Take Photo / Scan',
+              subtitle: 'Use camera to take a photo of your $docType',
+              badgeText: 'Option 3: Camera',
+              badgeColor: const Color(0xFF0F3260),
+              icon: LucideIcons.camera,
+              iconBg: const Color(0xFF0F3260),
+              onTap: () {
+                Navigator.pop(ctx);
+                _captureProofWithCamera(docType);
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Guidance Note
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBC02D).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.info, size: 16, color: Color(0xFFB78103)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isDeposit
+                          ? 'Ensure the transaction date, deposit amount, and account number are clearly visible.'
+                          : 'Ensure your full name and account number are sharply visible and not blurred.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: context.textPri,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              const Icon(LucideIcons.checkCircle2, size: 16, color: Color(0xFF0F3260)),
           ],
         ),
       ),
@@ -496,10 +440,76 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     );
   }
 
-  Future<void> _captureAtmProof(ImageSource source, String docType) async {
+  Future<void> _pickProofFromFile(String docType) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && !kIsWeb && file.path != null) {
+        try {
+          bytes = await File(file.path!).readAsBytes();
+        } catch (e) {
+          debugPrint('Error reading file from path: $e');
+        }
+      }
+
+      if (bytes == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not read file data. Please try another file.'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+        return;
+      }
+
+      final fileName = file.name.isNotEmpty
+          ? file.name
+          : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}';
+      final bool isPdf = fileName.toLowerCase().endsWith('.pdf');
+
+      ImageQualityResult? quality;
+      if (!isPdf) {
+        try {
+          quality = await ImageQualityService.analyzeQuality(bytes);
+        } catch (e) {
+          debugPrint('Quality analysis skipped: $e');
+        }
+      }
+
+      if (!mounted) return;
+
+      _showProofPreviewSheet(
+        bytes: bytes,
+        fileName: fileName,
+        docType: docType,
+        sourceDescription: isPdf ? 'PDF File' : 'Document File',
+        isPdf: isPdf,
+        quality: quality,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to select file: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickProofFromGallery(String docType) async {
     try {
       final XFile? image = await _imagePicker.pickImage(
-        source: source,
+        source: ImageSource.gallery,
         maxWidth: 1600,
         maxHeight: 1600,
         imageQuality: 88,
@@ -512,36 +522,81 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           ? image.name
           : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      // Analyze image sharpness & brightness
-      final quality = await ImageQualityService.analyzeQuality(bytes);
+      ImageQualityResult? quality;
+      try {
+        quality = await ImageQualityService.analyzeQuality(bytes);
+      } catch (e) {
+        debugPrint('Quality analysis error: $e');
+      }
 
       if (!mounted) return;
 
-      // Show instant preview and confirmation sheet before final upload
-      _showAtmProofPreviewSheet(
+      _showProofPreviewSheet(
         bytes: bytes,
         fileName: originalName,
         docType: docType,
-        source: source,
+        sourceDescription: 'Gallery',
+        isPdf: false,
+        quality: quality,
+      );
+    } catch (e) {
+      debugPrint('Gallery picker error: $e. Falling back to FilePicker.');
+      if (!mounted) return;
+      _pickProofFromFile(docType);
+    }
+  }
+
+  Future<void> _captureProofWithCamera(String docType) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 88,
+      );
+
+      if (image == null) return;
+
+      final bytes = await image.readAsBytes();
+      final originalName = image.name.isNotEmpty
+          ? image.name
+          : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      ImageQualityResult? quality;
+      try {
+        quality = await ImageQualityService.analyzeQuality(bytes);
+      } catch (e) {
+        debugPrint('Quality analysis error: $e');
+      }
+
+      if (!mounted) return;
+
+      _showProofPreviewSheet(
+        bytes: bytes,
+        fileName: originalName,
+        docType: docType,
+        sourceDescription: 'Camera',
+        isPdf: false,
         quality: quality,
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to capture $docType: $e'),
+          content: Text('Camera unavailable: $e. You can use Browse Files instead.'),
           backgroundColor: AppTheme.error,
         ),
       );
     }
   }
 
-  void _showAtmProofPreviewSheet({
+  void _showProofPreviewSheet({
     required Uint8List bytes,
     required String fileName,
     required String docType,
-    required ImageSource source,
-    required ImageQualityResult quality,
+    required String sourceDescription,
+    required bool isPdf,
+    ImageQualityResult? quality,
   }) {
     showModalBottomSheet(
       context: context,
@@ -590,7 +645,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Confirm your proof image before uploading',
+                        'Confirm your document before uploading',
                         style: TextStyle(fontSize: 12, color: context.textSec),
                       ),
                     ],
@@ -607,13 +662,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        source == ImageSource.camera ? LucideIcons.camera : LucideIcons.image,
+                        isPdf ? LucideIcons.fileText : LucideIcons.image,
                         size: 14,
                         color: const Color(0xFF0F3260),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        source == ImageSource.camera ? 'Scanned' : 'Uploaded',
+                        sourceDescription,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -627,7 +682,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Image Preview Container
+            // Preview Container
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -636,54 +691,111 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: context.crispBorder),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.contain,
-                  ),
-                ),
+                child: isPdf
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444).withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  LucideIcons.fileText,
+                                  size: 48,
+                                  color: Color(0xFFEF4444),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                fileName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: context.textPri,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'PDF Document • ${(bytes.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+                                style: TextStyle(fontSize: 12, color: context.textSec),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Ready for Upload',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF059669),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 14),
 
-            // Quality indicator banner
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: quality.isBlurry
-                    ? const Color(0xFFEF4444).withOpacity(0.08)
-                    : const Color(0xFF10B981).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
+            // Quality indicator banner (if analyzed)
+            if (quality != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
                   color: quality.isBlurry
-                      ? const Color(0xFFEF4444).withOpacity(0.3)
-                      : const Color(0xFF10B981).withOpacity(0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    quality.isBlurry ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
-                    size: 16,
-                    color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                      ? const Color(0xFFEF4444).withOpacity(0.08)
+                      : const Color(0xFF10B981).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: quality.isBlurry
+                        ? const Color(0xFFEF4444).withOpacity(0.3)
+                        : const Color(0xFF10B981).withOpacity(0.3),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      quality.isBlurry
-                          ? 'Photo may be blurry (${quality.sharpnessPercent}% clarity). Please make sure account numbers are readable.'
-                          : 'Sharp & clear scan (${quality.sharpnessPercent}% clarity). Ready for submission.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF059669),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      quality.isBlurry ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
+                      size: 16,
+                      color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        quality.isBlurry
+                            ? 'Photo may be blurry (${quality.sharpnessPercent}% clarity). Please make sure account numbers are readable.'
+                            : 'Sharp & clear scan (${quality.sharpnessPercent}% clarity). Ready for submission.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: quality.isBlurry ? const Color(0xFFEF4444) : const Color(0xFF059669),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 16),
 
             // Action Buttons
@@ -695,7 +807,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _showAtmProofSelectionSheet();
+                        _showDocumentSelectionSheet(docType);
                       },
                       icon: const Icon(LucideIcons.refreshCw, size: 16),
                       label: const Text('Retake / Change', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -714,7 +826,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _uploadAtmProofBytes(bytes, fileName, docType);
+                        _uploadProofBytes(bytes, fileName, docType);
                       },
                       icon: const Icon(LucideIcons.check, size: 18),
                       label: Text('Confirm $docType', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -735,10 +847,15 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     );
   }
 
-  Future<void> _uploadAtmProofBytes(Uint8List bytes, String originalName, String docType) async {
+  Future<void> _uploadProofBytes(Uint8List bytes, String originalName, String docType) async {
+    final bool isDeposit = docType == 'Deposit Slip';
     setState(() {
       _isUploading = true;
-      _atmCardFeedback = null;
+      if (isDeposit) {
+        _depositSlipFeedback = null;
+      } else {
+        _atmCardFeedback = null;
+      }
     });
 
     try {
@@ -746,7 +863,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       if (uid == null) throw Exception("User not authenticated");
 
       final safeName = originalName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-      final prefix = docType == 'Deposit Slip' ? 'DEPOSIT' : 'ATM';
+      final prefix = isDeposit ? 'DEPOSIT' : 'ATM';
       final String storagePath =
           'submissions/$uid/${prefix}_${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
@@ -759,11 +876,20 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
       setState(() {
         _isUploading = false;
-        _atmCardFeedback = "✅ $docType Ready";
-        _atmCardFileName = originalName;
-        _atmCardUrl = downloadUrl;
-        _atmProofType = docType;
-        _atmProofBytes = bytes;
+        final bool isPdf = originalName.toLowerCase().endsWith('.pdf');
+        if (isDeposit) {
+          _depositSlipFeedback = "✅ Deposit Slip Ready";
+          _depositSlipFileName = originalName;
+          _depositSlipUrl = downloadUrl;
+          _depositSlipBytes = bytes;
+          _depositSlipIsPdf = isPdf;
+        } else {
+          _atmCardFeedback = "✅ ATM Proof Ready";
+          _atmCardFileName = originalName;
+          _atmCardUrl = downloadUrl;
+          _atmProofBytes = bytes;
+          _atmProofIsPdf = isPdf;
+        }
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -784,7 +910,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       if (!mounted) return;
       setState(() {
         _isUploading = false;
-        _atmCardFeedback = "Error: ${e.toString()}";
+        if (isDeposit) {
+          _depositSlipFeedback = "Error: ${e.toString()}";
+        } else {
+          _atmCardFeedback = "Error: ${e.toString()}";
+        }
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -797,7 +927,14 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   }
 
   void _showReviewSheet(String label, String fileName) {
-    final bool isAtm = fileName == _atmCardFileName;
+    final bool isAtm = label.contains('ATM') || fileName == _atmCardFileName;
+    final bool isDeposit = label.contains('Deposit') || fileName == _depositSlipFileName;
+    final bool isBankDoc = isAtm || isDeposit;
+    final String docType = isDeposit ? 'Deposit Slip' : (isAtm ? 'ATM Proof' : 'Document');
+
+    final Uint8List? docBytes = isDeposit ? _depositSlipBytes : (isAtm ? _atmProofBytes : null);
+    final String? docUrl = isDeposit ? _depositSlipUrl : (isAtm ? _atmCardUrl : _submissionPdfUrl);
+    final bool isPdf = fileName.toLowerCase().endsWith('.pdf') || (isDeposit ? _depositSlipIsPdf : (isAtm ? _atmProofIsPdf : true));
 
     showModalBottomSheet(
       context: context,
@@ -830,7 +967,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    isAtm ? LucideIcons.creditCard : LucideIcons.eye,
+                    isDeposit
+                        ? LucideIcons.fileText
+                        : (isAtm ? LucideIcons.creditCard : LucideIcons.eye),
                     color: AppTheme.primaryColor,
                     size: 20,
                   ),
@@ -841,7 +980,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isAtm ? '$_atmProofType Review' : 'Document Review',
+                        isBankDoc ? '$docType Review' : 'Document Review',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
@@ -868,24 +1007,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (isAtm && _atmProofBytes != null)
+                    if (!isPdf && docBytes != null)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.memory(
-                          _atmProofBytes!,
+                          docBytes,
                           height: 150,
                           fit: BoxFit.contain,
                         ),
                       )
-                    else if (isAtm && _atmCardUrl != null)
+                    else if (!isPdf && docUrl != null)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.network(
-                          _atmCardUrl!,
+                          docUrl,
                           height: 150,
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) => Icon(
-                            LucideIcons.creditCard,
+                            isDeposit ? LucideIcons.fileText : LucideIcons.creditCard,
                             size: 56,
                             color: AppTheme.primaryColor.withOpacity(0.5),
                           ),
@@ -893,9 +1032,9 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       )
                     else
                       Icon(
-                        fileName.endsWith('.pdf')
+                        fileName.toLowerCase().endsWith('.pdf')
                             ? LucideIcons.fileText
-                            : LucideIcons.image,
+                            : (isDeposit ? LucideIcons.fileText : LucideIcons.image),
                         size: 56,
                         color: AppTheme.primaryColor.withOpacity(0.5),
                       ),
@@ -920,14 +1059,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final String? urlToOpen = fileName == _pdfFileName ? _submissionPdfUrl : _atmCardUrl;
-                  if (urlToOpen != null) {
-                    final uri = Uri.parse(urlToOpen);
+            if (docUrl != null) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(docUrl);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri, mode: LaunchMode.externalApplication);
                     } else {
@@ -936,23 +1074,23 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                         const SnackBar(content: Text('Could not open document.')),
                       );
                     }
-                  }
-                },
-                icon: const Icon(LucideIcons.externalLink, size: 18),
-                label: const Text(
-                  'Preview Full Document',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.primaryColor,
-                  side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                  },
+                  icon: const Icon(LucideIcons.externalLink, size: 18),
+                  label: const Text(
+                    'Preview Full Document',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryColor,
+                    side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (isAtm) ...[
+            ],
+            if (isBankDoc) ...[
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
@@ -960,11 +1098,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 child: TextButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    _showAtmProofSelectionSheet();
+                    _showDocumentSelectionSheet(docType);
                   },
                   icon: const Icon(LucideIcons.refreshCw, size: 16),
                   label: Text(
-                    'Re-scan or Replace $_atmProofType',
+                    'Re-upload or Replace $docType',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: TextButton.styleFrom(
@@ -1286,10 +1424,20 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       if (!_formKey.currentState!.validate()) {
         return;
       }
-      if (_submissionPdfUrl == null || _atmCardUrl == null) {
+      if (_submissionPdfUrl == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Please upload both your ID document and $_atmProofType proof before continuing.'),
+          const SnackBar(
+            content: Text('Please upload your ID document and signature before continuing.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_atmCardUrl == null && _depositSlipUrl == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload at least one banking requirement (ATM Proof or Deposit Slip) before continuing.'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1318,11 +1466,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           if (data != null && data['documents'] is Map) {
             documents = Map<String, dynamic>.from(data['documents']);
           }
-          documents['atmCardUrl'] = _atmCardUrl;
-          documents['atm_card_url'] = _atmCardUrl;
-          documents['atmCardFileName'] = _atmCardFileName;
-          documents['atmProofType'] = _atmProofType;
-          documents['atm_proof_type'] = _atmProofType;
+          if (_atmCardUrl != null) {
+            documents['atmCardUrl'] = _atmCardUrl;
+            documents['atm_card_url'] = _atmCardUrl;
+            documents['atmCardFileName'] = _atmCardFileName;
+            documents['atm_card_file_name'] = _atmCardFileName;
+          }
+          if (_depositSlipUrl != null) {
+            documents['depositSlipUrl'] = _depositSlipUrl;
+            documents['deposit_slip_url'] = _depositSlipUrl;
+            documents['depositSlipFileName'] = _depositSlipFileName;
+            documents['deposit_slip_file_name'] = _depositSlipFileName;
+          }
+          final String proofTypeSummary = (_atmCardUrl != null && _depositSlipUrl != null)
+              ? 'ATM Card & Deposit Slip'
+              : (_depositSlipUrl != null ? 'Deposit Slip' : 'ATM Card');
+          documents['atmProofType'] = proofTypeSummary;
+          documents['atm_proof_type'] = proofTypeSummary;
+
           documents['submissionPdfUrl'] = _submissionPdfUrl;
           documents['submission_pdf_url'] = _submissionPdfUrl;
           documents['submissionPdfName'] = _pdfFileName;
@@ -1360,11 +1521,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             'submission_pdf_url': _submissionPdfUrl,
             'submissionPdfName': _pdfFileName,
             'submission_pdf_name': _pdfFileName,
-            'atmCardUrl': _atmCardUrl,
-            'atm_card_url': _atmCardUrl,
-            'atmCardFileName': _atmCardFileName,
-            'atmProofType': _atmProofType,
-            'atm_proof_type': _atmProofType,
+            'atmProofType': proofTypeSummary,
+            'atm_proof_type': proofTypeSummary,
             'documents': documents,
             'pdfVerified': true,
             'academicYear': _stickerAcademicYear ?? AcademicTermService.currentTerm.academicYear,
@@ -1378,6 +1536,16 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             'requiresResubmission': false,
             'adminRemarks': null,
           };
+          if (_atmCardUrl != null) {
+            studentPayload['atmCardUrl'] = _atmCardUrl;
+            studentPayload['atm_card_url'] = _atmCardUrl;
+            studentPayload['atmCardFileName'] = _atmCardFileName;
+          }
+          if (_depositSlipUrl != null) {
+            studentPayload['depositSlipUrl'] = _depositSlipUrl;
+            studentPayload['deposit_slip_url'] = _depositSlipUrl;
+            studentPayload['depositSlipFileName'] = _depositSlipFileName;
+          }
           if (_idFrontUrl != null) {
             studentPayload['idFrontUrl'] = _idFrontUrl;
             studentPayload['id_front_url'] = _idFrontUrl;
@@ -1433,8 +1601,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             _atmCardUrl = null;
             _atmCardFeedback = null;
             _atmCardFileName = null;
-            _atmProofType = 'ATM Card';
             _atmProofBytes = null;
+            _atmProofIsPdf = false;
+            _depositSlipUrl = null;
+            _depositSlipFeedback = null;
+            _depositSlipFileName = null;
+            _depositSlipBytes = null;
+            _depositSlipIsPdf = false;
           });
         }
       } catch (e) {
@@ -1469,7 +1642,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         const SizedBox(height: 20),
         _bulletPoint('Camera Capture: Front and Back of Student ID'),
         _bulletPoint('Digital Signature: Draw signature directly in the app'),
-        _bulletPoint('Scan or photo of your ATM Card or Deposit Slip Proof'),
+        _bulletPoint('ATM Card Proof (Scan or photo of your Landbank ATM Card)'),
+        _bulletPoint('Deposit Slip Proof (Scan or photo of Bank Deposit Slip / Receipt)'),
         const SizedBox(height: 28),
         Container(
           padding: const EdgeInsets.all(20),
@@ -1653,14 +1827,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             fileName: _pdfFileName,
           ),
           _buildUploadCard(
-            '$_atmProofType Proof',
-            _atmProofType == 'Deposit Slip' ? LucideIcons.fileText : LucideIcons.creditCard,
-            onTap: () => _showAtmProofSelectionSheet(),
+            'ATM Proof',
+            LucideIcons.creditCard,
+            onTap: () => _showDocumentSelectionSheet('ATM Proof'),
             feedback: _atmCardFeedback,
             subtitle: _atmCardFileName != null
-                ? '$_atmProofType uploaded'
-                : 'Scan or upload photo of your ATM card or deposit slip',
+                ? 'ATM Proof attached: $_atmCardFileName'
+                : 'Upload photo or document of your Landbank ATM card',
             fileName: _atmCardFileName,
+          ),
+          _buildUploadCard(
+            'Deposit Slip',
+            LucideIcons.fileText,
+            onTap: () => _showDocumentSelectionSheet('Deposit Slip'),
+            feedback: _depositSlipFeedback,
+            subtitle: _depositSlipFileName != null
+                ? 'Deposit Slip attached: $_depositSlipFileName'
+                : 'Upload photo or document of your bank deposit slip',
+            fileName: _depositSlipFileName,
           ),
         ],
       ),
@@ -1869,14 +2053,18 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         ),
         const SizedBox(height: 32),
         if (_pdfFileName != null) ...[
-          _buildReviewItem(_pdfFileName!, 'PDF Document'),
+          _buildReviewItem(_pdfFileName!, 'ID Submission Document'),
           const SizedBox(height: 12),
         ],
         if (_atmCardFileName != null) ...[
-          _buildReviewItem(_atmCardFileName!, '$_atmProofType Proof Image'),
+          _buildReviewItem(_atmCardFileName!, 'ATM Card Proof'),
           const SizedBox(height: 12),
         ],
-        if (_pdfFileName == null && _atmCardFileName == null)
+        if (_depositSlipFileName != null) ...[
+          _buildReviewItem(_depositSlipFileName!, 'Deposit Slip Proof'),
+          const SizedBox(height: 12),
+        ],
+        if (_pdfFileName == null && _atmCardFileName == null && _depositSlipFileName == null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Text(
