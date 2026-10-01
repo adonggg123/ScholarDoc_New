@@ -2,6 +2,26 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables from .env if present
+if (fs.existsSync(path.join(__dirname, '.env'))) {
+    try {
+        const envLines = fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split(/\r?\n/);
+        for (const line of envLines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+                const k = trimmed.substring(0, eqIdx).trim();
+                let v = trimmed.substring(eqIdx + 1).trim();
+                if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+                    v = v.slice(1, -1);
+                }
+                if (!process.env[k]) process.env[k] = v;
+            }
+        }
+    } catch (_) {}
+}
+
 const PORT = process.env.PORT || 8080;
 const ROOT = __dirname;
 
@@ -516,6 +536,256 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
     };
 }
 
+// ── Gmail SMTP Grantee Email Notification Engine ────────────────────────
+let nodemailer = null;
+try {
+    nodemailer = require('nodemailer');
+} catch (e) {
+    console.warn('[Gmail SMTP] nodemailer not installed, email sending disabled.');
+}
+
+const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
+const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || 'eoueeoikuorzymkq').replace(/\s+/g, '');
+const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholardoc.app/download';
+
+function getGmailTransporter() {
+    if (!nodemailer) return null;
+    return nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+            user: GMAIL_USER,
+            pass: GMAIL_APP_PASSWORD
+        },
+        tls: { rejectUnauthorized: false }
+    });
+}
+
+function generateGranteeEmailHtml(grantee) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scholarship Grantee Notification - ScholarDoc</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased; }
+    .wrapper { width: 100%; background-color: #f1f5f9; padding: 32px 16px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #0F3260 0%, #172554 100%); padding: 36px 32px; text-align: center; color: #ffffff; }
+    .header h1 { margin: 0 0 8px 0; font-size: 24px; font-weight: 800; letter-spacing: 0.5px; }
+    .header p { margin: 0; font-size: 13px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+    .badge { display: inline-block; margin-top: 14px; padding: 6px 16px; background-color: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #fbbf24; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
+    .content { padding: 36px 32px; }
+    .greeting { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+    .lead-text { font-size: 15px; line-height: 1.6; color: #334155; margin-bottom: 24px; }
+    .card-info { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
+    .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+    .cta-box { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-radius: 14px; padding: 24px; text-align: center; margin-bottom: 28px; }
+    .cta-box h3 { margin: 0 0 8px 0; color: #166534; font-size: 17px; font-weight: 700; }
+    .cta-box p { margin: 0 0 18px 0; color: #15803d; font-size: 13.5px; line-height: 1.5; }
+    .btn-download { display: inline-block; background: linear-gradient(135deg, #0F3260 0%, #1e40af 100%); color: #ffffff !important; text-decoration: none; padding: 14px 32px; font-size: 14px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 12px rgba(15, 50, 96, 0.25); letter-spacing: 0.3px; }
+    .instructions { background-color: #f8fafc; border-left: 4px solid #0F3260; padding: 14px 18px; margin-bottom: 28px; border-radius: 0 8px 8px 0; }
+    .instructions h4 { margin: 0 0 8px 0; font-size: 13.5px; color: #0F3260; font-weight: 700; }
+    .instructions ol { margin: 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.6; }
+    .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 32px; text-align: center; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+    .footer p { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div style="margin-bottom: 16px;">
+          <img src="https://ywavesulvkqwpsejprxp.supabase.co/storage/v1/object/public/public-assets/app_logo3.png" 
+               alt="ScholarDoc Logo" 
+               width="80" 
+               height="80" 
+               style="width: 80px; height: 80px; border-radius: 50%; background: #ffffff; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); object-fit: contain;" />
+        </div>
+        <h1>ScholarDoc</h1>
+        <p>Scholarship Management & Verification System</p>
+        <div class="badge">Official Grantee Notice</div>
+      </div>
+      <div class="content">
+        <div class="greeting">Dear ${grantee.fullName},</div>
+        <p class="lead-text">
+          Congratulations! We are pleased to formally inform you that you have been identified and confirmed as an official <strong>scholarship grantee</strong> of the institution for <strong>${grantee.scholarshipName}</strong>.
+        </p>
+        <div class="card-info">
+          <div class="card-title">Your Grantee Details</div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 500;">Student ID:</td>
+              <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; text-align: right;">${grantee.studentId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 500;">Program / Course:</td>
+              <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; text-align: right;">${grantee.course}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 500;">Scholarship Program:</td>
+              <td style="padding: 6px 0; color: #047857; font-size: 13px; font-weight: 700; text-align: right;">${grantee.scholarshipName}</td>
+            </tr>
+            ${grantee.saNumber && grantee.saNumber !== 'N/A' ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 500;">SA Number:</td>
+              <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; text-align: right;">${grantee.saNumber}</td>
+            </tr>` : ''}
+            ${grantee.academicTerm ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 500;">Academic Term:</td>
+              <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; text-align: right;">${grantee.academicTerm}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+        <div class="cta-box">
+          <h3>Get Started with ScholarDoc Mobile</h3>
+          <p>Submit your scholarship documents (Certificate of Registration, School ID, and SA form) and track your stipend disbursement seamlessly on your mobile device.</p>
+          <a href="${grantee.downloadUrl}" class="btn-download" target="_blank">Download ScholarDoc Application</a>
+          <div style="margin-top: 14px; font-size: 11.5px; color: #64748b;">
+            Direct link: <a href="${grantee.downloadUrl}" style="color: #0F3260; word-break: break-all;">${grantee.downloadUrl}</a>
+          </div>
+        </div>
+        <div class="instructions">
+          <h4>Next Steps for Confirmed Grantees:</h4>
+          <ol>
+            <li>Download and install the <strong>ScholarDoc</strong> app using the button above.</li>
+            <li>Log in using your registered student ID number and email address.</li>
+            <li>Complete your student profile and upload the required verification requirements.</li>
+            <li>Monitor real-time approval status and stipend updates from your Scholarship Coordinator.</li>
+          </ol>
+        </div>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+          If you have any questions or require assistance with your account, please reach out to the University Scholarship & Financial Assistance Office.
+        </p>
+      </div>
+      <div class="footer">
+        <p><strong>ScholarDoc System</strong> • University Scholarship and Financial Assistance Unit</p>
+        <p>This is an automated notification sent from <em>${GMAIL_USER}</em>. Please do not reply directly to this email.</p>
+        <p>&copy; ${new Date().getFullYear()} ScholarDoc. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
+    const targetEmail = grantee.email_address || grantee.email;
+    const targetId = grantee.uid || grantee.id || grantee.student_no || grantee.studentId;
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+        return { success: false, student_id: targetId, error: `Invalid recipient email: "${targetEmail || ''}"` };
+    }
+
+    if (!force && grantee.email_sent_at) {
+        return { success: true, skipped: true, student_id: targetId, email: targetEmail, reason: 'Already sent' };
+    }
+
+    const transporter = getGmailTransporter();
+    if (!transporter) {
+        return { success: false, student_id: targetId, error: 'Gmail transporter not configured' };
+    }
+
+    const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
+    const studentNumber = grantee.student_no || grantee.studentId || 'N/A';
+    const course = grantee.program_name || grantee.course || 'General Course';
+    const scholarshipName = grantee.scholarship_name || grantee.scholarshipName || 'CHED TES';
+    const saNumber = grantee.sa_number || grantee.saNumber || 'N/A';
+    const academicTerm = [grantee.academic_year || grantee.academicYear, grantee.semester].filter(Boolean).join(' - ') || 'Current Academic Year';
+
+    const html = generateGranteeEmailHtml({
+        fullName,
+        studentId: studentNumber,
+        course,
+        scholarshipName,
+        academicTerm,
+        saNumber,
+        downloadUrl: APP_DOWNLOAD_URL
+    });
+
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    };
+
+    try {
+        console.log(`[Gmail SMTP] Sending email to ${targetEmail} for ${fullName}...`);
+        const info = await transporter.sendMail({
+            from: `"ScholarDoc Scholarship Office" <${GMAIL_USER}>`,
+            to: targetEmail,
+            subject: `[ScholarDoc] Official Notice: You are confirmed as a ${scholarshipName} Grantee - ${fullName}`,
+            text: `Dear ${fullName},\n\nCongratulations! You have been confirmed as an official scholarship grantee for ${scholarshipName}.\n\nStudent ID: ${studentNumber}\nCourse: ${course}\n\nPlease download the ScholarDoc mobile app to upload your documents and track your scholarship:\n${APP_DOWNLOAD_URL}\n\nScholarDoc Scholarship Office`,
+            html
+        });
+        console.log(`[Gmail SMTP] Email successfully sent to ${targetEmail}! Message ID: ${info.messageId}`);
+
+        const now = new Date().toISOString();
+
+        // Update student_grantees in Supabase
+        let matchQuery = '';
+        if (grantee.uid) matchQuery = `uid=eq.${encodeURIComponent(grantee.uid)}`;
+        else if (grantee.id) matchQuery = `id=eq.${encodeURIComponent(grantee.id)}`;
+        else if (grantee.student_no) matchQuery = `student_no=eq.${encodeURIComponent(grantee.student_no)}`;
+
+        if (matchQuery) {
+            await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({
+                    email_sent_at: now,
+                    email_status: 'sent',
+                    email_sent_to: targetEmail,
+                    email_error: null
+                })
+            });
+        }
+
+        // Insert audit log
+        try {
+            await fetch(`${SUPABASE_REST_URL}/grantee_email_logs`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    student_id: studentNumber,
+                    grantee_uid: grantee.uid || grantee.id,
+                    recipient_email: targetEmail,
+                    scholarship_name: scholarshipName,
+                    status: 'sent',
+                    sent_at: now
+                })
+            });
+        } catch (_) {}
+
+        return { success: true, student_id: targetId, email: targetEmail };
+    } catch (err) {
+        console.error(`[Gmail SMTP] Send failed to ${targetEmail}:`, err.message);
+
+        let matchQuery = '';
+        if (grantee.uid) matchQuery = `uid=eq.${encodeURIComponent(grantee.uid)}`;
+        else if (grantee.student_no) matchQuery = `student_no=eq.${encodeURIComponent(grantee.student_no)}`;
+
+        if (matchQuery) {
+            try {
+                await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({
+                        email_status: 'failed',
+                        email_error: err.message
+                    })
+                });
+            } catch (_) {}
+        }
+
+        return { success: false, student_id: targetId, email: targetEmail, error: err.message };
+    }
+}
+
 const server = http.createServer((req, res) => {
     // Enable CORS for all incoming requests
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -684,6 +954,125 @@ const server = http.createServer((req, res) => {
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Send Grantee Email Notification via Gmail SMTP ──────────────
+    if (urlPath === '/api/send-grantee-notification' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const { mode = 'single', student_id, uid, student_no, limit = 100, force = false } = payload;
+                const headers = {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                };
+
+                if (mode === 'batch') {
+                    // Fetch pending grantees
+                    let url = `${SUPABASE_REST_URL}/student_grantees?select=*&limit=${limit}`;
+                    if (!force) {
+                        url += '&email_sent_at=is.null';
+                    }
+                    const fetchRes = await fetch(url, { headers });
+                    const candidates = await fetchRes.json();
+
+                    if (!Array.isArray(candidates) || candidates.length === 0) {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: true,
+                            message: 'All eligible grantees have already received email notifications.',
+                            total: 0, sent: 0, skipped: 0, failed: 0
+                        }));
+                        return;
+                    }
+
+                    let sent = 0, skipped = 0, failed = 0;
+                    const details = [];
+
+                    for (const grantee of candidates) {
+                        const r = await sendSingleGranteeEmail(grantee, { force });
+                        details.push(r);
+                        if (r.success && !r.skipped) sent++;
+                        else if (r.skipped) skipped++;
+                        else failed++;
+
+                        // Delay 200ms between sends to avoid spam filtering
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        message: `Processed ${candidates.length} grantees. Sent: ${sent}, Skipped: ${skipped}, Failed: ${failed}`,
+                        total: candidates.length,
+                        sent, skipped, failed,
+                        details
+                    }));
+                    return;
+                }
+
+                // Single student notification
+                const targetId = student_id || uid || student_no;
+                let granteeRecord = null;
+
+                if (targetId) {
+                    const fetchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(id.eq.${encodeURIComponent(targetId)},uid.eq.${encodeURIComponent(targetId)},student_no.eq.${encodeURIComponent(targetId)},studentId.eq.${encodeURIComponent(targetId)})&limit=1`, { headers });
+                    const list = await fetchRes.json();
+                    if (Array.isArray(list) && list.length > 0) {
+                        granteeRecord = list[0];
+                    }
+                }
+
+                // If not found by ID, try finding by email
+                if (!granteeRecord && payload.email) {
+                    const fetchEmail = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(email.eq.${encodeURIComponent(payload.email)},email_address.eq.${encodeURIComponent(payload.email)})&limit=1`, { headers });
+                    const listEmail = await fetchEmail.json();
+                    if (Array.isArray(listEmail) && listEmail.length > 0) {
+                        granteeRecord = listEmail[0];
+                    }
+                }
+
+                // If still not in database but details were passed, construct record to send email
+                if (!granteeRecord && payload.email) {
+                    granteeRecord = {
+                        id: targetId,
+                        uid: targetId,
+                        student_no: payload.student_no || payload.studentNo || 'N/A',
+                        full_name: payload.full_name || payload.fullName || 'Student Grantee',
+                        email_address: payload.email,
+                        course: payload.course || payload.program_name || 'General Course',
+                        scholarship_name: payload.scholarship_name || payload.scholarshipName || 'CHED TES',
+                        sa_number: payload.sa_number || payload.saNumber || 'N/A'
+                    };
+                }
+
+                if (!granteeRecord) {
+                    console.warn(`[API send-grantee-notification] Grantee record not found for: ${targetId || payload.email}`);
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: `Student grantee record not found for: ${targetId || payload.email || 'unknown ID'}` }));
+                    return;
+                }
+
+                // For single student action button clicks, always force send
+                const shouldForce = force !== false;
+                console.log(`[API send-grantee-notification] Triggering single send to: ${granteeRecord.email_address || granteeRecord.email} (force=${shouldForce})`);
+                const r = await sendSingleGranteeEmail(granteeRecord, { force: shouldForce });
+                res.writeHead(r.success ? 200 : 400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(r));
+                return;
+
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Missing student_id or mode parameter' }));
+            } catch (err) {
+                console.error('[API send-grantee-notification error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
             }
         });
         return;

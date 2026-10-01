@@ -311,6 +311,200 @@ body.dark #app-content::-webkit-scrollbar-thumb:hover {
     background-color: rgba(15, 50, 96, 0.05);
 }
 
+/* Student Grantees / Records Toolbar Styling */
+.grantees-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.ay-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.ay-select-wrapper select {
+    appearance: none;
+    -webkit-appearance: none;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.ay-select-btn {
+    height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-color);
+    color: var(--text-primary);
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ay-select-btn:hover {
+    background: rgba(15, 50, 96, 0.03);
+    border-color: rgba(15, 50, 96, 0.25);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+#notify-all-grantees-btn {
+    height: 40px;
+    padding: 0 16px;
+    border: 1.5px solid rgba(15, 50, 96, 0.25);
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #0F3260;
+    background: var(--surface-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#notify-all-grantees-btn:hover {
+    background-color: #F0F4F9;
+    border-color: #0F3260;
+    box-shadow: 0 4px 12px rgba(15, 50, 96, 0.12);
+    transform: translateY(-1px);
+}
+
+#notify-all-grantees-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+#pending-email-badge {
+    background: linear-gradient(135deg, #EF4444, #DC2626);
+    color: #ffffff;
+    border-radius: 999px;
+    font-size: 11px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(239, 68, 68, 0.35);
+    line-height: 1;
+    margin-left: 2px;
+}
+
+#add-student-btn {
+    height: 40px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0F3260 0%, #1A447E 100%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(15, 50, 96, 0.25);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#add-student-btn:hover {
+    background: linear-gradient(135deg, #133D75 0%, #20539B 100%);
+    box-shadow: 0 6px 16px rgba(15, 50, 96, 0.35);
+    transform: translateY(-1px);
+}
+
+#add-student-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(15, 50, 96, 0.2);
+}
+
+#refresh-students-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-color);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+#refresh-students-btn:hover {
+    background: #F0F4F9;
+    color: #0F3260;
+    border-color: rgba(15, 50, 96, 0.3);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+#refresh-students-btn:active {
+    transform: translateY(0);
+}
+
+/* Dark mode adjustments */
+body.dark .ay-select-btn {
+    background: var(--surface-color);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+body.dark .ay-select-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+body.dark #notify-all-grantees-btn {
+    background: var(--surface-color);
+    border-color: rgba(96, 165, 250, 0.3);
+    color: #93C5FD;
+}
+body.dark #notify-all-grantees-btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: #60A5FA;
+}
+body.dark #notify-all-grantees-btn i {
+    color: #93C5FD !important;
+}
+body.dark #refresh-students-btn {
+    background: var(--surface-color);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+body.dark #refresh-students-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #93C5FD;
+    border-color: rgba(96, 165, 250, 0.3);
+}
+
 /* Animations */
 @keyframes fadeIn {
     from {

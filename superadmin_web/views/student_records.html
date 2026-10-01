@@ -6,8 +6,8 @@
             <h2 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Student Grantees</h2>
             <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">Manage and review all scholarship student grantees.</p>
         </div>
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="position: relative; display: inline-block;">
+        <div class="grantees-toolbar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="ay-select-wrapper" style="position: relative; display: inline-flex; align-items: center;">
                 <select id="filter-ay"
                     onchange="this.nextElementSibling.querySelector('#ay-display').innerText = this.options[this.selectedIndex].text;"
                     style="appearance: none; -webkit-appearance: none; position: absolute; width: 100%; height: 100%; left: 0; top: 0; opacity: 0; cursor: pointer; z-index: 10;">
@@ -17,26 +17,30 @@
                     <option value="AY 2023-2024, 1st Sem">AY 2023-2024, 1st Sem</option>
                     <option value="AY 2023-2024, 2nd Sem">AY 2023-2024, 2nd Sem</option>
                 </select>
-                <button
-                    style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; background: white; white-space: nowrap; flex-shrink: 0; cursor: pointer; color: var(--text-primary); transition: background 0.2s ease;"
-                    onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='white'">
-                    <i class="icon-calendar" style="font-size: 14px; color: var(--text-secondary);"></i>
+                <button type="button" class="ay-select-btn"
+                    style="height: 40px; padding: 0 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: var(--surface-color, #ffffff); white-space: nowrap; cursor: pointer; color: var(--text-primary); transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); font-family: inherit;">
+                    <i class="icon-calendar" style="font-size: 14px; color: var(--primary-color);"></i>
                     <span id="ay-display">AY 2024-2025, 1st Sem</span>
-                    <i class="icon-chevron-down" style="font-size: 14px; color: var(--text-secondary);"></i>
+                    <i class="icon-chevron-down" style="font-size: 14px; color: var(--text-secondary); margin-left: 2px;"></i>
                 </button>
             </div>
-            <button id="notify-all-grantees-btn" class="btn btn-outline"
-                style="gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600; border-color: #0F3260; color: #0F3260; display: inline-flex; align-items: center;"
+            <button id="notify-all-grantees-btn" type="button"
+                style="height: 40px; padding: 0 16px; border: 1.5px solid rgba(15, 50, 96, 0.25); border-radius: 10px; font-size: 13px; font-weight: 600; font-family: inherit; color: #0F3260; background: var(--surface-color, #ffffff); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);"
                 title="Send official scholarship acceptance email & app download link to unnotified grantees">
-                <i class="icon-mail" style="font-size: 16px;"></i> Notify Grantees
-                <span id="pending-email-badge" style="display: none; background: #EF4444; color: white; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 4px; font-weight: 700;">0</span>
+                <i class="icon-mail" style="font-size: 15px; color: #0F3260;"></i>
+                <span>Notify Grantees</span>
+                <span id="pending-email-badge" style="display: none; background: linear-gradient(135deg, #EF4444, #DC2626); color: white; border-radius: 999px; font-size: 11px; min-width: 20px; height: 20px; padding: 0 6px; font-weight: 700; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(239, 68, 68, 0.35); line-height: 1; margin-left: 2px;">0</span>
             </button>
-            <button id="add-student-btn" class="btn btn-primary"
-                style="gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600;">
-                <i class="icon-user-plus" style="font-size: 16px;"></i> Add Student
+            <button id="add-student-btn" type="button"
+                style="height: 40px; padding: 0 18px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; font-family: inherit; color: #FFFFFF; background: linear-gradient(135deg, #0F3260 0%, #1A447E 100%); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 3px 10px rgba(15, 50, 96, 0.22);"
+                title="Register new student grantee">
+                <i class="icon-user-plus" style="font-size: 15px;"></i>
+                <span>Add Student</span>
             </button>
-            <button class="icon-btn" id="refresh-students-btn" style="color: var(--primary-color);" title="Refresh Student Grantees">
-                <i class="icon-refresh-cw" style="font-size: 18px;"></i>
+            <button id="refresh-students-btn" type="button" class="icon-btn"
+                style="width: 40px; height: 40px; padding: 0; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-color, #ffffff); color: var(--text-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.04); flex-shrink: 0;"
+                title="Refresh Student Grantees">
+                <i class="icon-refresh-cw" style="font-size: 16px;"></i>
             </button>
         </div>
     </div>

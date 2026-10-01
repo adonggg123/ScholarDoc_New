@@ -16,6 +16,7 @@
   "author": "ScholarDoc Team",
   "license": "ISC",
   "dependencies": {
-    "firebase-admin": "^14.5.0"
+    "firebase-admin": "^14.5.0",
+    "nodemailer": "^10.0.13"
   }
 }

@@ -22,19 +22,54 @@ export class EmailNotificationService {
     /**
      * Sends an email notification to a single confirmed student grantee.
      * @param {string} studentIdentifier - The student's UID, ID, or student_no.
-     * @param {Object} options - { force: boolean } (if true, bypasses duplicate check).
+     * @param {Object} options - { force: boolean, email?: string, fullName?: string, studentNo?: string, course?: string, scholarshipName?: string, saNumber?: string }
      * @returns {Promise<{success: boolean, message?: string, error?: string}>}
      */
-    static async notifyGrantee(studentIdentifier, { force = false } = {}) {
+    static async notifyGrantee(studentIdentifier, { force = false, email, fullName, studentNo, course, scholarshipName, saNumber } = {}) {
+        console.log(`[EmailNotificationService] Sending notification for student: ${studentIdentifier}`);
+
+        const payload = {
+            student_id: studentIdentifier,
+            force: force,
+            email: email,
+            full_name: fullName,
+            fullName: fullName,
+            student_no: studentNo,
+            studentId: studentNo,
+            course: course,
+            scholarship_name: scholarshipName,
+            scholarshipName: scholarshipName,
+            sa_number: saNumber,
+            saNumber: saNumber
+        };
+
+        // 1. Try local server Gmail SMTP endpoint first
+        try {
+            const localRes = await fetch('/api/send-grantee-notification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await localRes.json();
+            if (localRes.ok && data.success) {
+                console.log('[EmailNotificationService] Local Gmail SMTP response:', data);
+                return data;
+            } else if (!localRes.ok && data.error && !data.error.includes('not found')) {
+                // If it's a real failure like auth or SMTP error, return it
+                return data;
+            }
+        } catch (localErr) {
+            console.warn('[EmailNotificationService] Local endpoint unavailable, trying Edge Function...', localErr.message);
+        }
+
         const supabase = window.supabaseClient;
         if (!supabase) {
             throw new Error('Supabase client is not initialized.');
         }
 
         try {
-            console.log(`[EmailNotificationService] Sending notification for student: ${studentIdentifier}`);
-
-            // Preferred: Use the built-in Supabase Functions client
+            // 2. Fallback: Use the built-in Supabase Functions client
             if (supabase.functions && typeof supabase.functions.invoke === 'function') {
                 const { data, error } = await supabase.functions.invoke('send-grantee-notification', {
                     body: {
@@ -51,7 +86,7 @@ export class EmailNotificationService {
                 return data;
             }
 
-            // Fallback: Direct HTTP POST fetch with authorization headers
+            // 3. Fallback: Direct HTTP POST fetch with authorization headers
             const anonKey = supabase.supabaseKey || supabase.headers?.apikey || '';
             const res = await fetch(this.getFunctionUrl(), {
                 method: 'POST',
@@ -80,14 +115,35 @@ export class EmailNotificationService {
      * @returns {Promise<{success: boolean, sent: number, skipped: number, failed: number, message: string}>}
      */
     static async notifyAllPendingGrantees({ limit = 50, force = false } = {}) {
+        console.log('[EmailNotificationService] Starting batch notification for pending grantees...');
+
+        // 1. Try local server Gmail SMTP endpoint first
+        try {
+            const localRes = await fetch('/api/send-grantee-notification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: 'batch',
+                    limit: limit,
+                    force: force
+                })
+            });
+
+            if (localRes.ok) {
+                const data = await localRes.json();
+                console.log('[EmailNotificationService] Local Gmail SMTP batch response:', data);
+                return data;
+            }
+        } catch (localErr) {
+            console.warn('[EmailNotificationService] Local batch endpoint unavailable, trying Edge Function...', localErr.message);
+        }
+
         const supabase = window.supabaseClient;
         if (!supabase) {
             throw new Error('Supabase client is not initialized.');
         }
 
         try {
-            console.log('[EmailNotificationService] Starting batch notification for pending grantees...');
-
             if (supabase.functions && typeof supabase.functions.invoke === 'function') {
                 const { data, error } = await supabase.functions.invoke('send-grantee-notification', {
                     body: {

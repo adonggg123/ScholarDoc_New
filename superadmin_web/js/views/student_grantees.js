@@ -29,6 +29,10 @@ const modalTitle = document.getElementById('modal-title');
 const modalContent = document.getElementById('modal-content');
 
 async function loadStudents() {
+    const refreshBtn = document.getElementById('refresh-students-btn') || refreshStudentsBtn;
+    const refreshIcon = refreshBtn ? refreshBtn.querySelector('i') : null;
+    if (refreshIcon) refreshIcon.style.animation = 'spin 0.8s linear infinite';
+
     try {
         if (tableBody) {
             tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
@@ -42,19 +46,24 @@ async function loadStudents() {
         applyFilters();
 
         // Update pending email notifications badge
-        if (pendingEmailBadge) {
+        const badgeEl = document.getElementById('pending-email-badge') || pendingEmailBadge;
+        if (badgeEl) {
             const pendingCount = allStudents.filter(s => !s.email_sent_at && !s.emailSentAt && (s.email_address || s.email)).length;
             if (pendingCount > 0) {
-                pendingEmailBadge.textContent = pendingCount;
-                pendingEmailBadge.style.display = 'inline-block';
+                badgeEl.textContent = pendingCount;
+                badgeEl.style.display = 'inline-flex';
             } else {
-                pendingEmailBadge.style.display = 'none';
+                badgeEl.style.display = 'none';
             }
         }
     } catch (e) {
         console.error('Error loading students:', e);
         if (tableBody) {
             tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+        }
+    } finally {
+        if (refreshIcon) {
+            setTimeout(() => { refreshIcon.style.animation = ''; }, 350);
         }
     }
 }
@@ -987,7 +996,7 @@ window.approveStudent = async function (uid) {
 };
 
 window.sendGranteeEmail = async function (uid, force = false) {
-    const student = allStudents.find(s => s.uid === uid);
+    const student = allStudents.find(s => s.uid === uid || s.id === uid || s.student_no === uid || s.studentId === uid);
     if (!student) {
         alert('Student record not found.');
         return;
@@ -1013,7 +1022,17 @@ window.sendGranteeEmail = async function (uid, force = false) {
     }
 
     try {
-        const res = await EmailNotificationService.notifyGrantee(uid, { force });
+        const targetId = student.uid || student.id || student.student_no || student.studentId;
+        const res = await EmailNotificationService.notifyGrantee(targetId, {
+            force,
+            email: email,
+            fullName: student.fullName || student.full_name,
+            studentNo: student.student_no || student.studentId,
+            course: student.program_name || student.course,
+            scholarshipName: student.scholarship_name || student.scholarshipName,
+            saNumber: student.saNumber || student.sa_number
+        });
+
         if (res.success) {
             alert(`Scholarship notification email successfully sent to ${email}!`);
             loadStudents();
