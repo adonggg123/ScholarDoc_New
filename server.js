@@ -315,7 +315,499 @@ async function getGoogleAccessToken() {
 const SUPABASE_REST_URL = 'https://ywavesulvkqwpsejprxp.supabase.co/rest/v1';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
 
-async function broadcastAnnouncementNotification({ announcementId, title, content, type, forceResend }) {
+// ── Semaphore SMS Messaging Engine (https://semaphore.co) ───────────────
+const SEMAPHORE_API_URL = 'https://api.semaphore.co/api/v4';
+
+/**
+ * Dynamically resolves Semaphore API Key from process.env or re-reads .env if newly configured.
+ */
+function getSemaphoreApiKey() {
+    if (process.env.SEMAPHORE_API_KEY && process.env.SEMAPHORE_API_KEY.trim()) {
+        return process.env.SEMAPHORE_API_KEY.trim();
+    }
+    try {
+        const envPath = path.join(__dirname, '.env');
+        if (fs.existsSync(envPath)) {
+            const envLines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+            for (const line of envLines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) continue;
+                const eqIdx = trimmed.indexOf('=');
+                if (eqIdx > 0) {
+                    const k = trimmed.substring(0, eqIdx).trim();
+                    let v = trimmed.substring(eqIdx + 1).trim();
+                    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+                        v = v.slice(1, -1);
+                    }
+                    process.env[k] = v;
+                }
+            }
+        }
+    } catch (_) {}
+    return (process.env.SEMAPHORE_API_KEY || '').trim();
+}
+
+/**
+ * Dynamically resolves Semaphore Sender Name.
+ */
+function getSemaphoreSenderName() {
+    return (process.env.SEMAPHORE_SENDER_NAME || 'ScholarDoc').trim();
+}
+
+/**
+ * Normalizes any Philippine mobile phone number string into standard format.
+ * Acceptable inputs:
+ *  - 09171234567
+ *  - +639171234567
+ *  - 639171234567
+ *  - 9171234567
+ *  - Formatted with dashes/spaces: 0917-123-4567, (0917) 123 4567
+ * Returns standard 11-digit '09XXXXXXXXX' string, or null if invalid.
+ */
+function normalizePhilippineMobile(rawPhone) {
+    if (!rawPhone) return null;
+    let digits = String(rawPhone).replace(/\D/g, '');
+    if (digits.startsWith('63') && digits.length === 12) {
+        digits = '0' + digits.substring(2);
+    } else if (digits.startsWith('9') && digits.length === 10) {
+        digits = '0' + digits;
+    }
+    if (/^09\d{9}$/.test(digits)) {
+        return digits;
+    }
+    return null;
+}
+
+/**
+ * Checks if a string is a valid UUID v4 format.
+ */
+function isUuidString(str) {
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str.trim());
+}
+
+/**
+ * Builds a type-safe PostgREST query filter for student lookup, avoiding Postgres UUID syntax errors.
+ */
+function buildStudentQueryFilter(targetId) {
+    if (!targetId) return null;
+    const cleanId = String(targetId).trim();
+    if (isUuidString(cleanId)) {
+        return `or=(id.eq.${encodeURIComponent(cleanId)},uid.eq.${encodeURIComponent(cleanId)})`;
+    } else {
+        return `or=(student_no.eq.${encodeURIComponent(cleanId)},studentId.eq.${encodeURIComponent(cleanId)})`;
+    }
+}
+
+/**
+ * Queries Semaphore account balance and details (without exposing API key to client).
+ */
+async function getSemaphoreAccountInfo() {
+    const apiKey = getSemaphoreApiKey();
+    if (!apiKey) {
+        return {
+            configured: false,
+            status: 'unconfigured',
+            message: 'Semaphore API key is not configured in .env'
+        };
+    }
+    try {
+        const res = await fetch(`${SEMAPHORE_API_URL}/account?apikey=${encodeURIComponent(apiKey)}`);
+        if (!res.ok) {
+            const errText = await res.text();
+            return {
+                configured: true,
+                status: 'error',
+                message: `Semaphore API error (${res.status}): ${errText}`
+            };
+        }
+        const data = await res.json();
+        return {
+            configured: true,
+            status: 'active',
+            account_id: data.account_id,
+            account_name: data.account_name,
+            credit_balance: data.credit_balance,
+            sender_name: getSemaphoreSenderName() || 'Default'
+        };
+    } catch (err) {
+        return {
+            configured: true,
+            status: 'network_error',
+            message: err.message
+        };
+    }
+}
+
+/**
+ * Inserts SMS delivery log and updates student_grantees SMS state in Supabase.
+ */
+async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, eventType = 'general', status = 'sent', messageId = null, network = null, errorMessage = null }) {
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+    };
+
+    const now = new Date().toISOString();
+
+    // 1. Audit log row
+    try {
+        await fetch(`${SUPABASE_REST_URL}/sms_logs`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                student_id: studentId || null,
+                grantee_uid: granteeUid || null,
+                recipient_phone: recipientPhone,
+                message: message,
+                event_type: eventType,
+                status: status,
+                semaphore_message_id: messageId ? String(messageId) : null,
+                network: network || null,
+                error_message: errorMessage || null,
+                sent_at: now
+            })
+        });
+    } catch (_) {}
+
+    // 2. Update student_grantees row
+    let matchQuery = '';
+    if (granteeUid && isUuidString(granteeUid)) matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
+    else if (studentId) matchQuery = buildStudentQueryFilter(studentId);
+
+    if (matchQuery) {
+        try {
+            await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({
+                    sms_sent_at: (status === 'sent' || status === 'queued') ? now : null,
+                    sms_status: status,
+                    sms_sent_to: recipientPhone,
+                    sms_error: errorMessage || null,
+                    sms_message_id: messageId ? String(messageId) : null
+                })
+            });
+        } catch (_) {}
+    }
+}
+
+/**
+ * Sends SMS via Semaphore v4 API
+ */
+async function sendSemaphoreSms({ numbers, message, sendername = null }) {
+    const apiKey = getSemaphoreApiKey();
+    if (!apiKey) {
+        console.warn('[Semaphore SMS] Cannot send SMS: SEMAPHORE_API_KEY is not configured in .env');
+        return {
+            success: false,
+            error: 'Semaphore API key is not configured. Please add SEMAPHORE_API_KEY to your .env file on the server.',
+            unconfigured: true
+        };
+    }
+
+    const rawList = Array.isArray(numbers) ? numbers : String(numbers || '').split(',');
+    const validNumbers = [...new Set(rawList.map(n => normalizePhilippineMobile(n)).filter(Boolean))];
+
+    if (validNumbers.length === 0) {
+        return {
+            success: false,
+            error: 'No valid Philippine mobile number provided (must be 11 digits starting with 09).'
+        };
+    }
+
+    const safeMessage = String(message || '').trim();
+    if (!safeMessage) {
+        return {
+            success: false,
+            error: 'SMS message content cannot be empty.'
+        };
+    }
+
+    const effectiveSender = (sendername || getSemaphoreSenderName() || '').trim().slice(0, 11);
+
+    const payload = {
+        apikey: apiKey,
+        number: validNumbers.join(','),
+        message: safeMessage
+    };
+    if (effectiveSender) {
+        payload.sendername = effectiveSender;
+    }
+
+    try {
+        console.log(`[Semaphore SMS] Sending to ${validNumbers.length} recipient(s): ${validNumbers.join(', ')}`);
+        let res = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        let data = await res.json().catch(() => ({}));
+
+        // If custom sendername failed (e.g. sendername not yet approved), auto-retry without sendername
+        if (!res.ok && payload.sendername) {
+            console.warn(`[Semaphore SMS] Dispatch failed with sendername "${payload.sendername}", retrying with default sender...`);
+            delete payload.sendername;
+            const retryRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (retryRes.ok) {
+                res = retryRes;
+                data = await retryRes.json().catch(() => ({}));
+            }
+        }
+
+        if (!res.ok) {
+            const errMsg = Array.isArray(data)
+                ? data.map(d => d.message || JSON.stringify(d)).join(', ')
+                : (data.error || data.message || `HTTP ${res.status}`);
+            console.error('[Semaphore SMS] Delivery error response:', errMsg);
+            return {
+                success: false,
+                status: 'failed',
+                error: errMsg,
+                details: data
+            };
+        }
+
+        console.log('[Semaphore SMS] Sent successfully:', data);
+        const first = Array.isArray(data) ? data[0] : data;
+        return {
+            success: true,
+            status: first?.status || 'sent',
+            message_id: first?.message_id ? String(first.message_id) : null,
+            recipient: first?.recipient || validNumbers.join(','),
+            network: first?.network || null,
+            count: validNumbers.length,
+            details: data
+        };
+    } catch (err) {
+        console.error('[Semaphore SMS] Network error:', err.message);
+        return {
+            success: false,
+            status: 'failed',
+            error: err.message
+        };
+    }
+}
+
+/**
+ * Sends official scholarship grantee notification SMS to a confirmed student.
+ */
+async function sendSingleGranteeSms(grantee, { force = false } = {}) {
+    const targetPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
+    const normalizedPhone = normalizePhilippineMobile(targetPhone);
+    const targetId = grantee.uid || grantee.id || grantee.student_no || grantee.studentId;
+
+    if (!normalizedPhone) {
+        return {
+            success: false,
+            student_id: targetId,
+            error: `Invalid or missing Philippine mobile number: "${targetPhone || ''}"`
+        };
+    }
+
+    if (!force && grantee.sms_sent_at) {
+        return {
+            success: true,
+            skipped: true,
+            student_id: targetId,
+            phone: normalizedPhone,
+            reason: `SMS already sent at ${grantee.sms_sent_at}`
+        };
+    }
+
+    const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
+    const scholarshipName = grantee.scholarship_name || grantee.scholarshipName || 'CHED TES';
+
+    const smsMessage = `[ScholarDoc] Congratulations ${fullName}! You are confirmed as an official ${scholarshipName} grantee. Download the app at ${APP_DOWNLOAD_URL} to upload documents and track your stipend.`;
+
+    const smsResult = await sendSemaphoreSms({
+        numbers: normalizedPhone,
+        message: smsMessage
+    });
+
+    await recordSmsLog({
+        studentId: grantee.student_no || grantee.studentId || targetId,
+        granteeUid: grantee.uid || grantee.id,
+        recipientPhone: normalizedPhone,
+        message: smsMessage,
+        eventType: 'grantee_confirmed',
+        status: smsResult.success ? 'sent' : 'failed',
+        messageId: smsResult.message_id,
+        network: smsResult.network,
+        errorMessage: smsResult.error
+    });
+
+    return {
+        ...smsResult,
+        student_id: targetId,
+        phone: normalizedPhone
+    };
+}
+
+/**
+ * Dispatches an event-driven SMS notification to a student (with deduplication & audit).
+ */
+async function sendStudentSmsNotification({
+    studentId,
+    uid,
+    studentNo,
+    phone,
+    eventType = 'custom',
+    customMessage,
+    title,
+    feedback = '',
+    force = false
+}) {
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+    };
+
+    const targetId = studentId || uid || studentNo;
+    let granteeRecord = null;
+
+    if (targetId) {
+        try {
+            const filter = buildStudentQueryFilter(targetId);
+            if (filter) {
+                const fetchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${filter}&limit=1`, { headers });
+                if (fetchRes.ok) {
+                    const list = await fetchRes.json();
+                    if (Array.isArray(list) && list.length > 0) {
+                        granteeRecord = list[0];
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!granteeRecord && targetId) {
+        try {
+            const filter = buildStudentQueryFilter(targetId);
+            if (filter) {
+                const fetchSchool = await fetch(`${SUPABASE_REST_URL}/school_students?${filter}&limit=1`, { headers });
+                if (fetchSchool.ok) {
+                    const listSchool = await fetchSchool.json();
+                    if (Array.isArray(listSchool) && listSchool.length > 0) {
+                        granteeRecord = listSchool[0];
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    // Fallback if not found in DB but phone or message details were provided
+    if (!granteeRecord && (phone || customMessage)) {
+        granteeRecord = {
+            student_no: studentNo || studentId || targetId,
+            uid: uid || targetId,
+            full_name: 'Student',
+            mobile_number: phone,
+            contactNumber: phone,
+            scholarship_name: 'Scholarship'
+        };
+    }
+
+    const rawPhone = phone || granteeRecord?.mobile_number || granteeRecord?.contactNumber || granteeRecord?.phone_number;
+    const normalizedPhone = normalizePhilippineMobile(rawPhone);
+
+    if (!normalizedPhone) {
+        return {
+            success: false,
+            student_id: targetId,
+            error: `No valid Philippine mobile number registered for this student (${rawPhone || 'empty'}).`
+        };
+    }
+
+    // Deduplication check
+    if (!force && eventType === 'grantee_confirmed' && granteeRecord?.sms_sent_at) {
+        return {
+            success: true,
+            skipped: true,
+            student_id: targetId,
+            phone: normalizedPhone,
+            reason: `Grantee SMS was already sent at ${granteeRecord.sms_sent_at}`
+        };
+    }
+
+    const studentName = granteeRecord?.full_name || granteeRecord?.fullName || 'Student';
+    const scholarshipName = granteeRecord?.scholarship_name || granteeRecord?.scholarshipName || 'Scholarship';
+
+    let message = customMessage;
+    if (title && message && !message.includes(title)) {
+        message = `[ScholarDoc] ${title}: ${message}`;
+    } else if (message && !message.startsWith('[ScholarDoc]')) {
+        message = `[ScholarDoc] ${message}`;
+    }
+
+    if (!message) {
+        switch (eventType) {
+            case 'grantee_confirmed':
+                message = `[ScholarDoc] Application Approved: Congratulations ${studentName}! You are confirmed as a ${scholarshipName} grantee. Download the app at ${APP_DOWNLOAD_URL} to upload documents and track your stipend.`;
+                break;
+            case 'application_approved':
+                message = `[ScholarDoc] Application Approved: Congratulations! Your scholarship application has been officially approved.`;
+                break;
+            case 'application_rejected':
+                message = `[ScholarDoc] Application Rejected: We regret to inform you that your scholarship application has been rejected.${feedback ? ' Feedback: ' + feedback : ''}`;
+                break;
+            case 'sa_revision':
+            case 'sa_verified':
+                if (eventType === 'sa_verified') {
+                    message = `[ScholarDoc] SA Number Verified: Great news! Your SA Number has been verified and approved.`;
+                } else {
+                    message = `[ScholarDoc] SA Number Rejected: Your SA Number submission requires correction.${feedback ? ' Feedback: ' + feedback : ''} Please update it in the ScholarDoc app.`;
+                }
+                break;
+            case 'id_revision':
+            case 'id_verified':
+                if (eventType === 'id_verified') {
+                    message = `[ScholarDoc] ID Validation Approved: Great news! Your School ID document has been verified and approved.`;
+                } else {
+                    message = `[ScholarDoc] ID Validation Rejected: Your School ID document requires correction.${feedback ? ' Feedback: ' + feedback : ''} Please review feedback in the ScholarDoc app.`;
+                }
+                break;
+            case 'deadline_alert':
+                message = `[ScholarDoc] Deadline Alert: Important scholarship deadline reminder for ${studentName}.${feedback ? ' ' + feedback : ''} Please check the ScholarDoc app immediately.`;
+                break;
+            default:
+                message = `[ScholarDoc] Scholarship Notice: Important scholarship update for ${studentName}.${feedback ? ' ' + feedback : ''} Open the ScholarDoc app to review.`;
+        }
+    }
+
+    const sendRes = await sendSemaphoreSms({
+        numbers: normalizedPhone,
+        message
+    });
+
+    await recordSmsLog({
+        studentId: granteeRecord?.student_no || granteeRecord?.studentId || targetId,
+        granteeUid: granteeRecord?.uid || granteeRecord?.id || targetId,
+        recipientPhone: normalizedPhone,
+        message,
+        eventType,
+        status: sendRes.success ? 'sent' : 'failed',
+        messageId: sendRes.message_id,
+        network: sendRes.network,
+        errorMessage: sendRes.error
+    });
+
+    return {
+        ...sendRes,
+        student_id: targetId,
+        phone: normalizedPhone,
+        event_type: eventType
+    };
+}
+
+async function broadcastAnnouncementNotification({ announcementId, title, content, type, forceResend, sendSms = false }) {
     const headers = {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -525,14 +1017,88 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
         }
     }
 
-    console.log(`[Push Notification] Broadcast complete. Devices reached: ${pushSentCount}/${tokens.length}. In-app history created for ${notificationHistoryCount} student(s).`);
+    // 6. Broadcast SMS via Semaphore if sendSms is enabled
+    let smsSentCount = 0;
+    let smsFailedCount = 0;
+    if (sendSms) {
+        try {
+            console.log('[Announcement] SMS broadcast requested, querying student mobile numbers...');
+            const stuRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=student_no,uid,full_name,mobile_number,contactNumber`, { headers });
+            if (stuRes.ok) {
+                const stuList = await stuRes.json();
+                if (Array.isArray(stuList) && stuList.length > 0) {
+                    const phoneMap = new Map();
+                    for (const s of stuList) {
+                        const p = normalizePhilippineMobile(s.mobile_number || s.contactNumber);
+                        if (p && !phoneMap.has(p)) {
+                            phoneMap.set(p, s);
+                        }
+                    }
+                    const uniquePhones = Array.from(phoneMap.keys());
+                    if (uniquePhones.length > 0) {
+                        const cleanT = (title || 'ScholarDoc Alert').trim().slice(0, 35);
+                        const cleanM = (shortMessage || 'New announcement posted.').trim().slice(0, 85);
+                        const annSmsText = `[ScholarDoc] ${cleanT}: ${cleanM} Open the app for details.`;
+
+                        // Send in chunks of 50 recipients
+                        for (let i = 0; i < uniquePhones.length; i += 50) {
+                            const chunk = uniquePhones.slice(i, i + 50);
+                            const smsRes = await sendSemaphoreSms({
+                                numbers: chunk,
+                                message: annSmsText
+                            });
+                            if (smsRes.success) {
+                                smsSentCount += chunk.length;
+                                for (const ph of chunk) {
+                                    const st = phoneMap.get(ph);
+                                    await recordSmsLog({
+                                        studentId: st?.student_no,
+                                        granteeUid: st?.uid,
+                                        recipientPhone: ph,
+                                        message: annSmsText,
+                                        eventType: 'announcement',
+                                        status: 'sent',
+                                        messageId: smsRes.message_id
+                                    });
+                                }
+                            } else {
+                                smsFailedCount += chunk.length;
+                                for (const ph of chunk) {
+                                    const st = phoneMap.get(ph);
+                                    await recordSmsLog({
+                                        studentId: st?.student_no,
+                                        granteeUid: st?.uid,
+                                        recipientPhone: ph,
+                                        message: annSmsText,
+                                        eventType: 'announcement',
+                                        status: 'failed',
+                                        errorMessage: smsRes.error
+                                    });
+                                }
+                            }
+                            if (i + 50 < uniquePhones.length) {
+                                await new Promise(r => setTimeout(r, 200));
+                            }
+                        }
+                        console.log(`[Announcement] SMS broadcast complete. Sent: ${smsSentCount}, Failed: ${smsFailedCount}`);
+                    }
+                }
+            }
+        } catch (smsErr) {
+            console.error('[Announcement] SMS broadcast exception:', smsErr.message);
+        }
+    }
+
+    console.log(`[Push Notification] Broadcast complete. Push devices reached: ${pushSentCount}/${tokens.length}. SMS sent: ${smsSentCount}. In-app history created for ${notificationHistoryCount} student(s).`);
 
     return {
         success: true,
         tokensCount: tokens.length,
         notificationHistoryCount,
         pushSentCount,
-        message: `Notification broadcasted to ${tokens.length} device(s) and recorded in student notification histories.`
+        smsSentCount,
+        smsFailedCount,
+        message: `Notification broadcasted to ${tokens.length} device(s)${smsSentCount > 0 ? ` and texted to ${smsSentCount} mobile numbers` : ''} and recorded in student notification histories.`
     };
 }
 
@@ -786,7 +1352,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
     }
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     // Enable CORS for all incoming requests
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -959,14 +1525,23 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // ── API: Send Grantee Email Notification via Gmail SMTP ──────────────
+    // ── API: Send Grantee Notification via Gmail SMTP & Semaphore SMS ────
     if (urlPath === '/api/send-grantee-notification' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
                 const payload = JSON.parse(body || '{}');
-                const { mode = 'single', student_id, uid, student_no, limit = 100, force = false } = payload;
+                const {
+                    mode = 'single',
+                    student_id,
+                    uid,
+                    student_no,
+                    limit = 100,
+                    force = false,
+                    channel = 'both' // 'both' | 'email' | 'sms'
+                } = payload;
+
                 const headers = {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -977,7 +1552,11 @@ const server = http.createServer((req, res) => {
                     // Fetch pending grantees
                     let url = `${SUPABASE_REST_URL}/student_grantees?select=*&limit=${limit}`;
                     if (!force) {
-                        url += '&email_sent_at=is.null';
+                        if (channel === 'sms') {
+                            url += '&sms_sent_at=is.null';
+                        } else {
+                            url += '&email_sent_at=is.null';
+                        }
                     }
                     const fetchRes = await fetch(url, { headers });
                     const candidates = await fetchRes.json();
@@ -986,32 +1565,54 @@ const server = http.createServer((req, res) => {
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: true,
-                            message: 'All eligible grantees have already received email notifications.',
-                            total: 0, sent: 0, skipped: 0, failed: 0
+                            message: 'All eligible grantees have already received notifications.',
+                            total: 0, sent: 0, skipped: 0, failed: 0,
+                            emailSent: 0, smsSent: 0
                         }));
                         return;
                     }
 
                     let sent = 0, skipped = 0, failed = 0;
+                    let emailSent = 0, smsSent = 0;
                     const details = [];
 
                     for (const grantee of candidates) {
-                        const r = await sendSingleGranteeEmail(grantee, { force });
-                        details.push(r);
-                        if (r.success && !r.skipped) sent++;
-                        else if (r.skipped) skipped++;
+                        let emailRes = null;
+                        let smsRes = null;
+
+                        if (channel === 'both' || channel === 'email') {
+                            emailRes = await sendSingleGranteeEmail(grantee, { force });
+                            if (emailRes.success && !emailRes.skipped) emailSent++;
+                        }
+
+                        if (channel === 'both' || channel === 'sms') {
+                            smsRes = await sendSingleGranteeSms(grantee, { force });
+                            if (smsRes.success && !smsRes.skipped) smsSent++;
+                        }
+
+                        const overallSuccess = (emailRes ? emailRes.success : true) && (smsRes ? smsRes.success : true);
+                        const isSkipped = (emailRes ? emailRes.skipped : false) && (smsRes ? smsRes.skipped : false);
+
+                        if (overallSuccess && !isSkipped) sent++;
+                        else if (isSkipped) skipped++;
                         else failed++;
 
-                        // Delay 200ms between sends to avoid spam filtering
+                        details.push({
+                            student_id: grantee.uid || grantee.id || grantee.student_no,
+                            email: emailRes,
+                            sms: smsRes
+                        });
+
+                        // Delay 200ms between sends to avoid spam filtering / rate limits
                         await new Promise(resolve => setTimeout(resolve, 200));
                     }
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: true,
-                        message: `Processed ${candidates.length} grantees. Sent: ${sent}, Skipped: ${skipped}, Failed: ${failed}`,
+                        message: `Processed ${candidates.length} grantees. Total: ${sent}, Emails sent: ${emailSent}, SMS sent: ${smsSent}, Skipped: ${skipped}, Failed: ${failed}`,
                         total: candidates.length,
-                        sent, skipped, failed,
+                        sent, emailSent, smsSent, skipped, failed,
                         details
                     }));
                     return;
@@ -1022,10 +1623,15 @@ const server = http.createServer((req, res) => {
                 let granteeRecord = null;
 
                 if (targetId) {
-                    const fetchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(id.eq.${encodeURIComponent(targetId)},uid.eq.${encodeURIComponent(targetId)},student_no.eq.${encodeURIComponent(targetId)},studentId.eq.${encodeURIComponent(targetId)})&limit=1`, { headers });
-                    const list = await fetchRes.json();
-                    if (Array.isArray(list) && list.length > 0) {
-                        granteeRecord = list[0];
+                    const filter = buildStudentQueryFilter(targetId);
+                    if (filter) {
+                        const fetchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${filter}&limit=1`, { headers });
+                        if (fetchRes.ok) {
+                            const list = await fetchRes.json();
+                            if (Array.isArray(list) && list.length > 0) {
+                                granteeRecord = list[0];
+                            }
+                        }
                     }
                 }
 
@@ -1038,14 +1644,16 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                // If still not in database but details were passed, construct record to send email
-                if (!granteeRecord && payload.email) {
+                // If still not in database but details were passed, construct record
+                if (!granteeRecord && (payload.email || payload.phone || payload.mobile_number)) {
                     granteeRecord = {
                         id: targetId,
                         uid: targetId,
                         student_no: payload.student_no || payload.studentNo || 'N/A',
                         full_name: payload.full_name || payload.fullName || 'Student Grantee',
                         email_address: payload.email,
+                        mobile_number: payload.phone || payload.mobile_number || payload.contactNumber,
+                        contactNumber: payload.phone || payload.mobile_number || payload.contactNumber,
                         course: payload.course || payload.program_name || 'General Course',
                         scholarship_name: payload.scholarship_name || payload.scholarshipName || 'CHED TES',
                         sa_number: payload.sa_number || payload.saNumber || 'N/A'
@@ -1059,22 +1667,287 @@ const server = http.createServer((req, res) => {
                     return;
                 }
 
-                // For single student action button clicks, always force send
                 const shouldForce = force !== false;
-                console.log(`[API send-grantee-notification] Triggering single send to: ${granteeRecord.email_address || granteeRecord.email} (force=${shouldForce})`);
-                const r = await sendSingleGranteeEmail(granteeRecord, { force: shouldForce });
-                res.writeHead(r.success ? 200 : 400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(r));
-                return;
+                let emailResult = null;
+                let smsResult = null;
 
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: 'Missing student_id or mode parameter' }));
+                if (channel === 'both' || channel === 'email') {
+                    console.log(`[API send-grantee-notification] Triggering email send to: ${granteeRecord.email_address || granteeRecord.email} (force=${shouldForce})`);
+                    emailResult = await sendSingleGranteeEmail(granteeRecord, { force: shouldForce });
+                }
+
+                if (channel === 'both' || channel === 'sms') {
+                    console.log(`[API send-grantee-notification] Triggering SMS send to: ${granteeRecord.mobile_number || granteeRecord.contactNumber} (force=${shouldForce})`);
+                    smsResult = await sendSingleGranteeSms(granteeRecord, { force: shouldForce });
+                }
+
+                const overallSuccess = (emailResult ? emailResult.success : true) && (smsResult ? smsResult.success : true);
+
+                res.writeHead(overallSuccess ? 200 : 400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: overallSuccess,
+                    student_id: targetId,
+                    email: emailResult,
+                    sms: smsResult,
+                    message: `Notification dispatched: ${emailResult?.success ? 'Email sent. ' : ''}${smsResult?.success ? 'SMS sent.' : ''}`.trim()
+                }));
+                return;
             } catch (err) {
                 console.error('[API send-grantee-notification error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: err.message }));
             }
         });
+        return;
+    }
+
+    // ── API: Check Semaphore SMS Account Status & Balance ─────────────────
+    if (urlPath === '/api/sms/account' && req.method === 'GET') {
+        try {
+            const info = await getSemaphoreAccountInfo();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(info));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ configured: false, error: err.message }));
+        }
+        return;
+    }
+
+    // ── API: Send Single Student Event / Custom SMS ──────────────────────
+    if (urlPath === '/api/sms/send' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const studentId = payload.student_id || payload.studentId || payload.uid || payload.student_no || payload.studentNo;
+                const phone = payload.phone || payload.mobile_number || payload.contactNumber || payload.number;
+                const eventType = payload.event_type || payload.eventType || 'custom';
+                const title = payload.title || payload.notificationTitle || '';
+                const message = payload.message || payload.customMessage || payload.custom_message || '';
+                const feedback = payload.feedback || '';
+                const force = Boolean(payload.force);
+
+                const result = await sendStudentSmsNotification({
+                    studentId: studentId,
+                    uid: payload.uid || studentId,
+                    studentNo: payload.student_no || payload.studentNo || studentId,
+                    phone,
+                    eventType,
+                    title,
+                    customMessage: message,
+                    feedback,
+                    force
+                });
+
+                res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                console.error('[API sms/send error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Batch SMS Dispatch to Student List ──────────────────────────
+    if (urlPath === '/api/sms/batch' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const { student_ids, event_type = 'grantee_confirmed', message, force = false, limit = 50 } = payload;
+                const headers = {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                };
+
+                let studentsToNotify = [];
+                if (Array.isArray(student_ids) && student_ids.length > 0) {
+                    const idsFilter = student_ids.map(id => `student_no.eq.${encodeURIComponent(id)},uid.eq.${encodeURIComponent(id)}`).join(',');
+                    const fetchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(${idsFilter})`, { headers });
+                    if (fetchRes.ok) studentsToNotify = await fetchRes.json();
+                } else {
+                    let url = `${SUPABASE_REST_URL}/student_grantees?select=*&limit=${limit}`;
+                    if (!force) url += '&sms_sent_at=is.null';
+                    const fetchRes = await fetch(url, { headers });
+                    if (fetchRes.ok) studentsToNotify = await fetchRes.json();
+                }
+
+                if (!Array.isArray(studentsToNotify) || studentsToNotify.length === 0) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        total: 0, sent: 0, skipped: 0, failed: 0,
+                        message: 'No eligible students found for SMS dispatch.'
+                    }));
+                    return;
+                }
+
+                let sent = 0, skipped = 0, failed = 0;
+                const results = [];
+
+                for (const student of studentsToNotify) {
+                    const r = await sendStudentSmsNotification({
+                        studentId: student.student_no,
+                        uid: student.uid,
+                        phone: student.mobile_number || student.contactNumber,
+                        eventType: event_type,
+                        customMessage: message,
+                        force
+                    });
+                    results.push(r);
+                    if (r.success && !r.skipped) sent++;
+                    else if (r.skipped) skipped++;
+                    else failed++;
+
+                    await new Promise(res => setTimeout(res, 200));
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    total: studentsToNotify.length,
+                    sent, skipped, failed,
+                    details: results
+                }));
+            } catch (err) {
+                console.error('[API sms/batch error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Broadcast SMS to All Registered Students ─────────────────────
+    if (urlPath === '/api/sms/broadcast' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const { title, message } = payload;
+                if (!message) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Message content is required.' }));
+                    return;
+                }
+
+                const headers = {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                };
+
+                const stuRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=student_no,uid,mobile_number,contactNumber`, { headers });
+                if (!stuRes.ok) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Could not fetch student records.' }));
+                    return;
+                }
+
+                const students = await stuRes.json();
+                const phoneMap = new Map();
+                for (const s of (students || [])) {
+                    const p = normalizePhilippineMobile(s.mobile_number || s.contactNumber);
+                    if (p && !phoneMap.has(p)) phoneMap.set(p, s);
+                }
+
+                const uniquePhones = Array.from(phoneMap.keys());
+                if (uniquePhones.length === 0) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, count: 0, message: 'No registered student mobile numbers found.' }));
+                    return;
+                }
+
+                const cleanT = (title || 'ScholarDoc Alert').trim().slice(0, 35);
+                const smsText = `[ScholarDoc] ${cleanT}: ${message.trim().slice(0, 110)}`;
+
+                let sentCount = 0;
+                let failCount = 0;
+
+                for (let i = 0; i < uniquePhones.length; i += 50) {
+                    const chunk = uniquePhones.slice(i, i + 50);
+                    const smsRes = await sendSemaphoreSms({
+                        numbers: chunk,
+                        message: smsText
+                    });
+
+                    if (smsRes.success) {
+                        sentCount += chunk.length;
+                        for (const ph of chunk) {
+                            const st = phoneMap.get(ph);
+                            await recordSmsLog({
+                                studentId: st?.student_no,
+                                granteeUid: st?.uid,
+                                recipientPhone: ph,
+                                message: smsText,
+                                eventType: 'broadcast',
+                                status: 'sent',
+                                messageId: smsRes.message_id
+                            });
+                        }
+                    } else {
+                        failCount += chunk.length;
+                        for (const ph of chunk) {
+                            const st = phoneMap.get(ph);
+                            await recordSmsLog({
+                                studentId: st?.student_no,
+                                granteeUid: st?.uid,
+                                recipientPhone: ph,
+                                message: smsText,
+                                eventType: 'broadcast',
+                                status: 'failed',
+                                errorMessage: smsRes.error
+                            });
+                        }
+                    }
+                    if (i + 50 < uniquePhones.length) await new Promise(r => setTimeout(r, 200));
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    totalNumbers: uniquePhones.length,
+                    sentCount,
+                    failCount,
+                    message: `SMS broadcast completed. Delivered: ${sentCount}, Failed: ${failCount}`
+                }));
+            } catch (err) {
+                console.error('[API sms/broadcast error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Retrieve Recent SMS Logs ────────────────────────────────────
+    if (urlPath === '/api/sms/logs' && req.method === 'GET') {
+        try {
+            const headers = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            };
+            const logsRes = await fetch(`${SUPABASE_REST_URL}/sms_logs?select=*&order=sent_at.desc&limit=50`, { headers });
+            if (logsRes.ok) {
+                const logs = await logsRes.json();
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, logs: logs || [] }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, logs: [] }));
+            }
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+        }
         return;
     }
 

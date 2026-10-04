@@ -1,6 +1,7 @@
 // js/views/student_records.js
 import { StudentSyncService } from '../services/student_sync_service.js';
 import { EmailNotificationService } from '../services/email_notification_service.js';
+import { SmsNotificationService } from '../services/sms_notification_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -17,6 +18,8 @@ const pageInfo = document.getElementById('pagination-info');
 const addStudentBtn = document.getElementById('add-student-btn');
 const notifyAllGranteesBtn = document.getElementById('notify-all-grantees-btn');
 const pendingEmailBadge = document.getElementById('pending-email-badge');
+const notifyAllSmsBtn = document.getElementById('notify-all-sms-btn');
+const pendingSmsBadge = document.getElementById('pending-sms-badge');
 const filterAy = document.getElementById('filter-ay');
 const ayDisplay = document.getElementById('ay-display');
 const refreshStudentsBtn = document.getElementById('refresh-students-btn');
@@ -56,10 +59,26 @@ async function loadStudents() {
                 badgeEl.style.display = 'none';
             }
         }
+
+        // Update pending SMS notifications badge
+        const smsBadgeEl = document.getElementById('pending-sms-badge') || pendingSmsBadge;
+        if (smsBadgeEl) {
+            const pendingSmsCount = allStudents.filter(s => {
+                const phone = s.mobile_number || s.contactNumber || s.phone_number;
+                const hasSms = Boolean(s.sms_sent_at || s.smsSentAt || s.sms_status === 'sent');
+                return !hasSms && Boolean(phone);
+            }).length;
+            if (pendingSmsCount > 0) {
+                smsBadgeEl.textContent = pendingSmsCount;
+                smsBadgeEl.style.display = 'inline-flex';
+            } else {
+                smsBadgeEl.style.display = 'none';
+            }
+        }
     } catch (e) {
         console.error('Error loading students:', e);
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
         }
     } finally {
         if (refreshIcon) {
@@ -181,7 +200,7 @@ function getStatusBadge(status) {
 
 function renderTable() {
     if (filteredStudents.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        tableBody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary);">
             <i class="icon-users" style="font-size: 32px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>
             No students found matching your filters.
         </td></tr>`;
@@ -209,7 +228,9 @@ function renderTable() {
 
         const isApproved = (s.status || '').toLowerCase() === 'approved' || (s.status || '').toLowerCase() === 'verified';
         const isNotified = Boolean(s.email_sent_at || s.emailSentAt);
+        const isSmsSent = Boolean(s.sms_sent_at || s.smsSentAt || s.sms_status === 'sent');
 
+        const rowId = s.uid || s.id || s.student_no || s.studentId;
         return `
             <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
                 <td style="padding: 12px 20px;">
@@ -224,20 +245,24 @@ function renderTable() {
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
                 <td style="padding: 12px;">${EmailNotificationService.renderStatusBadge(s)}</td>
+                <td style="padding: 12px;">${SmsNotificationService.renderStatusBadge(s)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${birthdate}</td>
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; gap: 8px;">
-                        <button class="view-btn" data-id="${s.uid}" title="View Details" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="view-btn" data-id="${rowId}" title="View Details" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #3B82F6; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-eye" style="font-size: 14px;"></i>
                         </button>
-                        <button class="email-btn" data-id="${s.uid}" title="${isNotified ? 'Resend Grantee Email Notification' : 'Send Grantee Email Notification'}" style="background: ${isNotified ? 'rgba(21, 128, 61, 0.1)' : 'rgba(15, 50, 96, 0.08)'}; border: 1px solid ${isNotified ? 'rgba(21, 128, 61, 0.25)' : 'rgba(15, 50, 96, 0.2)'}; color: ${isNotified ? '#15803d' : '#0F3260'}; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="email-btn" data-id="${rowId}" title="${isNotified ? 'Resend Grantee Email Notification' : 'Send Grantee Email Notification'}" style="background: ${isNotified ? 'rgba(21, 128, 61, 0.1)' : 'rgba(15, 50, 96, 0.08)'}; border: 1px solid ${isNotified ? 'rgba(21, 128, 61, 0.25)' : 'rgba(15, 50, 96, 0.2)'}; color: ${isNotified ? '#15803d' : '#0F3260'}; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-mail" style="font-size: 14px;"></i>
                         </button>
-                        <button class="approve-btn" data-id="${s.uid}" title="${isApproved ? 'Approved Scholar' : 'Approve Student'}" style="background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)'}; border: 1px solid rgba(34, 197, 94, 0.3); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="sms-btn" data-id="${rowId}" title="${isSmsSent ? 'Resend Grantee SMS Notification' : 'Send Grantee SMS Notification'}" style="background: ${isSmsSent ? 'rgba(5, 150, 105, 0.1)' : 'rgba(5, 150, 105, 0.05)'}; border: 1px solid ${isSmsSent ? 'rgba(5, 150, 105, 0.3)' : 'rgba(5, 150, 105, 0.2)'}; color: #059669; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                            <i class="icon-message-square" style="font-size: 14px;"></i>
+                        </button>
+                        <button class="approve-btn" data-id="${rowId}" title="${isApproved ? 'Approved Scholar' : 'Approve Student'}" style="background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)'}; border: 1px solid rgba(34, 197, 94, 0.3); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="${isApproved ? 'icon-check-circle' : 'icon-check-square'}" style="font-size: 14px;"></i>
                         </button>
-                        <button class="reject-btn" data-id="${s.uid}" title="Reject Student" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
+                        <button class="reject-btn" data-id="${rowId}" title="Reject Student" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-x-square" style="font-size: 14px;"></i>
                         </button>
                     </div>
@@ -252,7 +277,7 @@ function renderTable() {
     document.querySelectorAll('.view-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const uid = e.currentTarget.getAttribute('data-id');
-            const student = allStudents.find(st => st.uid === uid);
+            const student = allStudents.find(st => String(st.uid) === String(uid) || String(st.id) === String(uid) || String(st.student_no) === String(uid) || String(st.studentId) === String(uid));
             if (student) showStudentModal(student);
         });
     });
@@ -262,6 +287,14 @@ function renderTable() {
         btn.addEventListener('click', (e) => {
             const uid = e.currentTarget.getAttribute('data-id');
             window.sendGranteeEmail(uid);
+        });
+    });
+
+    // Attach SMS listeners
+    document.querySelectorAll('.sms-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const uid = e.currentTarget.getAttribute('data-id');
+            window.sendGranteeSms(uid);
         });
     });
 
@@ -666,13 +699,17 @@ function showStudentModal(student) {
                             <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); word-break: break-all;">${email}</span>
                         </div>
                         <div>
-                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Grantee Notification</span>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Email Notice</span>
                             ${EmailNotificationService.renderStatusBadge(student)}
                         </div>
                     </div>
                     <div>
                         <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Mobile / Contact</span>
                         <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${mobile}</span>
+                    </div>
+                    <div>
+                        <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">SMS Notice</span>
+                        ${SmsNotificationService.renderStatusBadge(student)}
                     </div>
                     <div>
                         <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Gender</span>
@@ -816,19 +853,23 @@ function showStudentModal(student) {
         `;
     }
 
+    const targetModalUid = student.uid || student.id || student.student_no || student.studentId;
     actionsDiv.innerHTML = `
         ${noticeHtml}
         <div style="display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px;">
-            <button type="button" onclick="sendGranteeEmail('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: #0F3260; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.2); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(15, 50, 96, 0.14)'" onmouseout="this.style.background='rgba(15, 50, 96, 0.08)'">
+            <button type="button" onclick="sendGranteeEmail('${targetModalUid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: #0F3260; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.2); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(15, 50, 96, 0.14)'" onmouseout="this.style.background='rgba(15, 50, 96, 0.08)'">
                 <i class="icon-mail" style="font-size: 15px;"></i> ${student.email_sent_at || student.emailSentAt ? 'Resend Grantee Email' : 'Send Grantee Email'}
+            </button>
+            <button type="button" onclick="sendGranteeSms('${targetModalUid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: #059669; background: rgba(5, 150, 105, 0.08); border: 1px solid rgba(5, 150, 105, 0.25); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(5, 150, 105, 0.14)'" onmouseout="this.style.background='rgba(5, 150, 105, 0.08)'">
+                <i class="icon-message-square" style="font-size: 15px;"></i> ${student.sms_sent_at || student.smsSentAt || student.sms_status === 'sent' ? 'Resend Grantee SMS' : 'Send Grantee SMS'}
             </button>
             <button type="button" class="btn btn-outline" onclick="hideModal()" style="padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer;">
                 Close
             </button>
-            <button type="button" onclick="rejectStudent('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #EF4444, #DC2626); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(239, 68, 68, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.2)'">
+            <button type="button" onclick="rejectStudent('${targetModalUid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #EF4444, #DC2626); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(239, 68, 68, 0.3)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.2)'">
                 <i class="icon-x-circle" style="font-size: 15px;"></i> Reject Application
             </button>
-            <button type="button" onclick="approveStudent('${student.uid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 24px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #10B981, #059669); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(16, 185, 129, 0.35)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.25)'">
+            <button type="button" onclick="approveStudent('${targetModalUid}')" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 24px; border-radius: 10px; font-weight: 600; font-size: 13.5px; color: white; background: linear-gradient(135deg, #10B981, #059669); border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(16, 185, 129, 0.35)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.25)'">
                 <i class="icon-check-circle" style="font-size: 15px;"></i> ${isApproved ? 'Approved Scholar' : 'Approve Student'}
             </button>
         </div>
@@ -985,9 +1026,10 @@ window.approveStudent = async function (uid) {
         hideModal();
         loadStudents();
 
-        // Optional prompt to dispatch grantee email notification immediately upon approval
-        if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification email to ${student?.fullName || 'this student'} now?`)) {
+        // Prompt to dispatch grantee email & SMS notifications immediately upon approval
+        if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification via Email & SMS to ${student?.fullName || 'this student'} now?`)) {
             window.sendGranteeEmail(uid, true);
+            window.sendGranteeSms(uid, true);
         }
     } catch (err) {
         console.error('Error approving student:', err);
@@ -1045,6 +1087,64 @@ window.sendGranteeEmail = async function (uid, force = false) {
     }
 };
 
+window.sendGranteeSms = async function (uid, force = false) {
+    const student = allStudents.find(s => 
+        (s.uid && String(s.uid) === String(uid)) || 
+        (s.id && String(s.id) === String(uid)) || 
+        (s.student_no && String(s.student_no) === String(uid)) || 
+        (s.studentId && String(s.studentId) === String(uid))
+    );
+    if (!student) {
+        alert('Student record not found.');
+        return;
+    }
+
+    const rawPhone = [student.mobile_number, student.contactNumber, student.phone_number]
+        .find(p => p && String(p).trim() !== '' && String(p).trim() !== 'N/A' && String(p).trim() !== 'undefined');
+
+    if (!rawPhone) {
+        alert(`Cannot send SMS: No mobile phone number registered for ${student.fullName || student.full_name || 'this student'}.`);
+        return;
+    }
+
+    const alreadySent = Boolean(student.sms_sent_at || student.smsSentAt || student.sms_status === 'sent');
+    if (alreadySent && !force) {
+        const dateStr = (student.sms_sent_at || student.smsSentAt) ? new Date(student.sms_sent_at || student.smsSentAt).toLocaleString() : 'earlier';
+        if (!confirm(`Notice: An SMS notice was already sent to ${student.fullName || student.full_name} (${rawPhone}) on ${dateStr}.\n\nWould you like to resend the SMS notification?`)) {
+            return;
+        }
+        force = true;
+    } else if (!force) {
+        if (!confirm(`Send official scholarship grantee SMS notification via Semaphore to:\n\nStudent: ${student.fullName || student.full_name}\nMobile: ${rawPhone}\nScholarship: ${student.scholarship_name || student.scholarshipName || 'CHED TES'}\n\nProceed?`)) {
+            return;
+        }
+    }
+
+    try {
+        const targetId = student.uid || student.id || student.student_no || student.studentId;
+        const res = await SmsNotificationService.notifyGranteeSms(targetId, {
+            force,
+            phone: rawPhone,
+            fullName: student.fullName || student.full_name,
+            studentNo: student.student_no || student.studentId,
+            course: student.program_name || student.course,
+            scholarshipName: student.scholarship_name || student.scholarshipName
+        });
+
+        if (res.skipped) {
+            alert(`SMS notification skipped: ${res.reason || 'Already sent'}`);
+        } else if (res.success) {
+            alert(`Scholarship SMS notification successfully sent to ${res.phone || rawPhone}!`);
+            loadStudents();
+        } else {
+            alert(`Failed to send SMS: ${res.error || res.message || 'Unknown error'}`);
+        }
+    } catch (err) {
+        console.error('Error sending SMS notification:', err);
+        alert(`Failed to send SMS: ${err.message || 'Network error'}`);
+    }
+};
+
 window.rejectStudent = async function (uid) {
     if (!confirm('Are you sure you want to reject this student?')) return;
     try {
@@ -1079,6 +1179,17 @@ window.rejectStudent = async function (uid) {
             isRead: false,
             timestamp: new Date().toISOString()
         }]);
+
+        // Trigger SMS notification if student has registered mobile number
+        const phone = student?.mobile_number || student?.contactNumber || student?.phone_number;
+        if (phone) {
+            SmsNotificationService.sendStudentSms(uid, {
+                eventType: 'application_rejected',
+                title: 'Application Rejected',
+                message: 'We regret to inform you that your scholarship application has been rejected.',
+                phone
+            }).catch(e => console.warn('Could not send rejection SMS:', e));
+        }
 
         alert('Student rejected.');
         hideModal();
@@ -1115,6 +1226,41 @@ if (notifyAllGranteesBtn) {
         } finally {
             notifyAllGranteesBtn.disabled = false;
             notifyAllGranteesBtn.innerHTML = originalText;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+}
+
+if (notifyAllSmsBtn) {
+    notifyAllSmsBtn.addEventListener('click', async () => {
+        const unnotified = allStudents.filter(s => {
+            const hasSms = Boolean(s.sms_sent_at || s.smsSentAt || s.sms_status === 'sent');
+            const phone = s.mobile_number || s.contactNumber || s.phone_number;
+            return !hasSms && Boolean(phone);
+        });
+
+        if (unnotified.length === 0) {
+            alert('All registered grantees with mobile numbers have already been sent SMS notifications.');
+            return;
+        }
+
+        const confirmMsg = `Send official scholarship grantee SMS notifications via Semaphore to ${unnotified.length} unnotified grantees with registered mobile numbers?\n\nThis will send personalized SMS messages directly to students' mobile phones.`;
+        if (!confirm(confirmMsg)) return;
+
+        const originalText = notifyAllSmsBtn.innerHTML;
+        notifyAllSmsBtn.disabled = true;
+        notifyAllSmsBtn.innerHTML = `<i class="icon-loader" style="font-size: 16px; animation: spin 1s linear infinite;"></i> Sending SMS...`;
+
+        try {
+            const res = await SmsNotificationService.notifyAllPendingGranteesSms({ limit: 100 });
+            alert(res.message || `Processed SMS batch. Sent: ${res.sent}, Failed: ${res.failed}`);
+            loadStudents();
+        } catch (err) {
+            console.error('Batch SMS error:', err);
+            alert(`Error triggering SMS batch: ${err.message}`);
+        } finally {
+            notifyAllSmsBtn.disabled = false;
+            notifyAllSmsBtn.innerHTML = originalText;
             if (window.lucide) window.lucide.createIcons();
         }
     });

@@ -892,6 +892,10 @@ class AuthService {
 
     final fam = (data['familyDetails'] is Map) ? (data['familyDetails'] as Map) : {};
 
+    // Normalize section
+    final sectionVal = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
+    data['section'] = sectionVal;
+
     // Normalize Year became a scholar
     final scholarYear =
         data['scholarYearLevel'] ??
@@ -916,6 +920,9 @@ class AuthService {
     // Merge user metadata if available
     final userMeta = _supabase.auth.currentUser?.userMetadata;
     if (userMeta != null) {
+      if ((data['section'] == null || data['section'].toString().isEmpty) && userMeta['section'] != null) {
+        data['section'] = userMeta['section'].toString();
+      }
       if ((data['scholarYearLevel'] == null ||
               data['scholarYearLevel'].toString().isEmpty) &&
           userMeta['yearBecameScholar'] != null) {
@@ -1242,7 +1249,20 @@ class AuthService {
         famDetails.remove('payouts_received');
       }
     }
+
+    if (updates.containsKey('section')) {
+      final secVal = updates['section']?.toString().trim();
+      if (secVal != null && secVal.isNotEmpty) {
+        famDetails['section'] = secVal;
+      } else {
+        famDetails.remove('section');
+      }
+    }
+
     dbPayload['familyDetails'] = famDetails;
+
+    // Remove top-level 'section' key from dbPayload so PostgREST update on student_grantees won't abort
+    dbPayload.remove('section');
 
     // Always persist to Supabase Auth user metadata as an instant fail-safe
     try {
@@ -1251,86 +1271,92 @@ class AuthService {
       debugPrint('AuthService: Failed to update user metadata: $e');
     }
 
-    // Try updating students table; if any column is missing in Supabase, strip and retry
+    // Determine student identifiers to update all companion tables and records
+    String? studentNo;
+    String? studentEmail;
+    try {
+      final currentRes = await _supabase
+          .from('student_grantees')
+          .select('student_no, studentId, email_address, email')
+          .eq('uid', uid)
+          .maybeSingle();
+      if (currentRes != null) {
+        studentNo = (currentRes['student_no'] ?? currentRes['studentId'])?.toString().trim();
+        studentEmail = (currentRes['email_address'] ?? currentRes['email'])?.toString().trim();
+      }
+    } catch (_) {}
+
+    // 1. Update student_grantees by UID
     try {
       await _supabase.from('student_grantees').update(dbPayload).eq('uid', uid);
     } catch (e) {
-      debugPrint('AuthService: Retrying table update with safe fields: $e');
+      debugPrint('AuthService: Retrying student_grantees update with safe fields: $e');
       final safePayload = <String, dynamic>{};
       const safeFields = [
-        'full_name',
-        'fullName',
-        'mobile_number',
-        'contactNumber',
-        'program_name',
-        'course',
-        'year_level',
-        'year',
-        'section',
-        'birthdate',
-        'scholarship_name',
-        'status',
-        'saNumber',
-        'sa_number',
-        'submissionPdfUrl',
-        'submission_pdf_url',
-        'submissionPdfName',
-        'submission_pdf_name',
-        'documents',
-        'atmCardUrl',
-        'atm_card_url',
-        'atmCardFileName',
-        'depositSlipUrl',
-        'deposit_slip_url',
-        'depositSlipFileName',
-        'deposit_slip_file_name',
-        'atmProofType',
-        'atm_proof_type',
-        'idFrontUrl',
-        'id_front_url',
-        'idBackUrl',
-        'id_back_url',
-        'pdfVerified',
-        'academicYear',
-        'academic_year',
-        'semester',
-        'stickerValidated',
-        'sticker_validated',
-        'submittedAt',
-        'submitted_at',
-        'requiresResubmission',
-        'adminRemarks',
-        'admin_remarks',
-        'familyDetails',
+        'full_name', 'fullName', 'mobile_number', 'contactNumber', 'program_name', 'course',
+        'year_level', 'year', 'section', 'birthdate', 'gender', 'scholarship_name', 'status',
+        'saNumber', 'sa_number', 'submissionPdfUrl', 'submission_pdf_url', 'familyDetails'
       ];
       for (final key in safeFields) {
         if (dbPayload.containsKey(key)) safePayload[key] = dbPayload[key];
       }
       try {
-        await _supabase
-            .from('student_grantees')
-            .update(safePayload)
-            .eq('uid', uid);
-      } catch (inner) {
-        debugPrint(
-          'AuthService: Safe batch update failed: $inner. Retrying column-by-column...',
-        );
-        for (final entry in safePayload.entries) {
-          try {
-            await _supabase
-                .from('student_grantees')
-                .update({entry.key: entry.value})
-                .eq('uid', uid);
-          } catch (_) {}
-        }
-      }
+        await _supabase.from('student_grantees').update(safePayload).eq('uid', uid);
+      } catch (_) {}
     }
 
-    // Log Activity
+    // 2. Synchronize by student_no across student_grantees and school_students
+    if (studentNo != null && studentNo.isNotEmpty && studentNo != 'N/A') {
+      try {
+        await _supabase.from('student_grantees').update(dbPayload).or('student_no.eq.$studentNo,studentId.eq.$studentNo');
+      } catch (_) {}
+
+      try {
+        final schoolPayload = <String, dynamic>{};
+        if (dbPayload.containsKey('full_name')) schoolPayload['full_name'] = dbPayload['full_name'];
+        if (dbPayload.containsKey('mobile_number')) schoolPayload['mobile_number'] = dbPayload['mobile_number'];
+        if (dbPayload.containsKey('date_of_birth')) schoolPayload['date_of_birth'] = dbPayload['date_of_birth'];
+        if (dbPayload.containsKey('gender')) schoolPayload['gender'] = dbPayload['gender'];
+        if (dbPayload.containsKey('program_name')) schoolPayload['program_name'] = dbPayload['program_name'];
+        if (dbPayload.containsKey('year_level')) schoolPayload['year_level'] = dbPayload['year_level'];
+        if (schoolPayload.isNotEmpty) {
+          await _supabase.from('school_students').update(schoolPayload).eq('student_no', studentNo);
+        }
+      } catch (_) {}
+    }
+
+    // 3. Synchronize by email across student_grantees
+    if (studentEmail != null && studentEmail.isNotEmpty && !studentEmail.endsWith('@scholardoc.com')) {
+      try {
+        await _supabase.from('student_grantees').update(dbPayload).or('email_address.eq.$studentEmail,email.eq.$studentEmail');
+      } catch (_) {}
+    }
+
+    final studentDisplayName = (dbPayload['fullName'] ?? dbPayload['full_name'] ?? 'Student').toString();
+
+    // 5. Notify Super Admin system directly via real-time notification
+    try {
+      await _supabase.from('notifications').insert([{
+        'studentId': 'superadmin',
+        'title': 'Student Profile Updated',
+        'message': '$studentDisplayName updated their personal information.',
+        'type': 'info',
+        'isRead': false,
+        'timestamp': DateTime.now().toIso8601String()
+      }]);
+    } catch (_) {}
+
+    // 6. Automatically clear any existing missing requirements notice for this student
+    try {
+      await _notificationService.clearMissingRequirementsNotifications(uid);
+    } catch (_) {}
+
+    // 6. Log Activity in System Audit Log
     await _auditService.logActivity(
-      action: 'Updated profile information',
-      userName: updates['fullName'] ?? 'Student',
+      action: 'Updated personal information',
+      userName: studentDisplayName,
       role: 'Student',
+      studentId: studentNo,
     );
   }
 

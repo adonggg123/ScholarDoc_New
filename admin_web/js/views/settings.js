@@ -280,6 +280,67 @@ async function handleSavePassword() {
     }
 }
 
+async function loadNotificationSettings() {
+    try {
+        const emailCb = document.getElementById('set-email');
+        const smsCb = document.getElementById('set-sms');
+
+        const savedEmail = localStorage.getItem('scholardoc_email_notifs');
+        const savedSms = localStorage.getItem('scholardoc_sms_alerts');
+
+        if (emailCb) emailCb.checked = savedEmail !== null ? savedEmail === 'true' : true;
+        if (smsCb) smsCb.checked = savedSms !== null ? savedSms === 'true' : false;
+
+        const { data } = await supabase.from('system_settings').select('*').eq('key', 'notification_preferences').maybeSingle();
+        if (data && data.value) {
+            if (emailCb && data.value.email_notifications !== undefined) {
+                emailCb.checked = data.value.email_notifications;
+                localStorage.setItem('scholardoc_email_notifs', data.value.email_notifications);
+            }
+            if (smsCb && data.value.sms_alerts !== undefined) {
+                smsCb.checked = data.value.sms_alerts;
+                localStorage.setItem('scholardoc_sms_alerts', data.value.sms_alerts);
+            }
+        }
+    } catch (err) {
+        console.warn('Could not load notification settings from DB:', err);
+    }
+}
+
+async function saveNotificationSettings(key, value) {
+    try {
+        localStorage.setItem(key === 'email' ? 'scholardoc_email_notifs' : 'scholardoc_sms_alerts', value);
+
+        const emailVal = document.getElementById('set-email')?.checked ?? true;
+        const smsVal = document.getElementById('set-sms')?.checked ?? false;
+
+        try {
+            await supabase.from('system_settings').upsert({
+                key: 'notification_preferences',
+                value: {
+                    email_notifications: emailVal,
+                    sms_alerts: smsVal,
+                    updated_at: new Date().toISOString()
+                }
+            });
+        } catch (_) {}
+
+        try {
+            await supabase.from('audit_logs').insert([{
+                action: `Toggled ${key === 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} to ${value ? 'Enabled' : 'Disabled'}`,
+                userName: window.currentAdmin?.username || window.currentAdmin?.displayRole || 'Admin',
+                role: window.currentAdmin?.displayRole || 'Admin',
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (_) {}
+
+        showToast(`${key === 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} ${value ? 'enabled' : 'disabled'}!`, 'success');
+    } catch (err) {
+        console.error('Error saving notification setting:', err);
+        showToast(`${key === 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} ${value ? 'enabled' : 'disabled'}`, 'success');
+    }
+}
+
 function setupListeners() {
     // Tab switching for Super Admin / Admin accounts
     const tabSuper = document.getElementById('tab-account-superadmin');
@@ -300,6 +361,21 @@ function setupListeners() {
             tabSuper.classList.add('active');
             if (tabAdmin) tabAdmin.classList.remove('active');
             updateActiveAccountView();
+        });
+    }
+
+    // Notification settings checkboxes
+    const setEmailCb = document.getElementById('set-email');
+    if (setEmailCb) {
+        setEmailCb.addEventListener('change', (e) => {
+            saveNotificationSettings('email', e.target.checked);
+        });
+    }
+
+    const setSmsCb = document.getElementById('set-sms');
+    if (setSmsCb) {
+        setSmsCb.addEventListener('change', (e) => {
+            saveNotificationSettings('sms', e.target.checked);
         });
     }
 
@@ -342,10 +418,144 @@ function setupListeners() {
             }
         });
     }
+
+    // Semaphore Test SMS button listener
+    const btnTestSms = document.getElementById('sms-test-btn');
+    if (btnTestSms) {
+        btnTestSms.addEventListener('click', handleSendTestSms);
+    }
+}
+
+// ── Semaphore SMS Gateway Diagnostics ──────────────────────────────
+async function loadSemaphoreAccountInfo() {
+    const statusText = document.getElementById('sms-status-text');
+    const statusPill = document.getElementById('sms-live-status-pill');
+    const creditsDisplay = document.getElementById('sms-credits-display');
+    const senderDisplay = document.getElementById('sms-sender-display');
+
+    try {
+        const res = await fetch('/api/sms/account');
+        const text = await res.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch (_) {
+            if (res.status === 404) {
+                if (statusText) statusText.textContent = 'Server restart needed';
+                if (statusPill) {
+                    statusPill.style.background = 'rgba(239, 68, 68, 0.1)';
+                    statusPill.style.color = '#DC2626';
+                    statusPill.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                    const dot = statusPill.querySelector('span');
+                    if (dot) dot.style.background = '#DC2626';
+                }
+                if (creditsDisplay) creditsDisplay.textContent = 'Restart Node Server';
+                return;
+            }
+            throw new Error(text || `HTTP ${res.status}`);
+        }
+
+        if (data.configured) {
+            if (statusText) statusText.textContent = 'Operational';
+            if (statusPill) {
+                statusPill.style.background = 'rgba(16, 185, 129, 0.1)';
+                statusPill.style.color = '#059669';
+                statusPill.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+                const dot = statusPill.querySelector('span');
+                if (dot) dot.style.background = '#10B981';
+            }
+            if (creditsDisplay) {
+                creditsDisplay.textContent = `${data.credit_balance ?? '0'} credits`;
+            }
+            if (senderDisplay) {
+                senderDisplay.textContent = data.sender_name || 'SEMAPHORE';
+            }
+        } else {
+            if (statusText) statusText.textContent = 'API Key Missing';
+            if (statusPill) {
+                statusPill.style.background = 'rgba(239, 68, 68, 0.1)';
+                statusPill.style.color = '#DC2626';
+                statusPill.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                const dot = statusPill.querySelector('span');
+                if (dot) dot.style.background = '#DC2626';
+            }
+            if (creditsDisplay) creditsDisplay.textContent = 'Add key to .env';
+            if (senderDisplay) senderDisplay.textContent = data.sender_name || 'SEMAPHORE';
+        }
+    } catch (err) {
+        console.warn('Could not load Semaphore account info:', err);
+        if (statusText) statusText.textContent = 'Offline';
+        if (statusPill) {
+            statusPill.style.background = 'rgba(239, 68, 68, 0.1)';
+            statusPill.style.color = '#DC2626';
+            statusPill.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+            const dot = statusPill.querySelector('span');
+            if (dot) dot.style.background = '#DC2626';
+        }
+    }
+}
+
+async function handleSendTestSms() {
+    const phoneInput = document.getElementById('sms-test-phone');
+    const testBtn = document.getElementById('sms-test-btn');
+    const rawPhone = phoneInput ? phoneInput.value.trim() : '';
+
+    if (!rawPhone) {
+        showToast('Please enter a Philippine mobile number (e.g. 09171234567).', 'error');
+        if (phoneInput) phoneInput.focus();
+        return;
+    }
+
+    const originalBtnHtml = testBtn ? testBtn.innerHTML : '';
+    if (testBtn) {
+        testBtn.disabled = true;
+        testBtn.innerHTML = `<i class="icon-loader" style="font-size: 13px; animation: spin 1s linear infinite;"></i> <span>Sending SMS...</span>`;
+    }
+
+    try {
+        const res = await fetch('/api/sms/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: rawPhone,
+                event_type: 'custom',
+                message: '[ScholarDoc Verification] This is a live SMS system test from ScholarDoc via Semaphore.',
+                customMessage: '[ScholarDoc Verification] This is a live SMS system test from ScholarDoc via Semaphore.'
+            })
+        });
+
+        const text = await res.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch (_) {
+            if (res.status === 404) {
+                throw new Error('Backend SMS service not started on port 8080. Please restart your Node server (server.js).');
+            }
+            throw new Error(text || `Server error (HTTP ${res.status})`);
+        }
+
+        if (data.success) {
+            showToast(`Test SMS sent successfully to ${rawPhone}!`, 'success');
+            if (phoneInput) phoneInput.value = '';
+            await loadSemaphoreAccountInfo();
+        } else {
+            showToast(`SMS delivery notice: ${data.error || 'Check balance and number'}`, 'error');
+        }
+    } catch (err) {
+        console.error('Test SMS error:', err);
+        showToast(`SMS error: ${err.message || 'Network error'}`, 'error');
+    } finally {
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.innerHTML = originalBtnHtml;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    }
 }
 
 // Init
 setupListeners();
 loadAdminsData();
-setupListeners();
-loadAdminsData();
+loadNotificationSettings();
+loadSemaphoreAccountInfo();

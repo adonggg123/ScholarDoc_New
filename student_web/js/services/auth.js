@@ -12,7 +12,7 @@ const AuthService = {
 
     async getStudentProfile(uid) {
         const { data, error } = await this.getClient()
-            .from('students')
+            .from('student_grantees')
             .select()
             .eq('uid', uid);
         if (error || !data || data.length === 0) return null;
@@ -25,14 +25,14 @@ const AuthService = {
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
-                table: 'students',
+                table: 'student_grantees',
                 filter: `uid=eq.${uid}`
             });
     },
 
     async updateStudentProfile(uid, updates) {
         const { error } = await this.getClient()
-            .from('students')
+            .from('student_grantees')
             .update(updates)
             .eq('uid', uid);
         if (error) throw error;

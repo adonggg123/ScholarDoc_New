@@ -100,7 +100,7 @@ class MissingRequirementsService {
     try {
       Map<String, dynamic>? data = studentData;
       if (data == null) {
-        final res = await _supabase.from('students').select('*').eq('uid', studentId).maybeSingle();
+        final res = await _supabase.from('student_grantees').select('*').eq('uid', studentId).maybeSingle();
         data = res;
       }
 

@@ -697,6 +697,23 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not send notification:', notifErr);
         }
 
+        // SMS Notification via Semaphore using identical title and message
+        try {
+            const phone = s.mobile_number || s.contactNumber || s.phone_number;
+            if (phone) {
+                const eventType = newStatus === 'Verified' ? 'id_verified' : 'id_revision';
+                SmsNotificationService.sendStudentSms(s.uid, {
+                    eventType,
+                    title: title,
+                    message: message,
+                    phone,
+                    feedback: remarks
+                }).catch(e => console.warn('Could not send ID SMS notification:', e));
+            }
+        } catch (smsErr) {
+            console.warn('ID SMS notification trigger note:', smsErr);
+        }
+
         if (window.showToast) {
             window.showToast(`Updated ${s.fullName || s.full_name || 'student'} to ${newStatus}.`, 'check-circle');
         } else {

@@ -30,7 +30,7 @@ async function loadHistory() {
     let targetProfile = window.currentStudentProfile || profile;
 
     if (uid && sb) {
-        const { data, error } = await sb.from('students').select().eq('uid', uid);
+        const { data, error } = await sb.from('student_grantees').select().eq('uid', uid);
         if (!error && data && data.length > 0) targetProfile = data[0];
     }
 

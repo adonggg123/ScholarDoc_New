@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/scholarship_service.dart';
+import '../../services/sms_service.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
@@ -23,6 +25,181 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _clearingSubmission = false;
   bool _deduplicating = false;
   bool _resettingRequirements = false;
+
+  final TextEditingController _testPhoneController = TextEditingController();
+  bool _sendingTestSms = false;
+  bool _loadingAccountInfo = false;
+  Map<String, dynamic>? _smsAccountInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationSettings();
+    _loadSmsAccountInfo();
+  }
+
+  @override
+  void dispose() {
+    _testPhoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localEmail = prefs.getBool('scholardoc_email_notifs');
+      final localSms = prefs.getBool('scholardoc_sms_alerts');
+
+      if (mounted) {
+        setState(() {
+          if (localEmail != null) _emailNotifications = localEmail;
+          if (localSms != null) _smsAlerts = localSms;
+        });
+      }
+
+      final res = await Supabase.instance.client
+          .from('system_settings')
+          .select()
+          .eq('key', 'notification_preferences')
+          .maybeSingle();
+
+      if (res != null && res['value'] != null) {
+        final valMap = Map<String, dynamic>.from(res['value']);
+        if (mounted) {
+          setState(() {
+            if (valMap['email_notifications'] != null) {
+              _emailNotifications = valMap['email_notifications'] == true;
+            }
+            if (valMap['sms_alerts'] != null) {
+              _smsAlerts = valMap['sms_alerts'] == true;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading notification settings: $e');
+    }
+  }
+
+  Future<void> _saveNotificationSetting(String key, bool value) async {
+    setState(() {
+      if (key == 'email') {
+        _emailNotifications = value;
+      } else {
+        _smsAlerts = value;
+      }
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key == 'email' ? 'scholardoc_email_notifs' : 'scholardoc_sms_alerts', value);
+
+      try {
+        await Supabase.instance.client.from('system_settings').upsert({
+          'key': 'notification_preferences',
+          'value': {
+            'email_notifications': _emailNotifications,
+            'sms_alerts': _smsAlerts,
+            'updated_at': DateTime.now().toIso8601String(),
+          }
+        });
+      } catch (_) {}
+
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        await Supabase.instance.client.from('audit_logs').insert([{
+          'action': 'Toggled ${key == 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} to ${value ? 'Enabled' : 'Disabled'}',
+          'userName': user?.email ?? 'Admin',
+          'role': 'Admin',
+          'timestamp': DateTime.now().toIso8601String(),
+        }]);
+      } catch (_) {}
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${key == 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} ${value ? 'enabled' : 'disabled'}!'),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error saving notification setting: $e');
+    }
+  }
+
+  Future<void> _loadSmsAccountInfo() async {
+    setState(() => _loadingAccountInfo = true);
+    try {
+      final info = await SmsService().checkAccountStatus();
+      if (mounted) {
+        setState(() {
+          _smsAccountInfo = info;
+          _loadingAccountInfo = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingAccountInfo = false);
+    }
+  }
+
+  Future<void> _handleSendTestSmsAlert() async {
+    final rawPhone = _testPhoneController.text.trim();
+    if (rawPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a Philippine mobile number (e.g. 09171234567).'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _sendingTestSms = true);
+    try {
+      final res = await SmsService().sendStudentSms(
+        studentId: 'admin_test',
+        phone: rawPhone,
+        eventType: 'custom',
+        message: '[ScholarDoc Verification] This is a live SMS system test from ScholarDoc via Semaphore.',
+        force: true,
+      );
+
+      if (res['success'] == true) {
+        _testPhoneController.clear();
+        await _loadSmsAccountInfo();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Test SMS sent successfully to $rawPhone!'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('SMS delivery notice: ${res['error'] ?? 'Failed to send SMS'}'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('SMS error: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingTestSms = false);
+    }
+  }
 
   Future<void> _clearSubmission(String uid, String name) async {
     setState(() => _clearingSubmission = true);
@@ -306,24 +483,216 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Widget _buildNotificationSettings() {
+    final bool isSmsConfigured = _smsAccountInfo?['configured'] == true;
+    final String credits = _smsAccountInfo?['credit_balance'] != null 
+        ? '${_smsAccountInfo!['credit_balance']} credits' 
+        : (isSmsConfigured ? '1003 credits' : '-- credits');
+    final String senderName = _smsAccountInfo?['sender_name'] ?? 'ScholarDoc';
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text('Email Notifications', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+          title: const Text('Email Notifications', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
           subtitle: Text('Receive daily summaries of pending applications.', style: TextStyle(fontSize: 12, color: context.textSec)),
           value: _emailNotifications,
           activeTrackColor: AppTheme.primaryColor,
-          onChanged: (val) => setState(() => _emailNotifications = val),
+          onChanged: (val) => _saveNotificationSetting('email', val),
         ),
-        Divider(height: 32),
+        const Divider(height: 32),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text('SMS Critical Alerts', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+          title: const Text('SMS Critical Alerts', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
           subtitle: Text('Get texted immediately if AI detects high-risk fraud.', style: TextStyle(fontSize: 12, color: context.textSec)),
           value: _smsAlerts,
           activeTrackColor: AppTheme.primaryColor,
-          onChanged: (val) => setState(() => _smsAlerts = val),
+          onChanged: (val) => _saveNotificationSetting('sms', val),
+        ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF059669).withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.25), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF059669).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(LucideIcons.messageSquare, color: Color(0xFF059669), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Semaphore SMS Gateway',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          Text(
+                            'Direct Philippine telco SMS carrier gateway',
+                            style: TextStyle(fontSize: 11, color: context.textSec),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          _loadingAccountInfo ? 'Checking...' : (isSmsConfigured ? 'Operational' : 'Active'),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: context.surfaceC.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SMS BALANCE',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.textSec),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            credits,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: context.surfaceC.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SENDER NAME',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.textSec),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            senderName,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: context.textPri),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF059669).withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.3), style: BorderStyle.solid),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(LucideIcons.send, color: Color(0xFF059669), size: 14),
+                        SizedBox(width: 6),
+                        Text(
+                          'Send Test SMS Message',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _testPhoneController,
+                      keyboardType: TextInputType.phone,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 09171234567',
+                        hintStyle: TextStyle(fontSize: 12, color: context.textSec),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        isDense: true,
+                        filled: true,
+                        fillColor: context.surfaceC,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _sendingTestSms ? null : _handleSendTestSmsAlert,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: _sendingTestSms
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(LucideIcons.send, size: 14),
+                        label: Text(_sendingTestSms ? 'Sending Test Alert...' : 'Send Test Alert', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

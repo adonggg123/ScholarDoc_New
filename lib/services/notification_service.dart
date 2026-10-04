@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'sms_service.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -90,7 +91,7 @@ class NotificationService {
     }
   }
 
-  // Send a notification to a specific student
+  // Send a notification to a specific student and mirror to SMS with same content
   Future<void> sendNotification({
     required String studentId,
     required String title,
@@ -106,6 +107,19 @@ class NotificationService {
         'isRead': false,
         // timestamp is handled by the DB
       });
+
+      // Synchronize with SMS: Send SMS notification with identical title and message
+      if (studentId != 'admin' && studentId != 'superadmin') {
+        final String smsContent = '[ScholarDoc] $title: $message';
+        SmsService().sendStudentSms(
+          studentId: studentId,
+          message: smsContent,
+          eventType: type,
+        ).catchError((e) {
+          debugPrint('NotificationService: SMS sync dispatch note: $e');
+          return <String, dynamic>{};
+        });
+      }
     } catch (e) {
       print('Error sending notification: $e');
     }
@@ -268,6 +282,31 @@ class NotificationService {
       message: message,
       type: 'warning',
     );
+  }
+
+  /// Clears/deletes any "Missing Requirements Notice" notifications for a student
+  Future<void> clearMissingRequirementsNotifications(String studentId) async {
+    try {
+      final res = await _supabase
+          .from('notifications')
+          .select('id')
+          .eq('studentId', studentId)
+          .ilike('title', '%Missing Requirements%');
+
+      if (res.isNotEmpty) {
+        final idsToDelete = res.map((e) => e['id'].toString()).toList();
+        await _supabase
+            .from('notifications')
+            .delete()
+            .inFilter('id', idsToDelete);
+
+        final currentDeleted = Set<String>.from(deletedNotificationIds.value)..addAll(idsToDelete);
+        deletedNotificationIds.value = currentDeleted;
+        unreadCountNotifier.value = (unreadCountNotifier.value - idsToDelete.length).clamp(0, 999);
+      }
+    } catch (e) {
+      debugPrint('NotificationService: clearMissingRequirementsNotifications error: $e');
+    }
   }
 }
 

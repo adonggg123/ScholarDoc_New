@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/scholarship_service.dart';
+import '../../services/sms_service.dart';
 import 'login_screen.dart';
 import '../main_layout.dart';
 
@@ -289,14 +290,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _contactController,
                       decoration: const InputDecoration(
-                        labelText: 'Contact Number',
+                        labelText: 'Contact / Mobile Number',
                         prefixIcon: Icon(Icons.phone_outlined),
                         hintText: 'e.g. 09123456789',
+                        helperText: 'Important scholarship alerts will be texted to this number',
                       ),
                       keyboardType: TextInputType.phone,
-                      validator: (value) => (value == null || value.isEmpty)
-                          ? 'Enter contact number'
-                          : null,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter mobile number';
+                        }
+                        if (!SmsService.isValidPhilippineMobile(value.trim())) {
+                          return 'Enter a valid 11-digit PH mobile number (e.g. 09123456789)';
+                        }
+                        return null;
+                      },
                     ),
                   ],
                 ),
@@ -665,7 +673,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     _payoutsController.text.trim().isNotEmpty
                                         ? _payoutsController.text.trim()
                                         : null,
-                                'contactNumber': _contactController.text.trim(),
+                                'contactNumber': SmsService.normalizePhilippineMobile(_contactController.text.trim()) ?? _contactController.text.trim(),
+                                'mobile_number': SmsService.normalizePhilippineMobile(_contactController.text.trim()) ?? _contactController.text.trim(),
                                 'role': 'student',
                                 'status': 'No Submission Yet',
                                 'documents': {},

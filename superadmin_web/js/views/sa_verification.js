@@ -1,4 +1,5 @@
 // js/views/sa_verification.js
+import { SmsNotificationService } from '../services/sms_notification_service.js';
 const supabase = window.supabaseClient;
 
 let saStudents = [];
@@ -736,6 +737,23 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             }]);
         } catch (notifErr) {
             console.warn('Could not send notification:', notifErr);
+        }
+
+        // 4. SMS Notification via Semaphore
+        try {
+            const phone = s.mobile_number || s.contactNumber || s.phone_number;
+            if (phone) {
+                const eventType = newStatus === 'Verified' ? 'sa_verified' : 'sa_revision';
+                SmsNotificationService.sendStudentSms(s.uid, {
+                    eventType,
+                    title: title,
+                    message: message,
+                    phone,
+                    feedback: remarks
+                }).catch(e => console.warn('Could not send SA SMS notification:', e));
+            }
+        } catch (smsErr) {
+            console.warn('SA SMS notification trigger note:', smsErr);
         }
 
         if (window.showToast) {

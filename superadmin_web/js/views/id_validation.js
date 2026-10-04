@@ -1,4 +1,5 @@
 // js/views/id_validation.js
+import { SmsNotificationService } from '../services/sms_notification_service.js';
 const supabase = window.supabaseClient;
 
 let idStudents = [];
@@ -695,6 +696,23 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             }]);
         } catch (notifErr) {
             console.warn('Could not send notification:', notifErr);
+        }
+
+        // 4. SMS Notification via Semaphore
+        try {
+            const phone = s.mobile_number || s.contactNumber || s.phone_number;
+            if (phone) {
+                const eventType = newStatus === 'Verified' ? 'id_verified' : 'id_revision';
+                SmsNotificationService.sendStudentSms(s.uid, {
+                    eventType,
+                    title: title,
+                    message: message,
+                    phone,
+                    feedback: remarks
+                }).catch(e => console.warn('Could not send ID SMS notification:', e));
+            }
+        } catch (smsErr) {
+            console.warn('ID SMS notification trigger note:', smsErr);
         }
 
         if (window.showToast) {

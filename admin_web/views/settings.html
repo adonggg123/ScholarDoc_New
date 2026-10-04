@@ -344,6 +344,50 @@
                     </label>
                 </div>
             </div>
+
+            <!-- Semaphore SMS Gateway Status & Diagnostics -->
+            <div class="card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1.5px solid rgba(5, 150, 105, 0.2); border-radius: 14px; padding: 20px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(5, 150, 105, 0.1); display: flex; align-items: center; justify-content: center; color: #059669;">
+                            <i class="icon-message-square" style="font-size: 18px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">Semaphore SMS Gateway</h3>
+                            <div style="font-size: 11.5px; color: var(--text-secondary);">Direct Philippine telco SMS carrier gateway</div>
+                        </div>
+                    </div>
+                    <span id="sms-live-status-pill" style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: #059669; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); padding: 3px 8px; border-radius: 12px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #10B981;"></span>
+                        <span id="sms-status-text">Checking...</span>
+                    </span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
+                    <div style="padding: 10px 12px; background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
+                        <span style="display: block; font-size: 10.5px; color: var(--text-secondary); font-weight: 700; text-transform: uppercase;">SMS Balance</span>
+                        <span id="sms-credits-display" style="font-size: 16px; font-weight: 900; color: #059669;">-- credits</span>
+                    </div>
+                    <div style="padding: 10px 12px; background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 10px;">
+                        <span style="display: block; font-size: 10.5px; color: var(--text-secondary); font-weight: 700; text-transform: uppercase;">Sender Name</span>
+                        <span id="sms-sender-display" style="font-size: 14px; font-weight: 800; color: var(--text-primary);">SEMAPHORE</span>
+                    </div>
+                </div>
+
+                <!-- Test SMS Tool -->
+                <div style="padding: 12px; background: rgba(5, 150, 105, 0.03); border: 1px dashed rgba(5, 150, 105, 0.3); border-radius: 10px;">
+                    <span style="display: block; font-size: 11px; font-weight: 800; color: #059669; margin-bottom: 8px;">
+                        <i class="icon-send" style="font-size: 12px;"></i> Send Test SMS Message
+                    </span>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <input type="text" id="sms-test-phone" placeholder="e.g. 09171234567" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 12px; outline: none; background: var(--surface-color); color: var(--text-primary); font-family: inherit;">
+                        <button type="button" id="sms-test-btn" style="padding: 8px 14px; border-radius: 8px; border: none; background: #059669; color: white; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s;">
+                            <i class="icon-send" style="font-size: 13px;"></i>
+                            <span>Send Test Alert</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>

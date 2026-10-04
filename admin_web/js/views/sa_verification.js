@@ -738,6 +738,23 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not send notification:', notifErr);
         }
 
+        // SMS Notification via Semaphore using identical title and message
+        try {
+            const phone = s.mobile_number || s.contactNumber || s.phone_number;
+            if (phone) {
+                const eventType = newStatus === 'Verified' ? 'sa_verified' : 'sa_revision';
+                SmsNotificationService.sendStudentSms(s.uid, {
+                    eventType,
+                    title: title,
+                    message: message,
+                    phone,
+                    feedback: remarks
+                }).catch(e => console.warn('Could not send SA SMS notification:', e));
+            }
+        } catch (smsErr) {
+            console.warn('SA SMS notification trigger note:', smsErr);
+        }
+
         if (window.showToast) {
             window.showToast(`Updated ${s.fullName || s.full_name || 'student'} to ${newStatus}.`, 'check-circle');
         } else {

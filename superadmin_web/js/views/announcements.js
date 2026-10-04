@@ -249,6 +249,12 @@ function filterAndRenderCards() {
                         <i class="icon-bell" style="font-size: 10px;"></i>
                         <span>PUSH SENT</span>
                     </div>` : ''}
+
+                    ${a.sms_sent ? `
+                    <div class="ann-status-pill" style="background: rgba(5, 150, 105, 0.1); color: #059669; border: 1px solid rgba(5, 150, 105, 0.25); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;" title="SMS text blast sent to students via Semaphore">
+                        <i class="icon-message-square" style="font-size: 10px;"></i>
+                        <span>SMS SENT</span>
+                    </div>` : ''}
                 </div>
 
                 <!-- Title & Meta -->
@@ -301,6 +307,10 @@ function filterAndRenderCards() {
                         <button class="ann-btn-action" title="Broadcast Push Notification to Mobile App" onclick="broadcastPush('${a.id}')" style="color: #0F3260;">
                             <i class="icon-bell" style="font-size: 13px;"></i>
                             <span>Push</span>
+                        </button>
+                        <button class="ann-btn-action" title="Broadcast SMS via Semaphore to Students" onclick="broadcastSms('${a.id}')" style="color: #059669;">
+                            <i class="icon-message-square" style="font-size: 13px;"></i>
+                            <span>SMS</span>
                         </button>
                         <button class="ann-btn-action" title="Edit Announcement" onclick="editAnnouncement('${a.id}')">
                             <i class="icon-pencil" style="font-size: 13px;"></i>
@@ -555,6 +565,7 @@ if (form) {
                 dataObj.isActive = true;
                 dataObj.createdAt = new Date().toISOString();
                 const sendPushChecked = document.getElementById('ann-inp-send-push')?.checked ?? true;
+                const sendSmsChecked = document.getElementById('ann-inp-send-sms')?.checked ?? false;
 
                 const { data: newDocs, error } = await supabase.from('announcements').insert([dataObj]).select();
                 if (error) throw error;
@@ -562,9 +573,9 @@ if (form) {
 
                 if (window.showToast) window.showToast('Announcement posted successfully!', 'check-circle');
 
-                // Trigger push notification if enabled
-                if (sendPushChecked) {
-                    await triggerAnnouncementPush(createdDoc);
+                // Trigger push and/or SMS notification if enabled
+                if (sendPushChecked || sendSmsChecked) {
+                    await triggerAnnouncementPush(createdDoc, false, sendSmsChecked);
                 }
             } else {
                 const { error } = await supabase.from('announcements').update(dataObj).eq('id', currentEditId);
@@ -636,8 +647,8 @@ if (refreshBtn) {
     });
 }
 
-// ── Push Notification Trigger Functions ──────────────────────────────
-async function triggerAnnouncementPush(announcement, forceResend = false) {
+// ── Push & SMS Notification Trigger Functions ─────────────────────────
+async function triggerAnnouncementPush(announcement, forceResend = false, sendSms = false) {
     if (!announcement || !announcement.id) return;
     try {
         const res = await fetch('/api/notifications/broadcast-announcement', {
@@ -648,20 +659,21 @@ async function triggerAnnouncementPush(announcement, forceResend = false) {
                 title: announcement.title,
                 content: announcement.content,
                 type: announcement.type,
-                forceResend: !!forceResend
+                forceResend: !!forceResend,
+                sendSms: !!sendSms
             })
         });
 
         const result = await res.json();
         if (result.success && !result.duplicatePrevented) {
             if (window.showToast) {
-                window.showToast(result.message || 'Push notification sent to students mobile app!', 'bell');
+                window.showToast(result.message || 'Notification broadcast completed!', 'bell');
             }
         } else if (result.duplicatePrevented) {
-            console.log('Push notification duplicate skipped for announcement:', announcement.id);
+            console.log('Notification duplicate skipped for announcement:', announcement.id);
         }
     } catch (e) {
-        console.warn('Could not trigger announcement push broadcast:', e);
+        console.warn('Could not trigger announcement broadcast:', e);
     }
 }
 
@@ -672,7 +684,18 @@ window.broadcastPush = async function(id) {
     if (!confirm(`Broadcast push notification for "${announcement.title}" to all students mobile devices?`)) return;
 
     if (window.showToast) window.showToast('Broadcasting push notification...', 'send');
-    await triggerAnnouncementPush(announcement, true);
+    await triggerAnnouncementPush(announcement, true, false);
+    await loadAnnouncements();
+};
+
+window.broadcastSms = async function(id) {
+    const announcement = allAnnouncements.find(a => String(a.id) === String(id));
+    if (!announcement) return;
+
+    if (!confirm(`Broadcast SMS notification for "${announcement.title}" via Semaphore to all registered student phone numbers?`)) return;
+
+    if (window.showToast) window.showToast('Broadcasting Semaphore SMS...', 'send');
+    await triggerAnnouncementPush(announcement, true, true);
     await loadAnnouncements();
 };
 

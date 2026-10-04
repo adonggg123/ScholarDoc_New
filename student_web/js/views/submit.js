@@ -427,13 +427,33 @@ submitBtn?.addEventListener('click', async () => {
         });
 
         // 7. Send notification
+        const submitTitle = 'Documents Submitted';
+        const submitMsg = 'Your documents have been submitted successfully via the web portal. Please wait for admin verification.';
         await sb.from('notifications').insert({
             studentId: uid,
-            title: 'Documents Submitted',
-            message: 'Your documents have been submitted successfully via the web portal. Please wait for admin verification.',
+            title: submitTitle,
+            message: submitMsg,
             type: 'success',
             isRead: false,
         });
+
+        // Mirror in-app notification to SMS for the student
+        try {
+            const phone = profile?.mobile_number || profile?.contactNumber;
+            if (phone) {
+                fetch('/api/sms/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: uid,
+                        phone: phone,
+                        event_type: 'documents_submitted',
+                        title: submitTitle,
+                        message: submitMsg
+                    })
+                }).catch(() => {});
+            }
+        } catch (_) {}
 
         // Notify admin
         await sb.from('notifications').insert({

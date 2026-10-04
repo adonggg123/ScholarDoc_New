@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/audit_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/scholarship_service.dart';
+import '../../services/sms_service.dart';
 import '../auth/login_screen.dart';
 import 'student_activity_log_screen.dart';
 
@@ -28,6 +29,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _sectionController = TextEditingController();
   final _emailController = TextEditingController();
   final _birthdateController = TextEditingController();
+  final _courseController = TextEditingController();
+  final _yearLevelController = TextEditingController();
   final _yearBecameScholarController = TextEditingController();
   final _payoutsReceivedController = TextEditingController();
 
@@ -38,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   StreamSubscription<List<Scholarship>>? _scholarshipSub;
 
   String? _selectedScholarship = 'TES';
+  String? _selectedGender = 'Male';
   final List<String> _scholarshipOptions = [
     'TES',
   ];
@@ -47,7 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
   String? _profilePictureUrl;
-  final Set<String> _expandedSections = {'academic'};
+  final Set<String> _expandedSections = {'personal', 'academic', 'banking'};
 
   @override
   void initState() {
@@ -73,17 +77,33 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (!_scholarshipOptions.contains(schName)) {
           _scholarshipOptions.add(schName);
         }
+
+        final rawGender = (data['gender'] ?? data['sex'] ?? 'Male').toString().trim();
+        String parsedGender = 'Male';
+        if (rawGender.toLowerCase().startsWith('f')) {
+          parsedGender = 'Female';
+        } else if (rawGender.toLowerCase().startsWith('m')) {
+          parsedGender = 'Male';
+        } else if (rawGender.isNotEmpty && rawGender != 'N/A' && rawGender != 'Not Specified') {
+          parsedGender = rawGender;
+        }
+
         setState(() {
           _profileData = data;
           _selectedScholarship = schName;
-          _nameController.text = data['fullName'] ?? '';
-          _emailController.text = data['email'] ?? '';
-          _contactController.text = data['contactNumber'] ?? '';
-          _sectionController.text = data['section'] ?? '';
-          _saController.text = data['saNumber'] ?? '';
+          _selectedGender = parsedGender;
           final fam = (data['familyDetails'] is Map)
               ? (data['familyDetails'] as Map)
               : {};
+          _nameController.text = (data['fullName'] ?? data['full_name'] ?? '').toString();
+          _emailController.text = (data['email'] ?? data['email_address'] ?? '').toString();
+          _contactController.text = (data['contactNumber'] ?? data['mobile_number'] ?? '').toString();
+          _sectionController.text = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
+          _saController.text = (data['saNumber'] ?? data['sa_number'] ?? '').toString();
+          _birthdateController.text = (data['birthdate'] ?? data['birthday'] ?? data['date_of_birth'] ?? '').toString();
+          _courseController.text = (data['course'] ?? data['program_name'] ?? '').toString();
+          _yearLevelController.text = (data['year'] ?? data['year_level'] ?? '').toString();
+
           _yearBecameScholarController.text =
               (data['yearBecameScholar'] ??
                       data['year_became_scholar'] ??
@@ -152,6 +172,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     _sectionController.dispose();
     _emailController.dispose();
     _birthdateController.dispose();
+    _courseController.dispose();
+    _yearLevelController.dispose();
     super.dispose();
   }
 
@@ -404,24 +426,60 @@ class _ProfileScreenState extends State<ProfileScreen>
                           LucideIcons.user,
                         ),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField(
-                          'Gender',
-                          _profileData?['gender'] ?? 'Not Specified',
-                          LucideIcons.user,
-                        ),
+                        _buildGenderDropdownField(),
                         const SizedBox(height: 16),
                         _buildBirthdateField(context),
                         const SizedBox(height: 16),
                         _buildEditableField(
-                          'Contact Number',
+                          'Email Address',
+                          _emailController,
+                          LucideIcons.mail,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildEditableField(
+                          'Contact Number (for SMS updates)',
                           _contactController,
                           LucideIcons.phone,
+                          keyboardType: TextInputType.phone,
+                          helperText: 'Important scholarship alerts will be texted to this number',
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return null;
+                            if (!SmsService.isValidPhilippineMobile(v.trim())) {
+                              return 'Enter valid 11-digit PH mobile (e.g. 09123456789)';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         _buildEditableField(
                           'Section',
                           _sectionController,
                           LucideIcons.layers,
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _handleSavePersonalInformation,
+                            icon: const Icon(LucideIcons.check, size: 18),
+                            label: const Text(
+                              'Save Personal Information',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -438,23 +496,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                       children: [
                         _buildScholarshipDropdownField(),
                         const SizedBox(height: 16),
-                        _buildReadOnlyField(
-                          'Degree Program / Course',
-                          (() {
-                            final String rawCourse =
-                                (_profileData?['course'] ??
-                                        _profileData?['program_name'] ??
-                                        '')
-                                    .toString()
-                                    .trim();
-                            return (rawCourse.isNotEmpty &&
-                                    rawCourse != 'CHED TES Scholar' &&
-                                    rawCourse != 'TES')
-                                ? rawCourse
-                                : 'Bachelor of Science in Information Technology';
-                          })(),
-                          LucideIcons.graduationCap,
-                        ),
+                        _buildCourseField(),
+                        const SizedBox(height: 16),
+                        _buildYearLevelField(),
                         const SizedBox(height: 16),
                         _buildReadOnlyField(
                           'Student ID',
@@ -463,15 +507,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   '...')
                               .toString(),
                           LucideIcons.badgeCheck,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildReadOnlyField(
-                          'Email Address',
-                          (_profileData?['email'] ??
-                                  _profileData?['email_address'] ??
-                                  '...')
-                              .toString(),
-                          LucideIcons.mail,
                         ),
                         const SizedBox(height: 16),
                         _buildYearBecameScholarField(),
@@ -547,12 +582,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               vertical: 16,
                             ),
                           ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your SA Number';
-                            }
-                            return null;
-                          },
+                          validator: (value) => null,
                         ),
                       ],
                     ),
@@ -621,54 +651,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                    // Save button
-                    Container(
-                      width: double.infinity,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFFFBC02D,
-                            ).withOpacity(0.25), // Golden Yellow Glow Shadow
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: _isSaving ? null : _handleSave,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: _isSaving
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Save Profile Changes',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                ),
-                              ),
-                      ),
-                    ),
+                    const SizedBox(height: 24),
                     const SizedBox(height: 20),
                     // Activity log tile
                     _buildActivityLogTile(context),
@@ -870,8 +853,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildEditableField(
     String label,
     TextEditingController controller,
-    IconData icon,
-  ) {
+    IconData icon, {
+    TextInputType? keyboardType,
+    String? helperText,
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -886,9 +872,15 @@ class _ProfileScreenState extends State<ProfileScreen>
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
+          keyboardType: keyboardType,
+          validator:
+              validator ??
+              (v) => (v == null || v.isEmpty) ? 'Field cannot be empty' : null,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             prefixIcon: Icon(icon, size: 16, color: AppTheme.primaryColor),
+            helperText: helperText,
+            helperMaxLines: 2,
             filled: true,
             fillColor: context.surfaceC,
             contentPadding: const EdgeInsets.symmetric(
@@ -915,8 +907,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               borderSide: BorderSide(color: AppTheme.error),
             ),
           ),
-          validator: (v) =>
-              (v == null || v.isEmpty) ? 'Field cannot be empty' : null,
         ),
       ],
     );
@@ -1437,70 +1427,117 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Future<void> _handleSave() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isSaving = true);
-      final uid = _authService.currentUser?.id;
-      if (uid != null) {
-        try {
-          await _authService.updateStudentProfile(uid, {
-            'fullName': _nameController.text.trim(),
-            'full_name': _nameController.text.trim(),
-            'contactNumber': _contactController.text.trim(),
-            'mobile_number': _contactController.text.trim(),
-            'section': _sectionController.text.trim(),
-            'saNumber': _saController.text.trim(),
-            'sa_number': _saController.text.trim(),
-            'birthdate': _birthdateController.text.trim(),
-            'date_of_birth': _birthdateController.text.trim(),
-            'scholarshipName': _selectedScholarship ?? 'TES',
-            'scholarship_name': _selectedScholarship ?? 'TES',
-            'scholarYearLevel': _yearBecameScholarController.text.trim(),
-            'year_became_scholar': _yearBecameScholarController.text.trim(),
-            'yearBecameScholar': _yearBecameScholarController.text.trim(),
-            'payoutsReceived':
-                _payoutsReceivedController.text.trim().isNotEmpty
-                    ? (int.tryParse(_payoutsReceivedController.text.trim()) ?? 0)
-                    : null,
-            'payouts_received':
-                _payoutsReceivedController.text.trim().isNotEmpty
-                    ? _payoutsReceivedController.text.trim()
-                    : null,
-          });
-          await _auditService.logActivity(
-            action: 'Updated Profile (Academic & Program, SA number)',
-            userName: _nameController.text.trim(),
-            role: 'Student',
-            studentId: _profileData?['studentId'],
-          );
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Profile updated successfully'),
-              backgroundColor: AppTheme.success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-          _loadProfile();
-        } catch (e) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: AppTheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        } finally {
-          if (mounted) setState(() => _isSaving = false);
+  Future<void> _handleSavePersonalInformation() async {
+    if (_formKey.currentState != null && !_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please check your entries for validation errors.'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Full Name cannot be empty'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    final uid = _authService.currentUser?.id;
+    if (uid != null) {
+      try {
+        final rawPhone = _contactController.text.trim();
+        final normalizedMobile = rawPhone.isNotEmpty
+            ? (SmsService.normalizePhilippineMobile(rawPhone) ?? rawPhone)
+            : '';
+
+        final updates = <String, dynamic>{
+          'fullName': _nameController.text.trim(),
+          'full_name': _nameController.text.trim(),
+          'gender': _selectedGender,
+          'email': _emailController.text.trim(),
+          'email_address': _emailController.text.trim(),
+          'contactNumber': normalizedMobile,
+          'mobile_number': normalizedMobile,
+          'section': _sectionController.text.trim(),
+          'saNumber': _saController.text.trim(),
+          'sa_number': _saController.text.trim(),
+          'birthdate': _birthdateController.text.trim(),
+          'date_of_birth': _birthdateController.text.trim(),
+          'course': _courseController.text.trim(),
+          'program_name': _courseController.text.trim(),
+          'year': _yearLevelController.text.trim(),
+          'year_level': _yearLevelController.text.trim(),
+          'scholarshipName': _selectedScholarship ?? 'TES',
+          'scholarship_name': _selectedScholarship ?? 'TES',
+        };
+
+        if (_yearBecameScholarController.text.trim().isNotEmpty) {
+          updates['scholarYearLevel'] = _yearBecameScholarController.text.trim();
+          updates['year_became_scholar'] = _yearBecameScholarController.text.trim();
+          updates['yearBecameScholar'] = _yearBecameScholarController.text.trim();
         }
+
+        if (_payoutsReceivedController.text.trim().isNotEmpty) {
+          final pNum = int.tryParse(_payoutsReceivedController.text.trim());
+          if (pNum != null) {
+            updates['payoutsReceived'] = pNum;
+            updates['payouts_received'] = _payoutsReceivedController.text.trim();
+          }
+        }
+
+        await _authService.updateStudentProfile(uid, updates);
+
+        await _auditService.logActivity(
+          action: 'Updated Personal Information',
+          userName: _nameController.text.trim(),
+          role: 'Student',
+          studentId: _profileData?['studentId'],
+        );
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 18),
+                SizedBox(width: 10),
+                Text('Personal Information saved successfully!'),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        await _loadProfile();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving personal information: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
       }
+    } else {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -1598,12 +1635,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildBirthdateField(BuildContext context) {
+  Widget _buildGenderDropdownField() {
+    final options = ['Male', 'Female', 'Prefer not to say'];
+    final currentVal = (options.contains(_selectedGender)) ? _selectedGender : 'Male';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Birthdate (mm/dd/yyyy)',
+          'Gender',
           style: TextStyle(
             fontSize: 11,
             color: context.textSec,
@@ -1611,14 +1650,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
         const SizedBox(height: 6),
-        TextFormField(
-          controller: _birthdateController,
-          readOnly: true,
-          onTap: () => _selectBirthdate(context),
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        DropdownButtonFormField<String>(
+          value: currentVal,
           decoration: InputDecoration(
             prefixIcon: const Icon(
-              LucideIcons.cake,
+              LucideIcons.user,
               size: 16,
               color: AppTheme.primaryColor,
             ),
@@ -1638,14 +1674,277 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+          ),
+          items: options.map((gender) {
+            return DropdownMenuItem<String>(
+              value: gender,
+              child: Text(
+                gender,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() {
+                _selectedGender = val;
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCourseField() {
+    final quickCourses = [
+      'BSIT',
+      'BSCS',
+      'BSBA',
+      'BSED',
+      'BEED',
+      'BSHM',
+      'BSN',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Degree Program / Course',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _courseController,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(
+              LucideIcons.graduationCap,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
+            hintText: 'e.g. Bachelor of Science in Information Technology',
+            filled: true,
+            fillColor: context.surfaceC,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: quickCourses.map((c) {
+              final isSelected = _courseController.text.trim().toUpperCase() == c;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  label: Text(
+                    c,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : context.textPri,
+                    ),
+                  ),
+                  backgroundColor: isSelected
+                      ? AppTheme.primaryColor
+                      : context.surfaceC,
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : context.crispBorder,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () {
+                    setState(() {
+                      _courseController.text = c;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildYearLevelField() {
+    final quickYears = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Year Level',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _yearLevelController,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(
+              LucideIcons.calendar,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
+            hintText: 'e.g. 2nd Year',
+            filled: true,
+            fillColor: context.surfaceC,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: quickYears.map((yr) {
+              final isSelected = _yearLevelController.text.trim() == yr;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  label: Text(
+                    yr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : context.textPri,
+                    ),
+                  ),
+                  backgroundColor: isSelected
+                      ? AppTheme.primaryColor
+                      : context.surfaceC,
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : context.crispBorder,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () {
+                    setState(() {
+                      _yearLevelController.text = yr;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBirthdateField(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Birthdate (mm/dd/yyyy)',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSec,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _birthdateController,
+          readOnly: false,
+          onTap: () {
+            if (_birthdateController.text.isEmpty) {
+              _selectBirthdate(context);
+            }
+          },
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(
+              LucideIcons.cake,
+              size: 16,
+              color: AppTheme.primaryColor,
+            ),
+            suffixIcon: IconButton(
+              icon: const Icon(
+                LucideIcons.calendarDays,
+                size: 18,
+                color: AppTheme.primaryColor,
+              ),
+              onPressed: () => _selectBirthdate(context),
+            ),
+            hintText: 'mm/dd/yyyy',
+            filled: true,
+            fillColor: context.surfaceC,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: context.crispBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
                 color: Color(0xFFFBC02D),
                 width: 2,
-              ), // Golden Yellow
+              ),
             ),
           ),
-          validator: (v) =>
-              (v == null || v.isEmpty) ? 'Birthdate cannot be empty' : null,
+          validator: (v) => null,
         ),
       ],
     );
