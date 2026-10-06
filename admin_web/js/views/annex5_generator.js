@@ -89,10 +89,26 @@ async function loadInitialData() {
         }
 
         // 2. Fetch Default School Student Records (strictly from school_students)
-        let { data: schoolDbData, error: errSchool } = await supabase
-            .from('school_students')
-            .select('*')
-            .order('created_at', { ascending: false });
+        let schoolDbData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+            const { data, error } = await supabase
+                .from('school_students')
+                .select('*')
+                .range(from, to);
+            if (error || !data || data.length === 0) {
+                hasMore = false;
+            } else {
+                schoolDbData = schoolDbData.concat(data);
+                if (data.length < pageSize) hasMore = false;
+                else page++;
+            }
+        }
+        let errSchool = null;
 
         // Optional profile enrichment from students table
         let { data: studentsDbData } = await supabase
@@ -299,19 +315,19 @@ function renderSuperAdminGranteesTable(items) {
     if (!tbody) return;
 
     if (!items || items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-secondary);">No grantees found in Super Admin masterlist.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 24px; color: var(--text-secondary);">No grantees found in Super Admin masterlist.</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = items.map((g, idx) => {
-        const fullName = g.name || `${g.last_name || ''}, ${g.first_name || ''} ${g.middle_name || ''}`.trim();
+    tbody.innerHTML = items.map((g) => {
+        const firstName = g.first_name || g.firstName || g.name || '';
+        const middleName = g.middle_name || g.middleName || '';
+        const lastName = g.last_name || g.lastName || '';
         return `
-            <tr>
-                <td style="font-weight: 700; color: var(--primary-color);">${idx + 1}</td>
-                <td><span style="font-weight: 600; font-family: monospace; font-size: 11px;">${g.student_id || g.studentId || 'Unassigned'}</span></td>
-                <td style="font-weight: 600;">${fullName}</td>
-                <td>${g.course || 'BSIT'}</td>
-                <td style="text-align: center;"><span style="padding: 2px 6px; border-radius: 4px; background: rgba(15,50,96,0.06); font-size: 11px; font-weight: 600;">${g.batch || 'Batch 1'}</span></td>
+            <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
+                <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${firstName}</td>
+                <td style="padding: 10px 14px; font-size: 12px; color: var(--text-primary);">${middleName}</td>
+                <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${lastName}</td>
             </tr>
         `;
     }).join('');

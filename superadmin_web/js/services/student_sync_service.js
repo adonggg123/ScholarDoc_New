@@ -390,18 +390,25 @@ export class StudentSyncService {
             const form2List = f2Res.data || [];
 
             // 2. Fetch School Student records (demographics & details)
-            let ssQuery = supabase.from('school_students').select('*');
-            if (typeof ssQuery.order === 'function') {
-                ssQuery = ssQuery.order('created_at', { ascending: false });
+            let schoolStudents = [];
+            let ssPage = 0;
+            const ssPageSize = 1000;
+            let ssHasMore = true;
+            while (ssHasMore) {
+                const from = ssPage * ssPageSize;
+                const to = from + ssPageSize - 1;
+                const { data, error } = await supabase
+                    .from('school_students')
+                    .select('*')
+                    .range(from, to);
+                if (error || !data || data.length === 0) {
+                    ssHasMore = false;
+                } else {
+                    schoolStudents = schoolStudents.concat(data);
+                    if (data.length < ssPageSize) ssHasMore = false;
+                    else ssPage++;
+                }
             }
-            let ssRes = await ssQuery;
-
-            if (ssRes.error) {
-                console.warn('StudentSyncService: Error loading school_students:', ssRes.error);
-                ssRes = { data: [] };
-            }
-
-            const schoolStudents = ssRes.data || [];
 
             // 3. Check student_grantees table for existing records
             let sgList = [];

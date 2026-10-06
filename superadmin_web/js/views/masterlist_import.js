@@ -158,7 +158,45 @@ async function extractExcelOrCsv(file) {
                 const rawRecords = [];
                 let currentBatch = 'Batch 1';
 
-                for (let r = 0; r < jsonData.length; r++) {
+                let headerRowIdx = -1;
+                let colMap = { firstName: -1, middleName: -1, lastName: -1, course: -1, batch: -1, studentId: -1 };
+
+                // 1. Detect header row by looking for name keywords
+                for (let r = 0; r < Math.min(10, jsonData.length); r++) {
+                    const row = jsonData[r];
+                    if (!row || row.length === 0) continue;
+                    const normRow = row.map(c => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim());
+
+                    const isHeader = normRow.some(c =>
+                        c === 'name' || c === 'firstname' || c === 'middlename' || c === 'middleinitial' || c === 'lastname' || c === 'student' || c === 'givenname' || c === 'surname' || c === 'fname' || c === 'lname' || c === 'mname' || c === 'studentname' || c.includes('first') || c.includes('last') || c.includes('middle')
+                    );
+
+                    if (isHeader) {
+                        headerRowIdx = r;
+                        normRow.forEach((col, idx) => {
+                            if (col.includes('first') || col.includes('given') || col === 'fname') {
+                                colMap.firstName = idx;
+                            } else if (col.includes('middle') || col.includes('mi') || col === 'mname') {
+                                colMap.middleName = idx;
+                            } else if (col.includes('last') || col.includes('surname') || col === 'lname') {
+                                colMap.lastName = idx;
+                            } else if (col === 'name' || col.includes('student')) {
+                                if (colMap.firstName === -1) colMap.firstName = idx;
+                            } else if (col.includes('course') || col.includes('program')) {
+                                colMap.course = idx;
+                            } else if (col.includes('batch')) {
+                                colMap.batch = idx;
+                            } else if (col.includes('studentno') || col.includes('studentid') || col === 'id') {
+                                colMap.studentId = idx;
+                            }
+                        });
+                        break;
+                    }
+                }
+
+                const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+
+                for (let r = startRow; r < jsonData.length; r++) {
                     const row = jsonData[r];
                     if (!row || row.length === 0) continue;
 
@@ -168,52 +206,73 @@ async function extractExcelOrCsv(file) {
                         if (match) currentBatch = `Batch ${match[1]}`;
                     }
 
-                    if (rowStr.includes('last name') || rowStr.includes('student name') || rowStr.includes('control no') || rowStr.includes('given name')) {
-                        continue;
-                    }
-
                     const cleanCells = row.map(c => String(c || '').trim()).filter(c => c.length > 0);
                     if (cleanCells.length === 0) continue;
 
-                    let cellIdx = 0;
-                    if (/^\d+$/.test(cleanCells[0]) && cleanCells.length > 1) {
-                        cellIdx = 1;
-                    }
-
-                    let studentId = '';
-                    if (cleanCells[cellIdx] && (/^\d{6,15}$/.test(cleanCells[cellIdx]) || /^[0-9-]+$/.test(cleanCells[cellIdx]))) {
-                        studentId = cleanCells[cellIdx];
-                        cellIdx++;
-                    }
-
-                    let lastName = '';
                     let firstName = '';
                     let middleName = '';
+                    let lastName = '';
                     let course = 'BSIT';
+                    let studentId = '';
 
-                    if (cleanCells.length >= cellIdx + 3) {
-                        lastName = cleanCells[cellIdx];
-                        firstName = cleanCells[cellIdx + 1];
-                        middleName = cleanCells[cellIdx + 2];
-                        if (cleanCells[cellIdx + 3]) course = cleanCells[cellIdx + 3];
-                    } else if (cleanCells.length >= cellIdx + 2) {
-                        lastName = cleanCells[cellIdx];
-                        firstName = cleanCells[cellIdx + 1];
-                    } else if (cleanCells[cellIdx]) {
-                        const parts = cleanCells[cellIdx].split(/[,\s]+/);
-                        if (parts.length >= 2) {
+                    if (headerRowIdx !== -1 && (colMap.firstName !== -1 || colMap.lastName !== -1)) {
+                        firstName = colMap.firstName !== -1 ? String(row[colMap.firstName] || '').trim() : '';
+                        middleName = colMap.middleName !== -1 ? String(row[colMap.middleName] || '').trim() : '';
+                        lastName = colMap.lastName !== -1 ? String(row[colMap.lastName] || '').trim() : '';
+                        if (colMap.course !== -1 && row[colMap.course]) course = String(row[colMap.course]).trim();
+                        if (colMap.studentId !== -1 && row[colMap.studentId]) studentId = String(row[colMap.studentId]).trim();
+
+                        if (firstName && !lastName && firstName.includes(',')) {
+                            const parts = firstName.split(',').map(p => p.trim());
                             lastName = parts[0];
-                            firstName = parts.slice(1).join(' ');
-                        } else {
-                            lastName = parts[0];
+                            const remaining = parts[1] ? parts[1].split(' ') : [];
+                            firstName = remaining[0] || '';
+                            middleName = remaining.slice(1).join(' ');
+                        }
+                    } else {
+                        // Positional Fallback based on Name | Middle Name | Last Name
+                        let cellIdx = 0;
+                        if (/^\d+$/.test(cleanCells[0]) && cleanCells.length > 1) {
+                            cellIdx = 1;
+                        }
+                        if (cleanCells[cellIdx] && (/^\d{6,15}$/.test(cleanCells[cellIdx]) || /^[0-9-]+$/.test(cleanCells[cellIdx]))) {
+                            studentId = cleanCells[cellIdx];
+                            cellIdx++;
+                        }
+
+                        if (cleanCells.length >= cellIdx + 3) {
+                            firstName = cleanCells[cellIdx];
+                            middleName = cleanCells[cellIdx + 1];
+                            lastName = cleanCells[cellIdx + 2];
+                            if (cleanCells[cellIdx + 3]) course = cleanCells[cellIdx + 3];
+                        } else if (cleanCells.length >= cellIdx + 2) {
+                            firstName = cleanCells[cellIdx];
+                            lastName = cleanCells[cellIdx + 1];
+                        } else if (cleanCells[cellIdx]) {
+                            const parts = cleanCells[cellIdx].split(/[,\s]+/);
+                            if (parts.length >= 2) {
+                                firstName = parts[0];
+                                lastName = parts.slice(1).join(' ');
+                            } else {
+                                firstName = parts[0];
+                            }
                         }
                     }
 
-                    if (lastName && firstName) {
+                    const fClean = (firstName || '').toUpperCase().replace(/[^A-Z]/g, '');
+                    const mClean = (middleName || '').toUpperCase().replace(/[^A-Z]/g, '');
+                    const lClean = (lastName || '').toUpperCase().replace(/[^A-Z]/g, '');
+
+                    // Skip header row strings if they slipped through as content rows
+                    if (fClean === 'FIRSTNAME' || lClean === 'LASTNAME' || fClean === 'FIRST' || lClean === 'LAST' || mClean.includes('MIDDLEINITIAL') || mClean.includes('MIDDLENAME')) {
+                        continue;
+                    }
+
+                    if (firstName || lastName) {
                         rawRecords.push({
-                            lastName: lastName.toUpperCase(),
-                            firstName: firstName.toUpperCase(),
+                            firstName: (firstName || '').toUpperCase(),
                             middleName: (middleName || '').toUpperCase(),
+                            lastName: (lastName || '').toUpperCase(),
                             batch: currentBatch,
                             studentId: studentId,
                             course: course
@@ -486,9 +545,7 @@ async function executeAutoImportPipeline(file) {
                 last_name: r.lastName,
                 first_name: r.firstName,
                 middle_name: r.middleName || '',
-                name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
-                course: r.course || 'BSIT',
-                batch: r.batch || 'Batch 1'
+                name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
             }));
 
             const { data: insertedData, error } = await window.supabaseClient
@@ -615,7 +672,7 @@ function renderTable() {
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="3" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-file-search" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>Upload a document and extract data to see new grantees listed here.</span>
@@ -633,7 +690,7 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="3" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>No records match the selected batch.</span>
@@ -651,54 +708,27 @@ function renderTable() {
         }
 
         const duplicateBadge = record.isDuplicate
-            ? `<span title="${record.duplicateReason || 'Duplicate'}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; margin-right: 8px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
+            ? `<span title="${record.duplicateReason || 'Duplicate'}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><i class="icon-alert-triangle" style="font-size: 12px;"></i> Duplicate</span>`
             : '';
 
         tr.innerHTML = `
             <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-last-name" data-index="${index}" value="${record.lastName}">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="text" class="input-clean edit-first-name" data-index="${index}" value="${record.firstName || ''}">
+                    ${duplicateBadge}
+                </div>
             </td>
             <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-first-name" data-index="${index}" value="${record.firstName}">
+                <input type="text" class="input-clean edit-middle-name" data-index="${index}" value="${record.middleName || ''}">
             </td>
             <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-middle-name" data-index="${index}" value="${record.middleName}">
-            </td>
-            <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-course" data-index="${index}" value="${record.course || 'BSIT'}" style="width: 90px;">
-            </td>
-            <td style="padding: 6px 12px;">
-                <input type="text" class="input-clean edit-batch" data-index="${index}" value="${record.batch}" style="width: 90px;">
-            </td>
-            <td style="padding: 6px 12px; text-align: right; white-space: nowrap;">
-                ${duplicateBadge}
-                <button class="icon-btn text-danger btn-remove" data-index="${index}" title="Remove" style="background: rgba(244, 67, 54, 0.1); border-radius: 8px;">
-                    <i class="icon-trash-2" style="font-size: 16px; color: #ef4444;"></i>
-                </button>
+                <input type="text" class="input-clean edit-last-name" data-index="${index}" value="${record.lastName || ''}">
             </td>
         `;
         extractedTableBody.appendChild(tr);
     });
 
     // Listeners for inline edits
-    document.querySelectorAll('.edit-last-name').forEach(input => {
-        input.addEventListener('change', async (e) => {
-            const idx = e.target.getAttribute('data-index');
-            const val = e.target.value.trim();
-            extractedRecords[idx].lastName = val;
-            if (extractedRecords[idx].id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).update({
-                        last_name: val,
-                        name: `${val}, ${extractedRecords[idx].firstName || ''} ${extractedRecords[idx].middleName || ''}`.trim()
-                    }).eq('id', extractedRecords[idx].id);
-                } catch (err) {
-                    console.warn('Error updating last name:', err);
-                }
-            }
-        });
-    });
-
     document.querySelectorAll('.edit-first-name').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
@@ -735,113 +765,20 @@ function renderTable() {
         });
     });
 
-    document.querySelectorAll('.edit-course').forEach(input => {
+    document.querySelectorAll('.edit-last-name').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
             const val = e.target.value.trim();
-            extractedRecords[idx].course = val;
+            extractedRecords[idx].lastName = val;
             if (extractedRecords[idx].id) {
                 try {
                     await window.supabaseClient.from(getTableName()).update({
-                        course: val
+                        last_name: val,
+                        name: `${val}, ${extractedRecords[idx].firstName || ''} ${extractedRecords[idx].middleName || ''}`.trim()
                     }).eq('id', extractedRecords[idx].id);
                 } catch (err) {
-                    console.warn('Error updating course:', err);
+                    console.warn('Error updating last name:', err);
                 }
-            }
-        });
-    });
-
-    document.querySelectorAll('.edit-batch').forEach(input => {
-        input.addEventListener('change', async (e) => {
-            const idx = e.target.getAttribute('data-index');
-            const val = e.target.value.trim();
-            extractedRecords[idx].batch = val;
-            if (extractedRecords[idx].id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).update({
-                        batch: val
-                    }).eq('id', extractedRecords[idx].id);
-                } catch (err) {
-                    console.warn('Error updating batch:', err);
-                }
-            }
-        });
-    });
-
-    document.querySelectorAll('.btn-remove').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const btnEl = e.currentTarget;
-            const idx = parseInt(btnEl.getAttribute('data-index'), 10);
-            const rec = extractedRecords[idx];
-            if (!rec) return;
-
-            const granteeName = (rec.lastName || rec.firstName)
-                ? `${rec.lastName || ''}, ${rec.firstName || ''} ${rec.middleName || ''}`.trim()
-                : (rec.name || 'this grantee');
-
-            if (!confirm(`Are you sure you want to delete "${granteeName}" from the New Grantees Masterlist?`)) {
-                return;
-            }
-
-            const origContent = btnEl.innerHTML;
-            btnEl.disabled = true;
-            btnEl.innerHTML = '<i class="icon-loader" style="font-size: 14px; animation: spin 1s linear infinite; display: inline-block;"></i>';
-
-            try {
-                if (rec && rec.id) {
-                    const { data, error } = await window.supabaseClient
-                        .from(getTableName())
-                        .delete()
-                        .eq('id', rec.id)
-                        .select();
-
-                    if (error) {
-                        console.error('Error deleting record from db:', error);
-                        alert(`Failed to delete record from database: ${error.message}`);
-                        btnEl.disabled = false;
-                        btnEl.innerHTML = origContent;
-                        return;
-                    }
-
-                    // Check if RLS blocked the delete (0 rows deleted despite record having an id in DB)
-                    if (data && data.length === 0) {
-                        console.warn('PostgREST returned 0 affected rows on delete:', rec.id);
-                        alert(
-                            'Notice: The record was removed locally, but could not be deleted from Supabase because Row Level Security (RLS) is active without a DELETE policy on new_grantees_masterlist.\n\n' +
-                            'Please run the "scratch/fix_new_grantees_rls.sql" script in your Supabase SQL Editor to grant DELETE permissions.'
-                        );
-                    }
-                }
-
-                // Remove from array (find by id if present, or index)
-                const targetIndex = rec.id
-                    ? extractedRecords.findIndex(r => r.id === rec.id)
-                    : idx;
-                if (targetIndex !== -1) {
-                    extractedRecords.splice(targetIndex, 1);
-                }
-
-                const skipped = extractedRecords.filter(r => r.isDuplicate).length;
-                const imported = extractedRecords.filter(r => !r.isDuplicate).length;
-                if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
-                if (summaryImported) summaryImported.textContent = imported;
-                if (summarySkipped) summarySkipped.textContent = skipped;
-
-                renderTable();
-                if (extractedRecords.length === 0) {
-                    if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
-                    if (importSummaryCard) importSummaryCard.classList.add('hidden');
-                }
-
-                if (typeof window.showToast === 'function') {
-                    window.showToast(`"${granteeName}" deleted from masterlist.`, 'trash-2');
-                }
-            } catch (delErr) {
-                console.error('Error deleting record from db:', delErr);
-                alert(`Error deleting record: ${delErr.message || delErr}`);
-                btnEl.disabled = false;
-                btnEl.innerHTML = origContent;
             }
         });
     });
@@ -1595,12 +1532,42 @@ async function handleSchoolFile(file) {
     return;
 }
 
+async function fetchAllSchoolStudents(supabaseClient) {
+    let allStudents = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        try {
+            const { data, error } = await supabaseClient
+                .from('school_students')
+                .select('*')
+                .range(from, to);
+
+            if (error || !data || data.length === 0) {
+                hasMore = false;
+            } else {
+                allStudents = allStudents.concat(data);
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+        } catch (e) {
+            console.warn('Error fetching paginated school_students:', e);
+            hasMore = false;
+        }
+    }
+    return allStudents;
+}
+
 async function loadSchoolStudentsAndVerify(grantees) {
     try {
-        let { data: dbStudents } = await window.supabaseClient
-            .from('school_students')
-            .select('*')
-            .order('created_at', { ascending: false });
+        let dbStudents = await fetchAllSchoolStudents(window.supabaseClient);
 
         let { data: fallbackStudents } = await window.supabaseClient
             .from('students')
@@ -2048,6 +2015,7 @@ function switchSourceSection(section) {
             sourceActiveLabel.textContent = 'School Student Records (View-Only)';
             sourceActiveLabel.style.color = '#1E88E5';
         }
+        loadSchoolStudentsAndVerify(extractedRecords);
     }
 }
 
@@ -2074,7 +2042,27 @@ async function fetchExistingMasterlist() {
         }
 
         if (data && data.length > 0) {
-            extractedRecords = data.map(row => ({
+            // Auto-clean any header text rows stored previously in database
+            const headerDbRows = data.filter(row => {
+                const f = String(row.first_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                const l = String(row.last_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                const m = String(row.middle_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                return f === 'FIRSTNAME' || l === 'LASTNAME' || m.includes('MIDDLEINITIAL') || f === 'FIRST' || l === 'LAST';
+            });
+
+            if (headerDbRows.length > 0) {
+                const idsToDelete = headerDbRows.map(r => r.id);
+                window.supabaseClient.from(tableName).delete().in('id', idsToDelete).then(() => {});
+            }
+
+            const validData = data.filter(row => {
+                const f = String(row.first_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                const l = String(row.last_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                const m = String(row.middle_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+                return f !== 'FIRSTNAME' && l !== 'LASTNAME' && !m.includes('MIDDLEINITIAL') && f !== 'FIRST' && l !== 'LAST';
+            });
+
+            extractedRecords = validData.map(row => ({
                 id: row.id,
                 studentId: row.student_id || '',
                 lastName: row.last_name,
@@ -2090,7 +2078,7 @@ async function fetchExistingMasterlist() {
             renderTable();
             updateClearMasterlistButtonVisibility();
 
-            const granteesForVerification = data.map(m => ({
+            const granteesForVerification = validData.map(m => ({
                 id: m.id,
                 name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
                 last_name: m.last_name,
@@ -2818,6 +2806,21 @@ export function initMasterlistImport() {
             renderAnnexReviewQueue(needsReviewList);
         }
     });
+
+    // Subscribe to Realtime updates for school_students table (updates Superadmin automatically when Admin uploads list file)
+    if (window.supabaseClient) {
+        try {
+            window.supabaseClient
+                .channel('superadmin-school-students-realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'school_students' }, async (payload) => {
+                    console.log('[Realtime] school_students change event in Superadmin:', payload.eventType);
+                    await loadSchoolStudentsAndVerify(extractedRecords);
+                })
+                .subscribe();
+        } catch (rtErr) {
+            console.warn('Realtime subscription error for school_students:', rtErr);
+        }
+    }
 
     // Initial fetch of masterlist data
     fetchExistingMasterlist();
