@@ -433,6 +433,24 @@ function renderPanel() {
                                 <i class="icon-external-link" style="font-size: 11px;"></i> Full Tab
                             </a>
                         </div>
+
+                        <!-- Document AI ATM Proof Verification Badge -->
+                        <div style="margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: ${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? 'rgba(16, 185, 129, 0.08)' : ((s.atmNameMatches === false || s.atmSaMatches === false) || (s.documents && (s.documents.atmNameMatches === false || s.documents.atmSaMatches === false)) ? 'rgba(239, 68, 68, 0.08)' : 'rgba(15, 50, 96, 0.04)')}; border: 1px solid ${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? 'rgba(16, 185, 129, 0.25)' : ((s.atmNameMatches === false || s.atmSaMatches === false) || (s.documents && (s.documents.atmNameMatches === false || s.documents.atmSaMatches === false)) ? 'rgba(239, 68, 68, 0.25)' : 'var(--border-color)')}; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 10px; font-weight: 800; color: ${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? '#10B981' : ((s.atmNameMatches === false || s.atmSaMatches === false) || (s.documents && (s.documents.atmNameMatches === false || s.documents.atmSaMatches === false)) ? '#EF4444' : 'var(--primary-color)')};">
+                                    <i class="${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? 'icon-shield-check' : 'icon-credit-card'}" style="font-size: 11px;"></i>
+                                    ${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? 'AI MATCH: NAME & SA CONFIRMED' : ((s.atmNameMatches === false || s.atmSaMatches === false) || (s.documents && (s.documents.atmNameMatches === false || s.documents.atmSaMatches === false)) ? 'AI MISMATCH DETECTED' : 'AI ATM VERIFICATION')}
+                                </div>
+                                <div style="font-size: 9.5px; color: var(--text-primary); font-weight: 600; margin-top: 1px;">
+                                    Holder: ${s.atmExtractedName || (s.documents && s.documents.atmExtractedName) || name} • SA: ${s.atmExtractedSaNumber || (s.documents && s.documents.atmExtractedSaNumber) || (s.saNumber || s.sa_number || 'N/A')}
+                                </div>
+                            </div>
+                            ${!isAtmPdf ? `
+                                <button onclick="triggerAtmProofScan('${atmCardUrl}', ${selectedIndex})" title="Run Google Document AI ATM Proof Scan" style="padding: 3px 8px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 10px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
+                                    AI Scan
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -826,6 +844,71 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
         alert('Failed to update student verification: ' + (e.message || e));
     } finally {
         isUpdating = false;
+    }
+};
+
+// Google Document AI Scanner for ATM Proof Name & SA verification
+window.triggerAtmProofScan = async function (imageUrl, studentIndex) {
+    if (!imageUrl) return;
+    const s = filteredSaStudents[studentIndex];
+    if (!s) return;
+
+    if (window.showToast) {
+        window.showToast('Verifying ATM card holder name & SA number with Document AI...', 'refresh-cw');
+    }
+
+    try {
+        const imgRes = await fetch(imageUrl);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+
+        reader.onloadend = async () => {
+            const base64data = reader.result.split(',')[1];
+            try {
+                const apiRes = await fetch('/api/document-ai/scan-atm-proof', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: base64data,
+                        expectedName: s.fullName || s.full_name || '',
+                        expectedSaNumber: s.saNumber || s.sa_number || (s.documents && s.documents.saNumber) || ''
+                    })
+                });
+
+                const data = await apiRes.json();
+                if (data && data.success) {
+                    s.atmNameMatches = data.nameMatches;
+                    s.atmSaMatches = data.saMatches;
+                    s.atmExtractedName = data.detectedName;
+                    s.atmExtractedSaNumber = data.detectedSaNumber;
+                    if (!s.documents) s.documents = {};
+                    s.documents.atmNameMatches = data.nameMatches;
+                    s.documents.atmSaMatches = data.saMatches;
+                    s.documents.atmExtractedName = data.detectedName;
+                    s.documents.atmExtractedSaNumber = data.detectedSaNumber;
+
+                    const statusMsg = data.isValid
+                        ? `✓ Verified: Name & SA match card details`
+                        : `⚠️ Mismatch: ${data.message || 'Details do not match'}`;
+
+                    if (window.showToast) {
+                        window.showToast(statusMsg, data.isValid ? 'shield-check' : 'alert-triangle');
+                    }
+                    renderPanel();
+                } else {
+                    if (window.showToast) {
+                        window.showToast(data.message || 'Could not extract details from ATM card.', 'alert-triangle');
+                    }
+                }
+            } catch (err) {
+                console.error('ATM scan error:', err);
+                if (window.showToast) window.showToast('Document AI service error: ' + err.message, 'alert-circle');
+            }
+        };
+        reader.readAsDataURL(blob);
+    } catch (e) {
+        console.error('Image fetch error:', e);
+        if (window.showToast) window.showToast('Error loading image for scan: ' + e.message, 'alert-circle');
     }
 };
 

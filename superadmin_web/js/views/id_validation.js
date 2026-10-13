@@ -386,6 +386,22 @@ function renderPanel() {
                                     <i class="icon-external-link" style="font-size: 10px;"></i>
                                 </a>
                             </div>
+
+                            <!-- Front ID Name AI Verification Badge -->
+                            <div style="margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: ${(s.frontNameMatches === true || (s.documents && s.documents.frontNameMatches === true)) ? 'rgba(16, 185, 129, 0.08)' : ((s.frontNameMatches === false || (s.documents && s.documents.frontNameMatches === false)) ? 'rgba(239, 68, 68, 0.08)' : 'rgba(15, 50, 96, 0.04)')}; border: 1px solid ${(s.frontNameMatches === true || (s.documents && s.documents.frontNameMatches === true)) ? 'rgba(16, 185, 129, 0.25)' : ((s.frontNameMatches === false || (s.documents && s.documents.frontNameMatches === false)) ? 'rgba(239, 68, 68, 0.25)' : 'var(--border-color)')}; display: flex; align-items: center; justify-content: space-between;">
+                                <div>
+                                    <div style="font-size: 9px; font-weight: 800; color: ${(s.frontNameMatches === true || (s.documents && s.documents.frontNameMatches === true)) ? '#10B981' : ((s.frontNameMatches === false || (s.documents && s.documents.frontNameMatches === false)) ? '#EF4444' : 'var(--primary-color)')};">
+                                        <i class="${(s.frontNameMatches === true || (s.documents && s.documents.frontNameMatches === true)) ? 'icon-user-check' : ((s.frontNameMatches === false || (s.documents && s.documents.frontNameMatches === false)) ? 'icon-user-x' : 'icon-user')}" style="font-size: 10px;"></i>
+                                        ${(s.frontNameMatches === true || (s.documents && s.documents.frontNameMatches === true)) ? 'NAME MATCHED' : ((s.frontNameMatches === false || (s.documents && s.documents.frontNameMatches === false)) ? 'NAME MISMATCH' : 'NAME VERIFY')}
+                                    </div>
+                                    <div style="font-size: 9px; color: var(--text-primary); font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${s.frontExtractedName || (s.documents && s.documents.frontExtractedName) || name}">
+                                        ${s.frontExtractedName || (s.documents && s.documents.frontExtractedName) || name}
+                                    </div>
+                                </div>
+                                <button onclick="triggerFrontIdNameScan('${frontUrl}', ${selectedIndex})" title="Run Front ID Name Verification Scan" style="padding: 3px 6px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
+                                    AI Scan
+                                </button>
+                            </div>
                         ` : `
                             <div style="height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color); color: var(--text-secondary);">
                                 <i class="icon-image-off" style="font-size: 20px; margin-bottom: 4px; opacity: 0.5;"></i>
@@ -419,14 +435,17 @@ function renderPanel() {
                             </div>
 
                             <!-- Document AI Validation Sticker Badge -->
-                            <div style="margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: ${s.stickerValidated ? 'rgba(16, 185, 129, 0.08)' : (s.stickerFlagged ? 'rgba(239, 68, 68, 0.08)' : 'rgba(15, 50, 96, 0.04)')}; border: 1px solid ${s.stickerValidated ? 'rgba(16, 185, 129, 0.25)' : (s.stickerFlagged ? 'rgba(239, 68, 68, 0.25)' : 'var(--border-color)')}; display: flex; align-items: center; justify-content: space-between;">
+                            <div style="margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: ${(s.stickerValidated || (s.documents && s.documents.stickerValidated)) ? 'rgba(16, 185, 129, 0.08)' : ((s.stickerFlagged || (s.documents && s.documents.stickerValidated === false)) ? 'rgba(239, 68, 68, 0.08)' : 'rgba(15, 50, 96, 0.04)')}; border: 1px solid ${(s.stickerValidated || (s.documents && s.documents.stickerValidated)) ? 'rgba(16, 185, 129, 0.25)' : ((s.stickerFlagged || (s.documents && s.documents.stickerValidated === false)) ? 'rgba(239, 68, 68, 0.25)' : 'var(--border-color)')}; display: flex; align-items: center; justify-content: space-between;">
                                 <div>
-                                    <div style="font-size: 9px; font-weight: 800; color: ${s.stickerValidated ? '#10B981' : (s.stickerFlagged ? '#EF4444' : 'var(--primary-color)')};">
-                                        <i class="${s.stickerValidated ? 'icon-shield-check' : 'icon-award'}" style="font-size: 10px;"></i>
-                                        ${s.stickerValidated ? 'STICKER VALIDATED' : (s.stickerFlagged ? 'STICKER MISMATCH' : 'STICKER SCAN')}
+                                    <div style="font-size: 9px; font-weight: 800; color: ${(s.stickerValidated || (s.documents && s.documents.stickerValidated)) ? '#10B981' : ((s.stickerFlagged || (s.documents && s.documents.stickerValidated === false)) ? '#EF4444' : 'var(--primary-color)')};">
+                                        <i class="${(s.stickerValidated || (s.documents && s.documents.stickerValidated)) ? 'icon-shield-check' : 'icon-award'}" style="font-size: 10px;"></i>
+                                        ${(s.stickerValidated || (s.documents && s.documents.stickerValidated)) ? 'STICKER VALIDATED' : ((s.stickerFlagged || (s.documents && s.documents.stickerValidated === false)) ? 'STICKER MISMATCH' : 'STICKER SCAN')}
                                     </div>
                                     <div style="font-size: 9px; color: var(--text-primary); font-weight: 600;">
-                                        ${s.academicYear ? `AY ${s.academicYear}` : 'AY 2026-2027'} • ${s.semester || '1st Sem'}
+                                        ${s.academicYear || (s.documents && s.documents.academicYear) ? `AY ${s.academicYear || (s.documents && s.documents.academicYear)}` : 'AY 2026-2027'} • ${s.semester || (s.documents && s.documents.semester) || '1st Sem'}
+                                    </div>
+                                    <div style="font-size: 8.5px; color: ${(s.backBirthdateMatches === false || (s.documents && s.documents.backBirthdateMatches === false)) ? '#EF4444' : '#10B981'}; font-weight: 700; margin-top: 1px;">
+                                        DOB: ${s.backBirthdate || (s.documents && s.documents.backBirthdate) || s.birthdate || s.dateOfBirth || 'Registered'} (${(s.backBirthdateMatches === false || (s.documents && s.documents.backBirthdateMatches === false)) ? 'MISMATCH' : 'MATCHED'})
                                     </div>
                                 </div>
                                 <button onclick="triggerDocumentAiScan('${backUrl}', ${selectedIndex})" title="Run Google Document AI Scan" style="padding: 3px 6px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
@@ -927,14 +946,14 @@ window.downloadAllIdDocuments = async function () {
     }
 };
 
-// Google Document AI Scanner for Back ID validation sticker
-window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
+// Google Document AI Scanner for Front ID Name verification
+window.triggerFrontIdNameScan = async function (imageUrl, studentIndex) {
     if (!imageUrl) return;
     const s = filteredIdStudents[studentIndex];
     if (!s) return;
 
     if (window.showToast) {
-        window.showToast('Scanning validation sticker with Google Document AI...', 'refresh-cw');
+        window.showToast('Verifying student name on Front ID with Document AI...', 'refresh-cw');
     }
 
     try {
@@ -945,10 +964,74 @@ window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
         reader.onloadend = async () => {
             const base64data = reader.result.split(',')[1];
             try {
-                const apiRes = await fetch('/api/document-ai/scan-sticker', {
+                const apiRes = await fetch('/api/document-ai/scan-front-id', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64data })
+                    body: JSON.stringify({
+                        image: base64data,
+                        expectedName: s.fullName || s.full_name || ''
+                    })
+                });
+
+                const data = await apiRes.json();
+                if (data && data.success) {
+                    s.frontNameMatches = data.nameMatches;
+                    s.frontExtractedName = data.detectedName;
+                    if (!s.documents) s.documents = {};
+                    s.documents.frontNameMatches = data.nameMatches;
+                    s.documents.frontExtractedName = data.detectedName;
+
+                    const statusMsg = data.nameMatches
+                        ? `✓ Name Matched: ${data.detectedName || s.fullName}`
+                        : `⚠️ Name Mismatch: ${data.detectedName || 'Unmatched'}`;
+
+                    if (window.showToast) {
+                        window.showToast(statusMsg, data.nameMatches ? 'user-check' : 'alert-triangle');
+                    }
+                    renderPanel();
+                } else {
+                    if (window.showToast) {
+                        window.showToast(data.message || 'Could not verify name on front of ID.', 'alert-triangle');
+                    }
+                }
+            } catch (err) {
+                console.error('Front ID scan error:', err);
+                if (window.showToast) window.showToast('Document AI service error: ' + err.message, 'alert-circle');
+            }
+        };
+        reader.readAsDataURL(blob);
+    } catch (e) {
+        console.error('Image fetch error:', e);
+        if (window.showToast) window.showToast('Error loading image for scan: ' + e.message, 'alert-circle');
+    }
+};
+
+// Google Document AI Scanner for Back ID validation sticker and birthdate
+window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
+    if (!imageUrl) return;
+    const s = filteredIdStudents[studentIndex];
+    if (!s) return;
+
+    if (window.showToast) {
+        window.showToast('Scanning sticker & birthdate with Google Document AI...', 'refresh-cw');
+    }
+
+    try {
+        const imgRes = await fetch(imageUrl);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+
+        reader.onloadend = async () => {
+            const base64data = reader.result.split(',')[1];
+            try {
+                const expectedBdate = s.birthdate || s.dateOfBirth || (s.documents && s.documents.birthdate) || '';
+                const apiRes = await fetch('/api/document-ai/scan-back-id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: base64data,
+                        expectedBirthdate: expectedBdate
+                    })
                 });
 
                 const data = await apiRes.json();
@@ -957,10 +1040,18 @@ window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
                     s.semester = data.semester || '1st Semester';
                     s.stickerValidated = data.isValid;
                     s.stickerFlagged = !data.isValid;
+                    s.backBirthdate = data.birthdate;
+                    s.backBirthdateMatches = data.birthdateMatches;
+                    if (!s.documents) s.documents = {};
+                    s.documents.academicYear = s.academicYear;
+                    s.documents.semester = s.semester;
+                    s.documents.stickerValidated = data.isValid;
+                    s.documents.backBirthdate = data.birthdate;
+                    s.documents.backBirthdateMatches = data.birthdateMatches;
 
                     const statusMsg = data.isValid
-                        ? `✓ Verified: ${data.semester} AY ${data.academicYear}`
-                        : `⚠️ ${data.message || 'Sticker mismatch'}`;
+                        ? `✓ Verified: ${data.semester} AY ${data.academicYear} (DOB Matched)`
+                        : `⚠️ ${data.message || 'Validation mismatch'}`;
 
                     if (window.showToast) {
                         window.showToast(statusMsg, data.isValid ? 'shield-check' : 'alert-triangle');
@@ -968,7 +1059,7 @@ window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
                     renderPanel();
                 } else {
                     if (window.showToast) {
-                        window.showToast(data.message || 'Could not detect sticker on card.', 'alert-triangle');
+                        window.showToast(data.message || 'Could not detect sticker or birthdate.', 'alert-triangle');
                     }
                 }
             } catch (err) {

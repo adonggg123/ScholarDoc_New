@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // Load environment variables from .env if present
 if (fs.existsSync(path.join(__dirname, '.env'))) {
@@ -87,10 +88,492 @@ function findFilePath(urlPath) {
     return null;
 }
 
-// Active academic term settings
+// Active academic term settings (dynamically updated from system_settings)
 let activeAcademicYear = '2026-2027';
 let activeSemester = '1st Semester';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'AIzaSyDKFEf2kVwuCGQQYaeBtsMaeDZiA0sXv_E';
+
+const https = require('https');
+
+// Dynamic academic period synchronization with Supabase
+async function syncAcademicTermFromDb() {
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        const res = await fetch(`${SUPABASE_REST_URL}/system_settings?key=in.(current_academic_year,current_semester,academic_term)`, { headers });
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                for (const row of data) {
+                    if (row.key === 'current_academic_year' && row.value) activeAcademicYear = String(row.value).trim();
+                    if (row.key === 'current_semester' && row.value) activeSemester = String(row.value).trim();
+                    if (row.key === 'academic_term' && typeof row.value === 'object') {
+                        if (row.value.academic_year) activeAcademicYear = String(row.value.academic_year).trim();
+                        if (row.value.semester) activeSemester = String(row.value.semester).trim();
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Fallback to default
+    }
+}
+setTimeout(syncAcademicTermFromDb, 1500);
+
+function callOcrSpace(base64Image) {
+    return new Promise((resolve) => {
+        const postData = 'apikey=helloworld&language=eng&isOverlayRequired=false&OCREngine=2&base64Image=' + encodeURIComponent('data:image/jpeg;base64,' + base64Image);
+        const req = https.request({
+            hostname: 'api.ocr.space',
+            path: '/parse/image',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', c => data += c);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    const text = json.ParsedResults?.[0]?.ParsedText || '';
+                    resolve(text);
+                } catch (_) {
+                    resolve('');
+                }
+            });
+        });
+        req.on('error', () => resolve(''));
+        req.setTimeout(8000, () => {
+            req.destroy();
+            resolve('');
+        });
+        req.write(postData);
+        req.end();
+    });
+}
+
+// ── Document AI & OCR Caching Layer ──────────────────────────────────────────
+const ocrTextCache = new Map(); // SHA-256(image) -> { text, engine, timestamp }
+const documentAiEndpointCache = new Map(); // SHA-256(urlPath + payload) -> { response, timestamp }
+const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes TTL
+const MAX_CACHE_ENTRIES = 500;
+
+function getSha256(str) {
+    return crypto.createHash('sha256').update(String(str)).digest('hex');
+}
+
+function getFromCache(cache, key) {
+    if (!cache.has(key)) return null;
+    const entry = cache.get(key);
+    if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+        cache.delete(key);
+        return null;
+    }
+    return entry.value;
+}
+
+function setInCache(cache, key, value) {
+    if (cache.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = cache.keys().next().value;
+        cache.delete(oldestKey);
+    }
+    cache.set(key, { value, timestamp: Date.now() });
+}
+
+function callVisionApi(base64Image) {
+    return new Promise((resolve) => {
+        if (!base64Image) return resolve({ text: '', engine: 'None' });
+
+        const imgHash = getSha256(base64Image);
+        const cached = getFromCache(ocrTextCache, imgHash);
+        if (cached) {
+            return resolve({ text: cached.text, engine: `${cached.engine} (Server Cached)` });
+        }
+
+        const visionPayload = JSON.stringify({
+            requests: [{
+                image: { content: base64Image },
+                features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
+            }]
+        });
+
+        let finished = false;
+        function finish(text, engine) {
+            if (finished) return;
+            finished = true;
+            if (text && text.trim().length > 0) {
+                setInCache(ocrTextCache, imgHash, { text, engine });
+            }
+            resolve({ text, engine });
+        }
+
+        const visionReq = https.request({
+            hostname: 'vision.googleapis.com',
+            path: '/v1/images:annotate?key=' + GOOGLE_API_KEY,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(visionPayload)
+            }
+        }, (visionRes) => {
+            let visionData = '';
+            visionRes.on('data', c => visionData += c);
+            visionRes.on('end', async () => {
+                let extractedText = '';
+                let engine = 'Google Document AI via ScholarDoc Server';
+                try {
+                    const vJson = JSON.parse(visionData);
+                    if (vJson.responses && vJson.responses[0]?.fullTextAnnotation) {
+                        extractedText = vJson.responses[0].fullTextAnnotation.text || '';
+                    } else if (vJson.responses && vJson.responses[0]?.textAnnotations?.[0]?.description) {
+                        extractedText = vJson.responses[0].textAnnotations[0].description || '';
+                    }
+                } catch (_) {}
+
+                if (!extractedText) {
+                    extractedText = await callOcrSpace(base64Image);
+                    if (extractedText) {
+                        engine = 'High-Accuracy Document OCR via ScholarDoc Server';
+                    }
+                }
+                finish(extractedText, engine);
+            });
+        });
+
+        visionReq.on('error', async (err) => {
+            console.warn('[Document AI] Google Vision error:', err.message);
+            const ocrText = await callOcrSpace(base64Image);
+            finish(ocrText, ocrText ? 'High-Accuracy Document OCR via ScholarDoc Server' : 'Fallback Engine');
+        });
+
+        // Fast failover timeout: 4s instead of 12s to prevent long hangs
+        visionReq.setTimeout(4000, async () => {
+            visionReq.destroy();
+            const ocrText = await callOcrSpace(base64Image);
+            finish(ocrText, ocrText ? 'High-Accuracy Document OCR via ScholarDoc Server' : 'Fallback Engine');
+        });
+
+        visionReq.write(visionPayload);
+        visionReq.end();
+    });
+}
+
+function normalizeName(name) {
+    if (!name) return '';
+    return name
+        .toUpperCase()
+        .replace(/[^A-Z0-9\s]/g, ' ')
+        .replace(/\b(MR|MS|MRS|STUDENT|NAME|HON|DR|JR|SR|II|III|IV)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function verifyNameMatch(rawText, expectedName) {
+    const raw = (rawText || '').toUpperCase();
+    const expClean = normalizeName(expectedName);
+    if (!expClean) {
+        return {
+            matches: false,
+            detectedName: '',
+            confidence: 0,
+            message: 'No registered name provided for comparison.'
+        };
+    }
+
+    if (!raw.trim()) {
+        return {
+            matches: false,
+            detectedName: '',
+            confidence: 0,
+            message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        };
+    }
+
+    const expTokens = expClean.split(' ').filter(t => t.length > 1);
+    if (expTokens.length === 0) {
+        return { matches: true, detectedName: expectedName, confidence: 1.0, message: 'Name verified' };
+    }
+
+    // Direct exact or substring match
+    if (raw.includes(expClean)) {
+        return {
+            matches: true,
+            detectedName: expectedName,
+            confidence: 0.98,
+            message: 'The name on your school ID matches your registered profile.'
+        };
+    }
+
+    const surname = expTokens[expTokens.length - 1];
+    const firstName = expTokens[0];
+
+    const matchedTokens = expTokens.filter(token => {
+        const regex = new RegExp(`\\b${token}\\b`, 'i');
+        if (regex.test(raw)) return true;
+        if (token.length >= 4 && raw.includes(token)) return true;
+        return false;
+    });
+
+    const tokenRatio = matchedTokens.length / expTokens.length;
+
+    // Line-by-line similarity
+    const lines = raw.split(/[\r\n]+/).map(l => normalizeName(l)).filter(l => l.length >= 3);
+    let bestLine = '';
+    let bestScore = 0;
+
+    for (const line of lines) {
+        const lineTokens = line.split(' ').filter(Boolean);
+        const intersect = expTokens.filter(t => lineTokens.includes(t));
+        const score = intersect.length / Math.max(expTokens.length, 1);
+        if (score > bestScore) {
+            bestScore = score;
+            bestLine = line;
+        }
+    }
+
+    const hasFirstAndLast = (
+        (raw.includes(firstName) || matchedTokens.includes(firstName)) &&
+        (raw.includes(surname) || matchedTokens.includes(surname))
+    );
+
+    const isMatch = (tokenRatio >= 0.60 && (hasFirstAndLast || expTokens.length <= 2)) || bestScore >= 0.65;
+
+    let message = '';
+    if (isMatch) {
+        message = 'The name on your school ID matches your registered profile.';
+    } else {
+        message = 'The name on your school ID does not match your registered profile. Please scan your own valid school ID again.';
+    }
+
+    return {
+        matches: isMatch,
+        detectedName: bestLine || matchedTokens.join(' '),
+        confidence: Math.max(tokenRatio, bestScore),
+        message
+    };
+}
+
+const MONTH_NAMES = {
+    'JAN': 1, 'JANUARY': 1, 'ENE': 1, 'ENERO': 1,
+    'FEB': 2, 'FEBRUARY': 2, 'PEB': 2, 'PEBRERO': 2,
+    'MAR': 3, 'MARCH': 3, 'MARSO': 3,
+    'APR': 4, 'APRIL': 4, 'ABR': 4, 'ABRIL': 4,
+    'MAY': 5, 'MAYO': 5,
+    'JUN': 6, 'JUNE': 6, 'HUN': 6, 'HUNYO': 6,
+    'JUL': 7, 'JULY': 7, 'HUL': 7, 'HULYO': 7,
+    'AUG': 8, 'AUGUST': 8, 'AGO': 8, 'AGOSTO': 8,
+    'SEP': 9, 'SEPT': 9, 'SEPTEMBER': 9, 'SET': 9, 'SETYEMBRE': 9,
+    'OCT': 10, 'OCTOBER': 10, 'OKT': 10, 'OKTUBRE': 10,
+    'NOV': 11, 'NOVEMBER': 11, 'NOB': 11, 'NOBYEMBRE': 11,
+    'DEC': 12, 'DECEMBER': 12, 'DIS': 12, 'DISYEMBRE': 12
+};
+
+function parseDateComponents(dateStr) {
+    if (!dateStr) return null;
+    const clean = String(dateStr).trim();
+
+    const isoMatch = clean.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$/);
+    if (isoMatch) {
+        return {
+            year: parseInt(isoMatch[1], 10),
+            month: parseInt(isoMatch[2], 10),
+            day: parseInt(isoMatch[3], 10)
+        };
+    }
+
+    const slashMatch = clean.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/);
+    if (slashMatch) {
+        const p1 = parseInt(slashMatch[1], 10);
+        const p2 = parseInt(slashMatch[2], 10);
+        const y = parseInt(slashMatch[3], 10);
+        if (p1 > 12 && p2 <= 12) {
+            return { year: y, month: p2, day: p1 };
+        }
+        return { year: y, month: p1, day: p2 };
+    }
+
+    const textMonthMatch = clean.match(/([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})/) ||
+                           clean.match(/(\d{1,2})\s+([a-zA-Z]+),?\s+(\d{4})/);
+    if (textMonthMatch) {
+        let mStr = textMonthMatch[1].toUpperCase();
+        let dStr = textMonthMatch[2];
+        let yStr = textMonthMatch[3];
+        if (MONTH_NAMES[dStr.toUpperCase()]) {
+            mStr = dStr.toUpperCase();
+            dStr = textMonthMatch[1];
+        }
+        const m = MONTH_NAMES[mStr];
+        if (m) {
+            return {
+                year: parseInt(yStr, 10),
+                month: m,
+                day: parseInt(dStr, 10)
+            };
+        }
+    }
+
+    return null;
+}
+
+function verifyBirthdateMatch(rawText, expectedBirthdate) {
+    const exp = parseDateComponents(expectedBirthdate);
+    if (!exp) {
+        return {
+            matches: true,
+            detectedBirthdate: null,
+            message: 'No registered birthdate on file to compare.'
+        };
+    }
+
+    const text = (rawText || '').trim();
+    if (!text) {
+        return {
+            matches: false,
+            detectedBirthdate: null,
+            message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        };
+    }
+
+    const dobRegexes = [
+        /(?:DOB|D\.O\.B|Birth\s*Date|Date\s*of\s*Birth|Birthday|Kapanganakan)\s*[:\.\-]?\s*([A-Za-z0-9\s,\/\-\.]+)/gi,
+        /\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4})\b/g,
+        /\b(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})\b/g,
+        /\b([a-zA-Z]{3,9}\s+\d{1,2},?\s+\d{4})\b/g,
+        /\b(\d{1,2}\s+[a-zA-Z]{3,9},?\s+\d{4})\b/g
+    ];
+
+    const candidateStrings = [];
+    for (const r of dobRegexes) {
+        let m;
+        while ((m = r.exec(text)) !== null) {
+            candidateStrings.push(m[1] || m[0]);
+        }
+    }
+
+    let detectedDate = null;
+    let matches = false;
+
+    for (const cand of candidateStrings) {
+        const parsed = parseDateComponents(cand);
+        if (parsed) {
+            const formatted = `${String(parsed.month).padStart(2, '0')}/${String(parsed.day).padStart(2, '0')}/${parsed.year}`;
+            if (!detectedDate) detectedDate = formatted;
+            if (parsed.year === exp.year) {
+                if ((parsed.month === exp.month && parsed.day === exp.day) ||
+                    (parsed.month === exp.day && parsed.day === exp.month)) {
+                    matches = true;
+                    detectedDate = formatted;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!matches) {
+        const hasYear = text.includes(String(exp.year));
+        const hasDay = new RegExp(`\\b${exp.day}\\b`).test(text);
+        if (hasYear && hasDay) {
+            matches = true;
+            detectedDate = `${String(exp.month).padStart(2, '0')}/${String(exp.day).padStart(2, '0')}/${exp.year}`;
+        }
+    }
+
+    let message = '';
+    if (matches) {
+        message = `Birthdate verified! Matches registered information (${detectedDate}).`;
+    } else if (detectedDate) {
+        message = 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.';
+    } else {
+        message = 'Could not detect a matching birthdate on the back of your ID.';
+    }
+
+    return {
+        matches,
+        detectedBirthdate: detectedDate,
+        message
+    };
+}
+
+function verifyAtmProof(rawText, expectedName, expectedSaNumber) {
+    const text = (rawText || '').trim();
+    if (!text) {
+        return {
+            isValid: false,
+            nameMatches: false,
+            saMatches: false,
+            detectedName: '',
+            detectedSaNumber: '',
+            message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        };
+    }
+
+    const cleanExpectedSa = (expectedSaNumber || '').replace(/\D/g, '');
+
+    const digitSequences = [];
+    const allNumberMatches = text.match(/\b\d{9,18}\b/g) || [];
+    for (const n of allNumberMatches) digitSequences.push(n);
+
+    const spacedMatch = text.match(/\b\d{3,6}[\s\-]\d{3,6}[\s\-]\d{2,6}\b/g) || [];
+    for (const s of spacedMatch) digitSequences.push(s.replace(/\D/g, ''));
+
+    const saRegex = /(?:SA\s*(?:No\.?|Number)?|Account\s*(?:No\.?|Number)?|Acct\s*(?:No\.?)?)?\s*[:\.\-]?\s*(\b\d{3,4}[\s\-]?\d{3,4}[\s\-]?\d{3,6}\b)/gi;
+    let m;
+    while ((m = saRegex.exec(text)) !== null) {
+        digitSequences.push(m[1].replace(/\D/g, ''));
+    }
+
+    let detectedSa = '';
+    let saMatches = false;
+
+    const strippedAllText = text.replace(/\D/g, '');
+    if (cleanExpectedSa && strippedAllText.includes(cleanExpectedSa)) {
+        saMatches = true;
+        detectedSa = cleanExpectedSa;
+    } else {
+        for (const cand of digitSequences) {
+            const cleanCand = cand.replace(/\D/g, '');
+            if (cleanCand.length >= 9) {
+                if (!detectedSa) detectedSa = cleanCand;
+                if (cleanExpectedSa && (cleanCand === cleanExpectedSa || cleanCand.includes(cleanExpectedSa) || cleanExpectedSa.includes(cleanCand))) {
+                    saMatches = true;
+                    detectedSa = cleanCand;
+                    break;
+                }
+            }
+        }
+    }
+
+    const nameResult = verifyNameMatch(text, expectedName);
+    const nameMatches = nameResult.matches;
+    const detectedName = nameResult.detectedName;
+
+    const isValid = saMatches && nameMatches;
+
+    let message = '';
+    if (isValid) {
+        message = 'ATM Proof verified! Account holder name and SA number match registered records.';
+    } else if (!saMatches && !nameMatches) {
+        message = "The account holder's name or SA number does not match your registered information. Please upload the correct ATM Proof.";
+    } else if (!saMatches) {
+        message = `The SA number on your ATM proof does not match your entered SA number. Please upload the correct ATM Proof.`;
+    } else {
+        message = "The account holder's name does not match your registered information. Please upload the correct ATM Proof.";
+    }
+
+    return {
+        isValid,
+        saMatches,
+        nameMatches,
+        detectedSaNumber: detectedSa || cleanExpectedSa,
+        detectedName,
+        message
+    };
+}
 
 function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem = activeSemester) {
     const text = (rawText || '').trim();
@@ -191,14 +674,14 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         const issues = [];
         if (!yearMatches) issues.push(`Year mismatch (Detected: ${detectedYear || 'None'}, Required: ${currentYear})`);
         if (!semMatches) issues.push(`Semester mismatch (Detected: ${detectedSem || 'None'}, Required: ${currentSem})`);
-        message = `Validation sticker does not match current period: ${issues.join(' and ')}.`;
+        message = `The academic year or semester on your ID sticker is not current. Please scan the correct ID.`;
     }
 
     return {
         stickerFound: !!(detectedYear || detectedSem || hasValidationStamp),
         isValid,
         yearMatches,
-        semesterMatches,
+        semesterMatches: semMatches,
         academicYear: detectedYear,
         semester: detectedSem,
         hasValidationStamp,
@@ -207,42 +690,6 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         message,
         rawText
     };
-}
-
-const https = require('https');
-
-function callOcrSpace(base64Image) {
-    return new Promise((resolve) => {
-        const postData = 'apikey=helloworld&language=eng&isOverlayRequired=false&OCREngine=2&base64Image=' + encodeURIComponent('data:image/jpeg;base64,' + base64Image);
-        const req = https.request({
-            hostname: 'api.ocr.space',
-            path: '/parse/image',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(postData)
-            }
-        }, (res) => {
-            let data = '';
-            res.on('data', c => data += c);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    const text = json.ParsedResults?.[0]?.ParsedText || '';
-                    resolve(text);
-                } catch (_) {
-                    resolve('');
-                }
-            });
-        });
-        req.on('error', () => resolve(''));
-        req.setTimeout(8000, () => {
-            req.destroy();
-            resolve('');
-        });
-        req.write(postData);
-        req.end();
-    });
 }
 
 // ── Google OAuth2 Access Token for FCM HTTP v1 ───────────────────────────
@@ -1442,14 +1889,15 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ── API: Google Document AI Sticker Scanner ──────────────────────────
+    // ── API: Google Document AI Sticker Scanner (Legacy & Superadmin) ───
     if (urlPath === '/api/document-ai/scan-sticker' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
             try {
                 const parsed = JSON.parse(body || '{}');
                 const base64Image = parsed.image;
+                const expectedBirthdate = parsed.expectedBirthdate || parsed.birthdate;
 
                 if (!base64Image) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1457,68 +1905,247 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // Call Google Cloud Vision DOCUMENT_TEXT_DETECTION
-                const visionPayload = JSON.stringify({
-                    requests: [{
-                        image: { content: base64Image },
-                        features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
-                    }]
-                });
-
-                const visionReq = https.request({
-                    hostname: 'vision.googleapis.com',
-                    path: '/v1/images:annotate?key=' + GOOGLE_API_KEY,
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Content-Length': Buffer.byteLength(visionPayload)
-                    }
-                }, (visionRes) => {
-                    let visionData = '';
-                    visionRes.on('data', c => visionData += c);
-                    visionRes.on('end', async () => {
-                        let extractedText = '';
-                        let engine = 'Google Document AI via ScholarDoc Server';
-                        try {
-                            const vJson = JSON.parse(visionData);
-                            if (vJson.responses && vJson.responses[0]?.fullTextAnnotation) {
-                                extractedText = vJson.responses[0].fullTextAnnotation.text || '';
-                            }
-                        } catch (_) {}
-
-                        if (!extractedText) {
-                            extractedText = await callOcrSpace(base64Image);
-                            if (extractedText) {
-                                engine = 'High-Accuracy Document OCR via ScholarDoc Server';
-                            }
-                        }
-
-                        const parsedSticker = parseStickerText(extractedText);
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({
-                            success: true,
-                            ...parsedSticker,
-                            engine
-                        }));
-                    });
-                });
-
-                visionReq.on('error', async (err) => {
-                    console.error('Vision API error:', err.message);
-                    const ocrText = await callOcrSpace(base64Image);
-                    const parsedSticker = parseStickerText(ocrText);
+                const cacheKey = getSha256(`sticker:${expectedBirthdate || ''}:${base64Image}`);
+                const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
+                if (cachedRes) {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        success: true,
-                        ...parsedSticker,
-                        engine: ocrText ? 'High-Accuracy Document OCR via ScholarDoc Server' : 'Fallback Engine',
-                        warning: err.message
-                    }));
-                });
+                    res.end(JSON.stringify({ ...cachedRes, cached: true }));
+                    return;
+                }
 
-                visionReq.write(visionPayload);
-                visionReq.end();
+                const { text, engine } = await callVisionApi(base64Image);
+                const parsedSticker = parseStickerText(text) || {};
+                const birthdateRes = verifyBirthdateMatch(text, expectedBirthdate) || {};
 
+                const responseData = {
+                    success: true,
+                    ...parsedSticker,
+                    birthdate: birthdateRes.detectedBirthdate,
+                    birthdateMatches: birthdateRes.matches === true,
+                    engine
+                };
+                setInCache(documentAiEndpointCache, cacheKey, responseData);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(responseData));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Front ID Name Verification ──────────────────────────────────
+    if (urlPath === '/api/document-ai/scan-front-id' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const base64Image = parsed.image;
+                const expectedName = parsed.expectedName || parsed.fullName || parsed.name || '';
+
+                if (!base64Image) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'No image provided' }));
+                    return;
+                }
+
+                const cacheKey = getSha256(`front:${expectedName.trim().toUpperCase()}:${base64Image}`);
+                const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
+                if (cachedRes) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ...cachedRes, cached: true }));
+                    return;
+                }
+
+                const { text, engine } = await callVisionApi(base64Image);
+                const nameRes = verifyNameMatch(text, expectedName);
+
+                const responseData = {
+                    success: true,
+                    nameMatches: nameRes.matches,
+                    detectedName: nameRes.detectedName,
+                    confidence: nameRes.confidence,
+                    engine,
+                    rawText: text,
+                    message: nameRes.message
+                };
+                setInCache(documentAiEndpointCache, cacheKey, responseData);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(responseData));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Back ID Term & Birthdate Verification ───────────────────────
+    if (urlPath === '/api/document-ai/scan-back-id' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const base64Image = parsed.image;
+                const expectedBirthdate = parsed.expectedBirthdate || parsed.birthdate;
+                const targetYear = parsed.academicYear || parsed.currentYear || activeAcademicYear;
+                const targetSem = parsed.semester || parsed.currentSem || activeSemester;
+
+                if (!base64Image) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'No image provided' }));
+                    return;
+                }
+
+                const cacheKey = getSha256(`back:${expectedBirthdate || ''}:${targetYear}:${targetSem}:${base64Image}`);
+                const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
+                if (cachedRes) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ...cachedRes, cached: true }));
+                    return;
+                }
+
+                const { text, engine } = await callVisionApi(base64Image);
+                const sticker = parseStickerText(text, targetYear, targetSem) || {};
+                const birthdateRes = verifyBirthdateMatch(text, expectedBirthdate) || {};
+
+                const hasExpectedBdate = !!expectedBirthdate;
+                const birthdateValid = hasExpectedBdate ? (birthdateRes.matches === true) : true;
+                const isValid = (sticker.isValid === true) && birthdateValid;
+
+                let message = '';
+                if (!sticker.stickerFound) {
+                    message = "Could not detect a valid academic year or semester validation sticker on ID.";
+                } else if (!sticker.isValid) {
+                    message = "The academic year or semester on your ID sticker is not current. Please scan the correct ID.";
+                } else if (hasExpectedBdate && !birthdateRes.matches) {
+                    message = "The birthdate on your school ID does not match your registered information. Please check your ID and try again.";
+                } else {
+                    message = `Back of ID validated successfully (AY ${sticker.academicYear || targetYear} • ${sticker.semester || targetSem}${birthdateRes.detectedBirthdate ? ` • DOB: ${birthdateRes.detectedBirthdate}` : ''}).`;
+                }
+
+                const responseData = {
+                    success: true,
+                    stickerFound: !!sticker.stickerFound,
+                    academicYear: sticker.academicYear,
+                    semester: sticker.semester,
+                    hasValidationStamp: !!sticker.hasValidationStamp,
+                    yearMatches: !!sticker.yearMatches,
+                    semesterMatches: !!sticker.semesterMatches,
+                    birthdate: birthdateRes.detectedBirthdate,
+                    birthdateMatches: birthdateRes.matches === true,
+                    isValid,
+                    engine,
+                    rawText: text,
+                    message
+                };
+                setInCache(documentAiEndpointCache, cacheKey, responseData);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(responseData));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: ATM Proof Account Holder & SA Number Verification ────────────
+    if (urlPath === '/api/document-ai/scan-atm-proof' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const base64Image = parsed.image;
+                const expectedName = parsed.expectedName || parsed.fullName || parsed.name || '';
+                const expectedSa = parsed.expectedSaNumber || parsed.saNumber || parsed.sa_number || '';
+
+                if (!base64Image) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'No image provided' }));
+                    return;
+                }
+
+                const cacheKey = getSha256(`atm:${expectedName.trim().toUpperCase()}:${expectedSa.trim()}:${base64Image}`);
+                const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
+                if (cachedRes) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ...cachedRes, cached: true }));
+                    return;
+                }
+
+                const { text, engine } = await callVisionApi(base64Image);
+                const atmRes = verifyAtmProof(text, expectedName, expectedSa) || {};
+
+                const responseData = {
+                    success: true,
+                    isValid: !!atmRes.isValid,
+                    saMatches: !!atmRes.saMatches,
+                    nameMatches: !!atmRes.nameMatches,
+                    detectedSaNumber: atmRes.detectedSaNumber,
+                    detectedName: atmRes.detectedName,
+                    engine,
+                    rawText: text,
+                    message: atmRes.message
+                };
+                setInCache(documentAiEndpointCache, cacheKey, responseData);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(responseData));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Update Active Academic Period ────────────────────────────────
+    if (urlPath === '/api/academic-term/update' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { academicYear, semester } = JSON.parse(body || '{}');
+                if (academicYear) activeAcademicYear = String(academicYear).trim();
+                if (semester) activeSemester = String(semester).trim();
+
+                // Persist to Supabase system_settings
+                try {
+                    const headers = {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates'
+                    };
+                    await fetch(`${SUPABASE_REST_URL}/system_settings`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({
+                            key: 'academic_term',
+                            value: {
+                                academic_year: activeAcademicYear,
+                                semester: activeSemester,
+                                updated_at: new Date().toISOString()
+                            }
+                        })
+                    });
+                } catch (_) {}
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    academicYear: activeAcademicYear,
+                    semester: activeSemester,
+                    displayString: `AY ${activeAcademicYear} • ${activeSemester}`
+                }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: e.message }));
@@ -2325,17 +2952,28 @@ server.on('error', (err) => {
     }
 });
 
-server.listen(PORT, () => {
-    console.log('\n=======================================================');
-    console.log(' 🎓 ScholarDoc Unified Web Platform');
-    console.log(` Running at:          http://localhost:${PORT}`);
-    console.log(` Landing Page:        http://localhost:${PORT}/`);
-    console.log(` Unified Login:       http://localhost:${PORT}/login.html`);
-    console.log(` Student Portal:      http://localhost:${PORT}/student_web/dashboard.html`);
-    console.log(` Admin Portal:        http://localhost:${PORT}/admin_web/admin.html`);
-    console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
-    console.log('=======================================================\n');
+if (require.main === module) {
+    server.listen(PORT, () => {
+        console.log('\n=======================================================');
+        console.log(' 🎓 ScholarDoc Unified Web Platform');
+        console.log(` Running at:          http://localhost:${PORT}`);
+        console.log(` Landing Page:        http://localhost:${PORT}/`);
+        console.log(` Unified Login:       http://localhost:${PORT}/login.html`);
+        console.log(` Student Portal:      http://localhost:${PORT}/student_web/dashboard.html`);
+        console.log(` Admin Portal:        http://localhost:${PORT}/admin_web/admin.html`);
+        console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
+        console.log('=======================================================\n');
 
-    // Start background watcher daemon
-    startNotificationSmsWatcher();
-});
+        // Start background watcher daemon
+        startNotificationSmsWatcher();
+    });
+}
+
+module.exports = {
+    verifyNameMatch,
+    parseStickerText,
+    verifyBirthdateMatch,
+    verifyAtmProof,
+    normalizeName
+};
+

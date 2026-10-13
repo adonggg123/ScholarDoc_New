@@ -15,6 +15,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'id_capture_screen.dart';
 import '../../services/academic_term_service.dart';
+import '../../services/document_ai_service.dart';
+import 'document_crop_screen.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
   const UploadWorkflowScreen({super.key});
@@ -32,6 +34,21 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   final StorageService _storageService = StorageService();
   final TextEditingController _saController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  String _studentFullName = '';
+  String _studentBirthdate = '';
+
+  // ID Validation metadata
+  bool? _frontNameMatches;
+  String? _frontExtractedName;
+  String? _backBirthdate;
+  bool? _backBirthdateMatches;
+
+  // ATM Proof Validation metadata
+  bool? _atmProofNameMatches;
+  bool? _atmProofSaMatches;
+  String? _atmExtractedName;
+  String? _atmExtractedSaNumber;
 
   String? _submissionPdfUrl;
   String? _pdfFeedback;
@@ -75,6 +92,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         final data = doc;
         final docs = (data['documents'] is Map) ? data['documents'] : {};
         setState(() {
+          _studentFullName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
+          _studentBirthdate = (data['birthdate'] ?? data['date_of_birth'] ?? '').toString().trim();
           _saController.text = (data['saNumber'] ?? data['sa_number'] ?? docs['saNumber'] ?? docs['sa_number'] ?? '').toString();
 
           final existingAtm = data['atmCardUrl'] ?? data['atm_card_url'] ?? docs['atmCardUrl'] ?? docs['atm_card_url'];
@@ -107,7 +126,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     try {
       final result = await Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const IDCaptureScreen()),
+        MaterialPageRoute(
+          builder: (context) => IDCaptureScreen(
+            expectedName: _studentFullName,
+            expectedBirthdate: _studentBirthdate,
+          ),
+        ),
       );
 
       if (result == null || result is! Map) return;
@@ -171,6 +195,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         _stickerSemester = result['semester'] as String?;
         _stickerValidated = result['stickerValidated'] as bool?;
         _stickerOverriddenForAdmin = result['stickerOverriddenForAdmin'] as bool?;
+        _frontNameMatches = result['frontNameMatches'] as bool?;
+        _frontExtractedName = result['frontExtractedName'] as String?;
+        _backBirthdate = result['backBirthdate'] as String?;
+        _backBirthdateMatches = result['backBirthdateMatches'] as bool?;
       });
     } catch (e) {
       if (!mounted) return;
@@ -476,24 +504,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}';
       final bool isPdf = fileName.toLowerCase().endsWith('.pdf');
 
-      ImageQualityResult? quality;
-      if (!isPdf) {
-        try {
-          quality = await ImageQualityService.analyzeQuality(bytes);
-        } catch (e) {
-          debugPrint('Quality analysis skipped: $e');
-        }
-      }
-
-      if (!mounted) return;
-
-      _showProofPreviewSheet(
-        bytes: bytes,
+      await _processSelectedProof(
+        initialBytes: bytes,
         fileName: fileName,
         docType: docType,
         sourceDescription: isPdf ? 'PDF File' : 'Document File',
         isPdf: isPdf,
-        quality: quality,
       );
     } catch (e) {
       if (!mounted) return;
@@ -522,22 +538,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           ? image.name
           : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      ImageQualityResult? quality;
-      try {
-        quality = await ImageQualityService.analyzeQuality(bytes);
-      } catch (e) {
-        debugPrint('Quality analysis error: $e');
-      }
-
-      if (!mounted) return;
-
-      _showProofPreviewSheet(
-        bytes: bytes,
+      await _processSelectedProof(
+        initialBytes: bytes,
         fileName: originalName,
         docType: docType,
         sourceDescription: 'Gallery',
         isPdf: false,
-        quality: quality,
       );
     } catch (e) {
       debugPrint('Gallery picker error: $e. Falling back to FilePicker.');
@@ -562,22 +568,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           ? image.name
           : '${docType.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      ImageQualityResult? quality;
-      try {
-        quality = await ImageQualityService.analyzeQuality(bytes);
-      } catch (e) {
-        debugPrint('Quality analysis error: $e');
-      }
-
-      if (!mounted) return;
-
-      _showProofPreviewSheet(
-        bytes: bytes,
+      await _processSelectedProof(
+        initialBytes: bytes,
         fileName: originalName,
         docType: docType,
         sourceDescription: 'Camera',
         isPdf: false,
-        quality: quality,
       );
     } catch (e) {
       if (!mounted) return;
@@ -588,6 +584,304 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _processSelectedProof({
+    required Uint8List initialBytes,
+    required String fileName,
+    required String docType,
+    required String sourceDescription,
+    required bool isPdf,
+  }) async {
+    Uint8List finalBytes = initialBytes;
+
+    if (!isPdf) {
+      // 1. Interactive CamScanner-like cropping, alignment, and enhancement
+      final cropped = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DocumentCropScreen(
+            imageBytes: initialBytes,
+            title: 'Crop & Enhance $docType',
+            isIdCard: docType == 'ATM Card' || docType == 'ATM Proof',
+          ),
+        ),
+      );
+      if (cropped == null) return;
+      finalBytes = cropped;
+    }
+
+    // 2. If it is ATM Proof, validate account holder name and SA number
+    if (docType == 'ATM Proof' || docType == 'ATM Card') {
+      final enteredSa = _saController.text.trim();
+      if (enteredSa.isEmpty) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(LucideIcons.alertCircle, color: Color(0xFFFBC02D), size: 24),
+                SizedBox(width: 10),
+                Text('SA Number Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: const Text(
+              'Please enter your SA Number in Step 1 before scanning your ATM card so ScholarDoc can verify it.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      StateSetter? dialogSetState;
+      String progressSubtitle = 'Optimizing image for fast OCR...';
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            dialogSetState = setDialogState;
+            return Center(
+              child: Card(
+                elevation: 8,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: Color(0xFF0F3260)),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Verifying ATM Proof with AI...',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        progressSubtitle,
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      AtmProofScanResult atmResult;
+      try {
+        atmResult = await DocumentAIScannerService.scanAtmProof(
+          finalBytes,
+          expectedName: _studentFullName,
+          expectedSaNumber: enteredSa,
+          onProgress: (status) {
+            dialogSetState?.call(() {
+              progressSubtitle = status;
+            });
+          },
+        );
+      } catch (e) {
+        atmResult = AtmProofScanResult(
+          isValid: false,
+          nameMatches: false,
+          saMatches: false,
+          rawExtractedText: '',
+          engineUsed: 'none',
+          message: e.toString(),
+        );
+      } finally {
+        if (mounted) Navigator.pop(context); // Dismiss loading dialog
+      }
+
+      if (!atmResult.isValid) {
+        if (!mounted) return;
+        _showAtmVerificationErrorDialog(
+          initialBytes: initialBytes,
+          atmResult: atmResult,
+          docType: docType,
+          fileName: fileName,
+          sourceDescription: sourceDescription,
+        );
+        return;
+      }
+
+      setState(() {
+        _atmProofNameMatches = true;
+        _atmProofSaMatches = true;
+        _atmExtractedName = atmResult.accountName;
+        _atmExtractedSaNumber = atmResult.saNumber;
+      });
+    }
+
+    ImageQualityResult? quality;
+    if (!isPdf) {
+      try {
+        quality = await ImageQualityService.analyzeQuality(finalBytes);
+      } catch (e) {
+        debugPrint('Quality analysis skipped: $e');
+      }
+    }
+
+    if (!mounted) return;
+
+    _showProofPreviewSheet(
+      bytes: finalBytes,
+      fileName: fileName,
+      docType: docType,
+      sourceDescription: sourceDescription,
+      isPdf: isPdf,
+      quality: quality,
+    );
+  }
+
+  void _showAtmVerificationErrorDialog({
+    required Uint8List initialBytes,
+    required AtmProofScanResult atmResult,
+    required String docType,
+    required String fileName,
+    required String sourceDescription,
+  }) {
+    String title = 'ATM Proof Verification Failed';
+    String message = '';
+    final enteredSa = _saController.text.trim();
+
+    if (atmResult.accountName == null && atmResult.saNumber == null) {
+      title = 'Unreadable Document';
+      message = "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.";
+    } else if (!atmResult.nameMatches && !atmResult.saMatches) {
+      message = "The account holder's name and SA number do not match your registered information. Please upload the correct ATM Proof.";
+    } else if (!atmResult.nameMatches) {
+      message = "The account holder's name (${atmResult.accountName ?? 'Not detected'}) does not match your registered profile name ($_studentFullName). Please upload your own ATM proof.";
+    } else if (!atmResult.saMatches) {
+      message = "The SA / account number (${atmResult.saNumber ?? 'Not detected'}) does not match the SA number entered ($enteredSa). Please check your SA number or upload the correct ATM proof.";
+    } else {
+      message = atmResult.message.isNotEmpty
+          ? atmResult.message
+          : "Verification failed. Please ensure the card details are clearly visible and match your records.";
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.shieldAlert, color: Color(0xFFEF4444), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(fontSize: 13, height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Name Match:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(
+                        atmResult.nameMatches ? '✅ Matched' : '❌ Mismatch',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: atmResult.nameMatches ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('SA Number Match:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(
+                        atmResult.saMatches ? '✅ Matched' : '❌ Mismatch',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: atmResult.saMatches ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processSelectedProof(
+                initialBytes: initialBytes,
+                fileName: fileName,
+                docType: docType,
+                sourceDescription: sourceDescription,
+                isPdf: false,
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF0F3260)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Adjust / Crop', style: TextStyle(color: Color(0xFF0F3260), fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showDocumentSelectionSheet(docType);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F3260),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Retake / Re-upload', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showProofPreviewSheet({
@@ -757,6 +1051,45 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
             ),
             const SizedBox(height: 14),
+
+            // ATM AI Verification badge (if verified)
+            if ((docType == 'ATM Proof' || docType == 'ATM Card') &&
+                _atmProofNameMatches == true &&
+                _atmProofSaMatches == true)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.09),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF10B981).withOpacity(0.35)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.badgeCheck, size: 18, color: Color(0xFF059669)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'AI Identity & Account Match Confirmed',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF059669),
+                            ),
+                          ),
+                          Text(
+                            'Holder: ${_atmExtractedName ?? _studentFullName} • SA: ${_atmExtractedSaNumber ?? _saController.text}',
+                            style: TextStyle(fontSize: 11, color: context.textSec),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // Quality indicator banner (if analyzed)
             if (quality != null)
@@ -1434,10 +1767,50 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         );
         return;
       }
+      if (_frontNameMatches == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The name on your school ID does not match your registered profile. Please scan your own valid school ID again.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_stickerValidated == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The academic year or semester on your ID sticker is not current. Please scan the correct ID.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_backBirthdateMatches == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The birthdate on your school ID does not match your registered information. Please check your ID and try again.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (_atmCardUrl == null && _depositSlipUrl == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please upload at least one banking requirement (ATM Proof or Deposit Slip) before continuing.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_atmCardUrl != null && (_atmProofNameMatches == false || _atmProofSaMatches == false)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The account holder\'s name or SA number does not match your registered information. Please upload the correct ATM Proof.'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1513,6 +1886,39 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             documents['stickerOverriddenForAdmin'] = _stickerOverriddenForAdmin;
           }
 
+          if (_frontNameMatches != null) {
+            documents['frontNameMatches'] = _frontNameMatches;
+            documents['front_name_matches'] = _frontNameMatches;
+          }
+          if (_frontExtractedName != null) {
+            documents['frontExtractedName'] = _frontExtractedName;
+            documents['front_extracted_name'] = _frontExtractedName;
+          }
+          if (_backBirthdate != null) {
+            documents['backBirthdate'] = _backBirthdate;
+            documents['back_birthdate'] = _backBirthdate;
+          }
+          if (_backBirthdateMatches != null) {
+            documents['backBirthdateMatches'] = _backBirthdateMatches;
+            documents['back_birthdate_matches'] = _backBirthdateMatches;
+          }
+          if (_atmProofNameMatches != null) {
+            documents['atmNameMatches'] = _atmProofNameMatches;
+            documents['atm_name_matches'] = _atmProofNameMatches;
+          }
+          if (_atmProofSaMatches != null) {
+            documents['atmSaMatches'] = _atmProofSaMatches;
+            documents['atm_sa_matches'] = _atmProofSaMatches;
+          }
+          if (_atmExtractedName != null) {
+            documents['atmExtractedName'] = _atmExtractedName;
+            documents['atm_extracted_name'] = _atmExtractedName;
+          }
+          if (_atmExtractedSaNumber != null) {
+            documents['atmExtractedSaNumber'] = _atmExtractedSaNumber;
+            documents['atm_extracted_sa_number'] = _atmExtractedSaNumber;
+          }
+
           final Map<String, dynamic> studentPayload = {
             'status': 'Pending',
             'saNumber': _saController.text.trim(),
@@ -1530,6 +1936,22 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             'semester': _stickerSemester ?? AcademicTermService.currentTerm.semester,
             'stickerValidated': _stickerValidated ?? true,
             'sticker_validated': _stickerValidated ?? true,
+            'frontNameMatches': _frontNameMatches,
+            'front_name_matches': _frontNameMatches,
+            'frontExtractedName': _frontExtractedName,
+            'front_extracted_name': _frontExtractedName,
+            'backBirthdate': _backBirthdate,
+            'back_birthdate': _backBirthdate,
+            'backBirthdateMatches': _backBirthdateMatches,
+            'back_birthdate_matches': _backBirthdateMatches,
+            'atmNameMatches': _atmProofNameMatches,
+            'atm_name_matches': _atmProofNameMatches,
+            'atmSaMatches': _atmProofSaMatches,
+            'atm_sa_matches': _atmProofSaMatches,
+            'atmExtractedName': _atmExtractedName,
+            'atm_extracted_name': _atmExtractedName,
+            'atmExtractedSaNumber': _atmExtractedSaNumber,
+            'atm_extracted_sa_number': _atmExtractedSaNumber,
             'createdAt': DateTime.now().toUtc().toIso8601String(),
             'submittedAt': DateTime.now().toUtc().toIso8601String(),
             'submitted_at': DateTime.now().toUtc().toIso8601String(),
@@ -1832,6 +2254,52 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             subtitle: 'Use camera to scan ID and sign',
             fileName: _pdfFileName,
           ),
+          if (_pdfFileName != null)
+            Container(
+              margin: const EdgeInsets.only(top: -8, bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                    ? const Color(0xFF10B981).withOpacity(0.08)
+                    : const Color(0xFFEF4444).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                      ? const Color(0xFF10B981).withOpacity(0.3)
+                      : const Color(0xFFEF4444).withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                        ? LucideIcons.badgeCheck
+                        : LucideIcons.alertTriangle,
+                    size: 15,
+                    color: (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                        ? const Color(0xFF059669)
+                        : const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                          ? 'ID Verified: Name & Sticker Validated'
+                          : (_frontNameMatches == false
+                              ? 'Name Mismatch: Registered name does not match ID'
+                              : 'Sticker or Birthdate Mismatch: Please re-scan ID'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
+                            ? const Color(0xFF059669)
+                            : const Color(0xFFEF4444),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _buildUploadCard(
             'ATM Proof',
             LucideIcons.creditCard,
@@ -1842,6 +2310,50 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 : 'Upload photo or document of your Landbank ATM card',
             fileName: _atmCardFileName,
           ),
+          if (_atmCardFileName != null && _atmProofNameMatches != null)
+            Container(
+              margin: const EdgeInsets.only(top: -8, bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                    ? const Color(0xFF10B981).withOpacity(0.08)
+                    : const Color(0xFFEF4444).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                      ? const Color(0xFF10B981).withOpacity(0.3)
+                      : const Color(0xFFEF4444).withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                        ? LucideIcons.badgeCheck
+                        : LucideIcons.alertTriangle,
+                    size: 15,
+                    color: (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                        ? const Color(0xFF059669)
+                        : const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                          ? 'ATM Proof Verified: Name & SA Match'
+                          : 'ATM Verification Failed: Details do not match',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: (_atmProofNameMatches == true && _atmProofSaMatches == true)
+                            ? const Color(0xFF059669)
+                            : const Color(0xFFEF4444),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _buildUploadCard(
             'Deposit Slip',
             LucideIcons.fileText,

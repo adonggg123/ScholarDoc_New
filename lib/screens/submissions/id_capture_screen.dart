@@ -13,9 +13,17 @@ import '../../theme/theme_provider.dart';
 import '../../services/image_quality_service.dart';
 import '../../services/academic_term_service.dart';
 import '../../services/document_ai_service.dart';
+import '../../services/auth_service.dart';
+import 'document_crop_screen.dart';
 
 class IDCaptureScreen extends StatefulWidget {
-  const IDCaptureScreen({super.key});
+  final String? expectedName;
+  final String? expectedBirthdate;
+  const IDCaptureScreen({
+    super.key,
+    this.expectedName,
+    this.expectedBirthdate,
+  });
 
   @override
   State<IDCaptureScreen> createState() => _IDCaptureScreenState();
@@ -23,17 +31,32 @@ class IDCaptureScreen extends StatefulWidget {
 
 class _IDCaptureScreenState extends State<IDCaptureScreen> {
   final ImagePicker _picker = ImagePicker();
+  final AuthService _authService = AuthService();
   
+  String _expectedName = '';
+  String _expectedBirthdate = '';
+
   XFile? _frontImage;
   XFile? _backImage;
+  Uint8List? _frontRawBytes;
+  Uint8List? _backRawBytes;
+  Uint8List? _frontProcessedBytes;
+  Uint8List? _backProcessedBytes;
+
   ImageQualityResult? _frontQuality;
   ImageQualityResult? _backQuality;
   bool _isAnalyzingFront = false;
   bool _isAnalyzingBack = false;
 
+  FrontIdScanResult? _frontNameResult;
+  bool _isScanningFrontName = false;
+  String _frontScanProgressStatus = 'Scanning Student Name...';
+  String? _frontScanError;
+
   StickerScanResult? _stickerResult;
   bool _isScanningSticker = false;
-  bool _stickerOverriddenForAdmin = false;
+  String _backScanProgressStatus = 'Scanning Term & Birthdate...';
+  String? _backScanError;
 
   int _currentStep = 0;
   
@@ -51,10 +74,34 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   void initState() {
     super.initState();
     AcademicTermService.initialize();
-    // Re-initialize controller listener to refresh state on draw events
     _signatureController.onDrawStart = () {
       setState(() {});
     };
+    _initExpectedStudentData();
+  }
+
+  Future<void> _initExpectedStudentData() async {
+    _expectedName = (widget.expectedName ?? '').trim();
+    _expectedBirthdate = (widget.expectedBirthdate ?? '').trim();
+    if (_expectedName.isEmpty || _expectedBirthdate.isEmpty) {
+      try {
+        final uid = _authService.currentUser?.id;
+        if (uid != null) {
+          final profile = await _authService.getStudentProfile(uid);
+          if (profile != null) {
+            if (_expectedName.isEmpty) {
+              _expectedName = (profile['fullName'] ?? profile['full_name'] ?? '').toString().trim();
+            }
+            if (_expectedBirthdate.isEmpty) {
+              _expectedBirthdate = (profile['birthdate'] ?? profile['date_of_birth'] ?? '').toString().trim();
+            }
+            if (mounted) setState(() {});
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading expected student data: $e');
+      }
+    }
   }
 
   @override
@@ -228,27 +275,48 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        imageQuality: 85,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 90,
       );
       if (image == null) return;
+      final rawBytes = await image.readAsBytes();
+
+      if (!mounted) return;
+
+      // CamScanner-style interactive crop & filter preview screen
+      final processed = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (ctx) => DocumentCropScreen(
+            imageBytes: rawBytes,
+            title: isFront ? 'Crop & Enhance Front ID' : 'Crop & Enhance Back ID',
+            isIdCard: true,
+          ),
+        ),
+      );
+      if (processed == null) return;
 
       setState(() {
         if (isFront) {
           _frontImage = image;
+          _frontRawBytes = rawBytes;
+          _frontProcessedBytes = processed;
           _isAnalyzingFront = true;
           _frontQuality = null;
+          _frontNameResult = null;
         } else {
           _backImage = image;
+          _backRawBytes = rawBytes;
+          _backProcessedBytes = processed;
           _isAnalyzingBack = true;
           _backQuality = null;
+          _stickerResult = null;
         }
       });
 
       // Analyze image sharpness / blurriness
-      final bytes = await image.readAsBytes();
-      final quality = await ImageQualityService.analyzeQuality(bytes);
+      final quality = await ImageQualityService.analyzeQuality(processed);
 
       if (!mounted) return;
 
@@ -265,27 +333,10 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       if (quality.isBlurry) {
         _showBlurWarningDialog(isFront: isFront, quality: quality);
       } else {
-        if (!isFront) {
-          // Trigger Google Document AI sticker scan on the upper back of ID
-          _scanBackSticker(bytes);
+        if (isFront) {
+          _scanFrontName(processed);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(LucideIcons.checkCircle, color: Colors.white, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Front ID scan is sharp & clear (${quality.sharpnessPercent}% clarity).',
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF10B981),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          _scanBackSticker(processed);
         }
       }
     } catch (e) {
@@ -299,12 +350,282 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to capture image: $e'),
+            content: Text('Failed to process image: $e'),
             backgroundColor: AppTheme.error,
           ),
         );
       }
     }
+  }
+
+  Future<void> _adjustCrop(bool isFront) async {
+    final rawBytes = isFront ? _frontRawBytes : _backRawBytes;
+    if (rawBytes == null) return;
+
+    final processed = await Navigator.push<Uint8List>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => DocumentCropScreen(
+          imageBytes: rawBytes,
+          title: isFront ? 'Crop & Enhance Front ID' : 'Crop & Enhance Back ID',
+          isIdCard: true,
+        ),
+      ),
+    );
+    if (processed == null) return;
+
+    setState(() {
+      if (isFront) {
+        _frontProcessedBytes = processed;
+        _isAnalyzingFront = true;
+        _frontQuality = null;
+        _frontNameResult = null;
+      } else {
+        _backProcessedBytes = processed;
+        _isAnalyzingBack = true;
+        _backQuality = null;
+        _stickerResult = null;
+      }
+    });
+
+    final quality = await ImageQualityService.analyzeQuality(processed);
+    if (!mounted) return;
+
+    setState(() {
+      if (isFront) {
+        _frontQuality = quality;
+        _isAnalyzingFront = false;
+      } else {
+        _backQuality = quality;
+        _isAnalyzingBack = false;
+      }
+    });
+
+    if (quality.isBlurry) {
+      _showBlurWarningDialog(isFront: isFront, quality: quality);
+    } else {
+      if (isFront) {
+        _scanFrontName(processed);
+      } else {
+        _scanBackSticker(processed);
+      }
+    }
+  }
+
+  Future<void> _scanFrontName(Uint8List bytes) async {
+    setState(() {
+      _isScanningFrontName = true;
+      _frontScanProgressStatus = 'Optimizing image for fast OCR...';
+      _frontScanError = null;
+      _frontNameResult = null;
+    });
+
+    try {
+      final result = await DocumentAIScannerService.scanIdFrontName(
+        bytes,
+        expectedName: _expectedName,
+        onProgress: (status) {
+          if (mounted) setState(() => _frontScanProgressStatus = status);
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isScanningFrontName = false;
+        _frontNameResult = result;
+      });
+
+      if (!result.isNameMatch) {
+        _showNameMismatchDialog(result);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(LucideIcons.shieldCheck, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Identity Verified: Name matched (${result.extractedName ?? _expectedName})',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isScanningFrontName = false;
+          _frontScanError = 'OCR scan timed out or failed. Please check network connection.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(LucideIcons.alertCircle, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('Document AI name scan failed. Tap retry to try again.'),
+                ),
+                TextButton(
+                  onPressed: () => _scanFrontName(bytes),
+                  child: const Text('RETRY', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        debugPrint('Error scanning front ID name: $e');
+      }
+    }
+  }
+
+  void _showNameMismatchDialog(FrontIdScanResult result) {
+    final bool isUnreadable = !result.isReadable;
+    final String title = isUnreadable ? 'Unreadable Front ID' : 'Front ID Name Mismatch';
+    final String message = isUnreadable
+        ? "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        : "The name on your school ID does not match your registered profile. Please scan your own valid school ID again.";
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: context.surfaceC,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.userX, color: AppTheme.error, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: context.textPri),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: TextStyle(fontSize: 13, color: context.textSec, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: context.isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: context.crispBorder),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Registered Profile:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textSec)),
+                      Flexible(
+                        child: Text(
+                          _expectedName.isNotEmpty ? _expectedName : 'Active User',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF10B981)),
+                          textAlign: TextAlign.end,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Extracted from ID:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textSec)),
+                      Flexible(
+                        child: Text(
+                          result.extractedName ?? 'Could not extract name',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.error),
+                          textAlign: TextAlign.end,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(LucideIcons.shieldAlert, size: 16, color: AppTheme.error),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You must scan your own valid school ID matching your registered name to proceed.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Review Photo', style: TextStyle(color: context.textSec, fontWeight: FontWeight.w600)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _adjustCrop(true);
+            },
+            icon: const Icon(LucideIcons.crop, size: 14, color: Color(0xFF0F3260)),
+            label: const Text('Adjust / Crop'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF0F3260),
+              side: const BorderSide(color: Color(0xFF0F3260)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _promptImageSource(true);
+            },
+            icon: const Icon(LucideIcons.camera, size: 14, color: Colors.white),
+            label: const Text('Retake Front ID'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showBlurWarningDialog({required bool isFront, required ImageQualityResult quality}) {
@@ -413,27 +734,42 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   Future<void> _scanBackSticker(Uint8List bytes) async {
     setState(() {
       _isScanningSticker = true;
+      _backScanProgressStatus = 'Optimizing back ID for scan...';
+      _backScanError = null;
       _stickerResult = null;
     });
 
     try {
-      // 1. Scan the captured image directly (fast, preserves full context without cropping off sticker)
-      var result = await DocumentAIScannerService.scanIdBackSticker(bytes);
+      // 1. Scan the captured image directly
+      var result = await DocumentAIScannerService.scanIdBackSticker(
+        bytes,
+        expectedBirthdate: _expectedBirthdate,
+        onProgress: (status) {
+          if (mounted) setState(() => _backScanProgressStatus = status);
+        },
+      );
 
       // 2. High-Accuracy Fallback: If not validated or missing academic year / semester, scan cropped sticker ROI
       if (!result.isValid || result.academicYear == null || result.semester == null) {
+        if (mounted) {
+          setState(() => _backScanProgressStatus = 'Analyzing sticker region...');
+        }
         final roiBytes = await DocumentAIScannerService.cropUpperStickerROI(bytes);
-        final roiResult = await DocumentAIScannerService.scanIdBackSticker(roiBytes);
+        final roiResult = await DocumentAIScannerService.scanIdBackSticker(
+          roiBytes,
+          expectedBirthdate: _expectedBirthdate,
+        );
         if (roiResult.isValid) {
           result = roiResult;
         } else if (!result.stickerFound && roiResult.stickerFound) {
           result = roiResult;
         } else if (roiResult.stickerFound) {
-          // Merge detected fields from full scan and ROI scan
           final bestYear = result.academicYear ?? roiResult.academicYear;
           final bestSem = result.semester ?? roiResult.semester;
           final bestStamp = result.hasValidationStamp || roiResult.hasValidationStamp;
           final bestRegistrar = result.registrarText ?? roiResult.registrarText;
+          final bestDob = result.birthdate ?? roiResult.birthdate;
+          final bestDobMatch = result.birthdateMatches && roiResult.birthdateMatches;
           if (bestYear != result.academicYear || bestSem != result.semester) {
             result = DocumentAIScannerService.revalidateWithTerms(
               result,
@@ -441,6 +777,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
               semester: bestSem,
               hasValidationStamp: bestStamp,
               registrarText: bestRegistrar,
+            ).copyWith(
+              birthdate: bestDob,
+              birthdateMatches: bestDobMatch,
             );
           }
         }
@@ -453,7 +792,8 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         _stickerResult = result;
       });
 
-      if (!result.isValid) {
+      final bool isBirthdateValid = result.birthdateMatches != false;
+      if (!result.isValid || !isBirthdateValid) {
         _showStickerWarningDialog(result);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -464,7 +804,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Validation Sticker Verified: ${result.semester ?? ""} AY ${result.academicYear ?? ""}',
+                    'Back ID Verified: ${result.semester ?? ""} AY ${result.academicYear ?? ""}${result.birthdate != null ? " • DOB: ${result.birthdate}" : ""}',
                   ),
                 ),
               ],
@@ -478,13 +818,50 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       if (mounted) {
         setState(() {
           _isScanningSticker = false;
+          _backScanError = 'Document AI scan timed out or failed. Please check network connection.';
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(LucideIcons.alertCircle, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('Document AI sticker scan failed. Tap retry to try again.'),
+                ),
+                TextButton(
+                  onPressed: () => _scanBackSticker(bytes),
+                  child: const Text('RETRY', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
         debugPrint('Error scanning sticker: $e');
       }
     }
   }
 
   void _showStickerWarningDialog(StickerScanResult result) {
+    final bool isBirthdateMismatch = result.birthdateMatches == false;
+    final bool isUnreadable = !result.stickerFound && result.birthdate == null;
+    
+    String title;
+    String message;
+    if (isBirthdateMismatch) {
+      title = 'Birthdate Mismatch';
+      message = 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.';
+    } else if (isUnreadable) {
+      title = 'Unreadable Back ID';
+      message = "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.";
+    } else {
+      title = 'ID Sticker Outdated';
+      message = 'The academic year or semester on your ID sticker is not current. Please scan the correct ID.';
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -504,7 +881,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                result.termValidation.statusTitle,
+                title,
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: context.textPri),
               ),
             ),
@@ -515,7 +892,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              result.termValidation.message,
+              message,
               style: TextStyle(fontSize: 13, color: context.textSec, height: 1.4),
             ),
             const SizedBox(height: 14),
@@ -547,10 +924,38 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         result.stickerFound
                             ? '${result.semester ?? "Unknown"} • AY ${result.academicYear ?? "Unknown"}'
                             : 'No sticker detected',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.error),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: result.isValid ? const Color(0xFF10B981) : AppTheme.error),
                       ),
                     ],
                   ),
+                  if (result.birthdate != null || _expectedBirthdate.isNotEmpty) ...[
+                    const Divider(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Profile Birthdate:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textSec)),
+                        Text(
+                          _expectedBirthdate.isNotEmpty ? _expectedBirthdate : 'Not recorded',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF10B981)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('ID Birthdate:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.textSec)),
+                        Text(
+                          result.birthdate ?? 'Unreadable',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: result.birthdateMatches == true ? const Color(0xFF10B981) : AppTheme.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -558,35 +963,17 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (result.termValidation.statusTitle.contains('Offline'))
-                    ? const Color(0xFFF59E0B).withOpacity(0.08)
-                    : AppTheme.error.withOpacity(0.08),
+                color: AppTheme.error.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  Icon(
-                    result.termValidation.statusTitle.contains('Offline')
-                        ? LucideIcons.info
-                        : LucideIcons.shieldAlert,
-                    size: 16,
-                    color: result.termValidation.statusTitle.contains('Offline')
-                        ? const Color(0xFFF59E0B)
-                        : AppTheme.error,
-                  ),
-                  const SizedBox(width: 8),
+                  Icon(LucideIcons.shieldAlert, size: 16, color: AppTheme.error),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      result.termValidation.statusTitle.contains('Offline')
-                          ? 'Document AI service is offline. You may proceed with manual Admin verification.'
-                          : 'If your physical sticker is valid and affixed, you may confirm and proceed for Admin inspection.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: result.termValidation.statusTitle.contains('Offline')
-                            ? const Color(0xFFB45309)
-                            : AppTheme.error,
-                      ),
+                      'All details must match valid current records before you can submit.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.error),
                     ),
                   ),
                 ],
@@ -602,41 +989,25 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
           OutlinedButton.icon(
             onPressed: () {
               Navigator.pop(ctx);
-              _promptImageSource(false);
+              _adjustCrop(false);
             },
-            icon: const Icon(LucideIcons.camera, size: 14, color: AppTheme.error),
-            label: const Text('Retake'),
+            icon: const Icon(LucideIcons.crop, size: 14, color: Color(0xFF0F3260)),
+            label: const Text('Adjust / Crop'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.error,
-              side: BorderSide(color: AppTheme.error.withOpacity(0.5)),
+              foregroundColor: const Color(0xFF0F3260),
+              side: const BorderSide(color: Color(0xFF0F3260)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           ),
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() {
-                _stickerOverriddenForAdmin = true;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(LucideIcons.shieldCheck, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(child: Text('Sticker flagged for manual Admin validation.')),
-                    ],
-                  ),
-                  backgroundColor: Color(0xFF10B981),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-              _nextStep();
+              _promptImageSource(false);
             },
-            icon: const Icon(LucideIcons.checkCheck, size: 14, color: Colors.white),
-            label: const Text('Confirm & Proceed'),
+            icon: const Icon(LucideIcons.camera, size: 14, color: Colors.white),
+            label: const Text('Retake Back ID'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: AppTheme.error,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -647,7 +1018,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   }
 
   Future<void> _generatePdf() async {
-    if (_frontImage == null || _backImage == null || _signatureController.isEmpty) {
+    if ((_frontProcessedBytes == null && _frontImage == null) ||
+        (_backProcessedBytes == null && _backImage == null) ||
+        _signatureController.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please complete all captures before review.'),
@@ -669,8 +1042,14 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       return;
     }
 
-    if (_stickerResult != null && !_stickerResult!.isValid && !_stickerOverriddenForAdmin) {
-      _showWarning('Cannot compile PDF: Validation sticker does not match current school period.');
+    if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
+      _showWarning('Cannot compile PDF: The name on your school ID does not match your registered profile.');
+      _showNameMismatchDialog(_frontNameResult!);
+      return;
+    }
+
+    if (_stickerResult != null && (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false)) {
+      _showWarning('Cannot compile PDF: Back ID validation sticker or birthdate verification failed.');
       _showStickerWarningDialog(_stickerResult!);
       return;
     }
@@ -683,8 +1062,8 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       // Small delay to allow UI to paint loading spinner smoothly
       await Future.delayed(const Duration(milliseconds: 50));
 
-      final rawFrontBytes = await _frontImage!.readAsBytes();
-      final rawBackBytes = await _backImage!.readAsBytes();
+      final rawFrontBytes = _frontProcessedBytes ?? await _frontImage!.readAsBytes();
+      final rawBackBytes = _backProcessedBytes ?? await _backImage!.readAsBytes();
       
       final frontBytes = await _optimizeImageBytes(rawFrontBytes);
       final backBytes = await _optimizeImageBytes(rawBackBytes);
@@ -841,12 +1220,12 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
 
   void _nextStep() {
     if (_currentStep == 0) {
-      if (_frontImage == null) {
+      if (_frontProcessedBytes == null && _frontImage == null) {
         _showWarning('Please capture the front side of your ID.');
         return;
       }
-      if (_isAnalyzingFront) {
-        _showWarning('Analyzing front ID clarity, please wait a moment...');
+      if (_isAnalyzingFront || _isScanningFrontName) {
+        _showWarning('Analyzing front ID and verifying name, please wait a moment...');
         return;
       }
       if (_frontQuality?.isBlurry == true) {
@@ -854,14 +1233,19 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         _showBlurWarningDialog(isFront: true, quality: _frontQuality!);
         return;
       }
+      if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
+        _showWarning('The name on your school ID does not match your registered profile. Please scan your own valid school ID again.');
+        _showNameMismatchDialog(_frontNameResult!);
+        return;
+      }
     }
     if (_currentStep == 1) {
-      if (_backImage == null) {
+      if (_backProcessedBytes == null && _backImage == null) {
         _showWarning('Please capture the back side of your ID.');
         return;
       }
-      if (_isAnalyzingBack) {
-        _showWarning('Analyzing back ID clarity, please wait a moment...');
+      if (_isAnalyzingBack || _isScanningSticker) {
+        _showWarning('Document AI is currently verifying your validation sticker and birthdate, please wait...');
         return;
       }
       if (_backQuality?.isBlurry == true) {
@@ -869,14 +1253,13 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         _showBlurWarningDialog(isFront: false, quality: _backQuality!);
         return;
       }
-      if (_isScanningSticker) {
-        _showWarning('Google Document AI is currently verifying your validation sticker, please wait...');
-        return;
-      }
-      if (_stickerResult != null && !_stickerResult!.isValid && !_stickerOverriddenForAdmin) {
-        _showWarning('Cannot proceed: The ID validation sticker does not match the active academic period.');
-        _showStickerWarningDialog(_stickerResult!);
-        return;
+      if (_stickerResult != null) {
+        final bool isBirthdateValid = _stickerResult!.birthdateMatches != false;
+        if (!_stickerResult!.isValid || !isBirthdateValid) {
+          _showWarning('Cannot proceed: The ID validation sticker or birthdate does not match current records.');
+          _showStickerWarningDialog(_stickerResult!);
+          return;
+        }
       }
     }
     if (_currentStep == 2 && _signatureController.isEmpty) {
@@ -1158,7 +1541,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: image == null
+                child: (isFront ? _frontProcessedBytes : _backProcessedBytes) == null && image == null
                     ? Stack(
                         alignment: Alignment.center,
                         children: [
@@ -1193,26 +1576,94 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                     : Stack(
                         fit: StackFit.expand,
                         children: [
-                          Image.file(File(image.path), fit: BoxFit.cover),
+                          (isFront ? _frontProcessedBytes : _backProcessedBytes) != null
+                              ? Image.memory(
+                                  (isFront ? _frontProcessedBytes : _backProcessedBytes)!,
+                                  fit: BoxFit.contain,
+                                )
+                              : Image.file(File(image!.path), fit: BoxFit.cover),
                           
                           // Analyzing overlay
-                          if (isAnalyzing)
+                          if (isAnalyzing || (isFront && _isScanningFrontName) || (!isFront && _isScanningSticker))
                             Container(
-                              color: Colors.black54,
-                              child: const Column(
+                              color: Colors.black.withOpacity(0.68),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    strokeWidth: 2.5,
+                                  const SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      strokeWidth: 2.5,
+                                    ),
                                   ),
-                                  SizedBox(height: 12),
+                                  const SizedBox(height: 12),
                                   Text(
-                                    'Analyzing image sharpness...',
-                                    style: TextStyle(
+                                    isFront
+                                        ? (_isScanningFrontName ? _frontScanProgressStatus : 'Analyzing Image...')
+                                        : (_isScanningSticker ? _backScanProgressStatus : 'Analyzing Image...'),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isFront ? 'OCR Name Verification' : 'Document AI Verification',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.7),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          // Scan failure overlay with in-card retry
+                          if (!isAnalyzing &&
+                              ((isFront && _frontScanError != null && _frontNameResult == null) ||
+                               (!isFront && _backScanError != null && _stickerResult == null)))
+                            Container(
+                              color: Colors.black.withOpacity(0.75),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(LucideIcons.alertCircle, color: AppTheme.error, size: 28),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    isFront ? 'Name Scan Failed' : 'Document AI Scan Failed',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    (isFront ? _frontScanError : _backScanError) ?? 'Processing issue occurred.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      final b = isFront ? _frontProcessedBytes : _backProcessedBytes;
+                                      if (b != null) {
+                                        if (isFront) {
+                                          _scanFrontName(b);
+                                        } else {
+                                          _scanBackSticker(b);
+                                        }
+                                      }
+                                    },
+                                    icon: const Icon(LucideIcons.refreshCw, size: 14),
+                                    label: const Text('Retry Scan', style: TextStyle(fontSize: 12)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0F3260),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
                                   ),
                                 ],
@@ -1251,54 +1702,115 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                             ),
 
                           // Clear checkmark indicator
-                          if (!isAnalyzing && isClear)
-                            Container(
-                              color: Colors.black12,
-                              alignment: Alignment.center,
+                          if (!isAnalyzing && isClear &&
+                              ((isFront && _frontNameResult?.isNameMatch == true) ||
+                               (!isFront && _stickerResult?.isValid == true && _stickerResult?.birthdateMatches != false)))
+                            Positioned(
+                              top: 12,
+                              left: 12,
                               child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF10B981),
-                                  shape: BoxShape.circle,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
                                 ),
-                                child: const Icon(LucideIcons.check, color: Colors.white, size: 28),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.checkCheck, color: Colors.white, size: 14),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'VALIDATED',
+                                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
 
-                          // Bottom action badge (Retake / Change)
+                          // Bottom action badges (Adjust / Crop and Retake)
                           Positioned(
                             bottom: 12,
                             right: 12,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isBlurry ? AppTheme.error : Colors.black87,
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isBlurry ? LucideIcons.alertTriangle : LucideIcons.refreshCw,
-                                    color: Colors.white,
-                                    size: 13,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    isBlurry ? 'Retake Blurry Photo' : 'Retake',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if ((isFront ? _frontRawBytes : _backRawBytes) != null) ...[
+                                  GestureDetector(
+                                    onTap: () => _adjustCrop(isFront),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black87,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.3),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(LucideIcons.crop, color: Colors.white, size: 13),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'Crop / Adjust',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                 ],
-                              ),
+                                GestureDetector(
+                                  onTap: onTap,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: isBlurry ? AppTheme.error : Colors.black87,
+                                      borderRadius: BorderRadius.circular(8),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isBlurry ? LucideIcons.alertTriangle : LucideIcons.refreshCw,
+                                          color: Colors.white,
+                                          size: 13,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          isBlurry ? 'Retake' : 'Retake',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -1387,6 +1899,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             ),
           ],
 
+          // Document AI OCR Verification Widget for Front ID
+          if (isFront) _buildFrontNameStatusWidget(),
+
           // Document AI Sticker Verification Widget for Back ID
           if (!isFront) _buildBackStickerStatusWidget(),
 
@@ -1395,6 +1910,193 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildFrontNameStatusWidget() {
+    if (_isScanningFrontName) {
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F3260).withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF0F3260).withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF0F3260)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'OCR Name Verification in Progress',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF0F3260)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _frontScanProgressStatus,
+                    style: TextStyle(fontSize: 11, color: context.textSec, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_frontScanError != null && _frontNameResult == null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.error.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.error.withOpacity(0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(LucideIcons.alertTriangle, color: AppTheme.error, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'OCR Name Scan Incomplete',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _frontScanError!,
+              style: TextStyle(fontSize: 12, color: context.textSec),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (_frontProcessedBytes != null) _scanFrontName(_frontProcessedBytes!);
+              },
+              icon: const Icon(LucideIcons.refreshCw, size: 14),
+              label: const Text('Retry OCR Scan'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F3260),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_frontNameResult != null) {
+      final res = _frontNameResult!;
+      final bool isMatch = res.isNameMatch;
+
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isMatch ? const Color(0xFF10B981).withOpacity(0.08) : AppTheme.error.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isMatch ? const Color(0xFF10B981).withOpacity(0.4) : AppTheme.error.withOpacity(0.4),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isMatch ? LucideIcons.shieldCheck : LucideIcons.userX,
+                  color: isMatch ? const Color(0xFF10B981) : AppTheme.error,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isMatch ? 'Identity Verified: Name Matched' : 'Name Verification Failed',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      color: isMatch ? const Color(0xFF10B981) : AppTheme.error,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isMatch ? const Color(0xFF10B981) : AppTheme.error,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isMatch ? 'VERIFIED' : 'MISMATCH',
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _buildStickerInfoPill('Registered', _expectedName.isNotEmpty ? _expectedName : 'Active User', isMatch ? const Color(0xFF10B981) : AppTheme.error),
+                _buildStickerInfoPill('Extracted from ID', res.extractedName ?? 'Unreadable', isMatch ? const Color(0xFF10B981) : AppTheme.error),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              res.message,
+              style: TextStyle(fontSize: 12, color: context.textPri, height: 1.35),
+            ),
+            if (!isMatch) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _adjustCrop(true),
+                      icon: const Icon(LucideIcons.crop, size: 14),
+                      label: const Text('Adjust / Crop'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.textPri,
+                        side: BorderSide(color: context.crispBorder),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _promptImageSource(true),
+                      icon: const Icon(LucideIcons.camera, size: 14, color: Colors.white),
+                      label: const Text('Retake Front ID'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.error,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildBackStickerStatusWidget() {
@@ -1425,7 +2127,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Scanning upper back portion of ID for semester and academic year sticker...',
+                    _backScanProgressStatus,
                     style: TextStyle(fontSize: 11, color: context.textSec, height: 1.3),
                   ),
                 ],
@@ -1436,9 +2138,57 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       );
     }
 
+    if (_backScanError != null && _stickerResult == null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.error.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.error.withOpacity(0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(LucideIcons.alertTriangle, color: AppTheme.error, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Document AI Scan Incomplete',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _backScanError!,
+              style: TextStyle(fontSize: 12, color: context.textSec),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (_backProcessedBytes != null) _scanBackSticker(_backProcessedBytes!);
+              },
+              icon: const Icon(LucideIcons.refreshCw, size: 14),
+              label: const Text('Retry Document AI Scan'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F3260),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_stickerResult != null) {
       final res = _stickerResult!;
-      final isValid = res.isValid;
+      final bool isBirthdateValid = res.birthdateMatches != false;
+      final isValid = res.isValid && isBirthdateValid;
 
       return Container(
         margin: const EdgeInsets.only(top: 14),
@@ -1464,7 +2214,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    isValid ? 'Validation Sticker Approved' : res.termValidation.statusTitle,
+                    isValid ? 'Back ID Verified & Approved' : (isBirthdateValid ? res.termValidation.statusTitle : 'Birthdate Mismatch'),
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
@@ -1486,38 +2236,55 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            if (res.stickerFound) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  _buildStickerInfoPill('Detected AY', res.academicYear ?? 'Unknown', isValid ? const Color(0xFF10B981) : AppTheme.error),
-                  _buildStickerInfoPill('Semester', res.semester ?? 'Unknown', isValid ? const Color(0xFF10B981) : AppTheme.error),
-                  if (res.hasValidationStamp)
-                    _buildStickerInfoPill('Auth', 'Registrar Validated', const Color(0xFF10B981)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                if (res.stickerFound) ...[
+                  _buildStickerInfoPill('Detected AY', res.academicYear ?? 'Unknown', res.isValid ? const Color(0xFF10B981) : AppTheme.error),
+                  _buildStickerInfoPill('Semester', res.semester ?? 'Unknown', res.isValid ? const Color(0xFF10B981) : AppTheme.error),
                 ],
-              ),
-              const SizedBox(height: 8),
-            ],
+                if (res.birthdate != null)
+                  _buildStickerInfoPill('Birthdate', res.birthdate!, res.birthdateMatches == true ? const Color(0xFF10B981) : AppTheme.error),
+                if (res.hasValidationStamp)
+                  _buildStickerInfoPill('Auth', 'Registrar Validated', const Color(0xFF10B981)),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
-              res.termValidation.message,
+              isBirthdateValid
+                  ? res.termValidation.message
+                  : 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.',
               style: TextStyle(fontSize: 12, color: context.textPri, height: 1.35),
             ),
             if (!isValid) ...[
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _promptImageSource(false),
-                  icon: const Icon(LucideIcons.camera, size: 14, color: Colors.white),
-                  label: const Text('Retake Back ID with Current Sticker'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.error,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _adjustCrop(false),
+                      icon: const Icon(LucideIcons.crop, size: 14),
+                      label: const Text('Adjust / Crop'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.textPri,
+                        side: BorderSide(color: context.crispBorder),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _promptImageSource(false),
+                      icon: const Icon(LucideIcons.camera, size: 14, color: Colors.white),
+                      label: const Text('Retake Back ID'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.error,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -1669,8 +2436,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
 
   Widget _buildReviewStepWidget() {
     final bool hasBlurry = _frontQuality?.isBlurry == true || _backQuality?.isBlurry == true;
-    final bool hasInvalidSticker = _stickerResult != null && !_stickerResult!.isValid;
-    final bool isBlocked = hasBlurry || hasInvalidSticker || _isScanningSticker;
+    final bool hasNameMismatch = _frontNameResult != null && !_frontNameResult!.isNameMatch;
+    final bool hasInvalidSticker = _stickerResult != null && (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false);
+    final bool isBlocked = hasBlurry || hasNameMismatch || hasInvalidSticker || _isScanningSticker || _isScanningFrontName;
 
     return SingleChildScrollView(
       key: const ValueKey(3),
@@ -1688,6 +2456,47 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             style: TextStyle(fontSize: 13, color: context.textSec, height: 1.4),
           ),
           const SizedBox(height: 24),
+
+          // Name Mismatch Warning Banner
+          if (hasNameMismatch)
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.error.withOpacity(0.4), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(LucideIcons.userX, color: AppTheme.error, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Submission Blocked: Front ID Name Mismatch',
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'The name on your school ID does not match your registered profile. Please retake or adjust crop.',
+                          style: TextStyle(fontSize: 11, color: context.textPri, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Blurry Warning Banner if any scan is blurry
           if (hasBlurry)
@@ -2195,17 +3004,29 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         );
                         return;
                       }
-                      if (_stickerResult != null && !_stickerResult!.isValid && !_stickerOverriddenForAdmin) {
+                      if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Cannot submit: ${_stickerResult!.termValidation.statusTitle}.'),
+                          const SnackBar(
+                            content: Text('Cannot submit: The name on your school ID does not match your registered profile.'),
                             backgroundColor: AppTheme.error,
                           ),
                         );
                         return;
                       }
-                      final frontBytes = _frontImage != null ? await _frontImage!.readAsBytes() : null;
-                      final backBytes = _backImage != null ? await _backImage!.readAsBytes() : null;
+                      if (_stickerResult != null) {
+                        final bool isBirthdateValid = _stickerResult!.birthdateMatches != false;
+                        if (!_stickerResult!.isValid || !isBirthdateValid) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Cannot submit: Back ID validation sticker or birthdate mismatch.'),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      final frontBytes = _frontProcessedBytes ?? (_frontImage != null ? await _frontImage!.readAsBytes() : null);
+                      final backBytes = _backProcessedBytes ?? (_backImage != null ? await _backImage!.readAsBytes() : null);
                       Navigator.pop(context, {
                         'bytes': _generatedPdfBytes,
                         'fileName': 'ID_Submission_${DateTime.now().millisecondsSinceEpoch}.pdf',
@@ -2214,8 +3035,11 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         'stickerResult': _stickerResult,
                         'academicYear': _stickerResult?.academicYear ?? AcademicTermService.currentTerm.academicYear,
                         'semester': _stickerResult?.semester ?? AcademicTermService.currentTerm.semester,
-                        'stickerValidated': _stickerResult?.isValid == true || _stickerOverriddenForAdmin,
-                        'stickerOverriddenForAdmin': _stickerOverriddenForAdmin,
+                        'stickerValidated': _stickerResult?.isValid == true,
+                        'frontNameMatches': _frontNameResult?.isNameMatch == true,
+                        'frontExtractedName': _frontNameResult?.extractedName,
+                        'backBirthdate': _stickerResult?.birthdate,
+                        'backBirthdateMatches': _stickerResult?.birthdateMatches == true,
                       });
                     },
                     icon: const Icon(LucideIcons.check, size: 14),
