@@ -1559,6 +1559,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
           final notificationService = NotificationService();
           await notificationService.sendNotification(
+            studentId: user.id,
+            title: 'Documents Submitted',
+            message: 'Your scholarship documents have been submitted successfully. Please wait for admin verification.',
+            type: 'success',
+          );
+          await notificationService.sendNotification(
             studentId: 'admin',
             title: 'SA Number Submitted',
             message: 'Student $fullName has submitted SA Number for verification.',

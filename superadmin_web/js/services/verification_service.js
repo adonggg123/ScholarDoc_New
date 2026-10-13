@@ -31,52 +31,96 @@ export class VerificationService {
         fullName = String(fullName || '').trim();
         if (!fullName) return { lastName: '', firstName: '', middleName: '', mi: '', cleanKey: '', tokens: [] };
 
-        // Clean up common "N/A" artifacts
-        fullName = fullName.replace(/\bN\/A\b/gi, '').replace(/\s+/g, ' ').trim();
+        // Clean up common "N/A" artifacts and leading/trailing commas
+        fullName = fullName.replace(/\bN\/A\b/gi, '').replace(/\s+/g, ' ').replace(/^,\s*|,\s*$/g, '').trim();
+        if (!fullName || fullName === ',') return { lastName: '', firstName: '', middleName: '', mi: '', cleanKey: '', tokens: [] };
 
         let lastName = '';
         let firstName = '';
         let middleName = '';
         let mi = '';
 
+        const suffixes = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI']);
+        const surnamePrefixes = new Set(['DE', 'DEL', 'DELA', 'DELOS', 'SAN', 'STA', 'STA.', 'SANTA', 'VAN', 'VON', 'AL']);
+
         if (fullName.includes(',')) {
             const parts = fullName.split(',');
             lastName = parts[0].trim();
             const rest = parts.slice(1).join(',').trim().split(/\s+/).filter(Boolean);
-            if (rest.length > 1) {
+            if (rest.length > 0) {
                 const lastToken = rest[rest.length - 1];
-                if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
+                if (suffixes.has(lastToken.toUpperCase())) {
+                    const suff = rest.pop();
+                    if (rest.length > 1) {
+                        middleName = rest.pop().replace(/\.$/, '');
+                        mi = middleName ? middleName.charAt(0).toUpperCase() : '';
+                        firstName = rest.join(' ');
+                    } else {
+                        firstName = rest.join(' ');
+                    }
+                    lastName = `${lastName} ${suff}`.trim();
+                } else if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
                     mi = lastToken.charAt(0).toUpperCase();
                     middleName = rest.pop().replace(/\.$/, '');
                     firstName = rest.join(' ');
                 } else if (rest.length >= 2) {
-                    // In Philippine lists formatted "LASTNAME, FIRSTNAME MIDDLENAME",
-                    // the trailing token is the middle name
                     middleName = rest.pop();
                     mi = middleName.charAt(0).toUpperCase();
                     firstName = rest.join(' ');
                 } else {
                     firstName = rest.join(' ');
                 }
-            } else {
-                firstName = rest.join(' ');
             }
         } else {
-            const parts = fullName.split(/\s+/).filter(Boolean);
-            if (parts.length === 1) {
-                lastName = parts[0];
-            } else if (parts.length === 2) {
-                firstName = parts[0];
-                lastName = parts[1];
+            let tokens = fullName.split(/\s+/).filter(Boolean);
+            if (tokens.length === 1) {
+                lastName = tokens[0];
+            } else if (tokens.length === 2) {
+                firstName = tokens[0];
+                lastName = tokens[1];
             } else {
-                lastName = parts.pop();
-                const lastToken = parts[parts.length - 1];
-                if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
-                    mi = lastToken.charAt(0).toUpperCase();
-                    middleName = parts.pop().replace(/\.$/, '');
-                    firstName = parts.join(' ');
+                let suffix = '';
+                if (suffixes.has(tokens[tokens.length - 1].toUpperCase())) {
+                    suffix = tokens.pop();
+                }
+
+                if (tokens.length >= 4 && (tokens[tokens.length - 3].toUpperCase() === 'DE' && (tokens[tokens.length - 2].toUpperCase() === 'LA' || tokens[tokens.length - 2].toUpperCase() === 'LOS'))) {
+                    lastName = tokens.slice(tokens.length - 3).join(' ');
+                    tokens = tokens.slice(0, tokens.length - 3);
+                    if (tokens.length > 1) {
+                        middleName = tokens.pop().replace(/\.$/, '');
+                        firstName = tokens.join(' ');
+                    } else {
+                        firstName = tokens[0] || '';
+                    }
+                } else if (tokens.length >= 3 && surnamePrefixes.has(tokens[tokens.length - 2].toUpperCase())) {
+                    lastName = tokens.slice(tokens.length - 2).join(' ');
+                    tokens = tokens.slice(0, tokens.length - 2);
+                    if (tokens.length > 1) {
+                        middleName = tokens.pop().replace(/\.$/, '');
+                        firstName = tokens.join(' ');
+                    } else {
+                        firstName = tokens[0] || '';
+                    }
                 } else {
-                    firstName = parts.join(' ');
+                    lastName = tokens.pop();
+                    const lastToken = tokens[tokens.length - 1];
+                    if (lastToken.length === 1 || (lastToken.length === 2 && lastToken.endsWith('.'))) {
+                        middleName = tokens.pop().replace(/\.$/, '');
+                        firstName = tokens.join(' ');
+                    } else if (tokens.length >= 2) {
+                        middleName = tokens.pop();
+                        firstName = tokens.join(' ');
+                    } else {
+                        firstName = tokens.join(' ');
+                    }
+                }
+
+                if (suffix) {
+                    lastName = `${lastName} ${suffix}`.trim();
+                }
+                if (middleName) {
+                    mi = middleName.charAt(0).toUpperCase();
                 }
             }
         }
@@ -210,10 +254,11 @@ export class VerificationService {
      * Matches a single Super Admin imported grantee against the Admin's school student masterlist.
      */
     static verifyGrantee(grantee, schoolStudents) {
-        const granteeName = this.normalizeName(grantee.name || `${grantee.last_name || ''} ${grantee.first_name || ''} ${grantee.middle_name || ''}`);
-        const granteeId = String(grantee.student_id || grantee.studentId || '').trim();
-        const granteeProg = grantee.course || grantee.program || '';
-        const granteeYear = String(grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '');
+        const granteeRawName = grantee.name || grantee.fullName || grantee.full_name || `${grantee.last_name || grantee.lastName || ''} ${grantee.first_name || grantee.firstName || ''} ${grantee.middle_name || grantee.middleName || ''}`;
+        const granteeName = this.normalizeName(granteeRawName);
+        const granteeId = String(grantee.student_id || grantee.studentId || grantee.student_no || grantee.studentNo || '').trim();
+        const granteeProg = grantee.course || grantee.program || grantee.program_name || grantee.programName || '';
+        const granteeYear = String(grantee.year || grantee.year_level || grantee.yearLevel || '1').replace(/[^0-9]/g, '');
 
         const hasValidGranteeId = Boolean(granteeId && !['unassigned', 'n/a', 'none', 'null', 'undefined', ''].includes(granteeId.toLowerCase()));
 
@@ -222,18 +267,19 @@ export class VerificationService {
         let matchBreakdown = { idScore: 0, nameScore: 0, progScore: 0, yearScore: 0, totalScore: 0 };
 
         for (const student of (schoolStudents || [])) {
-            const studentName = this.normalizeName(student.fullName || student.name || `${student.lastName || student.last_name || ''} ${student.firstName || student.first_name || ''}`);
-            const studentId = String(student.studentId || student.student_id || student.id || '').trim();
-            const studentProg = student.course || student.program || '';
-            const studentYear = String(student.year || student.scholarYearLevel || student.year_level || '1').replace(/[^0-9]/g, '');
+            const studentRawName = student.fullName || student.full_name || student.name || `${student.lastName || student.last_name || ''} ${student.firstName || student.first_name || ''}`;
+            const studentName = this.normalizeName(studentRawName);
+            const studentId = String(student.studentId || student.student_id || student.studentNo || student.student_no || student.id || '').trim();
+            const studentProg = student.course || student.program || student.programName || student.program_name || '';
+            const studentYear = String(student.year || student.scholarYearLevel || student.year_level || student.yearLevel || '1').replace(/[^0-9]/g, '');
 
             const hasValidStudentId = Boolean(studentId && !['unassigned', 'n/a', 'none', 'null', 'undefined', ''].includes(studentId.toLowerCase()));
             const canMatchId = hasValidGranteeId && hasValidStudentId;
 
-            // Extract structured names (prefer explicit fields if present on objects)
-            const gLast = (grantee.last_name || granteeName.lastName || '').trim();
-            const gFirst = (grantee.first_name || granteeName.firstName || '').trim();
-            const gMiddle = (grantee.middle_name || granteeName.middleName || '').replace(/\b(n\/a|na|none|null|undefined)\b/gi, '').trim();
+            // Extract structured names (support both snake_case and camelCase, and fallback to parsed names)
+            const gLast = (grantee.last_name || grantee.lastName || granteeName.lastName || '').trim();
+            const gFirst = (grantee.first_name || grantee.firstName || granteeName.firstName || '').trim();
+            const gMiddle = (grantee.middle_name || grantee.middleName || granteeName.middleName || '').replace(/\b(n\/a|na|none|null|undefined)\b/gi, '').trim();
             const gMI = gMiddle ? gMiddle.charAt(0).toUpperCase() : (granteeName.mi || '');
 
             const sLast = (student.lastName || student.last_name || studentName.lastName || '').trim();

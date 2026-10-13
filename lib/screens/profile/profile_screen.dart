@@ -67,63 +67,75 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadProfile() async {
     final uid = _authService.currentUser?.id;
     if (uid != null) {
-      final doc = await _authService.getStudentProfile(uid);
-      if (doc != null) {
-        final data = doc;
-        final rawSch = (data['scholarshipName'] ?? data['scholarship_name'] ?? '').toString().trim();
-        final schName = (rawSch.isEmpty || rawSch.contains('No Scholarship') || rawSch.contains('Unassigned'))
-            ? 'TES'
-            : (rawSch.toUpperCase().contains('TES') ? 'TES' : rawSch);
-        if (!_scholarshipOptions.contains(schName)) {
-          _scholarshipOptions.add(schName);
-        }
-
-        final rawGender = (data['gender'] ?? data['sex'] ?? 'Male').toString().trim();
-        String parsedGender = 'Male';
-        if (rawGender.toLowerCase().startsWith('f')) {
-          parsedGender = 'Female';
-        } else if (rawGender.toLowerCase().startsWith('m')) {
-          parsedGender = 'Male';
-        } else if (rawGender.isNotEmpty && rawGender != 'N/A' && rawGender != 'Not Specified') {
-          parsedGender = rawGender;
-        }
-
-        setState(() {
-          _profileData = data;
-          _selectedScholarship = schName;
-          _selectedGender = parsedGender;
-          final fam = (data['familyDetails'] is Map)
-              ? (data['familyDetails'] as Map)
-              : {};
-          _nameController.text = (data['fullName'] ?? data['full_name'] ?? '').toString();
-          _emailController.text = (data['email'] ?? data['email_address'] ?? '').toString();
-          _contactController.text = (data['contactNumber'] ?? data['mobile_number'] ?? '').toString();
-          _sectionController.text = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
-          _saController.text = (data['saNumber'] ?? data['sa_number'] ?? '').toString();
-          _birthdateController.text = (data['birthdate'] ?? data['birthday'] ?? data['date_of_birth'] ?? '').toString();
-          _courseController.text = (data['course'] ?? data['program_name'] ?? '').toString();
-          _yearLevelController.text = (data['year'] ?? data['year_level'] ?? '').toString();
-
-          _yearBecameScholarController.text =
-              (data['yearBecameScholar'] ??
-                      data['year_became_scholar'] ??
-                      data['scholarYearLevel'] ??
-                      fam['yearBecameScholar'] ??
-                      fam['scholarYearLevel'] ??
-                      '')
-                  .toString();
-          final rawPayouts = data['payoutsReceived'] ??
-              data['payouts_received'] ??
-              fam['payoutsReceived'] ??
-              fam['payouts_received'];
-          if (rawPayouts != null && rawPayouts.toString().trim().isNotEmpty) {
-            _payoutsReceivedController.text = rawPayouts.toString().trim();
-          } else {
-            _payoutsReceivedController.text = '';
+      try {
+        final doc = await _authService.getStudentProfile(uid);
+        if (doc != null && mounted) {
+          final data = doc;
+          final rawSch = (data['scholarshipName'] ?? data['scholarship_name'] ?? '').toString().trim();
+          final schName = (rawSch.isEmpty || rawSch.contains('No Scholarship') || rawSch.contains('Unassigned'))
+              ? 'TES'
+              : (rawSch.toUpperCase().contains('TES') ? 'TES' : rawSch);
+          if (!_scholarshipOptions.contains(schName)) {
+            _scholarshipOptions.add(schName);
           }
-          _profilePictureUrl = data['profilePictureUrl'] as String?;
-          _isProfileLoading = false;
-        });
+
+          final rawGender = (data['gender'] ?? data['sex'] ?? 'Male').toString().trim();
+          String parsedGender = 'Male';
+          if (rawGender.toLowerCase().startsWith('f')) {
+            parsedGender = 'Female';
+          } else if (rawGender.toLowerCase().startsWith('m')) {
+            parsedGender = 'Male';
+          } else if (rawGender.isNotEmpty && rawGender != 'N/A' && rawGender != 'Not Specified') {
+            parsedGender = rawGender;
+          }
+
+          setState(() {
+            _profileData = data;
+            _selectedScholarship = schName;
+            _selectedGender = parsedGender;
+            final fam = (data['familyDetails'] is Map)
+                ? (data['familyDetails'] as Map)
+                : {};
+            _nameController.text = (data['fullName'] ?? data['full_name'] ?? '').toString();
+            _emailController.text = (data['email'] ?? data['email_address'] ?? '').toString();
+            _contactController.text = (data['contactNumber'] ?? data['mobile_number'] ?? '').toString();
+            _sectionController.text = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
+            _saController.text = (data['saNumber'] ?? data['sa_number'] ?? '').toString();
+            _birthdateController.text = (data['birthdate'] ?? data['birthday'] ?? data['date_of_birth'] ?? '').toString();
+            _courseController.text = (data['course'] ?? data['program_name'] ?? '').toString();
+            _yearLevelController.text = (data['year'] ?? data['year_level'] ?? '').toString();
+
+            _yearBecameScholarController.text =
+                (data['yearBecameScholar'] ??
+                        data['year_became_scholar'] ??
+                        data['scholarYearLevel'] ??
+                        fam['yearBecameScholar'] ??
+                        fam['scholarYearLevel'] ??
+                        '')
+                    .toString();
+            final rawPayouts = data['payoutsReceived'] ??
+                data['payouts_received'] ??
+                fam['payoutsReceived'] ??
+                fam['payouts_received'];
+            if (rawPayouts != null && rawPayouts.toString().trim().isNotEmpty) {
+              _payoutsReceivedController.text = rawPayouts.toString().trim();
+            } else {
+              _payoutsReceivedController.text = '';
+            }
+            _profilePictureUrl = data['profilePictureUrl'] as String?;
+            _isProfileLoading = false;
+          });
+        }
+      } catch (e) {
+        debugPrint('ProfileScreen _loadProfile error: $e');
+      } finally {
+        if (mounted && _isProfileLoading) {
+          setState(() => _isProfileLoading = false);
+        }
+      }
+    } else {
+      if (mounted && _isProfileLoading) {
+        setState(() => _isProfileLoading = false);
       }
     }
   }

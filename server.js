@@ -624,7 +624,7 @@ async function sendSingleGranteeSms(grantee, { force = false } = {}) {
     const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
     const scholarshipName = grantee.scholarship_name || grantee.scholarshipName || 'CHED TES';
 
-    const smsMessage = `[ScholarDoc] Congratulations ${fullName}! You are confirmed as an official ${scholarshipName} grantee. Download the app at ${APP_DOWNLOAD_URL} to upload documents and track your stipend.`;
+    const smsMessage = `[ScholarDoc] Application Approved: Congratulations ${fullName}! Your scholarship application has been officially approved.`;
 
     const smsResult = await sendSemaphoreSms({
         numbers: normalizedPhone,
@@ -740,18 +740,19 @@ async function sendStudentSmsNotification({
     const studentName = granteeRecord?.full_name || granteeRecord?.fullName || 'Student';
     const scholarshipName = granteeRecord?.scholarship_name || granteeRecord?.scholarshipName || 'Scholarship';
 
-    let message = customMessage;
-    if (title && message && !message.includes(title)) {
-        message = `[ScholarDoc] ${title}: ${message}`;
-    } else if (message && !message.startsWith('[ScholarDoc]')) {
+    let message = (customMessage || '').trim();
+    if (title && message) {
+        if (!message.toLowerCase().includes(title.toLowerCase())) {
+            message = `${title}: ${message}`;
+        }
+    }
+    if (message && !message.startsWith('[ScholarDoc]')) {
         message = `[ScholarDoc] ${message}`;
     }
 
     if (!message) {
         switch (eventType) {
             case 'grantee_confirmed':
-                message = `[ScholarDoc] Application Approved: Congratulations ${studentName}! You are confirmed as a ${scholarshipName} grantee. Download the app at ${APP_DOWNLOAD_URL} to upload documents and track your stipend.`;
-                break;
             case 'application_approved':
                 message = `[ScholarDoc] Application Approved: Congratulations! Your scholarship application has been officially approved.`;
                 break;
@@ -807,7 +808,7 @@ async function sendStudentSmsNotification({
     };
 }
 
-async function broadcastAnnouncementNotification({ announcementId, title, content, type, forceResend, sendSms = false }) {
+async function broadcastAnnouncementNotification({ announcementId, title, content, type, forceResend, sendSms = true }) {
     const headers = {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -1017,10 +1018,10 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
         }
     }
 
-    // 6. Broadcast SMS via Semaphore if sendSms is enabled
+    // 6. Broadcast SMS via Semaphore matching notification content
     let smsSentCount = 0;
     let smsFailedCount = 0;
-    if (sendSms) {
+    if (sendSms !== false) {
         try {
             console.log('[Announcement] SMS broadcast requested, querying student mobile numbers...');
             const stuRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=student_no,uid,full_name,mobile_number,contactNumber`, { headers });
@@ -1036,9 +1037,10 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
                     }
                     const uniquePhones = Array.from(phoneMap.keys());
                     if (uniquePhones.length > 0) {
-                        const cleanT = (title || 'ScholarDoc Alert').trim().slice(0, 35);
-                        const cleanM = (shortMessage || 'New announcement posted.').trim().slice(0, 85);
-                        const annSmsText = `[ScholarDoc] ${cleanT}: ${cleanM} Open the app for details.`;
+                        const notifTitle = (title || 'ScholarDoc Announcement').trim();
+                        const notifBody = (shortMessage || cleanPreview || 'A new scholarship update has been posted.').trim();
+                        // Send identical content as the in-app notification & push notification
+                        const annSmsText = `[ScholarDoc] ${notifTitle}: ${notifBody}`;
 
                         // Send in chunks of 50 recipients
                         for (let i = 0; i < uniquePhones.length; i += 50) {
@@ -1988,6 +1990,318 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
+// ── Automatic Notification-to-SMS Watcher Daemon ─────────────────────────
+// Automatically mirrors all in-app notifications created in Supabase to SMS via Semaphore
+// with identical content, ensuring any notification triggered anywhere in ScholarDoc
+// immediately sends an SMS to the student's mobile number.
+
+const processedNotificationIds = new Set();
+const NOTIF_PROCESSED_FILE = path.join(__dirname, 'scratch', 'processed_sms_notification_ids.json');
+
+function loadProcessedNotificationIds() {
+    try {
+        if (fs.existsSync(NOTIF_PROCESSED_FILE)) {
+            const data = JSON.parse(fs.readFileSync(NOTIF_PROCESSED_FILE, 'utf8'));
+            if (Array.isArray(data)) {
+                data.forEach(id => processedNotificationIds.add(String(id)));
+            }
+        }
+    } catch (_) {}
+}
+
+function saveProcessedNotificationIds() {
+    try {
+        const dir = path.dirname(NOTIF_PROCESSED_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        // Keep latest 2000 IDs to prevent file unbounded growth
+        const arr = Array.from(processedNotificationIds).slice(-2000);
+        fs.writeFileSync(NOTIF_PROCESSED_FILE, JSON.stringify(arr), 'utf8');
+    } catch (_) {}
+}
+
+let isWatcherPolling = false;
+
+async function lookupStudentForNotification(studentId, notif = null) {
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    };
+
+    // If notification target is admin or superadmin, check if a specific student is mentioned in message
+    if (studentId === 'admin' || studentId === 'superadmin') {
+        if (notif && notif.message) {
+            const nameMatch = notif.message.match(/^(?:Student\s+)?([A-Za-z\s.]+?)(?:\s+has\s+|\s+updated\s+|\s+submitted)/i);
+            if (nameMatch && nameMatch[1]) {
+                const studentName = nameMatch[1].trim();
+                try {
+                    const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(full_name.ilike.*${encodeURIComponent(studentName)}*,fullName.ilike.*${encodeURIComponent(studentName)}*)&limit=1`, { headers });
+                    if (res.ok) {
+                        const rows = await res.json();
+                        if (Array.isArray(rows) && rows.length > 0) {
+                            const s = rows[0];
+                            const rawPhone = s.mobile_number || s.contactNumber || s.phone_number || s.documents?.contactNumber || s.familyDetails?.contactNumber;
+                            if (rawPhone) {
+                                return {
+                                    student_no: s.student_no || s.studentId,
+                                    uid: s.uid || s.id,
+                                    full_name: s.full_name || s.fullName,
+                                    rawPhone
+                                };
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+        // Fallback: Notify administrator/superadmin mobile number
+        const adminPhone = process.env.ADMIN_PHONE_NUMBER || '09653793139';
+        return {
+            student_no: studentId,
+            uid: studentId,
+            full_name: 'Administrator',
+            rawPhone: adminPhone
+        };
+    }
+
+    if (!studentId) return null;
+    const cleanId = String(studentId).trim();
+
+    // 1. Check student_grantees
+    try {
+        let filter;
+        if (isUuidString(cleanId)) {
+            filter = `or=(id.eq.${encodeURIComponent(cleanId)},uid.eq.${encodeURIComponent(cleanId)})`;
+        } else if (cleanId.includes('@')) {
+            filter = `or=(email.eq.${encodeURIComponent(cleanId)},email_address.eq.${encodeURIComponent(cleanId)})`;
+        } else {
+            filter = `or=(student_no.eq.${encodeURIComponent(cleanId)},studentId.eq.${encodeURIComponent(cleanId)})`;
+        }
+
+        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?${filter}&limit=1`, { headers });
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+                const s = rows[0];
+                const rawPhone = s.mobile_number || s.contactNumber || s.phone_number || s.documents?.contactNumber || s.familyDetails?.contactNumber;
+                return {
+                    student_no: s.student_no || s.studentId,
+                    uid: s.uid || s.id,
+                    full_name: s.full_name || s.fullName,
+                    rawPhone
+                };
+            }
+        }
+    } catch (_) {}
+
+    // 2. Check school_students
+    try {
+        let filter;
+        if (isUuidString(cleanId)) {
+            filter = `id=eq.${encodeURIComponent(cleanId)}`;
+        } else if (cleanId.includes('@')) {
+            filter = `email_address=eq.${encodeURIComponent(cleanId)}`;
+        } else {
+            filter = `student_no=eq.${encodeURIComponent(cleanId)}`;
+        }
+
+        const res = await fetch(`${SUPABASE_REST_URL}/school_students?${filter}&limit=1`, { headers });
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+                const s = rows[0];
+                return {
+                    student_no: s.student_no,
+                    uid: s.id,
+                    full_name: s.full_name,
+                    rawPhone: s.mobile_number
+                };
+            }
+        }
+    } catch (_) {}
+
+    return null;
+}
+
+async function checkSmsAlreadySentRecently(recipientPhone, message) {
+    if (!recipientPhone || !message) return false;
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        };
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const res = await fetch(
+            `${SUPABASE_REST_URL}/sms_logs?recipient_phone=eq.${encodeURIComponent(recipientPhone)}&sent_at=gte.${encodeURIComponent(oneHourAgo)}&status=eq.sent&order=sent_at.desc&limit=5`,
+            { headers }
+        );
+        if (res.ok) {
+            const logs = await res.json();
+            if (Array.isArray(logs)) {
+                const normalizedTarget = message.trim().toLowerCase();
+                for (const log of logs) {
+                    if ((log.message || '').trim().toLowerCase() === normalizedTarget) {
+                        return true;
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+    return false;
+}
+
+async function pollNotificationsAndSendSms() {
+    if (isWatcherPolling) return;
+    isWatcherPolling = true;
+
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        };
+
+        // Query the latest 30 notifications in Supabase
+        const res = await fetch(`${SUPABASE_REST_URL}/notifications?order=timestamp.desc&limit=30`, { headers });
+        if (!res.ok) return;
+
+        const notifs = await res.json();
+        if (!Array.isArray(notifs) || notifs.length === 0) return;
+
+        for (const notif of notifs) {
+            const notifId = String(notif.id || '');
+            if (!notifId || processedNotificationIds.has(notifId)) continue;
+
+            const targetStudentId = notif.studentId || notif.student_id;
+
+            // Skip individual notification rows created as part of an announcement broadcast
+            // (announcements already handle broadcast SMS directly via broadcastAnnouncementNotification)
+            if (notif.announcementId) {
+                processedNotificationIds.add(notifId);
+                continue;
+            }
+
+            // Look up student details & registered phone number (or admin fallback)
+            const studentInfo = await lookupStudentForNotification(targetStudentId, notif);
+            if (!studentInfo || !studentInfo.rawPhone) {
+                console.warn(`[SMS Watcher] Notification ${notifId}: Target ${targetStudentId} has no mobile number registered.`);
+                processedNotificationIds.add(notifId);
+                continue;
+            }
+
+            const normalizedPhone = normalizePhilippineMobile(studentInfo.rawPhone);
+            if (!normalizedPhone) {
+                console.warn(`[SMS Watcher] Notification ${notifId}: Invalid mobile number "${studentInfo.rawPhone}" for target ${targetStudentId}.`);
+                processedNotificationIds.add(notifId);
+                continue;
+            }
+
+            // Build SMS text identical in content to the notification
+            let smsMessage = (notif.message || '').trim();
+            const title = (notif.title || '').trim();
+            if (title && !smsMessage.toLowerCase().includes(title.toLowerCase())) {
+                smsMessage = `${title}: ${smsMessage}`;
+            }
+            if (!smsMessage.startsWith('[ScholarDoc]')) {
+                smsMessage = `[ScholarDoc] ${smsMessage}`;
+            }
+
+            // Deduplication: verify if identical SMS was already dispatched recently
+            const alreadySent = await checkSmsAlreadySentRecently(normalizedPhone, smsMessage);
+            if (alreadySent) {
+                console.log(`[SMS Watcher] Duplicate prevented for notification ${notifId} to ${normalizedPhone} (already logged in sms_logs).`);
+                processedNotificationIds.add(notifId);
+                continue;
+            }
+
+            console.log(`[SMS Watcher] Sending SMS for notification "${title}" -> ${studentInfo.full_name || targetStudentId} (${normalizedPhone})...`);
+
+            const smsRes = await sendSemaphoreSms({
+                numbers: normalizedPhone,
+                message: smsMessage
+            });
+
+            // Record to sms_logs in Supabase
+            await recordSmsLog({
+                studentId: studentInfo.student_no || targetStudentId,
+                granteeUid: studentInfo.uid,
+                recipientPhone: normalizedPhone,
+                message: smsMessage,
+                eventType: notif.type || 'notification',
+                status: smsRes.success ? 'sent' : 'failed',
+                messageId: smsRes.message_id,
+                network: smsRes.network,
+                errorMessage: smsRes.error
+            });
+
+            if (smsRes.success) {
+                console.log(`[SMS Watcher] Successfully sent SMS for notification ${notifId} to ${normalizedPhone}`);
+            } else {
+                console.error(`[SMS Watcher] Failed sending SMS for notification ${notifId}:`, smsRes.error);
+            }
+
+            processedNotificationIds.add(notifId);
+            saveProcessedNotificationIds();
+
+            // Delay 200ms between sends to avoid rate limiting
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        saveProcessedNotificationIds();
+
+    } catch (pollErr) {
+        console.error('[SMS Watcher] Polling error:', pollErr.message);
+    } finally {
+        isWatcherPolling = false;
+    }
+}
+
+async function startNotificationSmsWatcher() {
+    loadProcessedNotificationIds();
+
+    // On initial startup, cache existing notifications older than 5 minutes so we don't blast historical rows
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        };
+        const res = await fetch(`${SUPABASE_REST_URL}/notifications?select=id,timestamp&order=timestamp.desc&limit=100`, { headers });
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows)) {
+                const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+                for (const row of rows) {
+                    const rowTime = row.timestamp ? new Date(row.timestamp).getTime() : 0;
+                    if (rowTime < fiveMinsAgo) {
+                        processedNotificationIds.add(String(row.id));
+                    }
+                }
+                saveProcessedNotificationIds();
+            }
+        }
+    } catch (_) {}
+
+    console.log(`[SMS Watcher] Notification-to-SMS watcher daemon started (polling every 3s). Cached ${processedNotificationIds.size} processed IDs.`);
+
+    // Run first poll immediately
+    pollNotificationsAndSendSms();
+
+    // Run recurring poll every 3 seconds
+    setInterval(pollNotificationsAndSendSms, 3000);
+}
+
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`\n❌ [ScholarDoc] Port ${PORT} is already in use!`);
+        console.error(`   ScholarDoc is already running in another terminal window or background process.`);
+        console.error(`   If you want to restart it:`);
+        console.error(`     1. Press Ctrl+C in the terminal where it is running, OR`);
+        console.error(`     2. Stop the process holding port ${PORT}.\n`);
+        process.exit(1);
+    } else {
+        console.error('Server error:', err);
+        process.exit(1);
+    }
+});
+
 server.listen(PORT, () => {
     console.log('\n=======================================================');
     console.log(' 🎓 ScholarDoc Unified Web Platform');
@@ -1998,4 +2312,7 @@ server.listen(PORT, () => {
     console.log(` Admin Portal:        http://localhost:${PORT}/admin_web/admin.html`);
     console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
     console.log('=======================================================\n');
+
+    // Start background watcher daemon
+    startNotificationSmsWatcher();
 });

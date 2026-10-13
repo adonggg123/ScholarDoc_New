@@ -151,29 +151,31 @@ serve(async (req) => {
       );
     }
 
-    let finalMessage = message;
-    const name = targetStudent?.full_name || targetStudent?.fullName || "Student";
-    const scholarship = targetStudent?.scholarship_name || targetStudent?.scholarshipName || "Scholarship";
-
-    if (!finalMessage) {
+    let finalMessage = (message || "").trim();
+    if (finalMessage) {
+      if (title && !finalMessage.toLowerCase().includes(title.toLowerCase())) {
+        finalMessage = `${title}: ${finalMessage}`;
+      }
+      if (!finalMessage.startsWith("[ScholarDoc]")) {
+        finalMessage = `[ScholarDoc] ${finalMessage}`;
+      }
+    } else {
       switch (event_type) {
         case "grantee_confirmed":
-          finalMessage = `[ScholarDoc] Congratulations ${name}! You are confirmed as a ${scholarship} grantee. Download the app to submit requirements and track your stipend.`;
-          break;
         case "application_approved":
-          finalMessage = `[ScholarDoc] Good news ${name}! Your scholarship documents have been verified and approved by the Scholarship Office.`;
+          finalMessage = `[ScholarDoc] Application Approved: Congratulations! Your scholarship application has been officially approved.`;
           break;
         case "application_rejected":
-          finalMessage = `[ScholarDoc Notice] Hello ${name}, your scholarship submission requires attention/correction.${feedback ? " Feedback: " + feedback : ""} Please open the ScholarDoc app for details.`;
+          finalMessage = `[ScholarDoc] Application Rejected: We regret to inform you that your scholarship application has been rejected.${feedback ? " Feedback: " + feedback : ""}`;
           break;
         case "sa_revision":
-          finalMessage = `[ScholarDoc Notice] Hello ${name}, your SA Number submission requires correction.${feedback ? " Feedback: " + feedback : ""} Please update it in the ScholarDoc app.`;
+          finalMessage = `[ScholarDoc] SA Number Needs Revision: Your SA Number submission requires correction.${feedback ? " Feedback: " + feedback : ""} Please update it in the ScholarDoc app.`;
           break;
         case "id_revision":
-          finalMessage = `[ScholarDoc Notice] Hello ${name}, your School ID document requires correction.${feedback ? " Feedback: " + feedback : ""} Please review feedback in the ScholarDoc app.`;
+          finalMessage = `[ScholarDoc] School ID Needs Revision: Your School ID document requires correction.${feedback ? " Feedback: " + feedback : ""} Please review feedback in the ScholarDoc app.`;
           break;
         default:
-          finalMessage = `[ScholarDoc] Important scholarship update for ${name}.${feedback ? " " + feedback : ""} Check the ScholarDoc app.`;
+          finalMessage = `[ScholarDoc] Scholarship Notice: Important update for ${name}.${feedback ? " " + feedback : ""} Check the ScholarDoc app.`;
       }
     }
 

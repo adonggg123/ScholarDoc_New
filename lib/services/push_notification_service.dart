@@ -10,6 +10,8 @@ import '../firebase_options.dart';
 import 'announcement_service.dart';
 import '../screens/dashboard/widgets/announcement_detail_dialog.dart';
 import '../screens/notifications/notification_screen.dart';
+import '../screens/submissions/upload_workflow_screen.dart';
+import '../screens/submissions/status_tracking_screen.dart';
 
 /// Top-level background message handler for Firebase Messaging
 @pragma('vm:entry-point')
@@ -336,28 +338,103 @@ class PushNotificationService {
 
   /// Process any pending notification payload saved during cold start
   void processPendingNotification(BuildContext context) {
-    if (_pendingAnnouncementId != null) {
-      final id = _pendingAnnouncementId!;
-      final data = _pendingNotificationData;
+    if (_pendingAnnouncementId != null || _pendingNotificationData != null) {
+      final announcementId = _pendingAnnouncementId;
+      final data = _pendingNotificationData ?? {};
       _pendingAnnouncementId = null;
       _pendingNotificationData = null;
+
       Future.delayed(const Duration(milliseconds: 600), () {
-        openAnnouncementById(id, fallbackData: data, context: context);
+        if (context.mounted) {
+          navigateFromNotification(
+            context,
+            title: data['title']?.toString(),
+            message: (data['body'] ?? data['message'])?.toString(),
+            type: data['type']?.toString(),
+            announcementId: announcementId ?? data['announcementId']?.toString(),
+            data: data,
+          );
+        }
       });
     }
   }
 
   /// Handle tapping on a notification
   Future<void> handleNotificationTap(Map<String, dynamic> data) async {
-    final String? announcementId = data['announcementId']?.toString() ?? data['id']?.toString();
     final BuildContext? context = _navigatorKey?.currentContext;
+    final String? announcementId = data['announcementId']?.toString() ?? (data['target'] == 'announcement' ? data['id']?.toString() : null);
+    final String? title = data['title']?.toString();
+    final String? message = (data['body'] ?? data['message'])?.toString();
+    final String? type = data['type']?.toString();
 
-    debugPrint('ScholarDoc Push: Handling notification tap with announcementId=$announcementId');
+    debugPrint('ScholarDoc Push: Handling notification tap: title=$title, announcementId=$announcementId');
 
+    navigateFromNotification(
+      context,
+      title: title,
+      message: message,
+      type: type,
+      announcementId: announcementId,
+      data: data,
+    );
+  }
+
+  /// Central notification navigation dispatcher
+  void navigateFromNotification(
+    BuildContext? context, {
+    String? title,
+    String? message,
+    String? type,
+    String? announcementId,
+    Map<String, dynamic>? data,
+  }) {
+    final ctx = context ?? _navigatorKey?.currentContext;
+    if (ctx == null || !ctx.mounted) {
+      debugPrint('ScholarDoc Push: Context is not mounted for navigation');
+      return;
+    }
+
+    // 1. Announcement notification
     if (announcementId != null && announcementId.isNotEmpty) {
-      await openAnnouncementById(announcementId, fallbackData: data, context: context);
-    } else {
-      navigateToNotificationsScreen(context: context);
+      openAnnouncementById(announcementId, fallbackData: data, context: ctx);
+      return;
+    }
+
+    final combinedText = '${title ?? ''} ${message ?? ''} ${type ?? ''} ${data?['target'] ?? ''}'.toLowerCase();
+
+    // 2. Document Submission Update / Missing Documents / Resubmission
+    if (combinedText.contains('missing documents') ||
+        combinedText.contains('missing document') ||
+        combinedText.contains('resubmission') ||
+        combinedText.contains('re-upload') ||
+        combinedText.contains('requires revision') ||
+        combinedText.contains('document submission') ||
+        combinedText.contains('upload documents')) {
+      Navigator.of(ctx).push(
+        MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()),
+      );
+      return;
+    }
+
+    // 3. SA Verification, ID Validation, Application Status Updates (Pending, Verified, Approved, Rejected)
+    if (combinedText.contains('sa verification') ||
+        combinedText.contains('sa number') ||
+        combinedText.contains('id validation') ||
+        combinedText.contains('school id') ||
+        combinedText.contains('application approved') ||
+        combinedText.contains('application rejected') ||
+        combinedText.contains('verified') ||
+        combinedText.contains('status') ||
+        combinedText.contains('grantee')) {
+      Navigator.of(ctx).push(
+        MaterialPageRoute(builder: (_) => const StatusTrackingScreen()),
+      );
+      return;
+    }
+
+    // 4. Default fallback: Notifications Screen
+    if (ModalRoute.of(ctx)?.settings.name != '/notifications') {
+      navigateToNotificationsScreen(context: ctx);
     }
   }
 

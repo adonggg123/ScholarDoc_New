@@ -141,7 +141,9 @@ function applyFilters() {
         if (!matchAy) {
             const sAy = (s.academic_year || s.academicYear || '').toLowerCase();
             const sSem = (s.semester || '').toLowerCase();
-            if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
+            if (!sAy || sAy === 'n/a') {
+                matchAy = true;
+            } else if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
                 if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
                 else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
                 else if (!ay.includes('Sem')) matchAy = true;
@@ -185,8 +187,8 @@ function getStatusBadge(status) {
         color = '#D97706'; // warm amber for Pending
         bg = 'rgba(245, 158, 11, 0.12)';
         border = 'rgba(245, 158, 11, 0.35)';
-    } else if (sLower === 'late submission') {
-        color = '#EA580C'; // orange
+    } else if (sLower === 'missing documents' || sLower === 'missing') {
+        color = '#EA580C'; // orange for Missing Documents
         bg = 'rgba(234, 88, 12, 0.12)';
         border = 'rgba(234, 88, 12, 0.35)';
     } else if (sLower === 'no submission yet' || sLower.includes('no submission')) {
@@ -592,7 +594,8 @@ function showStudentModal(student) {
 
     // Documents resolution
     const docs = student.documents || {};
-    const atmUrl = student.atmCardUrl || student.atm_card_url || docs.atmCardUrl || docs.atm_card_url;
+    const atmUrl = student.atmCardUrl || student.atm_card_url || docs.atmCardUrl || docs.atm_card_url || docs.atmProofUrl || docs.atm_proof_url;
+    const depositUrl = student.depositSlipUrl || student.deposit_slip_url || docs.depositSlipUrl || docs.deposit_slip_url;
     const frontUrl = student.idFrontUrl || student.id_front_url || docs.idFrontUrl || docs.id_front_url;
     const backUrl = student.idBackUrl || student.id_back_url || docs.idBackUrl || docs.id_back_url;
     const pdfUrl = student.submissionPdfUrl || student.submission_pdf_url || docs.submissionPdfUrl || docs.submission_pdf_url;
@@ -823,12 +826,13 @@ function showStudentModal(student) {
                     <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Documentary Requirements</span>
                 </div>
                 <span style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary);">
-                    ${(atmUrl || frontUrl || backUrl || pdfUrl) ? 'Files Uploaded' : 'Awaiting Submissions'}
+                    ${(atmUrl || depositUrl || frontUrl || backUrl || pdfUrl) ? 'Files Uploaded' : 'Awaiting Submissions'}
                 </span>
             </div>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
                 ${renderDocItem('ATM Card Proof', atmUrl, 'icon-credit-card')}
+                ${renderDocItem('Deposit Slip Proof', depositUrl, 'icon-file-text')}
                 ${renderDocItem('Student ID (Front)', frontUrl, 'icon-image')}
                 ${renderDocItem('Student ID (Back)', backUrl, 'icon-image')}
                 ${renderDocItem('Application PDF', pdfUrl, 'icon-file-text')}
@@ -1022,11 +1026,23 @@ window.approveStudent = async function (uid) {
             timestamp: new Date().toISOString()
         }]);
 
+        // Mirror in-app notification directly to SMS via Semaphore with identical content
+        const phone = student?.mobile_number || student?.contactNumber || student?.phone_number;
+        if (phone) {
+            SmsNotificationService.sendStudentSms(uid, {
+                eventType: 'application_approved',
+                title: 'Application Approved',
+                message: 'Congratulations! Your scholarship application has been officially approved.',
+                phone: phone,
+                force: true
+            }).catch(e => console.warn('Could not mirror approval notification to SMS:', e));
+        }
+
         alert('Student approved successfully.');
         hideModal();
         loadStudents();
 
-        // Prompt to dispatch grantee email & SMS notifications immediately upon approval
+        // Prompt to dispatch grantee email notification immediately upon approval
         if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification via Email & SMS to ${student?.fullName || 'this student'} now?`)) {
             window.sendGranteeEmail(uid, true);
             window.sendGranteeSms(uid, true);

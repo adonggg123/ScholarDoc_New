@@ -5,6 +5,99 @@ import { AnnexSyncService } from '../services/annex_sync_service.js';
 
 const supabase = window.supabaseClient;
 
+function splitFullName(raw) {
+    if (!raw) return { firstName: '', middleName: '', lastName: '' };
+    let str = String(raw).trim();
+    if (!str) return { firstName: '', middleName: '', lastName: '' };
+
+    const suffixes = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI']);
+    const surnamePrefixes = new Set(['DE', 'DEL', 'DELA', 'DELOS', 'SAN', 'STA', 'STA.', 'SANTA', 'VAN', 'VON', 'AL']);
+
+    if (str.includes(',')) {
+        const commaParts = str.split(',');
+        const lastPart = commaParts[0].trim();
+        const rest = commaParts.slice(1).join(',').trim();
+        const tokens = rest.split(/\s+/).filter(Boolean);
+        
+        let first = '';
+        let middle = '';
+
+        if (tokens.length === 0) {
+            return { firstName: '', middleName: '', lastName: lastPart };
+        } else if (tokens.length === 1) {
+            first = tokens[0];
+        } else {
+            const lastToken = tokens[tokens.length - 1];
+            if (suffixes.has(lastToken.toUpperCase())) {
+                const suff = tokens.pop();
+                if (tokens.length > 1) {
+                    middle = tokens.pop();
+                    first = tokens.join(' ');
+                } else {
+                    first = tokens.join(' ');
+                }
+                return { firstName: first, middleName: middle, lastName: `${lastPart} ${suff}` };
+            } else {
+                middle = tokens.pop();
+                first = tokens.join(' ');
+            }
+        }
+        return { firstName: first, middleName: middle, lastName: lastPart };
+    }
+
+    // Space-separated
+    let tokens = str.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return { firstName: '', middleName: '', lastName: '' };
+
+    let suffix = '';
+    if (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1].toUpperCase())) {
+        suffix = tokens.pop();
+    }
+
+    if (tokens.length === 1) {
+        return { firstName: tokens[0], middleName: '', lastName: suffix ? suffix : '' };
+    }
+    if (tokens.length === 2) {
+        const ln = suffix ? `${tokens[1]} ${suffix}` : tokens[1];
+        return { firstName: tokens[0], middleName: '', lastName: ln };
+    }
+
+    let lastName = '';
+    let middleName = '';
+    let firstName = '';
+
+    // Check if compound prefix like 'DE LA CRUZ' (3 tokens)
+    if (tokens.length >= 4 && (tokens[tokens.length - 3].toUpperCase() === 'DE' && (tokens[tokens.length - 2].toUpperCase() === 'LA' || tokens[tokens.length - 2].toUpperCase() === 'LOS'))) {
+        lastName = tokens.slice(tokens.length - 3).join(' ');
+        tokens = tokens.slice(0, tokens.length - 3);
+        if (tokens.length > 1) {
+            middleName = tokens.pop();
+            firstName = tokens.join(' ');
+        } else {
+            firstName = tokens[0] || '';
+        }
+    } else if (tokens.length >= 3 && surnamePrefixes.has(tokens[tokens.length - 2].toUpperCase())) {
+        lastName = tokens.slice(tokens.length - 2).join(' ');
+        tokens = tokens.slice(0, tokens.length - 2);
+        if (tokens.length > 1) {
+            middleName = tokens.pop();
+            firstName = tokens.join(' ');
+        } else {
+            firstName = tokens[0] || '';
+        }
+    } else {
+        lastName = tokens.pop();
+        middleName = tokens.pop();
+        firstName = tokens.join(' ');
+    }
+
+    if (suffix) {
+        lastName = `${lastName} ${suffix}`.trim();
+    }
+
+    return { firstName, middleName, lastName };
+}
+
 // State
 let rawSuperAdminGrantees = [];
 let rawSchoolStudents = [];
@@ -68,17 +161,33 @@ async function loadInitialData() {
             .order('created_at', { ascending: false });
 
         if (!errMasterlist && masterlistData && masterlistData.length > 0) {
-            rawSuperAdminGrantees = masterlistData.map(m => ({
-                id: m.id,
-                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                last_name: m.last_name,
-                first_name: m.first_name,
-                middle_name: m.middle_name,
-                batch: m.batch || 'Batch 1',
-                student_id: m.student_id || '',
-                course: m.course || m.program || '',
-                year: m.year || '1'
-            }));
+            rawSuperAdminGrantees = masterlistData.map(m => {
+                let fn = m.first_name || '';
+                let mn = m.middle_name || '';
+                let ln = m.last_name || '';
+                if (fn && (!ln || !ln.trim())) {
+                    const parsed = splitFullName(fn);
+                    fn = parsed.firstName;
+                    mn = parsed.middleName || mn;
+                    ln = parsed.lastName;
+                } else if (!fn && m.name) {
+                    const parsed = splitFullName(m.name);
+                    fn = parsed.firstName;
+                    mn = parsed.middleName || mn;
+                    ln = parsed.lastName;
+                }
+                return {
+                    id: m.id,
+                    name: m.name || `${ln}, ${fn} ${mn}`.trim(),
+                    last_name: ln,
+                    first_name: fn,
+                    middle_name: mn,
+                    batch: m.batch || 'Batch 1',
+                    student_id: m.student_id || '',
+                    course: m.course || m.program || '',
+                    year: m.year || '1'
+                };
+            });
             const syncEl = document.getElementById('superadmin-sync-status');
             if (syncEl) syncEl.innerHTML = `<i class="icon-check-circle-2" style="font-size: 14px;"></i> Synced with Super Admin Import (${rawSuperAdminGrantees.length} records)`;
         } else {
@@ -218,17 +327,33 @@ function setupDatabaseRealtimeListeners() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'new_grantees_masterlist' }, async (payload) => {
             console.log('[Realtime] new_grantees_masterlist change event:', payload.eventType);
             const { data } = await supabase.from('new_grantees_masterlist').select('*').order('created_at', { ascending: false });
-            rawSuperAdminGrantees = (data || []).map(m => ({
-                id: m.id,
-                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                last_name: m.last_name,
-                first_name: m.first_name,
-                middle_name: m.middle_name,
-                batch: m.batch || 'Batch 1',
-                student_id: m.student_id || '',
-                course: m.course || m.program || '',
-                year: m.year || '1'
-            }));
+            rawSuperAdminGrantees = (data || []).map(m => {
+                let fn = m.first_name || '';
+                let mn = m.middle_name || '';
+                let ln = m.last_name || '';
+                if (fn && (!ln || !ln.trim())) {
+                    const parsed = splitFullName(fn);
+                    fn = parsed.firstName;
+                    mn = parsed.middleName || mn;
+                    ln = parsed.lastName;
+                } else if (!fn && m.name) {
+                    const parsed = splitFullName(m.name);
+                    fn = parsed.firstName;
+                    mn = parsed.middleName || mn;
+                    ln = parsed.lastName;
+                }
+                return {
+                    id: m.id,
+                    name: m.name || `${ln}, ${fn} ${mn}`.trim(),
+                    last_name: ln,
+                    first_name: fn,
+                    middle_name: mn,
+                    batch: m.batch || 'Batch 1',
+                    student_id: m.student_id || '',
+                    course: m.course || m.program || '',
+                    year: m.year || '1'
+                };
+            });
             updateSourceCounts();
             populateSuperAdminBatchFilter();
             renderSuperAdminGranteesTable(rawSuperAdminGrantees);
@@ -320,9 +445,20 @@ function renderSuperAdminGranteesTable(items) {
     }
 
     tbody.innerHTML = items.map((g) => {
-        const firstName = g.first_name || g.firstName || g.name || '';
-        const middleName = g.middle_name || g.middleName || '';
-        const lastName = g.last_name || g.lastName || '';
+        let firstName = g.first_name || g.firstName || '';
+        let middleName = g.middle_name || g.middleName || '';
+        let lastName = g.last_name || g.lastName || '';
+        if (firstName && (!lastName || !lastName.trim())) {
+            const parsed = splitFullName(firstName);
+            firstName = parsed.firstName;
+            middleName = parsed.middleName || middleName;
+            lastName = parsed.lastName;
+        } else if (!firstName && g.name) {
+            const parsed = splitFullName(g.name);
+            firstName = parsed.firstName;
+            middleName = parsed.middleName || middleName;
+            lastName = parsed.lastName;
+        }
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${firstName}</td>
@@ -1508,24 +1644,33 @@ function renderForm2Table(items) {
         const ctrl = String(idx + 1).padStart(5, '0');
         const grantee = item.grantee;
         const student = item.matchedStudent || {};
-        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+        let name = VerificationService.normalizeName(rawNameStr);
+        if (!name.lastName && !name.firstName) {
+            const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+            const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+            const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+            name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+        }
         const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
         const bdate = student.birthdate || student.birthday || '01/01/2000';
-        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const email = student.email || student.authEmail || 'N/A';
         const phone = student.contactNumber || student.phone || 'N/A';
+        const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
+        const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
 
         return `
             <tr>
                 <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
-                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">${sa}</span></td>
                 <td>${name.lastName}</td>
                 <td>${name.firstName}</td>
                 <td>${name.mi}</td>
                 <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
                 <td>${bdate}</td>
-                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td>${degree}</td>
                 <td style="text-align: center;">${year}</td>
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
@@ -1552,10 +1697,19 @@ function renderForm3Table(items) {
         const ctrl = String(idx + 1).padStart(5, '0');
         const grantee = item.grantee;
         const student = item.matchedStudent || {};
-        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+        let name = VerificationService.normalizeName(rawNameStr);
+        if (!name.lastName && !name.firstName) {
+            const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+            const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+            const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+            name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+        }
         const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
         const bdate = student.birthdate || student.birthday || '01/01/2000';
-        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
+        const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
+        const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
         const reason = item.specialStatusReason || 'Not enrolled';
         const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
 
@@ -1566,14 +1720,14 @@ function renderForm3Table(items) {
         return `
             <tr>
                 <td style="font-weight: 700; color: #E65100;">${ctrl}</td>
-                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(255,143,0,0.08); font-family: monospace; font-size: 11px;">${sa}</span></td>
                 <td>${name.lastName}</td>
                 <td>${name.firstName}</td>
                 <td>${name.mi}</td>
                 <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
                 <td>${bdate}</td>
-                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td>${degree}</td>
                 <td style="text-align: center;">${year}</td>
                 <td>
                     <span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; ${badgeStyle}">
@@ -1608,8 +1762,40 @@ function renderReviewQueue(items) {
         const confidence = item.confidence;
         const discrepancies = item.discrepancies || [];
 
-        const granteeName = grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''}`;
-        const studentName = student ? (student.fullName || student.name) : 'No Matching Record in School File';
+        const gLast = (grantee.last_name || grantee.lastName || '').trim();
+        const gFirst = (grantee.first_name || grantee.firstName || '').trim();
+        const gMiddle = (grantee.middle_name || grantee.middleName || '').trim();
+        let granteeName = (grantee.name || grantee.fullName || '').replace(/^,\s*|,\s*$/g, '').trim();
+        if (!granteeName || granteeName === ',') {
+            if (gLast && gFirst) {
+                granteeName = `${gLast}, ${gFirst}${gMiddle ? ' ' + gMiddle : ''}`;
+            } else if (gFirst || gLast) {
+                granteeName = `${gFirst} ${gLast}`.trim();
+            } else {
+                granteeName = 'Grantee';
+            }
+        }
+
+        let studentName = 'No Matching Record in School File';
+        if (student) {
+            const sLast = (student.last_name || student.lastName || '').trim();
+            const sFirst = (student.first_name || student.firstName || '').trim();
+            const sMiddle = (student.middle_name || student.middleName || student.middle_initial || '').trim();
+            studentName = (student.fullName || student.full_name || student.name || '').replace(/^,\s*|,\s*$/g, '').trim();
+            if (!studentName || studentName === ',') {
+                if (sLast && sFirst) {
+                    studentName = `${sLast}, ${sFirst}${sMiddle ? ' ' + sMiddle : ''}`;
+                } else if (sFirst || sLast) {
+                    studentName = `${sFirst} ${sLast}`.trim();
+                } else {
+                    studentName = 'Enrolled Student';
+                }
+            }
+        }
+
+        const granteeId = grantee.student_id || grantee.studentId || grantee.student_no || grantee.studentNo || 'Unassigned';
+        const granteeProg = grantee.course || grantee.program || grantee.program_name || 'N/A';
+        const studentProg = student ? (student.program_name || student.course || student.program || 'N/A') : 'N/A';
 
         return `
             <div class="card" style="padding: 18px 22px; border-left: 4px solid #E53935; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 12px;">
@@ -1621,7 +1807,7 @@ function renderReviewQueue(items) {
                         <div>
                             <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
                             <p style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
-                                ID: <strong>${grantee.student_id || 'Unassigned'}</strong> • Program: <strong>${grantee.course || 'N/A'}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
+                                ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
                             </p>
                         </div>
                     </div>
@@ -1638,7 +1824,7 @@ function renderReviewQueue(items) {
                     <div>
                         <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 2px;">Super Admin Grantee List:</span>
                         <div>Name: <strong>${granteeName}</strong></div>
-                        <div>Program: <strong>${grantee.course || 'N/A'}</strong></div>
+                        <div>Program: <strong>${granteeProg}</strong></div>
                     </div>
                     <div>
                         <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 2px;">School Student Masterlist:</span>

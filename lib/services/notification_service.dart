@@ -113,6 +113,7 @@ class NotificationService {
         final String smsContent = '[ScholarDoc] $title: $message';
         SmsService().sendStudentSms(
           studentId: studentId,
+          title: title,
           message: smsContent,
           eventType: type,
         ).catchError((e) {

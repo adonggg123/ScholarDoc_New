@@ -565,7 +565,7 @@ if (form) {
                 dataObj.isActive = true;
                 dataObj.createdAt = new Date().toISOString();
                 const sendPushChecked = document.getElementById('ann-inp-send-push')?.checked ?? true;
-                const sendSmsChecked = document.getElementById('ann-inp-send-sms')?.checked ?? false;
+                const sendSmsChecked = document.getElementById('ann-inp-send-sms')?.checked ?? true;
 
                 const { data: newDocs, error } = await supabase.from('announcements').insert([dataObj]).select();
                 if (error) throw error;

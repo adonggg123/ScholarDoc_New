@@ -609,7 +609,7 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
 
     isUpdating = true;
     try {
-        // 1. Update ID Validation Status (stored inside documents JSON)
+        // 1. Update ID Validation Status (stored in both documents JSON and top-level column)
         const currentDocs = s.documents || {};
         const updatedDocs = {
             ...currentDocs,
@@ -617,31 +617,47 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             id_validation_status: newStatus
         };
 
+        const currentSaStatus = s.saVerificationStatus || s.sa_verification_status || currentDocs.saVerificationStatus || currentDocs.sa_verification_status || 'Pending';
+
+        let calculatedStatus = 'Pending';
+        if (newStatus === 'Verified') {
+            if (currentSaStatus === 'Verified' || currentSaStatus === 'Approved') {
+                calculatedStatus = 'Verified';
+            } else if (currentSaStatus === 'Missing') {
+                calculatedStatus = 'Missing Documents';
+            } else if (currentSaStatus === 'Rejected') {
+                calculatedStatus = 'Rejected';
+            } else {
+                calculatedStatus = 'Pending';
+            }
+        } else if (newStatus === 'Missing') {
+            calculatedStatus = 'Missing Documents';
+        } else if (newStatus === 'Rejected') {
+            calculatedStatus = 'Rejected';
+        }
+
+        const needsResubmission = !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected');
+
         const updatePayload = {
+            status: calculatedStatus,
+            idValidationStatus: newStatus,
+            id_validation_status: newStatus,
             documents: updatedDocs,
             adminRemarks: remarks,
             admin_remarks: remarks,
-            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
-            requires_resubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
+            requiresResubmission: needsResubmission,
             updatedAt: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
 
-        // Auto-calculate overall status:
-        // Only set global status to Verified when BOTH SA and ID are verified
-        const currentSaStatus = currentDocs.saVerificationStatus || currentDocs.sa_verification_status || 'Pending';
-        if (newStatus === 'Verified' && (currentSaStatus === 'Verified' || currentSaStatus === 'Approved')) {
-            updatePayload.status = 'Verified';
-        } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
-            updatePayload.status = newStatus;
-        }
-
         let updateRes = await supabase.from('student_grantees').update(updatePayload).eq('uid', s.uid);
         if (updateRes.error) {
-            // Fallback: update with reduced fields if schema difference
+            console.warn('Initial update failed, trying fallback schema:', updateRes.error);
             const fallbackPayload = {
+                status: calculatedStatus,
                 admin_remarks: remarks,
                 adminRemarks: remarks,
+                requiresResubmission: needsResubmission,
                 updated_at: new Date().toISOString()
             };
             if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
@@ -662,7 +678,7 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not write audit log:', auditErr);
         }
 
-        // 3. Notification
+        // 3. In-App Notification
         let title = '';
         let message = '';
         let type = 'info';
@@ -672,10 +688,10 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             message = 'Your ID Front & Back + Signature document has been approved.';
             type = 'success';
         } else if (newStatus === 'Missing') {
-            title = 'ID Validation Missing';
+            title = 'ID Validation Missing Documents';
             message = remarks
-                ? `Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator: ${remarks}`
-                : 'Your submitted ID Front & Back + Signature document requires revision. Please review the feedback provided by the administrator.';
+                ? `Your submitted ID Front & Back + Signature document requires revision. Feedback: ${remarks}`
+                : 'Your submitted ID Front & Back + Signature document requires revision. Please re-upload a clear copy of your School ID with validation sticker.';
             type = 'warning';
         } else {
             title = 'ID Validation Rejected';
@@ -698,18 +714,21 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not send notification:', notifErr);
         }
 
-        // 4. SMS Notification via Semaphore
+        // 4. Mirror directly to SMS via Semaphore with identical content
         try {
             const phone = s.mobile_number || s.contactNumber || s.phone_number;
             if (phone) {
                 const eventType = newStatus === 'Verified' ? 'id_verified' : 'id_revision';
-                SmsNotificationService.sendStudentSms(s.uid, {
+                await SmsNotificationService.sendStudentSms(s.uid, {
                     eventType,
                     title: title,
                     message: message,
                     phone,
-                    feedback: remarks
-                }).catch(e => console.warn('Could not send ID SMS notification:', e));
+                    feedback: remarks,
+                    fullName: s.fullName || s.full_name,
+                    studentNo: s.studentId || s.student_no,
+                    course: s.course || s.program_name
+                });
             }
         } catch (smsErr) {
             console.warn('ID SMS notification trigger note:', smsErr);

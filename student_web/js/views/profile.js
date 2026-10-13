@@ -257,7 +257,7 @@ saveBtn?.addEventListener('click', async () => {
                 }]);
             } catch (_) {}
 
-            // Send notification to Super Admin
+            // Send notification to Super Admin and Student
             try {
                 await sb.from('notifications').insert([{
                     studentId: 'superadmin',
@@ -268,6 +268,19 @@ saveBtn?.addEventListener('click', async () => {
                     timestamp: new Date().toISOString()
                 }]);
             } catch (_) {}
+
+            if (uid) {
+                try {
+                    await sb.from('notifications').insert([{
+                        studentId: uid,
+                        title: 'Profile Updated',
+                        message: 'Your personal information has been updated successfully.',
+                        type: 'success',
+                        isRead: false,
+                        timestamp: new Date().toISOString()
+                    }]);
+                } catch (_) {}
+            }
 
             // Clear any existing missing requirement notice for this student
             if (uid) {

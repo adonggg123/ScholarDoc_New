@@ -569,9 +569,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
           if (isNew) {
             _notificationService.markAsRead(docId);
           }
-          if (announcementId != null && announcementId.isNotEmpty) {
-            PushNotificationService().openAnnouncementById(announcementId, context: context);
-          }
+          PushNotificationService().navigateFromNotification(
+            context,
+            title: title,
+            message: message,
+            type: type,
+            announcementId: announcementId,
+          );
         },
         borderRadius: BorderRadius.circular(20),
         child: Container(

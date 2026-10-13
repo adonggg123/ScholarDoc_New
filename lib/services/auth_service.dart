@@ -450,10 +450,12 @@ class AuthService {
             .select()
             .eq('uid', uid);
 
-        // Fallback: If UID doesn't match yet, find by Student ID / email and automatically link UID
+        bool isGranteeRecord = doc.isNotEmpty;
+
+        // Fallback: If UID doesn't match yet, find by Student ID / email in student_grantees and automatically link UID
         if (doc.isEmpty) {
           debugPrint(
-            'AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup...',
+            'AuthService: Step 3 - No document for UID: $uid. Trying fallback lookup in student_grantees...',
           );
 
           final cleanNo = trimmedId.replaceAll(' ', '');
@@ -489,10 +491,11 @@ class AuthService {
               debugPrint('AuthService: Notice linking UID: $upErr');
             }
             doc = fallback;
+            isGranteeRecord = true;
           }
         }
 
-        // 3c. If still not in student_grantees, check school_students table (e.g. from School Student Records import)
+        // 3c. If still not in student_grantees, check school_students table (read-only, DO NOT insert into student_grantees)
         if (doc.isEmpty) {
           try {
             final cleanNo = trimmedId.replaceAll(' ', '');
@@ -517,8 +520,8 @@ class AuthService {
 
             if (schoolDoc.isNotEmpty) {
               final s = schoolDoc.first;
-              debugPrint('AuthService: Step 3 - Found student in school_students! Provisioning into student_grantees...');
-              final newGrantee = {
+              debugPrint('AuthService: Step 3 - Found student in school_students! Loading profile without inserting into student_grantees.');
+              final studentProfile = {
                 'uid': uid,
                 'student_no': s['student_no'],
                 'studentId': s['student_no'],
@@ -541,12 +544,8 @@ class AuthService {
                 'scholarship_name': 'CHED TES',
                 'role': 'student',
               };
-              final inserted = await _supabase.from('student_grantees').insert(newGrantee).select();
-              if (inserted.isNotEmpty) {
-                doc = List<Map<String, dynamic>>.from(inserted);
-              } else {
-                doc = [newGrantee];
-              }
+              doc = [studentProfile];
+              isGranteeRecord = false;
             }
           } catch (schoolErr) {
             debugPrint('AuthService: Step 3 - school_students check error: $schoolErr');
@@ -554,7 +553,7 @@ class AuthService {
         }
 
         if (doc.isEmpty) {
-          debugPrint('AuthService: Step 3 - Auto-provisioning student profile for UID: $uid ($userEmail)');
+          debugPrint('AuthService: Step 3 - In-memory fallback student profile for UID: $uid ($userEmail)');
           final extractedId = userEmail.contains('@')
               ? userEmail.split('@').first.replaceAll('_', ' ').trim()
               : trimmedId;
@@ -578,17 +577,8 @@ class AuthService {
             'scholarship_name': 'CHED TES',
             'role': 'student',
           };
-          try {
-            final inserted = await _supabase.from('student_grantees').insert(fallbackStudent).select();
-            if (inserted.isNotEmpty) {
-              doc = List<Map<String, dynamic>>.from(inserted);
-            } else {
-              doc = [fallbackStudent];
-            }
-          } catch (insertErr) {
-            debugPrint('AuthService: Auto-provision profile notice: $insertErr');
-            doc = [fallbackStudent];
-          }
+          doc = [fallbackStudent];
+          isGranteeRecord = false;
         }
 
         // If multiple student records exist (e.g. legacy/duplicate), prioritize the active/complete one
@@ -609,8 +599,8 @@ class AuthService {
         }
 
         final studentData = doc.first;
-        // Cache uid on record if missing or mismatched
-        if (studentData['id'] != null && (studentData['uid'] == null || studentData['uid'] != uid)) {
+        // Cache uid on record in student_grantees ONLY if this record actually belongs to student_grantees
+        if (isGranteeRecord && studentData['id'] != null && (studentData['uid'] == null || studentData['uid'] != uid)) {
           try {
             await _supabase
                 .from('student_grantees')
@@ -1072,18 +1062,52 @@ class AuthService {
         return await _enrichStudentDataFromSchool(normalized);
       }
 
-      // Fallback: If no document by uid, attempt lookup by user email (derived from student ID)
+      // Fallback: If no document by uid, attempt lookup by student ID, email, or user metadata
       final user = _supabase.auth.currentUser;
       if (user != null) {
-        final email = user.email ?? '';
+        final email = (user.email ?? '').trim();
         final sId = email.contains('@')
             ? email.split('@').first.replaceAll('_', ' ').trim()
             : '';
+        final cleanSid = sId.replaceAll(' ', '');
+
+        final filterParts = <String>{};
         if (sId.isNotEmpty) {
+          filterParts.add('student_no.eq.$sId');
+          filterParts.add('studentId.eq.$sId');
+        }
+        if (cleanSid.isNotEmpty && cleanSid != sId) {
+          filterParts.add('student_no.eq.$cleanSid');
+          filterParts.add('studentId.eq.$cleanSid');
+        }
+        if (email.isNotEmpty) {
+          filterParts.add('email_address.eq.$email');
+          filterParts.add('email.eq.$email');
+        }
+
+        final metaStudentId = (user.userMetadata?['studentId'] ?? user.userMetadata?['student_no'])?.toString().trim();
+        if (metaStudentId != null && metaStudentId.isNotEmpty) {
+          filterParts.add('student_no.eq.$metaStudentId');
+          filterParts.add('studentId.eq.$metaStudentId');
+        }
+
+        final metaEmail = (user.userMetadata?['email'] ?? user.userMetadata?['gmail'])?.toString().trim();
+        if (metaEmail != null && metaEmail.isNotEmpty) {
+          filterParts.add('email_address.eq.$metaEmail');
+          filterParts.add('email.eq.$metaEmail');
+        }
+
+        final metaName = (user.userMetadata?['fullName'] ?? user.userMetadata?['full_name'])?.toString().trim();
+        if (metaName != null && metaName.isNotEmpty) {
+          filterParts.add('full_name.ilike.$metaName');
+          filterParts.add('fullName.ilike.$metaName');
+        }
+
+        if (filterParts.isNotEmpty) {
           final byId = await _supabase
               .from('student_grantees')
               .select()
-              .or('student_no.eq.$sId,studentId.eq.$sId');
+              .or(filterParts.join(','));
           if (byId.isNotEmpty) {
             final list = List<Map<String, dynamic>>.from(byId);
             list.sort((a, b) {
@@ -1097,7 +1121,7 @@ class AuthService {
               if (!aHas && bHas) return 1;
               return 0;
             });
-            // Link UID in background
+            // Link UID in background so future lookups and getStudentStream succeed instantly
             try {
               await _supabase
                   .from('student_grantees')
@@ -1106,8 +1130,46 @@ class AuthService {
             } catch (_) {}
             final normalized = _normalizeStudentData(list.first);
             return await _enrichStudentDataFromSchool(normalized);
+          } else {
+            // If not found in student_grantees, check school_students (read-only)
+            try {
+              final schoolFilter = <String>{};
+              if (sId.isNotEmpty) schoolFilter.add('student_no.eq.$sId');
+              if (cleanSid.isNotEmpty) schoolFilter.add('student_no.eq.$cleanSid');
+              if (email.isNotEmpty) schoolFilter.add('email_address.eq.$email');
+              if (metaStudentId != null && metaStudentId.isNotEmpty) schoolFilter.add('student_no.eq.$metaStudentId');
+              if (metaEmail != null && metaEmail.isNotEmpty) schoolFilter.add('email_address.eq.$metaEmail');
+              if (metaName != null && metaName.isNotEmpty) schoolFilter.add('full_name.ilike.$metaName');
+
+              if (schoolFilter.isNotEmpty) {
+                final schoolRes = await _supabase
+                    .from('school_students')
+                    .select()
+                    .or(schoolFilter.join(','))
+                    .limit(1);
+                if (schoolRes.isNotEmpty) {
+                  final normalized = _normalizeStudentData(schoolRes.first);
+                  return normalized;
+                }
+              }
+            } catch (_) {}
           }
         }
+
+        // Final in-memory fallback from user metadata so profile never returns null for logged-in user
+        final fallbackName = metaName ?? (sId.isNotEmpty ? sId : 'Scholar');
+        return {
+          'uid': uid,
+          'fullName': fallbackName,
+          'full_name': fallbackName,
+          'email': email.isNotEmpty ? email : (metaEmail ?? ''),
+          'email_address': email.isNotEmpty ? email : (metaEmail ?? ''),
+          'student_no': sId,
+          'studentId': sId,
+          'status': 'No Submission Yet',
+          'scholarship_name': 'CHED TES',
+          'role': 'student',
+        };
       }
     } catch (e) {
       debugPrint('AuthService getStudentProfile error: $e');
@@ -1261,8 +1323,74 @@ class AuthService {
 
     dbPayload['familyDetails'] = famDetails;
 
-    // Remove top-level 'section' key from dbPayload so PostgREST update on student_grantees won't abort
+    // Ensure documents JSON object is properly populated with banking and verification attachments
+    Map<String, dynamic> docsPayload = {};
+    if (dbPayload['documents'] is Map) {
+      docsPayload = Map<String, dynamic>.from(dbPayload['documents'] as Map);
+    } else {
+      try {
+        final existingDocsRes = await _supabase
+            .from('student_grantees')
+            .select('documents')
+            .eq('uid', uid)
+            .maybeSingle();
+        if (existingDocsRes != null && existingDocsRes['documents'] is Map) {
+          docsPayload = Map<String, dynamic>.from(existingDocsRes['documents'] as Map);
+        }
+      } catch (_) {}
+    }
+
+    // Preserve ATM Card Proof in documents
+    if (dbPayload.containsKey('atmCardUrl') || dbPayload.containsKey('atm_card_url')) {
+      final aUrl = dbPayload['atmCardUrl'] ?? dbPayload['atm_card_url'];
+      if (aUrl != null) {
+        docsPayload['atmCardUrl'] = aUrl;
+        docsPayload['atm_card_url'] = aUrl;
+      }
+    }
+    if (dbPayload.containsKey('atmCardFileName') || dbPayload.containsKey('atm_card_file_name')) {
+      final aName = dbPayload['atmCardFileName'] ?? dbPayload['atm_card_file_name'];
+      if (aName != null) {
+        docsPayload['atmCardFileName'] = aName;
+        docsPayload['atm_card_file_name'] = aName;
+      }
+    }
+
+    // Preserve Deposit Slip Proof in documents
+    if (dbPayload.containsKey('depositSlipUrl') || dbPayload.containsKey('deposit_slip_url')) {
+      final dUrl = dbPayload['depositSlipUrl'] ?? dbPayload['deposit_slip_url'];
+      if (dUrl != null) {
+        docsPayload['depositSlipUrl'] = dUrl;
+        docsPayload['deposit_slip_url'] = dUrl;
+      }
+    }
+    if (dbPayload.containsKey('depositSlipFileName') || dbPayload.containsKey('deposit_slip_file_name')) {
+      final dName = dbPayload['depositSlipFileName'] ?? dbPayload['deposit_slip_file_name'];
+      if (dName != null) {
+        docsPayload['depositSlipFileName'] = dName;
+        docsPayload['deposit_slip_file_name'] = dName;
+      }
+    }
+
+    if (dbPayload.containsKey('atmProofType') || dbPayload.containsKey('atm_proof_type')) {
+      final pType = dbPayload['atmProofType'] ?? dbPayload['atm_proof_type'];
+      if (pType != null) {
+        docsPayload['atmProofType'] = pType;
+        docsPayload['atm_proof_type'] = pType;
+      }
+    }
+
+    dbPayload['documents'] = docsPayload;
+
+    // Remove keys that are not individual table columns on student_grantees so PostgREST update will succeed
     dbPayload.remove('section');
+    dbPayload.remove('depositSlipUrl');
+    dbPayload.remove('deposit_slip_url');
+    dbPayload.remove('depositSlipFileName');
+    dbPayload.remove('deposit_slip_file_name');
+    dbPayload.remove('atmProofType');
+    dbPayload.remove('atm_proof_type');
+    dbPayload.remove('requires_resubmission');
 
     // Always persist to Supabase Auth user metadata as an instant fail-safe
     try {
@@ -1294,8 +1422,13 @@ class AuthService {
       final safePayload = <String, dynamic>{};
       const safeFields = [
         'full_name', 'fullName', 'mobile_number', 'contactNumber', 'program_name', 'course',
-        'year_level', 'year', 'section', 'birthdate', 'gender', 'scholarship_name', 'status',
-        'saNumber', 'sa_number', 'submissionPdfUrl', 'submission_pdf_url', 'familyDetails'
+        'year_level', 'year', 'birthdate', 'gender', 'scholarship_name', 'status',
+        'saNumber', 'sa_number', 'submissionPdfUrl', 'submission_pdf_url', 'submissionPdfName',
+        'submission_pdf_name', 'atmCardUrl', 'atm_card_url', 'atmCardFileName', 'idFrontUrl',
+        'id_front_url', 'idBackUrl', 'id_back_url', 'documents', 'familyDetails', 'submittedAt',
+        'submitted_at', 'requiresResubmission', 'adminRemarks', 'admin_remarks', 'pdfVerified',
+        'academicYear', 'academic_year', 'semester', 'stickerValidated', 'sticker_validated',
+        'idValidationStatus', 'id_validation_status', 'saVerificationStatus', 'sa_verification_status'
       ];
       for (final key in safeFields) {
         if (dbPayload.containsKey(key)) safePayload[key] = dbPayload[key];
@@ -1334,7 +1467,7 @@ class AuthService {
 
     final studentDisplayName = (dbPayload['fullName'] ?? dbPayload['full_name'] ?? 'Student').toString();
 
-    // 5. Notify Super Admin system directly via real-time notification
+    // 5. Notify Super Admin system and student directly via real-time notification
     try {
       await _supabase.from('notifications').insert([{
         'studentId': 'superadmin',
@@ -1344,6 +1477,15 @@ class AuthService {
         'isRead': false,
         'timestamp': DateTime.now().toIso8601String()
       }]);
+    } catch (_) {}
+
+    try {
+      await _notificationService.sendNotification(
+        studentId: uid,
+        title: 'Profile Updated',
+        message: 'Your personal information has been updated successfully.',
+        type: 'success',
+      );
     } catch (_) {}
 
     // 6. Automatically clear any existing missing requirements notice for this student

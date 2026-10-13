@@ -94,7 +94,9 @@ export class SmsNotificationService {
      */
     static async notifyGranteeSms(studentIdentifier, { force = false, phone, fullName, studentNo, course, scholarshipName } = {}) {
         return this.sendStudentSms(studentIdentifier, {
-            eventType: 'grantee_confirmed',
+            eventType: 'application_approved',
+            title: 'Application Approved',
+            message: 'Congratulations! Your scholarship application has been officially approved.',
             force,
             phone,
             fullName,

@@ -35,7 +35,7 @@ export class AnnexSyncService {
         const s = item.matchedStudent || {};
 
         // 1. Primary: Student ID / No. (if valid and not 'N/A' or empty)
-        const studentId = String(s.studentId || s.studentNo || g.student_id || g.studentId || g.studentNo || '').trim().toLowerCase();
+        const studentId = String(s.studentId || s.studentNo || s.student_no || g.student_id || g.studentId || g.studentNo || '').trim().toLowerCase();
         if (studentId && studentId !== 'n/a' && studentId !== 'unassigned') {
             return `id_${studentId.replace(/[^a-z0-9]/g, '')}`;
         }
@@ -48,7 +48,7 @@ export class AnnexSyncService {
         const combined = `${lName}_${fName}_${mName}`.replace(/[^a-z0-9]/g, '');
         if (combined) return `name_${combined}`;
 
-        const rawName = (g.name || g.fullName || s.fullName || s.name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rawName = (g.name || g.fullName || s.fullName || s.full_name || s.name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         if (rawName) return `raw_${rawName}`;
 
         if (g.id) return `uuid_${String(g.id)}`;
@@ -64,7 +64,7 @@ export class AnnexSyncService {
         const student = item.matchedStudent || {};
 
         if (typeof VerificationService !== 'undefined' && VerificationService.normalizeName) {
-            const rawName = student.fullName || student.name || grantee.name || grantee.fullName || '';
+            const rawName = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
             if (rawName) {
                 const norm = VerificationService.normalizeName(rawName);
                 if (norm && (norm.lastName || norm.firstName)) {
@@ -78,7 +78,7 @@ export class AnnexSyncService {
         let mi = student.mi || student.middleInitial || student.middle_name || grantee.middle_name || grantee.middleName || '';
 
         if (!lastName || !firstName) {
-            const raw = String(student.fullName || student.name || grantee.name || grantee.fullName || '').trim();
+            const raw = String(student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '').trim();
             if (raw.includes(',')) {
                 const parts = raw.split(',');
                 lastName = parts[0].trim();
@@ -117,8 +117,8 @@ export class AnnexSyncService {
         }
 
         // 2. Student ID match (ignoring generic placeholders)
-        const idA = String(sA.studentId || sA.studentNo || gA.student_id || gA.studentId || gA.studentNo || itemA.student_id || itemA.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-        const idB = String(sB.studentId || sB.studentNo || gB.student_id || gB.studentId || gB.studentNo || itemB.student_id || itemB.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idA = String(sA.studentId || sA.studentNo || sA.student_no || gA.student_id || gA.studentId || gA.studentNo || itemA.student_id || itemA.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idB = String(sB.studentId || sB.studentNo || sB.student_no || gB.student_id || gB.studentId || gB.studentNo || itemB.student_id || itemB.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         const isPlaceholderId = (id) => !id || id === 'na' || id === 'unassigned' || id.length < 3;
 
         if (!isPlaceholderId(idA) && !isPlaceholderId(idB)) {
@@ -290,12 +290,20 @@ export class AnnexSyncService {
             const parsed = JSON.parse(raw);
             if (!parsed || !Array.isArray(parsed.form2List)) return null;
 
+            // Filter out corrupted/broken items from old cached sessions
+            const isValidItem = (item) => {
+                if (!item) return false;
+                const g = item.grantee || item;
+                const s = item.matchedStudent || {};
+                const nameStr = (g.name || g.fullName || `${g.last_name || ''} ${g.first_name || ''}` || s.fullName || s.full_name || s.name || '').replace(/^,\s*|,\s*$/g, '').trim();
+                return nameStr.length > 0 && nameStr !== ',';
+            };
+            const validF2 = (parsed.form2List || []).filter(isValidItem);
+            const validF3 = (parsed.form3List || []).filter(isValidItem);
+            const validRev = (parsed.needsReviewList || []).filter(isValidItem);
+
             // Ensure deduplication on read
-            const deduplicated = this.deduplicateLists(
-                parsed.form2List || [],
-                parsed.form3List || [],
-                parsed.needsReviewList || []
-            );
+            const deduplicated = this.deduplicateLists(validF2, validF3, validRev);
 
             return {
                 ...parsed,

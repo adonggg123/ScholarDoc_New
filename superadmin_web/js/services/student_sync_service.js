@@ -32,21 +32,35 @@ export class StudentSyncService {
     }
 
     /**
-     * Intelligent matching between a School Student and a Grantee record.
+     * Intelligent matching between a School Student, Form 2, and a Grantee record.
      */
     static isMatch(student, grantee) {
         if (!student || !grantee) return false;
 
+        // 0. Match by ID or UID if available
+        const sUid = student.uid || student.id;
+        const gUid = grantee.uid || grantee.id;
+        if (sUid && gUid && String(sUid).trim() === String(gUid).trim()) {
+            return true;
+        }
+
         // 1. Match by Student Number / ID
-        const sNo = this.clean(student.student_no || student.studentId || student.id_number);
-        const gNo = this.clean(grantee.student_number || grantee.student_no || grantee.studentId || grantee.student_id);
+        const sNo = this.clean(student.student_no || student.student_number || student.studentId || student.id_number || student.idNumber);
+        const gNo = this.clean(grantee.student_no || grantee.student_number || grantee.studentId || grantee.student_id || grantee.id_number);
         if (sNo && gNo && sNo === gNo) {
             return true;
         }
 
-        // 2. Exact or Substring Clean String Match
-        const sFullName = student.full_name || student.fullName || `${student.first_name || ''} ${student.last_name || ''}`;
-        const gFullName = grantee.name || grantee.fullName || `${grantee.last_name || ''} ${grantee.given_name || grantee.first_name || ''}`;
+        // 2. Match by Email Address if both present
+        const sEmail = (student.email_address || student.email || '').toString().toLowerCase().trim();
+        const gEmail = (grantee.email_address || grantee.email || '').toString().toLowerCase().trim();
+        if (sEmail && gEmail && sEmail === gEmail && sEmail !== 'n/a') {
+            return true;
+        }
+
+        // 3. Exact or Substring Clean String Match
+        const sFullName = student.full_name || student.fullName || student.name || `${student.given_name || student.first_name || ''} ${student.last_name || ''}`.trim();
+        const gFullName = grantee.full_name || grantee.fullName || grantee.name || `${grantee.given_name || grantee.first_name || ''} ${grantee.last_name || ''}`.trim();
         
         const sClean = this.clean(sFullName);
         const gClean = this.clean(gFullName);
@@ -57,7 +71,7 @@ export class StudentSyncService {
             }
         }
 
-        // 3. Last Name + First Name Token Intersection
+        // 4. Last Name + First Name Token Intersection
         const sTokens = this.nameTokens(sFullName);
         const gLast = (grantee.last_name || '').toString().toLowerCase().trim();
         const gFirst = (grantee.given_name || grantee.first_name || '').toString().toLowerCase().trim();
@@ -70,7 +84,7 @@ export class StudentSyncService {
             }
         }
 
-        // 4. Reverse Name Match (e.g. "Jariol, Jude" vs "Jude Jariol")
+        // 5. Reverse Name Match (e.g. "Jariol, Jude" vs "Jude Jariol")
         const gTokens = this.nameTokens(gFullName);
         if (sTokens.length >= 2 && gTokens.length >= 2) {
             const sharedTokens = sTokens.filter(t => gTokens.includes(t));
@@ -279,8 +293,8 @@ export class StudentSyncService {
             idValidationStatus: idValidationStatus,
             sa_verification_status: saVerificationStatus,
             id_validation_status: idValidationStatus,
-            adminRemarks: existing.adminRemarks || existing.admin_remarks || (shouldAutoApprove ? 'Automatically approved as confirmed scholar grantee.' : ''),
-            admin_remarks: existing.admin_remarks || existing.adminRemarks || (shouldAutoApprove ? 'Automatically approved as confirmed scholar grantee.' : ''),
+            adminRemarks: existing.adminRemarks || existing.admin_remarks || '',
+            admin_remarks: existing.admin_remarks || existing.adminRemarks || '',
             role: 'student',
             sa_number: saNumber,
             saNumber: saNumber,
@@ -388,6 +402,7 @@ export class StudentSyncService {
             }
 
             const form2List = f2Res.data || [];
+            console.log(`StudentSyncService: Loaded ${form2List.length} annex_form_2 records.`);
 
             // 2. Fetch School Student records (demographics & details)
             let schoolStudents = [];
@@ -409,6 +424,7 @@ export class StudentSyncService {
                     else ssPage++;
                 }
             }
+            console.log(`StudentSyncService: Loaded ${schoolStudents.length} school_students records.`);
 
             // 3. Check student_grantees table for existing records
             let sgList = [];
@@ -416,17 +432,20 @@ export class StudentSyncService {
                 let sgRes = await supabase.from('student_grantees').select('*');
                 if (sgRes && sgRes.data) {
                     sgList = sgRes.data;
+                    console.log(`StudentSyncService: Loaded ${sgList.length} existing student_grantees records.`);
                 }
             } catch (_) {}
 
             // If annex_form_2 is completely empty, fallback to student_grantees records if available
             if (!Array.isArray(form2List) || form2List.length === 0) {
                 if (Array.isArray(sgList) && sgList.length > 0) {
+                    console.log(`StudentSyncService: No Form 2 data found. Falling back to ${sgList.length} existing student_grantees records.`);
                     return sgList.map(sg => {
                         const ssMatch = Array.isArray(schoolStudents) ? schoolStudents.find(ss => this.isMatch(ss, sg)) : null;
                         return this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
                     });
                 }
+                console.log('StudentSyncService: No Form 2 data and no existing student_grantees. Returning empty list.');
                 return [];
             }
 
@@ -513,6 +532,36 @@ export class StudentSyncService {
 
                 return normalized;
             });
+
+            // 5. Include any student_grantees records that were NOT matched to a Form 2 entry
+            //    (e.g. records created via mobile app login or direct DB insertion)
+            if (Array.isArray(sgList) && sgList.length > 0) {
+                const matchedSgIds = new Set();
+                // Collect all IDs/UIDs that were already matched during the Form 2 loop
+                for (const r of result) {
+                    if (r.id) matchedSgIds.add(String(r.id));
+                    if (r.uid) matchedSgIds.add(String(r.uid));
+                }
+
+                for (const sg of sgList) {
+                    const sgId = String(sg.id || '');
+                    const sgUid = String(sg.uid || '');
+                    // Skip if this student_grantees record was already matched to a Form 2 entry
+                    if ((sgId && matchedSgIds.has(sgId)) || (sgUid && matchedSgIds.has(sgUid))) {
+                        continue;
+                    }
+                    // Also skip if isMatch detects overlap with any existing result record
+                    const alreadyIncluded = result.some(r => this.isMatch(r, sg));
+                    if (alreadyIncluded) continue;
+
+                    const ssMatch = Array.isArray(schoolStudents)
+                        ? schoolStudents.find(ss => this.isMatch(ss, sg))
+                        : null;
+                    const normalized = this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
+                    result.push(normalized);
+                }
+                console.log(`StudentSyncService: Final result includes ${result.length} total students (Form 2 + unmatched student_grantees).`);
+            }
 
             // Automatically populate student_grantees table in Supabase if records were missing
             if (toInsert.length > 0) {

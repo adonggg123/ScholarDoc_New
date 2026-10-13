@@ -112,6 +112,100 @@ function normalizeName(lastName, firstName, middleName) {
     return full.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function splitFullName(raw) {
+    if (!raw) return { firstName: '', middleName: '', lastName: '' };
+    let str = String(raw).trim();
+    if (!str) return { firstName: '', middleName: '', lastName: '' };
+
+    const suffixes = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI']);
+    const surnamePrefixes = new Set(['DE', 'DEL', 'DELA', 'DELOS', 'SAN', 'STA', 'STA.', 'SANTA', 'VAN', 'VON', 'AL']);
+
+    if (str.includes(',')) {
+        const commaParts = str.split(',');
+        const lastPart = commaParts[0].trim();
+        const rest = commaParts.slice(1).join(',').trim();
+        const tokens = rest.split(/\s+/).filter(Boolean);
+        
+        let first = '';
+        let middle = '';
+
+        if (tokens.length === 0) {
+            return { firstName: '', middleName: '', lastName: lastPart };
+        } else if (tokens.length === 1) {
+            first = tokens[0];
+        } else {
+            const lastToken = tokens[tokens.length - 1];
+            if (suffixes.has(lastToken.toUpperCase())) {
+                const suff = tokens.pop();
+                if (tokens.length > 1) {
+                    middle = tokens.pop();
+                    first = tokens.join(' ');
+                } else {
+                    first = tokens.join(' ');
+                }
+                return { firstName: first, middleName: middle, lastName: `${lastPart} ${suff}` };
+            } else {
+                middle = tokens.pop();
+                first = tokens.join(' ');
+            }
+        }
+        return { firstName: first, middleName: middle, lastName: lastPart };
+    }
+
+    // Space-separated
+    let tokens = str.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return { firstName: '', middleName: '', lastName: '' };
+
+    let suffix = '';
+    if (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1].toUpperCase())) {
+        suffix = tokens.pop();
+    }
+
+    if (tokens.length === 1) {
+        return { firstName: tokens[0], middleName: '', lastName: suffix ? suffix : '' };
+    }
+    if (tokens.length === 2) {
+        const ln = suffix ? `${tokens[1]} ${suffix}` : tokens[1];
+        return { firstName: tokens[0], middleName: '', lastName: ln };
+    }
+
+    let lastName = '';
+    let middleName = '';
+    let firstName = '';
+
+    // Check if compound prefix like 'DE LA CRUZ' (3 tokens)
+    if (tokens.length >= 4 && (tokens[tokens.length - 3].toUpperCase() === 'DE' && (tokens[tokens.length - 2].toUpperCase() === 'LA' || tokens[tokens.length - 2].toUpperCase() === 'LOS'))) {
+        lastName = tokens.slice(tokens.length - 3).join(' ');
+        tokens = tokens.slice(0, tokens.length - 3);
+        if (tokens.length > 1) {
+            middleName = tokens.pop();
+            firstName = tokens.join(' ');
+        } else {
+            firstName = tokens[0] || '';
+        }
+    } else if (tokens.length >= 3 && surnamePrefixes.has(tokens[tokens.length - 2].toUpperCase())) {
+        lastName = tokens.slice(tokens.length - 2).join(' ');
+        tokens = tokens.slice(0, tokens.length - 2);
+        if (tokens.length > 1) {
+            middleName = tokens.pop();
+            firstName = tokens.join(' ');
+        } else {
+            firstName = tokens[0] || '';
+        }
+    } else {
+        lastName = tokens.pop();
+        middleName = tokens.pop();
+        firstName = tokens.join(' ');
+    }
+
+    if (suffix) {
+        lastName = `${lastName} ${suffix}`.trim();
+    }
+
+    return { firstName, middleName, lastName };
+}
+
+
 function clearFileState() {
     currentFile = null;
     if (fileInput) fileInput.value = '';
@@ -222,12 +316,21 @@ async function extractExcelOrCsv(file) {
                         if (colMap.course !== -1 && row[colMap.course]) course = String(row[colMap.course]).trim();
                         if (colMap.studentId !== -1 && row[colMap.studentId]) studentId = String(row[colMap.studentId]).trim();
 
-                        if (firstName && !lastName && firstName.includes(',')) {
-                            const parts = firstName.split(',').map(p => p.trim());
-                            lastName = parts[0];
-                            const remaining = parts[1] ? parts[1].split(' ') : [];
-                            firstName = remaining[0] || '';
-                            middleName = remaining.slice(1).join(' ');
+                        if (firstName && !lastName) {
+                            const parsed = splitFullName(firstName);
+                            firstName = parsed.firstName;
+                            middleName = parsed.middleName || middleName;
+                            lastName = parsed.lastName;
+                        } else if (lastName && !firstName) {
+                            const parsed = splitFullName(lastName);
+                            firstName = parsed.firstName;
+                            middleName = parsed.middleName || middleName;
+                            lastName = parsed.lastName;
+                        } else if (firstName && firstName.includes(',')) {
+                            const parsed = splitFullName(firstName);
+                            firstName = parsed.firstName;
+                            middleName = parsed.middleName || middleName;
+                            lastName = parsed.lastName || lastName;
                         }
                     } else {
                         // Positional Fallback based on Name | Middle Name | Last Name
@@ -249,13 +352,10 @@ async function extractExcelOrCsv(file) {
                             firstName = cleanCells[cellIdx];
                             lastName = cleanCells[cellIdx + 1];
                         } else if (cleanCells[cellIdx]) {
-                            const parts = cleanCells[cellIdx].split(/[,\s]+/);
-                            if (parts.length >= 2) {
-                                firstName = parts[0];
-                                lastName = parts.slice(1).join(' ');
-                            } else {
-                                firstName = parts[0];
-                            }
+                            const parsed = splitFullName(cleanCells[cellIdx]);
+                            firstName = parsed.firstName;
+                            middleName = parsed.middleName;
+                            lastName = parsed.lastName;
                         }
                     }
 
@@ -372,41 +472,76 @@ async function parseDocumentText(text) {
         if (cleanLine.length < 2) continue;
 
         if (cleanLine.includes(',')) {
-            const parts = cleanLine.split(',').map(p => p.trim());
+            const parsed = splitFullName(cleanLine);
             rawRecords.push({
-                lastName: parts[0] || '',
-                firstName: parts[1] || '',
-                middleName: parts[2] || '',
+                lastName: parsed.lastName,
+                firstName: parsed.firstName,
+                middleName: parsed.middleName,
                 batch: currentBatch,
                 studentId: '',
                 course: 'BSIT'
             });
             tempNameParts = [];
         } else {
-            tempNameParts.push(cleanLine);
-            if (tempNameParts.length === 3) {
+            const words = cleanLine.split(/\s+/).filter(Boolean);
+            if (words.length >= 2) {
+                const parsed = splitFullName(cleanLine);
                 rawRecords.push({
-                    lastName: tempNameParts[0],
-                    firstName: tempNameParts[1],
-                    middleName: tempNameParts[2],
+                    lastName: parsed.lastName,
+                    firstName: parsed.firstName,
+                    middleName: parsed.middleName,
                     batch: currentBatch,
                     studentId: '',
                     course: 'BSIT'
                 });
                 tempNameParts = [];
+            } else if (words.length === 1) {
+                tempNameParts.push(cleanLine);
+                if (tempNameParts.length === 3) {
+                    rawRecords.push({
+                        lastName: tempNameParts[2],
+                        firstName: tempNameParts[0],
+                        middleName: tempNameParts[1],
+                        batch: currentBatch,
+                        studentId: '',
+                        course: 'BSIT'
+                    });
+                    tempNameParts = [];
+                }
             }
         }
     }
 
     if (tempNameParts.length > 0) {
-        rawRecords.push({
-            lastName: tempNameParts[0] || '',
-            firstName: tempNameParts[1] || '',
-            middleName: tempNameParts[2] || '',
-            batch: currentBatch,
-            studentId: '',
-            course: 'BSIT'
-        });
+        if (tempNameParts.length === 1) {
+            const parsed = splitFullName(tempNameParts[0]);
+            rawRecords.push({
+                lastName: parsed.lastName,
+                firstName: parsed.firstName,
+                middleName: parsed.middleName,
+                batch: currentBatch,
+                studentId: '',
+                course: 'BSIT'
+            });
+        } else if (tempNameParts.length === 2) {
+            rawRecords.push({
+                firstName: tempNameParts[0],
+                middleName: '',
+                lastName: tempNameParts[1],
+                batch: currentBatch,
+                studentId: '',
+                course: 'BSIT'
+            });
+        } else {
+            rawRecords.push({
+                firstName: tempNameParts[0],
+                middleName: tempNameParts[1],
+                lastName: tempNameParts[2],
+                batch: currentBatch,
+                studentId: '',
+                course: 'BSIT'
+            });
+        }
     }
 
     if (rawRecords.length === 0) {
@@ -805,10 +940,8 @@ async function saveRecordsToDatabase() {
         const toInsert = validToInsert.map(r => ({
             last_name: r.lastName,
             first_name: r.firstName,
-            middle_name: r.middleName,
-            name: `${r.lastName}, ${r.firstName} ${r.middleName}`.trim(),
-            course: r.course || 'BSIT',
-            batch: r.batch
+            middle_name: r.middleName || '',
+            name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
         }));
 
         const { error } = await window.supabaseClient
@@ -1609,7 +1742,7 @@ async function loadSchoolStudentsAndVerify(grantees) {
 
         // 1. Check if Admin has already verified and categorized records in Review Queue
         const savedSync = AnnexSyncService.getVerifiedData();
-        if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0 || savedSync.needsReviewList.length > 0)) {
+        if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
             if (grantees && grantees.length > 0) {
                 const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
                 const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -1642,7 +1775,7 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     }
                 }
 
-                // Preserve any verified records from savedSync
+                // Preserve any manually approved records from savedSync
                 for (const item of savedSync.form2List) {
                     const key = AnnexSyncService.getUniqueKey(item);
                     if (!processedKeys.has(key)) {
@@ -1655,13 +1788,6 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     if (!processedKeys.has(key)) {
                         processedKeys.add(key);
                         combinedForm3.push(item);
-                    }
-                }
-                for (const item of savedSync.needsReviewList) {
-                    const key = AnnexSyncService.getUniqueKey(item);
-                    if (!processedKeys.has(key)) {
-                        processedKeys.add(key);
-                        remainingReview.push(item);
                     }
                 }
 
@@ -1839,24 +1965,33 @@ function renderAnnexForm2Table(items) {
         const ctrl = String(idx + 1).padStart(5, '0');
         const grantee = item.grantee;
         const student = item.matchedStudent || {};
-        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+        let name = VerificationService.normalizeName(rawNameStr);
+        if (!name.lastName && !name.firstName) {
+            const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+            const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+            const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+            name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+        }
         const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
         const bdate = student.birthdate || student.birthday || '01/01/2000';
-        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const email = student.email || student.authEmail || 'N/A';
         const phone = student.contactNumber || student.phone || 'N/A';
+        const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
+        const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
 
         return `
             <tr>
                 <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
-                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">${sa}</span></td>
                 <td>${name.lastName}</td>
                 <td>${name.firstName}</td>
                 <td>${name.mi}</td>
                 <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
                 <td>${bdate}</td>
-                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td>${degree}</td>
                 <td style="text-align: center;">${year}</td>
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
@@ -1882,10 +2017,19 @@ function renderAnnexForm3Table(items) {
         const ctrl = String(idx + 1).padStart(5, '0');
         const grantee = item.grantee;
         const student = item.matchedStudent || {};
-        const name = VerificationService.normalizeName(student.fullName || grantee.name);
+        const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+        let name = VerificationService.normalizeName(rawNameStr);
+        if (!name.lastName && !name.firstName) {
+            const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+            const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+            const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+            name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+        }
         const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
         const bdate = student.birthdate || student.birthday || '01/01/2000';
-        const year = String(student.year || student.scholarYearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
+        const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
+        const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
+        const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
         const reason = item.specialStatusReason || 'Not enrolled';
         const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
 
@@ -1904,14 +2048,14 @@ function renderAnnexForm3Table(items) {
         return `
             <tr>
                 <td style="font-weight: 700; color: #E65100;">${ctrl}</td>
-                <td><span style="font-weight: 600;">${student.studentId || grantee.student_id || 'N/A'}</span></td>
+                <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(255,143,0,0.08); font-family: monospace; font-size: 11px;">${sa}</span></td>
                 <td>${name.lastName}</td>
                 <td>${name.firstName}</td>
                 <td>${name.mi}</td>
                 <td>${(student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M'}</td>
                 <td>${bdate}</td>
-                <td>${student.course || grantee.course || 'BSIT'}</td>
+                <td>${degree}</td>
                 <td style="text-align: center;">${year}</td>
                 <td>
                     <span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; ${badgeStyle}">
@@ -1943,7 +2087,23 @@ function renderAnnexReviewQueue(items) {
         const grantee = item.grantee;
         const confidence = item.confidence;
         const discrepancies = item.discrepancies || [];
-        const granteeName = grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''}`;
+
+        const gLast = (grantee.last_name || grantee.lastName || '').trim();
+        const gFirst = (grantee.first_name || grantee.firstName || '').trim();
+        const gMiddle = (grantee.middle_name || grantee.middleName || '').trim();
+        let granteeName = (grantee.name || grantee.fullName || '').replace(/^,\s*|,\s*$/g, '').trim();
+        if (!granteeName || granteeName === ',') {
+            if (gLast && gFirst) {
+                granteeName = `${gLast}, ${gFirst}${gMiddle ? ' ' + gMiddle : ''}`;
+            } else if (gFirst || gLast) {
+                granteeName = `${gFirst} ${gLast}`.trim();
+            } else {
+                granteeName = 'Grantee';
+            }
+        }
+
+        const granteeId = grantee.student_id || grantee.studentId || grantee.student_no || grantee.studentNo || 'Unassigned';
+        const granteeProg = grantee.course || grantee.program || grantee.program_name || 'BSIT';
 
         return `
             <div class="card" style="padding: 16px 20px; border-left: 4px solid #E53935; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 10px;">
@@ -1951,7 +2111,7 @@ function renderAnnexReviewQueue(items) {
                     <div>
                         <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
                         <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-secondary);">
-                            ID: <strong>${grantee.student_id || 'Unassigned'}</strong> • Program: <strong>${grantee.course || 'BSIT'}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
+                            ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
                         </p>
                     </div>
                     <span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: rgba(229,57,53,0.1); color: #D32F2F;">
@@ -2062,32 +2222,65 @@ async function fetchExistingMasterlist() {
                 return f !== 'FIRSTNAME' && l !== 'LASTNAME' && !m.includes('MIDDLEINITIAL') && f !== 'FIRST' && l !== 'LAST';
             });
 
-            extractedRecords = validData.map(row => ({
-                id: row.id,
-                studentId: row.student_id || '',
-                lastName: row.last_name,
-                firstName: row.first_name,
-                middleName: row.middle_name,
-                course: row.course || 'BSIT',
-                batch: row.batch,
-                isDuplicate: false
-            }));
+            const rowsToHeal = [];
+
+            extractedRecords = validData.map(row => {
+                let fn = row.first_name || '';
+                let mn = row.middle_name || '';
+                let ln = row.last_name || '';
+
+                if (fn && (!ln || !ln.trim())) {
+                    const parsed = splitFullName(fn);
+                    fn = parsed.firstName;
+                    mn = parsed.middleName || mn;
+                    ln = parsed.lastName;
+                    rowsToHeal.push({
+                        id: row.id,
+                        first_name: fn,
+                        middle_name: mn,
+                        last_name: ln,
+                        name: `${ln}, ${fn} ${mn}`.trim()
+                    });
+                }
+
+                return {
+                    id: row.id,
+                    studentId: row.student_id || '',
+                    lastName: ln,
+                    firstName: fn,
+                    middleName: mn,
+                    course: row.course || 'BSIT',
+                    batch: row.batch,
+                    isDuplicate: false
+                };
+            });
+
+            if (rowsToHeal.length > 0) {
+                Promise.all(rowsToHeal.map(r =>
+                    window.supabaseClient.from(tableName).update({
+                        first_name: r.first_name,
+                        middle_name: r.middle_name,
+                        last_name: r.last_name,
+                        name: r.name
+                    }).eq('id', r.id)
+                )).catch(e => console.warn('Background masterlist healing error:', e));
+            }
 
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
             populateBatchFilter();
             renderTable();
             updateClearMasterlistButtonVisibility();
 
-            const granteesForVerification = validData.map(m => ({
+            const granteesForVerification = extractedRecords.map(m => ({
                 id: m.id,
-                name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                last_name: m.last_name,
-                first_name: m.first_name,
-                middle_name: m.middle_name,
+                name: `${m.lastName || ''}, ${m.firstName || ''} ${m.middleName || ''}`.trim(),
+                last_name: m.lastName,
+                first_name: m.firstName,
+                middle_name: m.middleName,
                 batch: m.batch || 'Batch 1',
-                student_id: m.student_id || '',
+                student_id: m.studentId || '',
                 course: m.course || 'BSIT',
-                year: m.year || '1'
+                year: '1'
             }));
             await loadSchoolStudentsAndVerify(granteesForVerification);
 

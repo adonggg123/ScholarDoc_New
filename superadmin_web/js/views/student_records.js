@@ -141,7 +141,9 @@ function applyFilters() {
         if (!matchAy) {
             const sAy = (s.academic_year || s.academicYear || '').toLowerCase();
             const sSem = (s.semester || '').toLowerCase();
-            if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
+            if (!sAy || sAy === 'n/a') {
+                matchAy = true;
+            } else if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
                 if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
                 else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
                 else if (!ay.includes('Sem')) matchAy = true;
@@ -185,8 +187,8 @@ function getStatusBadge(status) {
         color = '#D97706'; // warm amber for Pending
         bg = 'rgba(245, 158, 11, 0.12)';
         border = 'rgba(245, 158, 11, 0.35)';
-    } else if (sLower === 'late submission') {
-        color = '#EA580C'; // orange
+    } else if (sLower === 'missing documents' || sLower === 'missing') {
+        color = '#EA580C'; // orange for Missing Documents
         bg = 'rgba(234, 88, 12, 0.12)';
         border = 'rgba(234, 88, 12, 0.35)';
     } else if (sLower === 'no submission yet' || sLower.includes('no submission')) {
@@ -446,7 +448,7 @@ studentForm.addEventListener('submit', async (e) => {
                     .or(`student_no.eq.${studentIdClean},full_name.ilike.%${fullNameClean}%`)
                     .limit(1);
                 if (ssCheck && ssCheck.length > 0) isRegistered = true;
-            } catch (_) {}
+            } catch (_) { }
 
             if (isRegistered && ssCheck && ssCheck.length > 0) {
                 const reg = ssCheck[0];
@@ -483,8 +485,8 @@ studentForm.addEventListener('submit', async (e) => {
             await supabase.from('audit_logs').insert([{
                 userName: 'Admin',
                 role: 'Admin',
-                action: isRegistered 
-                    ? `Added and auto-approved registered student grantee: ${studentData.fullName}` 
+                action: isRegistered
+                    ? `Added and auto-approved registered student grantee: ${studentData.fullName}`
                     : `Added new student record: ${studentData.fullName}`,
                 studentId: studentData.studentId,
                 ipAddress: 'Web Browser'
@@ -592,14 +594,15 @@ function showStudentModal(student) {
 
     // Documents resolution
     const docs = student.documents || {};
-    const atmUrl = student.atmCardUrl || student.atm_card_url || docs.atmCardUrl || docs.atm_card_url;
+    const atmUrl = student.atmCardUrl || student.atm_card_url || docs.atmCardUrl || docs.atm_card_url || docs.atmProofUrl || docs.atm_proof_url;
+    const depositUrl = student.depositSlipUrl || student.deposit_slip_url || docs.depositSlipUrl || docs.deposit_slip_url;
     const frontUrl = student.idFrontUrl || student.id_front_url || docs.idFrontUrl || docs.id_front_url;
     const backUrl = student.idBackUrl || student.id_back_url || docs.idBackUrl || docs.id_back_url;
     const pdfUrl = student.submissionPdfUrl || student.submission_pdf_url || docs.submissionPdfUrl || docs.submission_pdf_url;
 
     // Avatar generation with aspect-ratio protection and initial fallback
     const nameParts = fullName.replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(Boolean);
-    const initials = nameParts.length >= 2 
+    const initials = nameParts.length >= 2
         ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
         : (nameParts[0] ? nameParts[0].slice(0, 2).toUpperCase() : 'GD');
 
@@ -772,9 +775,9 @@ function showStudentModal(student) {
                         <div style="grid-column: 1 / -1;">
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Payouts Received</span>
                             <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
-                                ${hasPayouts 
-                                    ? `<i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts} ${payouts === '1' ? 'Payout' : 'Payouts'}` 
-                                    : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}
+                                ${hasPayouts
+            ? `<i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts} ${payouts === '1' ? 'Payout' : 'Payouts'}`
+            : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}
                             </span>
                         </div>
                     </div>
@@ -823,12 +826,13 @@ function showStudentModal(student) {
                     <span style="font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary);">Documentary Requirements</span>
                 </div>
                 <span style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary);">
-                    ${(atmUrl || frontUrl || backUrl || pdfUrl) ? 'Files Uploaded' : 'Awaiting Submissions'}
+                    ${(atmUrl || depositUrl || frontUrl || backUrl || pdfUrl) ? 'Files Uploaded' : 'Awaiting Submissions'}
                 </span>
             </div>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
                 ${renderDocItem('ATM Card Proof', atmUrl, 'icon-credit-card')}
+                ${renderDocItem('Deposit Slip Proof', depositUrl, 'icon-file-text')}
                 ${renderDocItem('Student ID (Front)', frontUrl, 'icon-image')}
                 ${renderDocItem('Student ID (Back)', backUrl, 'icon-image')}
                 ${renderDocItem('Application PDF', pdfUrl, 'icon-file-text')}
@@ -935,8 +939,8 @@ window.editStudent = function (uid) {
     inpGender.value = student.gender || 'Male';
     inpSa.value = student.saNumber || fam.saNumber || '';
     inpScholarYear.value = student.scholarYearLevel || fam.scholarYearLevel || fam.yearBecameScholar || '';
-    const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '') 
-        ? student.payoutsReceived 
+    const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '')
+        ? student.payoutsReceived
         : ((fam.payoutsReceived !== undefined && fam.payoutsReceived !== null && String(fam.payoutsReceived).trim() !== '') ? fam.payoutsReceived : '');
     inpPayouts.value = currentPayouts;
     inpFatherEdu.value = fam.fatherEduStatus || 'Non-graduate';
@@ -1022,11 +1026,23 @@ window.approveStudent = async function (uid) {
             timestamp: new Date().toISOString()
         }]);
 
+        // Mirror in-app notification directly to SMS via Semaphore with identical content
+        const phone = student?.mobile_number || student?.contactNumber || student?.phone_number;
+        if (phone) {
+            SmsNotificationService.sendStudentSms(uid, {
+                eventType: 'application_approved',
+                title: 'Application Approved',
+                message: 'Congratulations! Your scholarship application has been officially approved.',
+                phone: phone,
+                force: true
+            }).catch(e => console.warn('Could not mirror approval notification to SMS:', e));
+        }
+
         alert('Student approved successfully.');
         hideModal();
         loadStudents();
 
-        // Prompt to dispatch grantee email & SMS notifications immediately upon approval
+        // Prompt to dispatch grantee email notification immediately upon approval
         if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification via Email & SMS to ${student?.fullName || 'this student'} now?`)) {
             window.sendGranteeEmail(uid, true);
             window.sendGranteeSms(uid, true);
@@ -1088,10 +1104,10 @@ window.sendGranteeEmail = async function (uid, force = false) {
 };
 
 window.sendGranteeSms = async function (uid, force = false) {
-    const student = allStudents.find(s => 
-        (s.uid && String(s.uid) === String(uid)) || 
-        (s.id && String(s.id) === String(uid)) || 
-        (s.student_no && String(s.student_no) === String(uid)) || 
+    const student = allStudents.find(s =>
+        (s.uid && String(s.uid) === String(uid)) ||
+        (s.id && String(s.id) === String(uid)) ||
+        (s.student_no && String(s.student_no) === String(uid)) ||
         (s.studentId && String(s.studentId) === String(uid))
     );
     if (!student) {

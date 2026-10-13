@@ -390,8 +390,9 @@ function renderPanel() {
 
     // ATM Card Proof Box
     let atmCardHtml = '';
-    const atmCardUrl = s.atmCardUrl || s.atm_card_url || (s.documents && (s.documents.atmCardUrl || s.documents.atm_card_url));
-    const atmCardFileName = s.atmCardFileName || s.atm_card_file_name || (s.documents && (s.documents.atmCardFileName || s.documents.atm_card_file_name)) || 'ATM_Proof_Image.jpg';
+    const atmCardUrl = s.atmCardUrl || s.atm_card_url || (s.documents && (s.documents.atmCardUrl || s.documents.atm_card_url || s.documents.atmProofUrl || s.documents.atm_proof_url));
+    const atmCardFileName = s.atmCardFileName || s.atm_card_file_name || (s.documents && (s.documents.atmCardFileName || s.documents.atm_card_file_name)) || 'ATM_Proof_Document';
+    const isAtmPdf = (atmCardFileName && atmCardFileName.toLowerCase().endsWith('.pdf')) || (atmCardUrl && atmCardUrl.toLowerCase().includes('.pdf'));
 
     if (atmCardUrl) {
         atmCardHtml = `
@@ -406,7 +407,14 @@ function renderPanel() {
                 <div style="display: flex; gap: 14px; align-items: center; background: var(--surface-color); padding: 10px; border-radius: 10px; border: 1px solid var(--border-color);">
                     <div style="position: relative; width: 100px; height: 65px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); flex-shrink: 0; cursor: pointer;"
                          onclick="openSaLightbox('${atmCardUrl}', '${name} - ATM Card Proof')">
-                        <img src="${atmCardUrl}" alt="ATM Card" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        ${isAtmPdf ? `
+                            <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(239, 68, 68, 0.08);">
+                                <i class="icon-file-text" style="font-size: 24px; color: #EF4444;"></i>
+                                <span style="font-size: 9px; font-weight: 800; color: #EF4444; margin-top: 2px;">PDF PROOF</span>
+                            </div>
+                        ` : `
+                            <img src="${atmCardUrl}" alt="ATM Card" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        `}
                         <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
                             <i class="icon-zoom-in" style="color: white; font-size: 18px;"></i>
                         </div>
@@ -414,13 +422,13 @@ function renderPanel() {
 
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${atmCardFileName}">${atmCardFileName}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Land Bank ATM Card Image</div>
+                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Land Bank ATM Card Document</div>
                         
                         <div style="display: flex; gap: 8px; margin-top: 6px;">
                             <button onclick="openSaLightbox('${atmCardUrl}', '${name} - ATM Card Proof')" style="padding: 4px 10px; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 6px; font-size: 11px; font-weight: 700; color: var(--primary-color); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-maximize-2" style="font-size: 11px;"></i> Lightbox
                             </button>
-                            <a href="${atmCardUrl}" target="_blank" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                            <a href="${atmCardUrl}" target="_blank" rel="noopener noreferrer" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-external-link" style="font-size: 11px;"></i> Full Tab
                             </a>
                         </div>
@@ -441,7 +449,8 @@ function renderPanel() {
     // Deposit Slip Proof Box
     let depositSlipHtml = '';
     const depositSlipUrl = s.depositSlipUrl || s.deposit_slip_url || (s.documents && (s.documents.depositSlipUrl || s.documents.deposit_slip_url));
-    const depositSlipFileName = s.depositSlipFileName || s.deposit_slip_file_name || (s.documents && (s.documents.depositSlipFileName || s.documents.deposit_slip_file_name)) || 'Deposit_Slip_Proof.jpg';
+    const depositSlipFileName = s.depositSlipFileName || s.deposit_slip_file_name || (s.documents && (s.documents.depositSlipFileName || s.documents.deposit_slip_file_name)) || 'Deposit_Slip_Document';
+    const isDepositPdf = (depositSlipFileName && depositSlipFileName.toLowerCase().endsWith('.pdf')) || (depositSlipUrl && depositSlipUrl.toLowerCase().includes('.pdf'));
 
     if (depositSlipUrl) {
         depositSlipHtml = `
@@ -456,9 +465,10 @@ function renderPanel() {
                 <div style="display: flex; gap: 14px; align-items: center; background: var(--surface-color); padding: 10px; border-radius: 10px; border: 1px solid var(--border-color);">
                     <div style="position: relative; width: 100px; height: 65px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: rgba(0,0,0,0.02); flex-shrink: 0; cursor: pointer;"
                          onclick="openSaLightbox('${depositSlipUrl}', '${name} - Deposit Slip Proof')">
-                        ${depositSlipFileName.toLowerCase().endsWith('.pdf') ? `
-                            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(239, 68, 68, 0.08);">
+                        ${isDepositPdf ? `
+                            <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(239, 68, 68, 0.08);">
                                 <i class="icon-file-text" style="font-size: 24px; color: #EF4444;"></i>
+                                <span style="font-size: 9px; font-weight: 800; color: #EF4444; margin-top: 2px;">PDF RECEIPT</span>
                             </div>
                         ` : `
                             <img src="${depositSlipUrl}" alt="Deposit Slip" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
@@ -470,18 +480,26 @@ function renderPanel() {
 
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${depositSlipFileName}">${depositSlipFileName}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Bank Deposit Slip / Receipt</div>
+                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Bank Deposit Slip / Transaction Receipt</div>
                         
                         <div style="display: flex; gap: 8px; margin-top: 6px;">
                             <button onclick="openSaLightbox('${depositSlipUrl}', '${name} - Deposit Slip Proof')" style="padding: 4px 10px; background: rgba(15, 50, 96, 0.08); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 6px; font-size: 11px; font-weight: 700; color: var(--primary-color); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-maximize-2" style="font-size: 11px;"></i> Lightbox
                             </button>
-                            <a href="${depositSlipUrl}" target="_blank" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                            <a href="${depositSlipUrl}" target="_blank" rel="noopener noreferrer" style="padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-external-link" style="font-size: 11px;"></i> Full Tab
                             </a>
                         </div>
                     </div>
                 </div>
+            </div>
+        `;
+    } else {
+        depositSlipHtml = `
+            <div style="margin-bottom: 16px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 12px; text-align: center; background: rgba(0,0,0,0.01);">
+                <i class="icon-file-text" style="font-size: 24px; color: var(--text-secondary); margin-bottom: 6px; display: block;"></i>
+                <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">No Deposit Slip Uploaded</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Student did not attach a bank deposit slip or transaction receipt.</div>
             </div>
         `;
     }
@@ -626,16 +644,35 @@ window.copySaNumber = function (saNum) {
 window.openSaLightbox = function (url, caption = '') {
     const modal = document.getElementById('sa-lightbox-modal');
     const img = document.getElementById('sa-lightbox-img');
+    const iframe = document.getElementById('sa-lightbox-frame');
     const cap = document.getElementById('sa-lightbox-caption');
-    if (modal && img) {
-        img.src = url;
-        if (cap) cap.textContent = caption || 'ATM Card Proof Image';
-        modal.style.display = 'flex';
+    if (!modal) return;
+
+    const isPdf = (url || '').toLowerCase().includes('.pdf');
+    if (isPdf) {
+        if (img) img.style.display = 'none';
+        if (iframe) {
+            iframe.style.display = 'block';
+            iframe.src = url;
+        }
+    } else {
+        if (iframe) {
+            iframe.style.display = 'none';
+            iframe.src = '';
+        }
+        if (img) {
+            img.style.display = 'block';
+            img.src = url;
+        }
     }
+    if (cap) cap.textContent = caption || (isPdf ? 'Document Proof PDF' : 'Document Proof Image');
+    modal.style.display = 'flex';
 };
 
 window.closeSaLightbox = function () {
     const modal = document.getElementById('sa-lightbox-modal');
+    const iframe = document.getElementById('sa-lightbox-frame');
+    if (iframe) iframe.src = '';
     if (modal) modal.style.display = 'none';
 };
 
@@ -649,7 +686,7 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
 
     isUpdating = true;
     try {
-        // 1. Update SA Verification Status (stored inside documents JSON)
+        // 1. Update SA Verification Status (stored in both documents JSON and top-level column)
         const currentDocs = s.documents || {};
         const updatedDocs = {
             ...currentDocs,
@@ -657,31 +694,47 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             sa_verification_status: newStatus
         };
 
+        const currentIdStatus = s.idValidationStatus || s.id_validation_status || currentDocs.idValidationStatus || currentDocs.id_validation_status || 'Pending';
+
+        let calculatedStatus = 'Pending';
+        if (newStatus === 'Verified') {
+            if (currentIdStatus === 'Verified' || currentIdStatus === 'Approved') {
+                calculatedStatus = 'Verified';
+            } else if (currentIdStatus === 'Missing') {
+                calculatedStatus = 'Missing Documents';
+            } else if (currentIdStatus === 'Rejected') {
+                calculatedStatus = 'Rejected';
+            } else {
+                calculatedStatus = 'Pending';
+            }
+        } else if (newStatus === 'Missing') {
+            calculatedStatus = 'Missing Documents';
+        } else if (newStatus === 'Rejected') {
+            calculatedStatus = 'Rejected';
+        }
+
+        const needsResubmission = !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected');
+
         const updatePayload = {
+            status: calculatedStatus,
+            saVerificationStatus: newStatus,
+            sa_verification_status: newStatus,
             documents: updatedDocs,
             adminRemarks: remarks,
             admin_remarks: remarks,
-            requiresResubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
-            requires_resubmission: !isFinalRejection && (newStatus === 'Missing' || newStatus === 'Rejected'),
+            requiresResubmission: needsResubmission,
             updatedAt: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
 
-        // Auto-calculate overall status:
-        // Only set global status to Verified when BOTH SA and ID are verified
-        const currentIdStatus = currentDocs.idValidationStatus || currentDocs.id_validation_status || 'Pending';
-        if (newStatus === 'Verified' && (currentIdStatus === 'Verified' || currentIdStatus === 'Approved')) {
-            updatePayload.status = 'Verified';
-        } else if (newStatus === 'Missing' || newStatus === 'Rejected') {
-            updatePayload.status = newStatus;
-        }
-
         let updateRes = await supabase.from('student_grantees').update(updatePayload).eq('uid', s.uid);
         if (updateRes.error) {
-            // Fallback: update with reduced fields if schema difference
+            console.warn('Initial update failed, trying fallback schema:', updateRes.error);
             const fallbackPayload = {
+                status: calculatedStatus,
                 admin_remarks: remarks,
                 adminRemarks: remarks,
+                requiresResubmission: needsResubmission,
                 updated_at: new Date().toISOString()
             };
             if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
@@ -702,26 +755,26 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not write audit log:', auditErr);
         }
 
-        // 3. Notification
+        // 3. In-App Notification
         let title = '';
         let message = '';
         let type = 'info';
 
         if (newStatus === 'Verified') {
-            title = 'SA Number Verified';
-            message = 'Your Land Bank SA Number has been verified by the administrator.';
+            title = 'SA Verification Approved';
+            message = 'Your Land Bank SA Number has been verified and approved by the administrator.';
             type = 'success';
         } else if (newStatus === 'Missing') {
-            title = 'SA Number Missing';
+            title = 'SA Verification Missing Documents';
             message = remarks
-                ? `Your submitted SA Number requires revision. Please review the feedback provided by the administrator: ${remarks}`
-                : 'Your submitted SA Number requires revision. Please review the feedback provided by the administrator.';
+                ? `Your submitted SA Number requires revision. Feedback: ${remarks}`
+                : 'Your submitted SA Number requires revision. Please upload a clear copy of your Land Bank ATM card or deposit slip.';
             type = 'warning';
         } else {
-            title = 'SA Number Rejected';
+            title = 'SA Verification Rejected';
             message = remarks
-                ? `Your SA Number has been rejected. Feedback: ${remarks}`
-                : 'Your SA Number has been rejected.';
+                ? `Your SA Number submission has been rejected. Feedback: ${remarks}`
+                : 'Your SA Number submission has been rejected.';
             type = 'error';
         }
 
@@ -738,18 +791,21 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             console.warn('Could not send notification:', notifErr);
         }
 
-        // SMS Notification via Semaphore using identical title and message
+        // 4. Mirror directly to SMS via Semaphore with identical content
         try {
             const phone = s.mobile_number || s.contactNumber || s.phone_number;
             if (phone) {
                 const eventType = newStatus === 'Verified' ? 'sa_verified' : 'sa_revision';
-                SmsNotificationService.sendStudentSms(s.uid, {
+                await SmsNotificationService.sendStudentSms(s.uid, {
                     eventType,
                     title: title,
                     message: message,
                     phone,
-                    feedback: remarks
-                }).catch(e => console.warn('Could not send SA SMS notification:', e));
+                    feedback: remarks,
+                    fullName: s.fullName || s.full_name,
+                    studentNo: s.studentId || s.student_no,
+                    course: s.course || s.program_name
+                });
             }
         } catch (smsErr) {
             console.warn('SA SMS notification trigger note:', smsErr);
