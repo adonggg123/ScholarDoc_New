@@ -2149,6 +2149,8 @@ async function checkSmsAlreadySentRecently(recipientPhone, message) {
     return false;
 }
 
+let consecutivePollErrors = 0;
+
 async function pollNotificationsAndSendSms() {
     if (isWatcherPolling) return;
     isWatcherPolling = true;
@@ -2159,9 +2161,17 @@ async function pollNotificationsAndSendSms() {
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
         };
 
-        // Query the latest 30 notifications in Supabase
-        const res = await fetch(`${SUPABASE_REST_URL}/notifications?order=timestamp.desc&limit=30`, { headers });
+        // Query the latest 30 notifications in Supabase with an 8-second timeout
+        const res = await fetch(`${SUPABASE_REST_URL}/notifications?order=timestamp.desc&limit=30`, {
+            headers,
+            signal: AbortSignal.timeout(8000)
+        });
         if (!res.ok) return;
+
+        if (consecutivePollErrors > 0) {
+            console.log('[SMS Watcher] Connection to Supabase restored.');
+            consecutivePollErrors = 0;
+        }
 
         const notifs = await res.json();
         if (!Array.isArray(notifs) || notifs.length === 0) return;
@@ -2248,7 +2258,13 @@ async function pollNotificationsAndSendSms() {
         saveProcessedNotificationIds();
 
     } catch (pollErr) {
-        console.error('[SMS Watcher] Polling error:', pollErr.message);
+        consecutivePollErrors++;
+        // Only log once on first failure or occasionally on prolonged outage to avoid terminal spam
+        if (consecutivePollErrors === 1) {
+            console.warn(`[SMS Watcher] Temporary network issue reaching Supabase (${pollErr.message}). Waiting for connection...`);
+        } else if (consecutivePollErrors % 20 === 0) {
+            console.warn(`[SMS Watcher] Still waiting for network connection (${consecutivePollErrors} failed attempts)...`);
+        }
     } finally {
         isWatcherPolling = false;
     }
@@ -2263,7 +2279,10 @@ async function startNotificationSmsWatcher() {
             'apikey': SUPABASE_ANON_KEY,
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
         };
-        const res = await fetch(`${SUPABASE_REST_URL}/notifications?select=id,timestamp&order=timestamp.desc&limit=100`, { headers });
+        const res = await fetch(`${SUPABASE_REST_URL}/notifications?select=id,timestamp&order=timestamp.desc&limit=100`, {
+            headers,
+            signal: AbortSignal.timeout(8000)
+        });
         if (res.ok) {
             const rows = await res.json();
             if (Array.isArray(rows)) {
@@ -2279,13 +2298,17 @@ async function startNotificationSmsWatcher() {
         }
     } catch (_) {}
 
-    console.log(`[SMS Watcher] Notification-to-SMS watcher daemon started (polling every 3s). Cached ${processedNotificationIds.size} processed IDs.`);
+    console.log(`[SMS Watcher] Notification-to-SMS watcher daemon started. Cached ${processedNotificationIds.size} processed IDs.`);
 
-    // Run first poll immediately
-    pollNotificationsAndSendSms();
+    // Run adaptive loop: 5s when healthy, 15s backoff during network outages
+    function schedulePoll() {
+        pollNotificationsAndSendSms().finally(() => {
+            const delay = consecutivePollErrors > 0 ? 15000 : 5000;
+            setTimeout(schedulePoll, delay);
+        });
+    }
 
-    // Run recurring poll every 3 seconds
-    setInterval(pollNotificationsAndSendSms, 3000);
+    schedulePoll();
 }
 
 server.on('error', (err) => {

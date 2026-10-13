@@ -964,6 +964,26 @@ body.dark .annex-table tbody tr:hover {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.badge-batch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 11px;
+    background: rgba(15, 50, 96, 0.08);
+    color: var(--primary-color, #0F3260);
+    border: 1px solid rgba(15, 50, 96, 0.16);
+    white-space: nowrap;
+}
+
+body.dark .badge-batch-pill {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.25);
+}
+
 /* Custom Scrollbar for Dark Mode */
 body.dark ::-webkit-scrollbar {
     width: 8px;

@@ -98,6 +98,33 @@ function splitFullName(raw) {
     return { firstName, middleName, lastName };
 }
 
+function getCachedGranteeBatch(record) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
+        if (record && record.id && cache[record.id]) return cache[record.id];
+        const ln = (record?.lastName || record?.last_name || '').toLowerCase().trim();
+        const fn = (record?.firstName || record?.first_name || '').toLowerCase().trim();
+        const mn = (record?.middleName || record?.middle_name || '').toLowerCase().trim();
+        const normKey = `${ln}|${fn}|${mn}`.replace(/[^a-z0-9|]/g, '');
+        if (normKey && cache[normKey]) return cache[normKey];
+        const rawName = (record?.name || `${ln}, ${fn} ${mn}`).trim().toLowerCase();
+        if (rawName && cache[rawName]) return cache[rawName];
+    } catch (_) {}
+    return null;
+}
+
+function resolveGranteeBatch(record) {
+    let rawB = record?.batch || getCachedGranteeBatch(record) || 'Batch 1.1';
+    rawB = String(rawB).trim();
+    if (rawB === '1' || rawB.toLowerCase() === 'batch 1') {
+        return 'Batch 1.1';
+    }
+    if (!rawB.toLowerCase().startsWith('batch')) {
+        return `Batch ${rawB}`;
+    }
+    return rawB;
+}
+
 // State
 let rawSuperAdminGrantees = [];
 let rawSchoolStudents = [];
@@ -182,7 +209,7 @@ async function loadInitialData() {
                     last_name: ln,
                     first_name: fn,
                     middle_name: mn,
-                    batch: m.batch || 'Batch 1',
+                    batch: resolveGranteeBatch({ ...m, last_name: ln, first_name: fn, middle_name: mn }),
                     student_id: m.student_id || '',
                     course: m.course || m.program || '',
                     year: m.year || '1'
@@ -348,7 +375,7 @@ function setupDatabaseRealtimeListeners() {
                     last_name: ln,
                     first_name: fn,
                     middle_name: mn,
-                    batch: m.batch || 'Batch 1',
+                    batch: resolveGranteeBatch({ ...m, last_name: ln, first_name: fn, middle_name: mn }),
                     student_id: m.student_id || '',
                     course: m.course || m.program || '',
                     year: m.year || '1'
@@ -440,7 +467,7 @@ function renderSuperAdminGranteesTable(items) {
     if (!tbody) return;
 
     if (!items || items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 24px; color: var(--text-secondary);">No grantees found in Super Admin masterlist.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 24px; color: var(--text-secondary);">No grantees found in Super Admin masterlist.</td></tr>`;
         return;
     }
 
@@ -459,11 +486,19 @@ function renderSuperAdminGranteesTable(items) {
             middleName = parsed.middleName || middleName;
             lastName = parsed.lastName;
         }
+        const batch = resolveGranteeBatch(g);
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${firstName}</td>
                 <td style="padding: 10px 14px; font-size: 12px; color: var(--text-primary);">${middleName}</td>
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${lastName}</td>
+                <td style="padding: 10px 14px; white-space: nowrap;">
+                    <span class="badge-batch-pill" title="Assigned Batch">
+                        <i class="icon-layers" style="font-size: 11px;"></i>
+                        ${batch}
+                    </span>
+                </td>
             </tr>
         `;
     }).join('');
@@ -476,13 +511,16 @@ function populateSuperAdminBatchFilter() {
 
     const uniqueBatches = new Set();
     rawSuperAdminGrantees.forEach(g => {
-        if (g.batch && g.batch.trim().length > 0) {
-            uniqueBatches.add(g.batch.trim());
+        const b = resolveGranteeBatch(g);
+        if (b && b.trim().length > 0) {
+            uniqueBatches.add(b.trim());
         }
     });
 
     if (uniqueBatches.size === 0) {
-        uniqueBatches.add('Batch 1');
+        uniqueBatches.add('Batch 1.1');
+        uniqueBatches.add('Batch 1.2');
+        uniqueBatches.add('Batch 1.3');
     }
 
     const sortedBatches = Array.from(uniqueBatches).sort((a, b) => {
@@ -502,10 +540,12 @@ function filterSuperAdminGrantees() {
         const name = (g.name || `${g.last_name || ''} ${g.first_name || ''}`).toLowerCase();
         const id = (g.student_id || g.studentId || '').toLowerCase();
         const course = (g.course || '').toLowerCase();
-        const batch = (g.batch || 'Batch 1').trim();
+        const batch = resolveGranteeBatch(g);
 
         const matchQuery = !q || name.includes(q) || id.includes(q) || course.includes(q);
-        const matchBatch = batchSel === 'All Batches' || batch.toLowerCase() === batchSel.toLowerCase();
+        const matchBatch = batchSel === 'All Batches' ||
+            batch.toLowerCase() === batchSel.toLowerCase() ||
+            batch.toLowerCase().replace(/^batch\s*/i, '') === batchSel.toLowerCase().replace(/^batch\s*/i, '');
 
         return matchQuery && matchBatch;
     });
@@ -1674,7 +1714,7 @@ function renderForm2Table(items) {
                 <td style="text-align: center;">${year}</td>
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
-                <td style="text-align: center;">${grantee.batch || '1'}</td>
+                <td style="text-align: center;"><span class="badge-batch-pill">${resolveGranteeBatch(grantee)}</span></td>
                 <td style="font-weight: 600; color: #2E7D32;">₱10,000.00</td>
                 <td style="text-align: center; color: var(--text-secondary);">₱0.00</td>
                 <td style="font-weight: 700; color: #2E7D32;">₱10,000.00</td>
@@ -1807,7 +1847,7 @@ function renderReviewQueue(items) {
                         <div>
                             <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
                             <p style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
-                                ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
+                                ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${resolveGranteeBatch(grantee)}</strong>
                             </p>
                         </div>
                     </div>
@@ -2243,7 +2283,7 @@ async function exportForm2Excel() {
                 lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
                 firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
                 middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
-                batch: grantee.batch || matched.batch || '1',
+                batch: resolveGranteeBatch(grantee || matched),
                 gender: matched.gender || grantee.gender || 'M',
                 birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
                 course: matched.course || grantee.course || grantee.program || '',
@@ -2285,7 +2325,7 @@ async function exportForm3Excel() {
                 lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
                 firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
                 middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
-                batch: grantee.batch || matched.batch || '1',
+                batch: resolveGranteeBatch(grantee || matched),
                 gender: matched.gender || grantee.gender || 'M',
                 birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
                 course: matched.course || grantee.course || grantee.program || '',

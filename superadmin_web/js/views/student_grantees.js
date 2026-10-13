@@ -10,6 +10,7 @@ let filteredStudents = [];
 // Elements
 const tableBody = document.getElementById('students-table-body');
 const searchInput = document.getElementById('search-input');
+const filterBatch = document.getElementById('filter-batch');
 const filterStatus = document.getElementById('filter-status');
 const filterCourse = document.getElementById('filter-course');
 const filterScholarship = document.getElementById('filter-scholarship');
@@ -23,6 +24,49 @@ const pendingSmsBadge = document.getElementById('pending-sms-badge');
 const filterAy = document.getElementById('filter-ay');
 const ayDisplay = document.getElementById('ay-display');
 const refreshStudentsBtn = document.getElementById('refresh-students-btn');
+
+function populateBatchFilter() {
+    const filterBatchEl = document.getElementById('filter-batch') || filterBatch;
+    if (!filterBatchEl) return;
+
+    const currentVal = filterBatchEl.value || 'All';
+
+    // Collect all batches found in allStudents
+    const batchSet = new Set();
+    allStudents.forEach(s => {
+        const raw = s.batch || s.tes_batch;
+        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+            let b = String(raw).trim();
+            if (b === '1' || b.toLowerCase() === 'batch 1') {
+                b = 'Batch 1.1';
+            } else if (!b.toLowerCase().startsWith('batch')) {
+                b = `Batch ${b}`;
+            }
+            batchSet.add(b);
+        }
+    });
+
+    if (batchSet.size === 0) {
+        batchSet.add('Batch 1.1');
+        batchSet.add('Batch 1.2');
+        batchSet.add('Batch 1.3');
+    }
+
+    // Sort batches naturally (e.g. Batch 1.1, Batch 1.2, Batch 2.1)
+    const sortedBatches = Array.from(batchSet).sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    let optionsHtml = '<option value="All">All Batches</option>';
+    sortedBatches.forEach(b => {
+        optionsHtml += `<option value="${b}">${b}</option>`;
+    });
+
+    filterBatchEl.innerHTML = optionsHtml;
+    if (sortedBatches.includes(currentVal) || currentVal === 'All') {
+        filterBatchEl.value = currentVal;
+    }
+}
 
 // Modal Elements
 const modal = document.getElementById('student-modal');
@@ -38,7 +82,7 @@ async function loadStudents() {
 
     try {
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+            tableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 40px; color: var(--text-secondary);">
                 <i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i>
                 <div>Loading student records...</div>
             </td></tr>`;
@@ -46,6 +90,7 @@ async function loadStudents() {
         }
 
         allStudents = await StudentSyncService.loadAndSyncStudents();
+        populateBatchFilter();
         applyFilters();
 
         // Update pending email notifications badge
@@ -89,6 +134,7 @@ async function loadStudents() {
 
 function applyFilters() {
     const search = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    const batch = filterBatch ? filterBatch.value : 'All';
     const status = filterStatus ? filterStatus.value : 'All';
     const course = filterCourse ? filterCourse.value : 'All';
     const scholarship = filterScholarship ? filterScholarship.value : 'All';
@@ -116,6 +162,20 @@ function applyFilters() {
             } else {
                 matchStatus = currentStatus === stLower;
             }
+        }
+
+        let matchBatch = batch === 'All';
+        if (!matchBatch) {
+            let studentBatch = (s.batch || s.tes_batch || 'Batch 1.1').toString().trim();
+            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
+                studentBatch = 'Batch 1.1';
+            } else if (!studentBatch.toLowerCase().startsWith('batch')) {
+                studentBatch = `Batch ${studentBatch}`;
+            }
+            const selectedBatch = batch.trim();
+            const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
+            const selNorm = selectedBatch.toLowerCase().replace(/^batch\s*/i, '');
+            matchBatch = studentBatch.toLowerCase() === selectedBatch.toLowerCase() || sNorm === selNorm;
         }
 
         const currentCourse = prog;
@@ -156,7 +216,7 @@ function applyFilters() {
             }
         }
 
-        return matchSearch && matchStatus && matchCourse && matchSchol && matchAy;
+        return matchSearch && matchStatus && matchBatch && matchCourse && matchSchol && matchAy;
     });
 
     if (sort === 'Name (A-Z)') {
@@ -202,7 +262,7 @@ function getStatusBadge(status) {
 
 function renderTable() {
     if (filteredStudents.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        tableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 40px; color: var(--text-secondary);">
             <i class="icon-users" style="font-size: 32px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>
             No students found matching your filters.
         </td></tr>`;
@@ -244,6 +304,12 @@ function renderTable() {
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${program} - ${yearLevel}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 12px; font-size: 13px;">
+                    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; white-space: nowrap;">
+                        <i class="icon-layers" style="font-size: 12px;"></i>
+                        ${s.batch || 'Batch 1.1'}
+                    </span>
+                </td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
                 <td style="padding: 12px;">${EmailNotificationService.renderStatusBadge(s)}</td>
@@ -324,6 +390,7 @@ const inpBirthdate = document.getElementById('inp-birthdate');
 const inpCourse = document.getElementById('inp-course');
 const inpYear = document.getElementById('inp-year');
 const inpGender = document.getElementById('inp-gender');
+const inpBatch = document.getElementById('inp-batch');
 const inpSa = document.getElementById('inp-sa');
 const inpScholarYear = document.getElementById('inp-scholar-year');
 const inpPayouts = document.getElementById('inp-payouts');
@@ -368,6 +435,7 @@ addStudentBtn.addEventListener('click', () => {
     document.getElementById('modal-save-btn').textContent = 'Add Student';
 
     studentForm.reset();
+    if (inpBatch) inpBatch.value = 'Batch 1.1';
     inpScholarYear.value = '';
     inpPayouts.value = '';
     modal.classList.remove('hidden');
@@ -424,6 +492,7 @@ studentForm.addEventListener('submit', async (e) => {
             year: yearClean,
             year_level: yearClean,
             gender: genderClean,
+            batch: (inpBatch ? inpBatch.value : 'Batch 1.1'),
             familyDetails: familyDetails,
             saNumber: saClean,
             sa_number: saClean,
@@ -761,6 +830,12 @@ function showStudentModal(student) {
                             </span>
                         </div>
                         <div>
+                            <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Batch</span>
+                            <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 3px 9px; border-radius: 6px;">
+                                <i class="icon-layers" style="font-size: 13px;"></i> ${student.batch || 'Batch 1.1'}
+                            </span>
+                        </div>
+                        <div>
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">SA Number</span>
                             <span style="display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--text-primary); background: rgba(0,0,0,0.05); padding: 3px 8px; border-radius: 6px;">${saNumber}</span>
                         </div>
@@ -772,7 +847,7 @@ function showStudentModal(student) {
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Scholar Year</span>
                             <span style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">${scholarYear ? scholarYear : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}</span>
                         </div>
-                        <div style="grid-column: 1 / -1;">
+                        <div>
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Payouts Received</span>
                             <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
                                 ${hasPayouts 
@@ -937,6 +1012,12 @@ window.editStudent = function (uid) {
     inpCourse.value = student.course || 'BSIT';
     inpYear.value = student.year || '1st Year';
     inpGender.value = student.gender || 'Male';
+    if (inpBatch) {
+        let bVal = student.batch || student.tes_batch || 'Batch 1.1';
+        if (bVal === '1' || bVal.toLowerCase() === 'batch 1') bVal = 'Batch 1.1';
+        else if (!bVal.toLowerCase().startsWith('batch')) bVal = `Batch ${bVal}`;
+        inpBatch.value = bVal;
+    }
     inpSa.value = student.saNumber || fam.saNumber || '';
     inpScholarYear.value = student.scholarYearLevel || fam.scholarYearLevel || fam.yearBecameScholar || '';
     const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '') 
@@ -1282,6 +1363,7 @@ if (notifyAllSmsBtn) {
     });
 }
 if (searchInput) searchInput.addEventListener('input', applyFilters);
+if (filterBatch) filterBatch.addEventListener('change', applyFilters);
 if (filterStatus) filterStatus.addEventListener('change', applyFilters);
 if (filterCourse) filterCourse.addEventListener('change', applyFilters);
 if (filterScholarship) filterScholarship.addEventListener('change', applyFilters);

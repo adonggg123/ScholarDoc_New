@@ -351,8 +351,8 @@ export class AnnexSyncService {
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
                 const yr = String(student.year || student.yearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
                 const email = student.email || student.emailAddress || 'N/A';
-                const phone = student.contactNumber || student.phone || student.mobileNumber || 'N/A';
-                const batch = String(grantee.batch || '1').replace(/[^0-9]/g, '') || '1';
+                const rawB = String(grantee.batch || '1.1').replace(/[^0-9.]/g, '') || '1.1';
+                const batch = (rawB === '1') ? '1.1' : rawB;
 
                 return {
                     control_number: ctrl,

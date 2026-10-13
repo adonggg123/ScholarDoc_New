@@ -248,6 +248,57 @@
         background: rgba(255, 255, 255, 0.25);
         color: white;
     }
+
+    /* Batch Selection Field Styles */
+    .batch-select-box {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(15, 50, 96, 0.03);
+        border: 1.5px solid var(--border-color);
+        border-radius: 16px;
+        padding: 16px;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.dark .batch-select-box {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .batch-select-box.error-state {
+        border-color: #ef4444 !important;
+        background: rgba(239, 68, 68, 0.04) !important;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+        animation: batchShake 0.35s ease-in-out;
+    }
+
+    @keyframes batchShake {
+        0%, 100% { transform: translateX(0); }
+        20%, 60% { transform: translateX(-5px); }
+        40%, 80% { transform: translateX(5px); }
+    }
+
+    .badge-batch-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 11px;
+        background: rgba(15, 50, 96, 0.08);
+        color: var(--primary-color);
+        border: 1px solid rgba(15, 50, 96, 0.16);
+        white-space: nowrap;
+    }
+
+    body.dark .badge-batch-pill {
+        background: rgba(56, 189, 248, 0.12);
+        color: #38bdf8;
+        border-color: rgba(56, 189, 248, 0.25);
+    }
 </style>
 
 <div class="view-content" style="display: flex; flex-direction: column; gap: 24px; padding-bottom: 60px;">
@@ -347,6 +398,45 @@
                     Upload New Grantees</h3>
             </div>
 
+            <!-- Batch Selection Field (Required before import) -->
+            <div id="import-batch-selection-container" class="batch-select-box">
+                <label for="select-import-batch" style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; margin: 0;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="icon-layers" style="color: var(--primary-color); font-size: 15px;"></i>
+                        Target Batch <span style="color: #ef4444; font-size: 14px;">*</span>
+                    </span>
+                    <span id="batch-required-badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444;">Required</span>
+                </label>
+                <div style="position: relative;">
+                    <select id="select-import-batch" class="input-clean" style="width: 100%; height: 42px; padding: 0 36px 0 14px; font-size: 13px; font-weight: 600; border-radius: 12px; border: 1.5px solid var(--border-color); background: var(--surface-color); color: var(--text-primary); cursor: pointer; appearance: none; -webkit-appearance: none; transition: all 0.2s ease;">
+                        <option value="" disabled selected>-- Select Batch (e.g. Batch 1.1) --</option>
+                        <option value="Batch 1.1">Batch 1.1</option>
+                        <option value="Batch 1.2">Batch 1.2</option>
+                        <option value="Batch 1.3">Batch 1.3</option>
+                        <option value="Batch 1.4">Batch 1.4</option>
+                        <option value="Batch 1.5">Batch 1.5</option>
+                        <option value="Batch 2.1">Batch 2.1</option>
+                        <option value="Batch 2.2">Batch 2.2</option>
+                        <option value="Batch 2.3">Batch 2.3</option>
+                        <option value="Batch 3.1">Batch 3.1</option>
+                        <option value="Batch 3.2">Batch 3.2</option>
+                        <option value="custom">+ Enter Custom Batch...</option>
+                    </select>
+                    <i class="icon-chevron-down" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #64748b; font-size: 14px;"></i>
+                </div>
+
+                <!-- Custom Batch Input (shown when "custom" is selected) -->
+                <div id="custom-batch-container" class="hidden" style="margin-top: 2px;">
+                    <input type="text" id="custom-batch-input" class="input-clean" placeholder="Type batch name (e.g. Batch 1.6)" style="width: 100%; height: 40px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--primary-color); background: var(--surface-color); color: var(--text-primary);">
+                </div>
+
+                <!-- Batch Selection Validation Hint -->
+                <div id="batch-validation-hint" class="hidden" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #ef4444; margin-top: 2px;">
+                    <i class="icon-alert-circle" style="font-size: 14px;"></i>
+                    <span>Please select a batch before uploading or extracting a file.</span>
+                </div>
+            </div>
+
             <div id="drop-zone" class="import-drop-zone">
                 <i class="icon-file-up" style="font-size: 40px; color: #94a3b8; margin-bottom: 12px;"></i>
                 <p style="margin: 0; font-weight: 700; font-size: 14px; color: var(--text-primary);">Drag & drop new
@@ -422,11 +512,12 @@
                             <th>Name</th>
                             <th>Middle Name</th>
                             <th>Last Name</th>
+                            <th>Batch</th>
                         </tr>
                     </thead>
                     <tbody id="extracted-table-body">
                         <tr>
-                            <td colspan="3"
+                            <td colspan="4"
                                 style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                                     <div style="position: relative;">

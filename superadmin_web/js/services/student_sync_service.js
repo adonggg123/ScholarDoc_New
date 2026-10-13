@@ -226,7 +226,44 @@ export class StudentSyncService {
             idValidationStatus = 'No Submission Yet';
         }
 
-        const batch = f2Match?.tes_batch || gmMatch?.batch || existing.batch || 'Batch 1';
+        // Check localStorage grantee batches mapping if available
+        let localBatchMap = {};
+        try {
+            localBatchMap = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
+        } catch (_) {}
+
+        const sNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || '';
+        const saNum = f2Match?.tes_application_number || existing.sa_number || existing.saNumber || '';
+        const exId = existing.id || existing.uid || '';
+        const normFullName = (fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const cachedBatch = (sNo && localBatchMap[sNo]) ||
+            (saNum && localBatchMap[saNum]) ||
+            (exId && localBatchMap[exId]) ||
+            (normFullName && localBatchMap[normFullName]) ||
+            (f2Match?.id && localBatchMap[f2Match.id]) ||
+            (gmMatch?.id && localBatchMap[gmMatch.id]);
+
+        const rawBatch = cachedBatch ||
+            f2Match?.tes_batch ||
+            f2Match?.batch ||
+            gmMatch?.batch ||
+            existing.batch ||
+            existing.tes_batch ||
+            ss.batch ||
+            ss.tes_batch ||
+            existingDocs.batch ||
+            'Batch 1.1';
+
+        let batch = String(rawBatch || 'Batch 1.1').trim();
+        // Upgrade legacy '1' or 'Batch 1' to 'Batch 1.1'
+        if (batch === '1' || batch.toLowerCase() === 'batch 1') {
+            batch = 'Batch 1.1';
+        } else if (!batch.toLowerCase().startsWith('batch')) {
+            batch = `Batch ${batch}`;
+        } else if (!batch) {
+            batch = 'Batch 1.1';
+        }
 
         const fatherName = ss.father_full_name || existing.father_full_name || existing.familyDetails?.fatherName || 'N/A';
         const fatherEdu = ss.father_occupation || existing.father_occupation || existing.familyDetails?.fatherEduStatus || 'N/A';
@@ -436,13 +473,24 @@ export class StudentSyncService {
                 }
             } catch (_) {}
 
+            // 3b. Fetch New Grantees Masterlist records to cross-reference batches
+            let newGranteesList = [];
+            try {
+                const ngRes = await supabase.from('new_grantees_masterlist').select('*');
+                if (ngRes && ngRes.data) {
+                    newGranteesList = ngRes.data;
+                    console.log(`StudentSyncService: Loaded ${newGranteesList.length} new_grantees_masterlist records.`);
+                }
+            } catch (_) {}
+
             // If annex_form_2 is completely empty, fallback to student_grantees records if available
             if (!Array.isArray(form2List) || form2List.length === 0) {
                 if (Array.isArray(sgList) && sgList.length > 0) {
                     console.log(`StudentSyncService: No Form 2 data found. Falling back to ${sgList.length} existing student_grantees records.`);
                     return sgList.map(sg => {
                         const ssMatch = Array.isArray(schoolStudents) ? schoolStudents.find(ss => this.isMatch(ss, sg)) : null;
-                        return this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
+                        const gmMatch = Array.isArray(newGranteesList) ? newGranteesList.find(gm => this.isMatch(gm, sg)) : null;
+                        return this.normalizeStudentRecord(ssMatch || {}, null, gmMatch, sg, activeDeadline);
                     });
                 }
                 console.log('StudentSyncService: No Form 2 data and no existing student_grantees. Returning empty list.');
@@ -459,7 +507,10 @@ export class StudentSyncService {
                 const existingSg = Array.isArray(sgList)
                     ? sgList.find(sg => this.isMatch(sg, f2) || (ssMatch && this.isMatch(sg, ssMatch)))
                     : null;
-                const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, null, existingSg || {}, activeDeadline);
+                const gmMatch = Array.isArray(newGranteesList)
+                    ? newGranteesList.find(gm => this.isMatch(gm, f2) || (ssMatch && this.isMatch(gm, ssMatch)))
+                    : null;
+                const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, gmMatch, existingSg || {}, activeDeadline);
 
                 if (!existingSg) {
                     toInsert.push({

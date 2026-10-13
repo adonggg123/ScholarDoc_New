@@ -46,6 +46,11 @@ let extractedTableBody = null;
 let btnSaveRecords = null;
 let filterBatch = null;
 let btnClearMasterlist = null;
+let selectImportBatch = null;
+let customBatchContainer = null;
+let customBatchInput = null;
+let batchValidationHint = null;
+let batchSelectBox = null;
 
 // School Students Elements
 let elSchoolCount = null;
@@ -112,6 +117,86 @@ function normalizeName(lastName, firstName, middleName) {
     return full.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// ── Batch Helpers & Persistent Storage ──────────────────────────────
+function getSelectedImportBatch() {
+    if (!selectImportBatch) {
+        selectImportBatch = document.getElementById('select-import-batch');
+        customBatchContainer = document.getElementById('custom-batch-container');
+        customBatchInput = document.getElementById('custom-batch-input');
+        batchValidationHint = document.getElementById('batch-validation-hint');
+        batchSelectBox = document.getElementById('import-batch-selection-container');
+    }
+    if (!selectImportBatch) return null;
+
+    const val = selectImportBatch.value;
+    let chosen = '';
+
+    if (val === 'custom') {
+        chosen = customBatchInput ? customBatchInput.value.trim() : '';
+    } else if (val) {
+        chosen = val.trim();
+    }
+
+    if (!chosen) {
+        showBatchError();
+        return null;
+    }
+
+    clearBatchError();
+    return chosen;
+}
+
+function showBatchError() {
+    if (!batchSelectBox) batchSelectBox = document.getElementById('import-batch-selection-container');
+    if (!batchValidationHint) batchValidationHint = document.getElementById('batch-validation-hint');
+    if (batchSelectBox) batchSelectBox.classList.add('error-state');
+    if (batchValidationHint) batchValidationHint.classList.remove('hidden');
+    if (selectImportBatch && selectImportBatch.value !== 'custom') {
+        selectImportBatch.focus();
+    } else if (customBatchInput && selectImportBatch?.value === 'custom') {
+        customBatchInput.focus();
+    }
+    if (window.showToast) {
+        window.showToast('Please select a batch first before uploading or extracting a file.', 'alert-triangle');
+    }
+}
+
+function clearBatchError() {
+    if (!batchSelectBox) batchSelectBox = document.getElementById('import-batch-selection-container');
+    if (!batchValidationHint) batchValidationHint = document.getElementById('batch-validation-hint');
+    if (batchSelectBox) batchSelectBox.classList.remove('error-state');
+    if (batchValidationHint) batchValidationHint.classList.add('hidden');
+}
+
+function cacheGranteeBatches(records) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
+        (records || []).forEach(r => {
+            const b = r.batch || 'Batch 1.1';
+            if (r.id) cache[r.id] = b;
+            const normKey = normalizeName(r.lastName || r.last_name, r.firstName || r.first_name, r.middleName || r.middle_name);
+            if (normKey) cache[normKey] = b;
+            const rawName = (r.name || `${r.lastName || r.last_name || ''}, ${r.firstName || r.first_name || ''} ${r.middleName || r.middle_name || ''}`).trim().toLowerCase();
+            if (rawName) cache[rawName] = b;
+        });
+        localStorage.setItem('scholardoc_grantee_batches', JSON.stringify(cache));
+    } catch (e) {
+        console.warn('Error saving grantee batches cache:', e);
+    }
+}
+
+function getCachedGranteeBatch(record) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
+        if (record.id && cache[record.id]) return cache[record.id];
+        const normKey = normalizeName(record.lastName || record.last_name, record.firstName || record.first_name, record.middleName || record.middle_name);
+        if (normKey && cache[normKey]) return cache[normKey];
+        const rawName = (record.name || `${record.lastName || record.last_name || ''}, ${record.firstName || record.first_name || ''} ${record.middleName || record.middle_name || ''}`).trim().toLowerCase();
+        if (rawName && cache[rawName]) return cache[rawName];
+    } catch (_) { }
+    return null;
+}
+
 function splitFullName(raw) {
     if (!raw) return { firstName: '', middleName: '', lastName: '' };
     let str = String(raw).trim();
@@ -125,7 +210,7 @@ function splitFullName(raw) {
         const lastPart = commaParts[0].trim();
         const rest = commaParts.slice(1).join(',').trim();
         const tokens = rest.split(/\s+/).filter(Boolean);
-        
+
         let first = '';
         let middle = '';
 
@@ -219,11 +304,18 @@ function clearFileState() {
 }
 
 async function handleFile(file) {
+    const selectedBatch = getSelectedImportBatch();
+    if (!selectedBatch) {
+        if (fileInput) fileInput.value = '';
+        return;
+    }
+
     const validExtensions = ['pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
     const ext = file.name.split('.').pop().toLowerCase();
 
     if (!validExtensions.includes(ext)) {
         alert('Please upload a valid masterlist file (PDF, DOCX, XLSX, CSV).');
+        if (fileInput) fileInput.value = '';
         return;
     }
 
@@ -235,10 +327,10 @@ async function handleFile(file) {
     if (fileInfoContainer) fileInfoContainer.classList.remove('hidden');
 
     // Expected Flow: Upload File -> Automatically Extract Data -> Display in Table -> Automatically Save to Database
-    await executeAutoImportPipeline(file);
+    await executeAutoImportPipeline(file, selectedBatch);
 }
 
-async function extractExcelOrCsv(file) {
+async function extractExcelOrCsv(file, selectedBatch) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -250,7 +342,7 @@ async function extractExcelOrCsv(file) {
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
                 const rawRecords = [];
-                let currentBatch = 'Batch 1';
+                let currentBatch = selectedBatch || 'Batch 1.1';
 
                 let headerRowIdx = -1;
                 let colMap = { firstName: -1, middleName: -1, lastName: -1, course: -1, batch: -1, studentId: -1 };
@@ -446,14 +538,14 @@ async function extractDocxText(file) {
     });
 }
 
-async function parseDocumentText(text) {
+async function parseDocumentText(text, selectedBatch) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let currentBatch = 'Batch 1';
+    let currentBatch = selectedBatch || 'Batch 1.1';
     const rawRecords = [];
     let tempNameParts = [];
 
     for (const line of lines) {
-        if (line.toLowerCase().includes('batch')) {
+        if (!selectedBatch && line.toLowerCase().includes('batch')) {
             const batchMatch = line.match(/batch\s*\d+/i);
             if (batchMatch) {
                 currentBatch = batchMatch[0].replace(/\s+/g, ' ');
@@ -477,7 +569,7 @@ async function parseDocumentText(text) {
                 lastName: parsed.lastName,
                 firstName: parsed.firstName,
                 middleName: parsed.middleName,
-                batch: currentBatch,
+                batch: selectedBatch || currentBatch,
                 studentId: '',
                 course: 'BSIT'
             });
@@ -490,7 +582,7 @@ async function parseDocumentText(text) {
                     lastName: parsed.lastName,
                     firstName: parsed.firstName,
                     middleName: parsed.middleName,
-                    batch: currentBatch,
+                    batch: selectedBatch || currentBatch,
                     studentId: '',
                     course: 'BSIT'
                 });
@@ -502,7 +594,7 @@ async function parseDocumentText(text) {
                         lastName: tempNameParts[2],
                         firstName: tempNameParts[0],
                         middleName: tempNameParts[1],
-                        batch: currentBatch,
+                        batch: selectedBatch || currentBatch,
                         studentId: '',
                         course: 'BSIT'
                     });
@@ -519,7 +611,7 @@ async function parseDocumentText(text) {
                 lastName: parsed.lastName,
                 firstName: parsed.firstName,
                 middleName: parsed.middleName,
-                batch: currentBatch,
+                batch: selectedBatch || currentBatch,
                 studentId: '',
                 course: 'BSIT'
             });
@@ -528,7 +620,7 @@ async function parseDocumentText(text) {
                 firstName: tempNameParts[0],
                 middleName: '',
                 lastName: tempNameParts[1],
-                batch: currentBatch,
+                batch: selectedBatch || currentBatch,
                 studentId: '',
                 course: 'BSIT'
             });
@@ -537,7 +629,7 @@ async function parseDocumentText(text) {
                 firstName: tempNameParts[0],
                 middleName: tempNameParts[1],
                 lastName: tempNameParts[2],
-                batch: currentBatch,
+                batch: selectedBatch || currentBatch,
                 studentId: '',
                 course: 'BSIT'
             });
@@ -552,19 +644,23 @@ async function parseDocumentText(text) {
     return rawRecords;
 }
 
-async function checkAndFlagDuplicates(records) {
-    let existingDbNames = new Set();
+async function checkAndFlagDuplicates(records, selectedBatch) {
+    const existingDbMap = new Map(); // normKey -> batch
 
     try {
         const { data, error } = await window.supabaseClient
             .from(getTableName())
-            .select('last_name, first_name, middle_name, name');
+            .select('*');
 
         if (!error && data) {
             data.forEach(row => {
                 const norm = normalizeName(row.last_name, row.first_name, row.middle_name || '');
-                if (norm) existingDbNames.add(norm);
-                if (row.name) existingDbNames.add(row.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                const rowBatch = row.batch || getCachedGranteeBatch(row) || 'Batch 1.1';
+                if (norm) existingDbMap.set(norm, rowBatch);
+                if (row.name) {
+                    const normDirect = row.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (normDirect) existingDbMap.set(normDirect, rowBatch);
+                }
             });
         }
     } catch (e) {
@@ -574,8 +670,10 @@ async function checkAndFlagDuplicates(records) {
     const seenInFile = new Set();
     let skippedCount = 0;
     let importedCount = 0;
+    const targetBatch = selectedBatch || 'Batch 1.1';
 
     extractedRecords = records.map(r => {
+        const recordBatch = r.batch || targetBatch;
         const normKey = normalizeName(r.lastName, r.firstName, r.middleName);
         let isDuplicate = false;
         let duplicateReason = '';
@@ -583,9 +681,10 @@ async function checkAndFlagDuplicates(records) {
         if (!normKey) {
             isDuplicate = true;
             duplicateReason = 'Empty name';
-        } else if (existingDbNames.has(normKey)) {
+        } else if (existingDbMap.has(normKey)) {
             isDuplicate = true;
-            duplicateReason = 'Already in masterlist';
+            const prevBatch = existingDbMap.get(normKey);
+            duplicateReason = prevBatch === recordBatch ? `Already in ${recordBatch}` : `Already registered in ${prevBatch}`;
         } else if (seenInFile.has(normKey)) {
             isDuplicate = true;
             duplicateReason = 'Duplicate in document';
@@ -601,6 +700,7 @@ async function checkAndFlagDuplicates(records) {
 
         return {
             ...r,
+            batch: recordBatch,
             isDuplicate,
             duplicateReason
         };
@@ -619,15 +719,20 @@ async function checkAndFlagDuplicates(records) {
 }
 
 // ── Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database ──
-async function executeAutoImportPipeline(file) {
+async function executeAutoImportPipeline(file, explicitBatch) {
     if (!file) return;
+
+    const selectedBatch = explicitBatch || getSelectedImportBatch();
+    if (!selectedBatch) {
+        return;
+    }
 
     if (btnExtract) {
         btnExtract.disabled = true;
         btnExtract.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Auto-Extracting...';
     }
     if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
-    if (ocrStatusText) ocrStatusText.textContent = 'Extracting grantee data from file...';
+    if (ocrStatusText) ocrStatusText.textContent = `Extracting grantee data for ${selectedBatch}...`;
     if (ocrProgressBar) {
         ocrProgressBar.style.width = '35%';
         ocrProgressBar.style.animation = 'pulse 1.5s infinite';
@@ -643,13 +748,13 @@ async function executeAutoImportPipeline(file) {
         let rawRecords = [];
 
         if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-            rawRecords = await extractExcelOrCsv(file);
+            rawRecords = await extractExcelOrCsv(file, selectedBatch);
         } else if (ext === 'pdf') {
             const text = await extractPdfText(file);
-            rawRecords = await parseDocumentText(text);
+            rawRecords = await parseDocumentText(text, selectedBatch);
         } else if (ext === 'docx' || ext === 'doc') {
             const text = await extractDocxText(file);
-            rawRecords = await parseDocumentText(text);
+            rawRecords = await parseDocumentText(text, selectedBatch);
         }
 
         if (!rawRecords || rawRecords.length === 0) {
@@ -662,17 +767,22 @@ async function executeAutoImportPipeline(file) {
             return;
         }
 
+        // Guarantee batch is assigned to every single record
+        rawRecords.forEach(r => {
+            r.batch = selectedBatch;
+        });
+
         // Step 2: Validate & Flag duplicates, immediately display in table
-        if (ocrStatusText) ocrStatusText.textContent = 'Validating records & checking duplicates...';
+        if (ocrStatusText) ocrStatusText.textContent = `Validating records & checking duplicates for ${selectedBatch}...`;
         if (ocrProgressBar) ocrProgressBar.style.width = '65%';
 
-        const { skippedCount, importedCount } = await checkAndFlagDuplicates(rawRecords);
+        const { skippedCount, importedCount } = await checkAndFlagDuplicates(rawRecords, selectedBatch);
 
         // Step 3: Automatically Save unique records to database
         const validToInsert = extractedRecords.filter(r => !r.isDuplicate);
 
         if (validToInsert.length > 0) {
-            if (ocrStatusText) ocrStatusText.textContent = `Auto-saving ${validToInsert.length} new grantees to database...`;
+            if (ocrStatusText) ocrStatusText.textContent = `Auto-saving ${validToInsert.length} new grantees (${selectedBatch}) to database...`;
             if (ocrProgressBar) ocrProgressBar.style.width = '85%';
 
             const tableName = getTableName();
@@ -680,16 +790,36 @@ async function executeAutoImportPipeline(file) {
                 last_name: r.lastName,
                 first_name: r.firstName,
                 middle_name: r.middleName || '',
-                name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
+                name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
+                batch: r.batch || selectedBatch
             }));
 
-            const { data: insertedData, error } = await window.supabaseClient
+            let insertedData = null;
+            const { data: resData, error: insertErr } = await window.supabaseClient
                 .from(tableName)
                 .insert(toInsert)
                 .select();
 
-            if (error) {
-                throw error;
+            if (insertErr) {
+                if (insertErr.code === 'PGRST204' || insertErr.code === '42703' || String(insertErr.message || '').includes('batch')) {
+                    console.warn("Table 'new_grantees_masterlist' does not have 'batch' column yet. Saving records without batch column and caching batch locally.", insertErr);
+                    const toInsertFallback = validToInsert.map(r => ({
+                        last_name: r.lastName,
+                        first_name: r.firstName,
+                        middle_name: r.middleName || '',
+                        name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
+                    }));
+                    const { data: fallbackData, error: fallbackErr } = await window.supabaseClient
+                        .from(tableName)
+                        .insert(toInsertFallback)
+                        .select();
+                    if (fallbackErr) throw fallbackErr;
+                    insertedData = fallbackData;
+                } else {
+                    throw insertErr;
+                }
+            } else {
+                insertedData = resData;
             }
 
             // Link returned Supabase database IDs back to in-memory records
@@ -703,11 +833,14 @@ async function executeAutoImportPipeline(file) {
                 });
             }
 
-            if (ocrStatusText) ocrStatusText.textContent = `Complete: Auto-saved ${validToInsert.length} new grantees to database!`;
+            // Cache grantee batches locally so they survive reload even if DB column is pending
+            cacheGranteeBatches(extractedRecords);
+
+            if (ocrStatusText) ocrStatusText.textContent = `Complete: Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!`;
             if (ocrProgressBar) ocrProgressBar.style.width = '100%';
 
             if (window.showToast) {
-                window.showToast(`Auto-saved ${validToInsert.length} new grantees to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
+                window.showToast(`Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
             }
 
             // Re-render table to display updated "Saved to DB" status
@@ -720,17 +853,20 @@ async function executeAutoImportPipeline(file) {
                 .order('created_at', { ascending: false });
 
             if (allCurrentGrantees && allCurrentGrantees.length > 0) {
-                const granteesForVerification = allCurrentGrantees.map(m => ({
-                    id: m.id,
-                    name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                    last_name: m.last_name,
-                    first_name: m.first_name,
-                    middle_name: m.middle_name,
-                    batch: m.batch || 'Batch 1',
-                    student_id: m.student_id || '',
-                    course: m.course || 'BSIT',
-                    year: m.year || '1'
-                }));
+                const granteesForVerification = allCurrentGrantees.map(m => {
+                    const assignedBatch = m.batch || getCachedGranteeBatch(m) || 'Batch 1.1';
+                    return {
+                        id: m.id,
+                        name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
+                        last_name: m.last_name,
+                        first_name: m.first_name,
+                        middle_name: m.middle_name,
+                        batch: assignedBatch,
+                        student_id: m.student_id || '',
+                        course: m.course || 'BSIT',
+                        year: m.year || '1'
+                    };
+                });
                 await loadSchoolStudentsAndVerify(granteesForVerification);
             }
 
@@ -774,13 +910,17 @@ function populateBatchFilter() {
 
     if (!filterBatch) return;
 
-    const batches = [...new Set(extractedRecords.map(r => r.batch))].sort();
+    const currentFilter = filterBatch.value || 'All Batches';
+    const batches = [...new Set(extractedRecords.map(r => r.batch || 'Batch 1.1'))].sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
 
     filterBatch.innerHTML = '<option value="All Batches">All Batches</option>';
     batches.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b;
         opt.textContent = b;
+        if (b === currentFilter) opt.selected = true;
         filterBatch.appendChild(opt);
     });
 
@@ -807,7 +947,7 @@ function renderTable() {
     if (extractedRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="3" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="4" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-file-search" style="font-size: 40px; color: #cbd5e1;"></i>
                         <span>Upload a document and extract data to see new grantees listed here.</span>
@@ -820,15 +960,15 @@ function renderTable() {
     const filterValue = filterBatch ? filterBatch.value : 'All Batches';
 
     const displayRecords = extractedRecords.map((record, index) => ({ record, index }))
-        .filter(item => filterValue === 'All Batches' || item.record.batch === filterValue);
+        .filter(item => filterValue === 'All Batches' || (item.record.batch || 'Batch 1.1') === filterValue);
 
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="3" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="4" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
-                        <span>No records match the selected batch.</span>
+                        <span>No records match the selected batch (${filterValue}).</span>
                     </div>
                 </td>
             </tr>`;
@@ -858,6 +998,12 @@ function renderTable() {
             </td>
             <td style="padding: 6px 12px;">
                 <input type="text" class="input-clean edit-last-name" data-index="${index}" value="${record.lastName || ''}">
+            </td>
+            <td style="padding: 6px 12px; white-space: nowrap;">
+                <span class="badge-batch-pill" title="Assigned Batch">
+                    <i class="icon-layers" style="font-size: 11px;"></i>
+                    ${record.batch || 'Batch 1.1'}
+                </span>
             </td>
         `;
         extractedTableBody.appendChild(tr);
@@ -941,14 +1087,39 @@ async function saveRecordsToDatabase() {
             last_name: r.lastName,
             first_name: r.firstName,
             middle_name: r.middleName || '',
-            name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
+            name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
+            batch: r.batch || 'Batch 1.1'
         }));
 
-        const { error } = await window.supabaseClient
+        let insertedData = null;
+        const { data: resData, error } = await window.supabaseClient
             .from(tableName)
-            .insert(toInsert);
+            .insert(toInsert)
+            .select();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === 'PGRST204' || error.code === '42703' || String(error.message || '').includes('batch')) {
+                console.warn("Table does not have 'batch' column in schema yet. Inserting without batch column and caching batch locally.", error);
+                const toInsertFallback = validToInsert.map(r => ({
+                    last_name: r.lastName,
+                    first_name: r.firstName,
+                    middle_name: r.middleName || '',
+                    name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
+                }));
+                const { data: fbData, error: fbErr } = await window.supabaseClient
+                    .from(tableName)
+                    .insert(toInsertFallback)
+                    .select();
+                if (fbErr) throw fbErr;
+                insertedData = fbData;
+            } else {
+                throw error;
+            }
+        } else {
+            insertedData = resData;
+        }
+
+        cacheGranteeBatches(validToInsert);
 
         if (btnSaveRecords) {
             btnSaveRecords.innerHTML = `<i class="icon-check" style="color: white;"></i> Saved ${validToInsert.length} Grantees to Masterlist`;
@@ -2212,7 +2383,7 @@ async function fetchExistingMasterlist() {
 
             if (headerDbRows.length > 0) {
                 const idsToDelete = headerDbRows.map(r => r.id);
-                window.supabaseClient.from(tableName).delete().in('id', idsToDelete).then(() => {});
+                window.supabaseClient.from(tableName).delete().in('id', idsToDelete).then(() => { });
             }
 
             const validData = data.filter(row => {
@@ -2243,6 +2414,14 @@ async function fetchExistingMasterlist() {
                     });
                 }
 
+                const assignedBatch = row.batch || getCachedGranteeBatch({
+                    id: row.id,
+                    last_name: ln,
+                    first_name: fn,
+                    middle_name: mn,
+                    name: row.name
+                }) || 'Batch 1.1';
+
                 return {
                     id: row.id,
                     studentId: row.student_id || '',
@@ -2250,10 +2429,13 @@ async function fetchExistingMasterlist() {
                     firstName: fn,
                     middleName: mn,
                     course: row.course || 'BSIT',
-                    batch: row.batch,
+                    batch: assignedBatch,
                     isDuplicate: false
                 };
             });
+
+            // Cache retrieved batches
+            cacheGranteeBatches(extractedRecords);
 
             if (rowsToHeal.length > 0) {
                 Promise.all(rowsToHeal.map(r =>
@@ -2277,7 +2459,7 @@ async function fetchExistingMasterlist() {
                 last_name: m.lastName,
                 first_name: m.firstName,
                 middle_name: m.middleName,
-                batch: m.batch || 'Batch 1',
+                batch: m.batch || 'Batch 1.1',
                 student_id: m.studentId || '',
                 course: m.course || 'BSIT',
                 year: '1'
@@ -2312,6 +2494,32 @@ export function initMasterlistImport() {
     btnSaveRecords = document.getElementById('btn-save-records');
     filterBatch = document.getElementById('filter-batch');
     btnClearMasterlist = document.getElementById('btn-clear-masterlist');
+
+    // Batch Selection Elements
+    selectImportBatch = document.getElementById('select-import-batch');
+    customBatchContainer = document.getElementById('custom-batch-container');
+    customBatchInput = document.getElementById('custom-batch-input');
+    batchValidationHint = document.getElementById('batch-validation-hint');
+    batchSelectBox = document.getElementById('import-batch-selection-container');
+
+    if (selectImportBatch) {
+        selectImportBatch.addEventListener('change', () => {
+            const val = selectImportBatch.value;
+            if (val === 'custom') {
+                if (customBatchContainer) customBatchContainer.classList.remove('hidden');
+                if (customBatchInput) customBatchInput.focus();
+            } else {
+                if (customBatchContainer) customBatchContainer.classList.add('hidden');
+            }
+            clearBatchError();
+        });
+    }
+
+    if (customBatchInput) {
+        customBatchInput.addEventListener('input', () => {
+            clearBatchError();
+        });
+    }
 
     // Source Toggle Elements & Listeners
     toggleBtnGrantees = document.getElementById('toggle-source-grantees');
@@ -2474,18 +2682,33 @@ export function initMasterlistImport() {
             e.preventDefault();
             dropZone.style.borderColor = 'var(--border-color)';
             dropZone.style.background = 'rgba(0,0,0,0.01)';
+
+            const selectedBatch = getSelectedImportBatch();
+            if (!selectedBatch) {
+                return;
+            }
+
             if (e.dataTransfer.files.length > 0) {
                 handleFile(e.dataTransfer.files[0]);
             }
         });
 
         dropZone.addEventListener('click', () => {
+            const selectedBatch = getSelectedImportBatch();
+            if (!selectedBatch) {
+                return;
+            }
             if (fileInput) fileInput.click();
         });
     }
 
     if (fileInput) {
         fileInput.addEventListener('change', (e) => {
+            const selectedBatch = getSelectedImportBatch();
+            if (!selectedBatch) {
+                fileInput.value = '';
+                return;
+            }
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
             }
@@ -2499,7 +2722,9 @@ export function initMasterlistImport() {
     if (btnExtract) {
         btnExtract.addEventListener('click', async () => {
             if (!currentFile) return;
-            await executeAutoImportPipeline(currentFile);
+            const selectedBatch = getSelectedImportBatch();
+            if (!selectedBatch) return;
+            await executeAutoImportPipeline(currentFile, selectedBatch);
         });
     }
 
