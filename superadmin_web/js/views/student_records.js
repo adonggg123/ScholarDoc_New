@@ -745,6 +745,9 @@ function showStudentModal(student) {
                     <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #B45309; background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 8px;">
                         Year ${yearLevel}
                     </span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 4px 10px; border-radius: 8px;">
+                        <i class="icon-layers" style="font-size: 12px;"></i> ${student.batch || student.tes_batch || student.batch_name || 'Batch 1.1'}
+                    </span>
                 </div>
             </div>
             <div style="flex-shrink: 0; align-self: flex-start;">

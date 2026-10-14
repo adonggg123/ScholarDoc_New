@@ -40,6 +40,9 @@ async function loadIdQueue() {
         // Update KPI summary cards
         updateKpis();
 
+        // Populate dynamic batch filter options
+        populateIdBatchFilter();
+
         // Apply filters
         filterIdQueue();
 
@@ -102,11 +105,50 @@ function updateKpis() {
     if (bulkBadge) bulkBadge.textContent = pdfCount;
 }
 
+// ── Dynamic Batch Filter ─────────────────────────────────────────────
+function populateIdBatchFilter() {
+    const filterBatchEl = document.getElementById('id-filter-batch');
+    if (!filterBatchEl) return;
+
+    const currentVal = filterBatchEl.value || 'All';
+    const batchSet = new Set();
+
+    idStudents.forEach(s => {
+        const raw = s.batch || s.tes_batch || s.batch_name;
+        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+            let b = String(raw).trim();
+            if (b === '1' || b.toLowerCase() === 'batch 1') {
+                b = 'Batch 1.1';
+            } else if (!b.toLowerCase().startsWith('batch')) {
+                b = `Batch ${b}`;
+            }
+            batchSet.add(b);
+        }
+    });
+
+    ['Batch 1.1', 'Batch 1.2', 'Batch 1.3', 'Batch 1.4', 'Batch 1.5', 'Batch 2.1', 'Batch 2.2', 'Batch 2.3', 'Batch 3.1', 'Batch 3.2'].forEach(b => batchSet.add(b));
+
+    const sortedBatches = Array.from(batchSet).sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    let optionsHtml = '<option value="All">All Batches</option>';
+    sortedBatches.forEach(b => {
+        optionsHtml += `<option value="${b}">${b}</option>`;
+    });
+
+    filterBatchEl.innerHTML = optionsHtml;
+    if (sortedBatches.includes(currentVal) || currentVal === 'All') {
+        filterBatchEl.value = currentVal;
+    }
+}
+
 // ── Search & Filter Logic ────────────────────────────────────────────
 function filterIdQueue() {
     const searchInput = document.getElementById('id-search-input');
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
+    const batchFilter = document.getElementById('id-filter-batch')?.value || 'All';
     const statusFilter = document.getElementById('id-filter-status')?.value || 'All';
     const docFilter = document.getElementById('id-filter-doc')?.value || 'All';
     const courseFilter = document.getElementById('id-filter-course')?.value || 'All';
@@ -124,6 +166,21 @@ function filterIdQueue() {
 
         // Search Match
         const matchQuery = !query || name.includes(query) || studentId.includes(query) || course.toLowerCase().includes(query);
+
+        // Batch Match
+        let matchBatch = batchFilter === 'All';
+        if (!matchBatch) {
+            let studentBatch = String(s.batch || s.tes_batch || s.batch_name || '').trim();
+            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
+                studentBatch = 'Batch 1.1';
+            } else if (studentBatch && !studentBatch.toLowerCase().startsWith('batch')) {
+                studentBatch = `Batch ${studentBatch}`;
+            }
+            const selectedBatch = batchFilter.trim();
+            const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
+            const selNorm = selectedBatch.toLowerCase().replace(/^batch\s*/i, '');
+            matchBatch = studentBatch.toLowerCase() === selectedBatch.toLowerCase() || sNorm === selNorm;
+        }
 
         // Status Match
         let matchStatus = true;
@@ -151,7 +208,7 @@ function filterIdQueue() {
             matchCourse = course.includes(courseFilter.toUpperCase());
         }
 
-        return matchQuery && matchStatus && matchDoc && matchCourse;
+        return matchQuery && matchBatch && matchStatus && matchDoc && matchCourse;
     });
 
     // Sorting
@@ -276,6 +333,15 @@ function renderQueue() {
             docBadgesHtml += `<span style="font-size: 9px; font-weight: 700; color: #7C3AED; background: rgba(124, 58, 237, 0.08); padding: 1px 5px; border-radius: 4px;">PDF Dossier</span>`;
         }
 
+        const rawBatch = s.batch || s.tes_batch || s.batch_name;
+        let batchBadgeHtml = '';
+        if (rawBatch) {
+            let b = String(rawBatch).trim();
+            if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
+            else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+            batchBadgeHtml = `<span style="font-size: 10px; color: #1E3A8A; font-weight: 700; background: rgba(30, 58, 138, 0.08); padding: 1px 6px; border-radius: 4px;">${b}</span>`;
+        }
+
         return `
             <div class="id-list-item ${isSelected ? 'selected' : ''}" 
                  style="padding: 14px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border-color); user-select: none;"
@@ -290,6 +356,7 @@ function renderQueue() {
                         <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">ID: ${studentId}</span>
                         <span style="color: var(--border-color); font-size: 10px;">•</span>
                         <span style="font-size: 10px; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 1px 5px; border-radius: 4px;">${course}</span>
+                        ${batchBadgeHtml}
                         ${docBadgesHtml}
                     </div>
                 </div>
@@ -529,6 +596,18 @@ function renderPanel() {
                     <span style="padding: 3px 10px; background: rgba(212, 175, 55, 0.15); border-radius: 20px; color: #B45309; font-size: 11px; font-weight: 800;">
                         ${course} - ${year}
                     </span>
+                    ${(() => {
+                        const raw = s.batch || s.tes_batch || s.batch_name;
+                        if (!raw) return '';
+                        let b = String(raw).trim();
+                        if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
+                        else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+                        return `
+                            <span style="padding: 3px 10px; background: rgba(30, 58, 138, 0.1); border-radius: 20px; color: #1E3A8A; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="icon-layers" style="font-size: 11px;"></i> ${b}
+                            </span>
+                        `;
+                    })()}
                 </div>
             </div>
 

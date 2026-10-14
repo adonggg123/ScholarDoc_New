@@ -5,7 +5,7 @@ import '../theme/theme_provider.dart';
 import 'dashboard/home_screen.dart';
 import 'submissions/status_tracking_screen.dart';
 import 'submissions/upload_workflow_screen.dart';
-import 'directory/user_directory_screen.dart';
+import 'submissions/submission_history_screen.dart';
 import 'profile/profile_screen.dart';
 
 class MainLayout extends StatefulWidget {
@@ -22,7 +22,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     HomeScreen(),
     StatusTrackingScreen(),
     UploadWorkflowScreen(),
-    UserDirectoryScreen(),
+    SubmissionHistoryScreen(),
     ProfileScreen(),
   ];
 
@@ -31,7 +31,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     _NavItem(icon: LucideIcons.home, label: 'Home'),
     _NavItem(icon: LucideIcons.clipboardList, label: 'Status'),
     _NavItem(icon: LucideIcons.uploadCloud, label: 'Submit'),
-    _NavItem(icon: LucideIcons.users, label: 'Directory'),
+    _NavItem(icon: LucideIcons.history, label: 'History'),
     _NavItem(icon: LucideIcons.user, label: 'Profile'),
   ];
 

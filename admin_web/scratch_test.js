@@ -22,7 +22,7 @@ fetch(`${base}/notifications`, {
     console.log('Insert Status:', r.status);
     const data = await r.json();
     console.log('Response:', JSON.stringify(data, null, 2));
-    
+
     // If it succeeded, delete it to clean up
     if (r.status === 201 || r.status === 200) {
       const createdId = data[0].id;

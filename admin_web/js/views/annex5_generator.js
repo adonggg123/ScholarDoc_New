@@ -299,13 +299,6 @@ async function loadInitialData() {
         renderSchoolStudentsTable(rawSchoolStudents);
         runCrossVerification();
 
-        if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
-            const syncEl = document.getElementById('superadmin-sync-status');
-            if (syncEl) {
-                syncEl.innerHTML = `<i class="icon-database" style="font-size: 13px; color: #10b981;"></i> Auto-Restored from Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
-            }
-        }
-
         // Setup real-time listeners so Supabase deletions reflect immediately
         setupDatabaseRealtimeListeners();
 

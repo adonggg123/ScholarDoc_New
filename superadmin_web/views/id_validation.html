@@ -35,6 +35,14 @@
                    onfocus="this.style.borderColor='var(--primary-color)'" onblur="this.style.borderColor='var(--border-color)'" oninput="filterIdQueue()">
         </div>
 
+        <!-- Filter: Batch -->
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-layers" style="font-size: 13px; margin-right: 4px;"></i>Batch:</span>
+            <select id="id-filter-batch" onchange="filterIdQueue()" style="padding: 8px 12px; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="All">All Batches</option>
+            </select>
+        </div>
+
         <!-- Filter: Status -->
         <div style="display: flex; align-items: center; gap: 6px;">
             <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;"><i class="icon-filter" style="font-size: 13px; margin-right: 4px;"></i>Status:</span>
