@@ -32,26 +32,28 @@ export class AnnexSyncService {
     static getUniqueKey(item) {
         if (!item) return '';
         const g = item.grantee || item;
-        const s = item.matchedStudent || {};
 
-        // 1. Primary: Student ID / No. (if valid and not 'N/A' or empty)
-        const studentId = String(s.studentId || s.studentNo || s.student_no || g.student_id || g.studentId || g.studentNo || '').trim().toLowerCase();
-        if (studentId && studentId !== 'n/a' && studentId !== 'unassigned') {
-            return `id_${studentId.replace(/[^a-z0-9]/g, '')}`;
+        // 1. Primary: Database record ID of grantee if available
+        if (g.id) {
+            return `gid_${String(g.id)}`;
         }
 
-        // 2. Secondary: Normalized Name (Last + First + Middle)
-        const lName = (g.last_name || g.lastName || s.lastName || s.last_name || '').trim().toLowerCase();
-        const fName = (g.first_name || g.firstName || s.firstName || s.first_name || '').trim().toLowerCase();
-        const mName = (g.middle_name || g.middleName || s.mi || s.middleInitial || '').trim().toLowerCase();
+        // 2. Grantee's own valid student ID if present
+        const granteeId = String(g.student_id || g.studentId || g.studentNo || g.student_no || '').trim().toLowerCase();
+        if (granteeId && granteeId !== 'n/a' && granteeId !== 'unassigned' && granteeId.length >= 3) {
+            return `id_${granteeId.replace(/[^a-z0-9]/g, '')}`;
+        }
 
+        // 3. Grantee's normalized name (Last + First + Middle)
+        const lName = (g.last_name || g.lastName || '').trim().toLowerCase();
+        const fName = (g.first_name || g.firstName || '').trim().toLowerCase();
+        const mName = (g.middle_name || g.middleName || '').trim().toLowerCase();
         const combined = `${lName}_${fName}_${mName}`.replace(/[^a-z0-9]/g, '');
-        if (combined) return `name_${combined}`;
+        if (combined && combined.length >= 3) return `name_${combined}`;
 
-        const rawName = (g.name || g.fullName || s.fullName || s.full_name || s.name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rawName = (g.name || g.fullName || `${lName} ${fName}`).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         if (rawName) return `raw_${rawName}`;
 
-        if (g.id) return `uuid_${String(g.id)}`;
         return Math.random().toString(36).substring(2, 9);
     }
 
@@ -64,7 +66,7 @@ export class AnnexSyncService {
         const student = item.matchedStudent || {};
 
         if (typeof VerificationService !== 'undefined' && VerificationService.normalizeName) {
-            const rawName = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+            const rawName = grantee.name || grantee.fullName || `${grantee.last_name || ''} ${grantee.first_name || ''}` || student.fullName || student.full_name || student.name || '';
             if (rawName) {
                 const norm = VerificationService.normalizeName(rawName);
                 if (norm && (norm.lastName || norm.firstName)) {
@@ -296,7 +298,24 @@ export class AnnexSyncService {
                 const g = item.grantee || item;
                 const s = item.matchedStudent || {};
                 const nameStr = (g.name || g.fullName || `${g.last_name || ''} ${g.first_name || ''}` || s.fullName || s.full_name || s.name || '').replace(/^,\s*|,\s*$/g, '').trim();
-                return nameStr.length > 0 && nameStr !== ',';
+                if (!nameStr || nameStr === ',') return false;
+
+                // Validate that Form 2 matches don't contain stale false-positive pairings
+                if (item.classification === 'MATCHED_FORM2' && item.matchedStudent) {
+                    const gL = (g.last_name || g.lastName || '').trim().toLowerCase();
+                    const sL = (s.lastName || s.last_name || '').trim().toLowerCase();
+                    const gId = (g.student_id || g.studentId || '').trim();
+                    const sId = (s.studentId || s.student_no || '').trim();
+                    const idsMatch = gId && sId && gId.replace(/[^0-9a-zA-Z]/g, '') === sId.replace(/[^0-9a-zA-Z]/g, '');
+                    if (!idsMatch && gL && sL && !gL.includes(sL) && !sL.includes(gL)) {
+                        if (typeof VerificationService !== 'undefined' && VerificationService.levenshteinSimilarity) {
+                            if (VerificationService.levenshteinSimilarity(gL, sL) < 0.75) {
+                                return false; // Stale false-positive match from older run
+                            }
+                        }
+                    }
+                }
+                return true;
             };
             const validF2 = (parsed.form2List || []).filter(isValidItem);
             const validF3 = (parsed.form3List || []).filter(isValidItem);
@@ -351,6 +370,7 @@ export class AnnexSyncService {
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
                 const yr = String(student.year || student.yearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
                 const email = student.email || student.emailAddress || 'N/A';
+                const phone = student.mobileNumber || student.phone || student.contactNumber || grantee.phone || 'N/A';
                 const rawB = String(grantee.batch || '1.1').replace(/[^0-9.]/g, '') || '1.1';
                 const batch = (rawB === '1') ? '1.1' : rawB;
 

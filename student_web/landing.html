@@ -6,21 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScholarDoc — Digital Scholarship Verification & Billing Management System</title>
     <meta name="description"
-        content="ScholarDoc is the official digital scholarship management and document verification platform for USTP Oroquieta City Campus scholars and administrators.">
+        content="ScholarDoc is the official digital scholarship management and document verification platform for USTP Oroquieta City Campus scholars and administrators. Fast OCR, digital signatures, and transparent TES billing.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
         /* ════════════════════════════════════════════════════════
-           DESIGN SYSTEM — ScholarDoc Landing Page
+           DESIGN SYSTEM — ScholarDoc Modern UI/UX
            ════════════════════════════════════════════════════════ */
 
-        /* ─── Reset ─── */
+        /* ─── Reset & Base ─── */
         *,
         *::before,
         *::after {
@@ -29,78 +29,91 @@
             padding: 0;
         }
 
-        /* ─── Design Tokens ─── */
         :root {
-            /* Brand */
-            --navy-900: #061530;
-            --navy-800: #091D3E;
-            --navy: #0F3260;
-            --navy-600: #164080;
-            --navy-500: #1D52A0;
-            --navy-400: #3B6EBD;
-            --gold: #FBC02D;
-            --gold-light: #FFD54F;
-            --gold-pale: #FFF3C4;
-            --gold-dark: #C49000;
-            --emerald: #10B981;
-            --emerald-light: #D1FAE5;
-            --rose: #F43F5E;
+            /* Brand Color Palette */
+            --navy-950: #040d1a;
+            --navy-900: #06152d;
+            --navy-850: #0a1f3f;
+            --navy-800: #0f2b57;
+            --navy-700: #14376e;
+            --navy-600: #1a4589;
+            --navy-500: #2358aa;
+            --navy-100: #e8f0fe;
+            --navy-50: #f1f6fd;
+
+            --gold-600: #b47800;
+            --gold-500: #d99300;
+            --gold-400: #f5a60b;
+            --gold-300: #fbbf24;
+            --gold-200: #fde68a;
+            --gold-100: #fef3c7;
+            --gold-50: #fffbeb;
+
+            --emerald-600: #059669;
+            --emerald-500: #10b981;
+            --emerald-400: #34d399;
+            --emerald-100: #d1fae5;
+            --emerald-50: #ecfdf5;
+
+            --rose-500: #f43f5e;
+            --rose-100: #ffe4e6;
 
             /* Neutrals */
-            --slate-50: #F8FAFC;
-            --slate-100: #F1F5F9;
-            --slate-200: #E2E8F0;
-            --slate-300: #CBD5E1;
-            --slate-400: #94A3B8;
-            --slate-500: #64748B;
-            --slate-600: #475569;
+            --slate-900: #0f172a;
+            --slate-800: #1e293b;
             --slate-700: #334155;
-            --slate-800: #1E293B;
-            --slate-900: #0F172A;
-            --slate-950: #020617;
-            --white: #FFFFFF;
+            --slate-600: #475569;
+            --slate-500: #64748b;
+            --slate-400: #94a3b8;
+            --slate-300: #cbd5e1;
+            --slate-200: #e2e8f0;
+            --slate-100: #f1f5f9;
+            --slate-50: #f8fafc;
+            --white: #ffffff;
+
+            /* Semantics */
+            --bg-page: var(--white);
+            --bg-surface: var(--white);
+            --bg-muted: var(--slate-50);
+            --bg-subtle: #f5f8fc;
+            --border-light: #e2e8f0;
+            --border-subtle: rgba(15, 43, 87, 0.08);
+            --text-heading: var(--slate-900);
+            --text-body: var(--slate-600);
+            --text-muted: var(--slate-400);
+
+            /* Shadows */
+            --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+            --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.03);
+            --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.04);
+            --shadow-lg: 0 16px 36px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
+            --shadow-xl: 0 24px 56px rgba(15, 23, 42, 0.12), 0 8px 20px rgba(15, 23, 42, 0.06);
+            --shadow-gold: 0 8px 24px rgba(245, 166, 11, 0.28), 0 2px 6px rgba(245, 166, 11, 0.18);
+            --shadow-navy: 0 8px 24px rgba(15, 43, 87, 0.22), 0 2px 6px rgba(15, 43, 87, 0.12);
 
             /* Radii */
-            --r-sm: 8px;
-            --r-md: 12px;
-            --r-lg: 16px;
-            --r-xl: 20px;
-            --r-2xl: 24px;
-            --r-3xl: 32px;
-            --r-full: 999px;
+            --r-xs: 6px;
+            --r-sm: 10px;
+            --r-md: 14px;
+            --r-lg: 18px;
+            --r-xl: 24px;
+            --r-full: 9999px;
 
-            /* Easing */
+            /* Transitions */
             --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
             --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-
-            /* Light mode semantic tokens */
-            --bg: var(--white);
-            --bg-alt: var(--slate-50);
-            --bg-subtle: #F5F7FA;
-            --surface: var(--white);
-            --surface-raised: var(--white);
-            --border: var(--slate-200);
-            --border-subtle: rgba(0, 0, 0, 0.04);
-            --text-h: var(--slate-900);
-            --text-p: var(--slate-500);
-            --text-muted: var(--slate-400);
-            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.03);
-            --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-elevated: 0 20px 60px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
+            --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-
-
-        /* ─── Base ─── */
         html {
             scroll-behavior: smooth;
-            scroll-padding-top: 80px;
+            scroll-padding-top: 84px;
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--bg);
-            color: var(--text-p);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-body);
             line-height: 1.65;
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
@@ -110,6 +123,7 @@
 
         img {
             max-width: 100%;
+            height: auto;
             display: block;
         }
 
@@ -120,571 +134,55 @@
 
         button {
             font-family: inherit;
+            border: none;
+            background: none;
+            cursor: pointer;
         }
 
         .container {
-            max-width: 1180px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 0 28px;
         }
 
-        /* ─── Typography ─── */
+        /* ─── Typography Utilities ─── */
         .section-eyebrow {
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 2.5px;
-            text-transform: uppercase;
-            color: var(--navy);
             display: inline-flex;
             align-items: center;
-            gap: 10px;
-            padding: 7px 16px;
+            gap: 8px;
+            padding: 6px 14px;
             border-radius: var(--r-full);
-            background: rgba(15, 50, 96, 0.06);
-            border: 1px solid rgba(15, 50, 96, 0.08);
-        }
-
-        body.dark .section-eyebrow {
-            color: var(--gold);
-            background: rgba(251, 192, 45, 0.08);
-            border-color: rgba(251, 192, 45, 0.12);
+            background: rgba(20, 55, 110, 0.07);
+            border: 1px solid rgba(20, 55, 110, 0.12);
+            color: var(--navy-700);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
         }
 
         .section-eyebrow svg {
             width: 14px;
             height: 14px;
+            color: var(--gold-500);
         }
 
         .section-title {
             font-family: 'Outfit', sans-serif;
-            font-size: clamp(28px, 4vw, 42px);
+            font-size: clamp(30px, 4.2vw, 44px);
             font-weight: 800;
-            color: var(--text-h);
+            color: var(--text-heading);
             letter-spacing: -0.8px;
-            line-height: 1.15;
-            margin: 18px 0 14px;
+            line-height: 1.16;
+            margin: 16px 0 14px;
         }
 
         .section-desc {
             font-size: 16px;
-            line-height: 1.75;
-            color: var(--text-p);
-            max-width: 540px;
+            line-height: 1.7;
+            color: var(--text-body);
+            max-width: 580px;
             font-weight: 400;
-        }
-
-        /* ─── Buttons ─── */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-family: 'Inter', sans-serif;
-            font-weight: 700;
-            font-size: 14px;
-            padding: 13px 28px;
-            border-radius: var(--r-full);
-            border: none;
-            cursor: pointer;
-            transition: all 0.3s var(--ease-out);
-            text-decoration: none;
-            white-space: nowrap;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn svg {
-            width: 17px;
-            height: 17px;
-            transition: transform 0.3s var(--ease-out);
-        }
-
-        .btn:hover svg {
-            transform: translateX(3px);
-        }
-
-        .btn-primary {
-            background: var(--navy);
-            color: var(--white);
-            box-shadow: 0 2px 8px rgba(15, 50, 96, 0.2), 0 8px 24px rgba(15, 50, 96, 0.15);
-        }
-
-        .btn-primary:hover {
-            background: var(--navy-600);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(15, 50, 96, 0.25), 0 12px 32px rgba(15, 50, 96, 0.2);
-        }
-
-        .btn-primary:active {
-            transform: translateY(0);
-        }
-
-        body.dark .btn-primary {
-            background: var(--gold);
-            color: var(--navy-900);
-            box-shadow: 0 2px 8px rgba(251, 192, 45, 0.2), 0 8px 24px rgba(251, 192, 45, 0.15);
-        }
-
-        body.dark .btn-primary:hover {
-            background: var(--gold-light);
-        }
-
-        .btn-gold {
-            background: linear-gradient(135deg, var(--gold) 0%, #F5B800 100%);
-            color: var(--navy-900);
-            font-weight: 800;
-            box-shadow: 0 2px 8px rgba(251, 192, 45, 0.2), 0 8px 24px rgba(251, 192, 45, 0.2);
-        }
-
-        .btn-gold:hover {
-            background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(251, 192, 45, 0.3), 0 12px 32px rgba(251, 192, 45, 0.25);
-        }
-
-        .btn-outline {
-            background: transparent;
-            color: var(--text-h);
-            border: 1.5px solid var(--border);
-            padding: 12px 26px;
-        }
-
-        .btn-outline:hover {
-            border-color: var(--navy);
-            color: var(--navy);
-            background: rgba(15, 50, 96, 0.03);
-        }
-
-        body.dark .btn-outline:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-            background: rgba(251, 192, 45, 0.04);
-        }
-
-        .btn-ghost {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--white);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-        }
-
-        .btn-ghost:hover {
-            background: rgba(255, 255, 255, 0.18);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* ═══════════════════════════════════════
-           NAVIGATION
-           ═══════════════════════════════════════ */
-        .nav-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 72px;
-            z-index: 100;
-            background: #FFFFFF !important;
-            border-bottom: 1px solid #E2E8F0 !important;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
-            transition: all 0.3s var(--ease-out);
-        }
-
-
-
-        .nav-bar.scrolled {
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
-        }
-
-        .nav-inner {
-            max-width: 1180px;
-            margin: 0 auto;
-            padding: 0 28px;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .nav-logo {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            text-decoration: none;
-        }
-
-        .nav-logo img {
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            transition: transform 0.3s var(--ease-spring);
-        }
-
-        .nav-logo:hover img {
-            transform: rotate(-6deg) scale(1.05);
-        }
-
-        .nav-logo-text {
-            font-family: 'Outfit', sans-serif;
-            font-size: 20px;
-            font-weight: 900;
-            line-height: 1.0;
-            letter-spacing: -0.3px;
-            background: linear-gradient(135deg, #0A1E3D 0%, #0F3260 40%, #D49B00 75%, #FBC02D 100%) !important;
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            background-clip: text !important;
-            display: block;
-            margin-bottom: 0px;
-        }
-
-        .nav-logo-sub {
-            font-family: 'Inter', sans-serif;
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0px;
-            color: #64748B !important;
-            text-transform: none !important;
-            line-height: 1.1;
-            margin-top: 0px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2px;
-        }
-
-        .nav-link {
-            font-size: 13px;
-            font-weight: 600;
-            color: #475569 !important;
-            padding: 7px 16px;
-            border-radius: var(--r-full);
-            transition: all 0.2s ease;
-            position: relative;
-        }
-
-        .nav-link:hover {
-            color: #0F3260 !important;
-            background: #F1F5F9 !important;
-        }
-
-        .nav-link.active {
-            color: #0F3260 !important;
-            font-weight: 700;
-            background: #E2E8F0 !important;
-        }
-
-        .nav-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* ═══════════════════════════════════════
-           HERO
-           ═══════════════════════════════════════ */
-        .hero {
-            position: relative;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            overflow: hidden;
-            padding-top: 72px;
-        }
-
-        .hero-bg {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-        }
-
-        .hero-bg img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            filter: brightness(0.35);
-        }
-
-        .hero-bg::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                linear-gradient(160deg,
-                    rgba(6, 21, 48, 0.95) 0%,
-                    rgba(9, 29, 62, 0.85) 35%,
-                    rgba(15, 50, 96, 0.55) 100%),
-                radial-gradient(ellipse at 80% 50%, rgba(251, 192, 45, 0.06) 0%, transparent 60%);
-        }
-
-        /* Subtle grain texture overlay */
-        .hero-bg::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
-            opacity: 0.5;
-        }
-
-        .hero-content {
-            position: relative;
-            z-index: 2;
-            max-width: 1180px;
-            margin: 0 auto;
-            padding: 60px 28px 80px;
-            display: grid;
-            grid-template-columns: 1.15fr 0.85fr;
-            gap: 72px;
-            align-items: center;
-            width: 100%;
-        }
-
-        .hero-text {
-            color: var(--white);
-        }
-
-        .hero-eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 7px 18px;
-            border-radius: var(--r-full);
-            background: rgba(251, 192, 45, 0.1);
-            border: 1px solid rgba(251, 192, 45, 0.2);
-            color: var(--gold-light);
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            margin-bottom: 32px;
-            animation: fadeInUp 0.6s var(--ease-out) 0.1s both;
-        }
-
-        .hero-eyebrow svg {
-            width: 13px;
-            height: 13px;
-        }
-
-        .hero-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: clamp(36px, 4.2vw, 54px);
-            font-weight: 900;
-            line-height: 1.06;
-            letter-spacing: -1.8px;
-            margin-bottom: 24px;
-            animation: fadeInUp 0.7s var(--ease-out) 0.2s both;
-        }
-
-        .hero-title em {
-            font-style: normal;
-            display: inline;
-            background: linear-gradient(135deg, var(--gold) 0%, #FFE082 60%, var(--gold) 100%);
-            background-size: 200% 100%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: shimmer 4s ease-in-out infinite;
-        }
-
-        @keyframes shimmer {
-
-            0%,
-            100% {
-                background-position: 0% 50%;
-            }
-
-            50% {
-                background-position: 100% 50%;
-            }
-        }
-
-        .hero-desc {
-            font-size: 16px;
-            line-height: 1.75;
-            color: rgba(255, 255, 255, 0.6);
-            max-width: 500px;
-            margin-bottom: 40px;
-            font-weight: 400;
-            animation: fadeInUp 0.7s var(--ease-out) 0.3s both;
-        }
-
-        .hero-buttons {
-            display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            margin-bottom: 56px;
-            animation: fadeInUp 0.7s var(--ease-out) 0.4s both;
-        }
-
-        .hero-stats {
-            display: flex;
-            gap: 40px;
-            animation: fadeInUp 0.7s var(--ease-out) 0.5s both;
-        }
-
-        .hero-stat {
-            text-align: left;
-            position: relative;
-        }
-
-        .hero-stat+.hero-stat::before {
-            content: '';
-            position: absolute;
-            left: -20px;
-            top: 4px;
-            bottom: 4px;
-            width: 1px;
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .hero-stat-num {
-            font-family: 'Outfit', sans-serif;
-            font-size: 34px;
-            font-weight: 900;
-            color: var(--gold);
-            letter-spacing: -0.5px;
-            line-height: 1.1;
-        }
-
-        .hero-stat-label {
-            font-size: 11px;
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.35);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-top: 2px;
-        }
-
-        /* Hero image grid */
-        .hero-showcase {
-            position: relative;
-            animation: fadeInRight 0.9s var(--ease-out) 0.4s both;
-        }
-
-        .hero-showcase-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-        .hero-showcase-img {
-            border-radius: var(--r-xl);
-            overflow: hidden;
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.2);
-            border: 1.5px solid rgba(255, 255, 255, 0.08);
-            transition: all 0.5s var(--ease-out);
-            position: relative;
-        }
-
-        .hero-showcase-img::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to bottom, transparent 60%, rgba(6, 21, 48, 0.4));
-            pointer-events: none;
-        }
-
-        .hero-showcase-img:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 32px 72px rgba(0, 0, 0, 0.45);
-        }
-
-        .hero-showcase-img img {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            transition: transform 0.6s var(--ease-out);
-        }
-
-        .hero-showcase-img:hover img {
-            transform: scale(1.06);
-        }
-
-        .hero-showcase-img:first-child {
-            grid-row: span 2;
-        }
-
-        .hero-showcase-img:first-child img {
-            height: 414px;
-        }
-
-        /* Floating badge */
-        .hero-float-badge {
-            position: absolute;
-            bottom: -16px;
-            right: 16px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px) saturate(150%);
-            -webkit-backdrop-filter: blur(20px) saturate(150%);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 12px 20px;
-            border-radius: var(--r-lg);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            z-index: 3;
-            animation: floatBadge 4s ease-in-out infinite;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        }
-
-        .hero-float-badge svg {
-            color: var(--gold);
-            width: 20px;
-            height: 20px;
-        }
-
-        .hero-float-badge span {
-            color: var(--white);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: -0.1px;
-        }
-
-        @keyframes floatBadge {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(24px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInRight {
-            from {
-                opacity: 0;
-                transform: translateX(30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        /* ═══════════════════════════════════════
-           SECTIONS
-           ═══════════════════════════════════════ */
-        section {
-            padding: 110px 0;
-            position: relative;
-        }
-
-        .section-alt {
-            background: var(--bg-alt);
         }
 
         .section-center {
@@ -696,15 +194,742 @@
             margin-right: auto;
         }
 
-        /* Decorative divider between sections */
-        .section-divider {
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--border), transparent);
+        /* ─── Modern Buttons ─── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: var(--r-full);
+            transition: var(--transition-smooth);
+            cursor: pointer;
+            white-space: nowrap;
+            position: relative;
+            user-select: none;
         }
 
-        /* ═══════════════════════════════════════
-           ABOUT / CAMPUS
-           ═══════════════════════════════════════ */
+        .btn svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.25s var(--ease-out);
+        }
+
+        .btn:hover svg.arrow-icon {
+            transform: translateX(4px);
+        }
+
+        .btn-gold {
+            background: linear-gradient(135deg, #f5a60b 0%, #d99300 100%);
+            color: var(--navy-950);
+            box-shadow: var(--shadow-gold);
+            font-weight: 800;
+        }
+
+        .btn-gold:hover {
+            background: linear-gradient(135deg, #fbbf24 0%, #f5a60b 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(245, 166, 11, 0.38), 0 3px 8px rgba(245, 166, 11, 0.2);
+        }
+
+        .btn-gold:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-700) 100%);
+            color: var(--white);
+            box-shadow: var(--shadow-navy);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--navy-700) 0%, var(--navy-600) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(15, 43, 87, 0.3), 0 3px 8px rgba(15, 43, 87, 0.15);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: var(--white);
+            color: var(--navy-800);
+            border: 1.5px solid var(--border-light);
+            box-shadow: var(--shadow-xs);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--navy-600);
+            color: var(--navy-600);
+            background: var(--navy-50);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-ghost-white {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: var(--white);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-ghost-white:hover {
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.35);
+            transform: translateY(-2px);
+        }
+
+        /* ════════════════════════════════════════════════════════
+           NAVIGATION BAR
+           ════════════════════════════════════════════════════════ */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 76px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+            transition: var(--transition-smooth);
+        }
+
+        .nav-bar.scrolled {
+            height: 68px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+            border-bottom-color: rgba(226, 232, 240, 0.95);
+        }
+
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 28px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .nav-brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--r-sm);
+            object-fit: contain;
+            transition: transform 0.3s var(--ease-spring);
+        }
+
+        .nav-brand:hover .nav-brand-logo {
+            transform: scale(1.06) rotate(-3deg);
+        }
+
+        .nav-brand-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .nav-brand-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1.1;
+            letter-spacing: -0.4px;
+            background: linear-gradient(135deg, #091f3f 0%, #14376e 50%, #d99300 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-brand-sub {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--slate-500);
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .nav-link {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--slate-600);
+            padding: 8px 16px;
+            border-radius: var(--r-full);
+            transition: var(--transition-smooth);
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--navy-800);
+            background: rgba(20, 55, 110, 0.06);
+        }
+
+        .nav-link.active {
+            color: var(--navy-800);
+            font-weight: 700;
+            background: rgba(20, 55, 110, 0.08);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-btn-support {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--slate-700);
+            padding: 8px 14px;
+            border-radius: var(--r-full);
+            transition: var(--transition-smooth);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn-support:hover {
+            color: var(--navy-700);
+            background: rgba(20, 55, 110, 0.05);
+        }
+
+        .nav-btn-support svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .mobile-menu-toggle {
+            display: none;
+            width: 42px;
+            height: 42px;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--r-sm);
+            background: var(--slate-100);
+            color: var(--slate-800);
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .mobile-menu-toggle:hover {
+            background: var(--slate-200);
+        }
+
+        /* ════════════════════════════════════════════════════════
+           HERO SECTION
+           ════════════════════════════════════════════════════════ */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            background: var(--navy-950);
+            color: var(--white);
+            padding: 120px 0 80px;
+            overflow: hidden;
+        }
+
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+        }
+
+        .hero-bg-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: brightness(0.25) saturate(1.1);
+        }
+
+        .hero-bg-overlay {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 75% 20%, rgba(245, 166, 11, 0.14) 0%, transparent 45%),
+                radial-gradient(circle at 20% 85%, rgba(20, 55, 110, 0.6) 0%, transparent 55%),
+                linear-gradient(135deg, rgba(4, 13, 26, 0.94) 0%, rgba(6, 21, 45, 0.88) 50%, rgba(10, 31, 63, 0.82) 100%);
+        }
+
+        .hero-grid-pattern {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 60px;
+            align-items: center;
+            width: 100%;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: var(--r-full);
+            background: rgba(245, 166, 11, 0.12);
+            border: 1px solid rgba(245, 166, 11, 0.3);
+            color: var(--gold-300);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            animation: fadeInDown 0.6s var(--ease-out);
+        }
+
+        .hero-badge .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background-color: var(--emerald-400);
+            box-shadow: 0 0 8px var(--emerald-400);
+            display: inline-block;
+            animation: pulseDot 2s infinite;
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        .hero-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(38px, 4.4vw, 56px);
+            font-weight: 900;
+            line-height: 1.08;
+            letter-spacing: -1.4px;
+            margin-bottom: 20px;
+            color: var(--white);
+            animation: fadeInUp 0.7s var(--ease-out) 0.1s both;
+        }
+
+        .hero-gradient-text {
+            background: linear-gradient(135deg, var(--gold-300) 0%, #ffe082 50%, var(--gold-400) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline;
+        }
+
+        .hero-desc {
+            font-size: 16.5px;
+            line-height: 1.75;
+            color: rgba(255, 255, 255, 0.78);
+            max-width: 530px;
+            margin-bottom: 34px;
+            animation: fadeInUp 0.7s var(--ease-out) 0.2s both;
+        }
+
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 48px;
+            animation: fadeInUp 0.7s var(--ease-out) 0.3s both;
+        }
+
+        .hero-actions .btn {
+            padding: 14px 28px;
+            font-size: 15px;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            animation: fadeInUp 0.7s var(--ease-out) 0.4s both;
+        }
+
+        .hero-stat-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--r-md);
+            padding: 16px 18px;
+            backdrop-filter: blur(8px);
+            transition: var(--transition-smooth);
+        }
+
+        .hero-stat-card:hover {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(245, 166, 11, 0.25);
+            transform: translateY(-3px);
+        }
+
+        .hero-stat-num {
+            font-family: 'Outfit', sans-serif;
+            font-size: 30px;
+            font-weight: 900;
+            color: var(--gold-300);
+            line-height: 1;
+            letter-spacing: -0.5px;
+            margin-bottom: 5px;
+        }
+
+        .hero-stat-label {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.65);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        /* ─── Hero Showcase Mockup (Right Column) ─── */
+        .hero-showcase {
+            position: relative;
+            animation: fadeInRight 0.8s var(--ease-out) 0.3s both;
+        }
+
+        .showcase-mockup-frame {
+            background: rgba(15, 35, 68, 0.75);
+            border: 1.5px solid rgba(255, 255, 255, 0.16);
+            border-radius: var(--r-xl);
+            box-shadow: 0 32px 72px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .mockup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: rgba(6, 21, 45, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .mockup-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .mockup-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+        }
+
+        .mockup-dot.red { background: #ff5f56; }
+        .mockup-dot.yellow { background: #ffbd2e; }
+        .mockup-dot.green { background: #27c93f; }
+
+        .mockup-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.65);
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mockup-title svg {
+            width: 13px;
+            height: 13px;
+            color: var(--emerald-400);
+        }
+
+        .mockup-body {
+            position: relative;
+            padding: 16px;
+        }
+
+        .mockup-image-wrap {
+            position: relative;
+            height: 290px;
+            border-radius: var(--r-md);
+            overflow: hidden;
+        }
+
+        .mockup-image-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: brightness(0.92);
+        }
+
+        .mockup-image-wrap::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(6, 21, 45, 0.85) 0%, transparent 60%);
+        }
+
+        /* Floating live widgets */
+        .mockup-float-card {
+            position: absolute;
+            background: rgba(10, 27, 56, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: var(--r-md);
+            padding: 12px 16px;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 5;
+            transition: var(--transition-smooth);
+        }
+
+        .mockup-float-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: rgba(245, 166, 11, 0.35);
+        }
+
+        .mockup-float-top {
+            top: 28px;
+            right: 28px;
+            animation: floatSlow 4.5s ease-in-out infinite;
+        }
+
+        .mockup-float-bottom {
+            bottom: 28px;
+            left: 28px;
+            animation: floatSlow 4s ease-in-out infinite 0.5s;
+        }
+
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .float-card-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--r-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .float-card-icon.emerald {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--emerald-400);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .float-card-icon.gold {
+            background: rgba(245, 166, 11, 0.15);
+            color: var(--gold-300);
+            border: 1px solid rgba(245, 166, 11, 0.3);
+        }
+
+        .float-card-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .float-card-info h5 {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 2px;
+        }
+
+        .float-card-info p {
+            font-size: 10.5px;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .mockup-footer-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 18px;
+            background: rgba(6, 21, 45, 0.9);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 11.5px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .mockup-footer-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--emerald-400);
+            font-weight: 700;
+        }
+
+        .mockup-footer-badge svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           INSTITUTIONAL TRUST & CAMPUS PHOTO TICKER
+           ════════════════════════════════════════════════════════ */
+        .trust-ticker-section {
+            background: linear-gradient(180deg, var(--navy-950) 0%, #081a38 100%);
+            padding: 44px 0 54px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid var(--border-light);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .trust-badges-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+            margin-bottom: 34px;
+            padding: 0 20px;
+        }
+
+        .trust-badge-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.75);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .trust-badge-item svg {
+            width: 16px;
+            height: 16px;
+            color: var(--gold-400);
+        }
+
+        .trust-ticker-wrapper {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* Smooth gradient side masks for the ticker */
+        .trust-ticker-wrapper::before,
+        .trust-ticker-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 140px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .trust-ticker-wrapper::before {
+            left: 0;
+            background: linear-gradient(to right, #081a38 0%, transparent 100%);
+        }
+
+        .trust-ticker-wrapper::after {
+            right: 0;
+            background: linear-gradient(to left, #081a38 0%, transparent 100%);
+        }
+
+        .photo-marquee {
+            display: flex;
+            gap: 20px;
+            width: max-content;
+            animation: marqueeSlide 38s linear infinite;
+        }
+
+        .photo-marquee:hover {
+            animation-play-state: paused;
+        }
+
+        .marquee-card {
+            flex-shrink: 0;
+            width: 320px;
+            height: 190px;
+            border-radius: var(--r-lg);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            position: relative;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+            transition: var(--transition-smooth);
+        }
+
+        .marquee-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: rgba(245, 166, 11, 0.35);
+        }
+
+        .marquee-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.6s var(--ease-out);
+        }
+
+        .marquee-card:hover img {
+            transform: scale(1.06);
+        }
+
+        .marquee-card-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 24px 16px 12px;
+            background: linear-gradient(to top, rgba(4, 13, 26, 0.9) 0%, transparent 100%);
+            color: var(--white);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        @keyframes marqueeSlide {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(calc(-340px * 4)); }
+        }
+
+        /* ════════════════════════════════════════════════════════
+           SYSTEM OVERVIEW / ABOUT SECTION
+           ════════════════════════════════════════════════════════ */
+        .section-padding {
+            padding: 100px 0;
+            position: relative;
+        }
+
+        .bg-subtle-section {
+            background-color: var(--bg-muted);
+        }
+
         .about-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -712,232 +937,147 @@
             align-items: center;
         }
 
-        .about-img-wrapper {
+        .about-visual-column {
             position: relative;
-            border-radius: var(--r-2xl);
+        }
+
+        .about-img-frame {
+            position: relative;
+            border-radius: var(--r-xl);
             overflow: hidden;
-            box-shadow: var(--shadow-elevated);
-            transition: transform 0.5s var(--ease-out);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-light);
         }
 
-        .about-img-wrapper:hover {
-            transform: scale(1.01);
-        }
-
-        .about-img-wrapper img {
+        .about-img-frame img {
             width: 100%;
-            height: 440px;
+            height: 480px;
             object-fit: cover;
-            transition: transform 0.8s var(--ease-out);
+            transition: transform 0.7s var(--ease-out);
         }
 
-        .about-img-wrapper:hover img {
-            transform: scale(1.04);
+        .about-img-frame:hover img {
+            transform: scale(1.03);
         }
 
-        .about-img-overlay {
+        .about-img-caption {
             position: absolute;
             bottom: 0;
             left: 0;
             right: 0;
-            background: linear-gradient(to top, rgba(6, 21, 48, 0.92) 0%, rgba(6, 21, 48, 0.4) 60%, transparent 100%);
-            padding: 32px;
-            display: flex;
-            align-items: flex-end;
-            justify-content: space-between;
-        }
-
-        .about-img-overlay-text {
+            padding: 36px 28px 24px;
+            background: linear-gradient(to top, rgba(6, 21, 45, 0.92) 0%, rgba(6, 21, 45, 0.5) 60%, transparent 100%);
             color: var(--white);
         }
 
-        .about-img-overlay-text h4 {
+        .about-img-caption h4 {
             font-family: 'Outfit', sans-serif;
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 800;
-            letter-spacing: -0.2px;
+            margin-bottom: 4px;
         }
 
-        .about-img-overlay-text p {
-            font-size: 12px;
-            opacity: 0.6;
-            margin-top: 2px;
+        .about-img-caption p {
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.75);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .about-highlights {
+        .about-highlights-list {
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            margin-top: 32px;
+            gap: 16px;
+            margin-top: 36px;
         }
 
-        .about-highlight-item {
+        .about-highlight-card {
             display: flex;
             align-items: flex-start;
-            gap: 16px;
-            padding: 18px 20px;
+            gap: 18px;
+            padding: 20px 22px;
             border-radius: var(--r-lg);
-            background: var(--bg-alt);
-            border: 1px solid var(--border);
-            transition: all 0.35s var(--ease-out);
+            background: var(--white);
+            border: 1.5px solid var(--border-light);
+            box-shadow: var(--shadow-xs);
+            transition: var(--transition-smooth);
         }
 
-        .about-highlight-item:hover {
+        .about-highlight-card:hover {
             transform: translateX(6px);
-            border-color: rgba(251, 192, 45, 0.3);
-            box-shadow: 0 4px 16px rgba(251, 192, 45, 0.06);
+            border-color: var(--navy-500);
+            box-shadow: var(--shadow-md);
         }
 
-        body.dark .about-highlight-item:hover {
-            box-shadow: 0 4px 16px rgba(251, 192, 45, 0.08);
-        }
-
-        .about-highlight-icon {
-            width: 44px;
-            height: 44px;
+        .highlight-icon-box {
+            width: 48px;
+            height: 48px;
             border-radius: var(--r-md);
             flex-shrink: 0;
-            background: linear-gradient(135deg, rgba(251, 192, 45, 0.1) 0%, rgba(251, 192, 45, 0.05) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(251, 192, 45, 0.1);
         }
 
-        .about-highlight-icon svg {
-            color: var(--gold-dark);
-            width: 20px;
-            height: 20px;
+        .highlight-icon-box.gold {
+            background: var(--gold-100);
+            color: var(--gold-600);
+            border: 1px solid var(--gold-200);
         }
 
-        body.dark .about-highlight-icon svg {
-            color: var(--gold);
+        .highlight-icon-box.navy {
+            background: var(--navy-100);
+            color: var(--navy-700);
+            border: 1px solid rgba(20, 55, 110, 0.15);
         }
 
-        body.dark .about-highlight-icon {
-            background: rgba(251, 192, 45, 0.08);
-            border-color: rgba(251, 192, 45, 0.12);
+        .highlight-icon-box.emerald {
+            background: var(--emerald-100);
+            color: var(--emerald-600);
+            border: 1px solid var(--emerald-200);
         }
 
-        .about-highlight-text h4 {
-            font-size: 14px;
+        .highlight-icon-box svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .highlight-text h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
             font-weight: 800;
-            color: var(--text-h);
-            margin-bottom: 3px;
-            letter-spacing: -0.1px;
+            color: var(--text-heading);
+            margin-bottom: 4px;
         }
 
-        .about-highlight-text p {
-            font-size: 13px;
-            color: var(--text-p);
-            line-height: 1.55;
+        .highlight-text p {
+            font-size: 13.5px;
+            color: var(--text-body);
+            line-height: 1.6;
         }
 
-        /* ═══════════════════════════════════════
-           IMAGE SHOWCASE BANNER
-           ═══════════════════════════════════════ */
-        .showcase-banner {
-            padding: 60px 0;
-            overflow: hidden;
-            background: linear-gradient(160deg, var(--navy-900) 0%, var(--navy-800) 50%, var(--navy) 100%);
-            position: relative;
-        }
-
-        .showcase-banner::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(ellipse at 20% 50%, rgba(251, 192, 45, 0.05), transparent 50%),
-                radial-gradient(ellipse at 80% 50%, rgba(251, 192, 45, 0.03), transparent 50%);
-        }
-
-        .showcase-banner-label {
-            text-align: center;
-            position: relative;
-            z-index: 2;
-            margin-bottom: 32px;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.25);
-        }
-
-        .showcase-scroll {
-            display: flex;
-            gap: 16px;
-            animation: scrollImages 35s linear infinite;
-            position: relative;
-            z-index: 1;
-        }
-
-        .showcase-item {
-            flex-shrink: 0;
-            width: 360px;
-            height: 220px;
-            border-radius: var(--r-xl);
-            overflow: hidden;
-            border: 1.5px solid rgba(255, 255, 255, 0.06);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-            transition: all 0.4s var(--ease-out);
-            position: relative;
-        }
-
-        .showcase-item::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to bottom, transparent 70%, rgba(6, 21, 48, 0.4));
-            pointer-events: none;
-        }
-
-        .showcase-item:hover {
-            transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 20px 56px rgba(0, 0, 0, 0.4);
-            border-color: rgba(251, 192, 45, 0.15);
-        }
-
-        .showcase-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.5s var(--ease-out);
-        }
-
-        .showcase-item:hover img {
-            transform: scale(1.05);
-        }
-
-        @keyframes scrollImages {
-            0% {
-                transform: translateX(0);
-            }
-
-            100% {
-                transform: translateX(calc(-376px * 4));
-            }
-        }
-
-        /* ═══════════════════════════════════════
-           FEATURES
-           ═══════════════════════════════════════ */
+        /* ════════════════════════════════════════════════════════
+           KEY FEATURES SECTION
+           ════════════════════════════════════════════════════════ */
         .features-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 22px;
+            gap: 26px;
             margin-top: 60px;
         }
 
         .feature-card {
-            padding: 36px 28px 32px;
+            background: var(--white);
+            border: 1.5px solid var(--border-light);
             border-radius: var(--r-xl);
-            background: var(--surface);
-            border: 1.5px solid var(--border);
-            transition: all 0.4s var(--ease-out);
+            padding: 34px 28px;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-smooth);
             position: relative;
             overflow: hidden;
-            box-shadow: var(--shadow-card);
+            display: flex;
+            flex-direction: column;
         }
 
         .feature-card::before {
@@ -946,313 +1086,327 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--navy), var(--gold));
+            height: 3.5px;
+            background: linear-gradient(90deg, var(--navy-700) 0%, var(--gold-400) 100%);
             transform: scaleX(0);
             transform-origin: left;
             transition: transform 0.4s var(--ease-out);
         }
 
-        body.dark .feature-card::before {
-            background: linear-gradient(90deg, var(--gold), var(--gold-light));
-        }
-
         .feature-card:hover {
             transform: translateY(-8px);
-            box-shadow: var(--shadow-card-hover);
-            border-color: rgba(15, 50, 96, 0.1);
-        }
-
-        body.dark .feature-card:hover {
-            border-color: rgba(251, 192, 45, 0.12);
+            border-color: rgba(20, 55, 110, 0.2);
+            box-shadow: var(--shadow-lg);
         }
 
         .feature-card:hover::before {
             transform: scaleX(1);
         }
 
-        .feature-icon {
-            width: 54px;
-            height: 54px;
+        .feature-tag {
+            align-self: flex-start;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: var(--r-full);
+            background: var(--slate-100);
+            color: var(--slate-600);
+            margin-bottom: 20px;
+        }
+
+        .feature-icon-wrapper {
+            width: 56px;
+            height: 56px;
             border-radius: var(--r-md);
-            background: linear-gradient(135deg, rgba(15, 50, 96, 0.07) 0%, rgba(15, 50, 96, 0.03) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             margin-bottom: 22px;
-            border: 1px solid rgba(15, 50, 96, 0.06);
-            transition: all 0.3s var(--ease-out);
+            transition: var(--transition-smooth);
         }
 
-        body.dark .feature-icon {
-            background: linear-gradient(135deg, rgba(251, 192, 45, 0.1) 0%, rgba(251, 192, 45, 0.04) 100%);
-            border-color: rgba(251, 192, 45, 0.08);
+        .feature-card:hover .feature-icon-wrapper {
+            transform: scale(1.08) rotate(2deg);
         }
 
-        .feature-card:hover .feature-icon {
-            transform: scale(1.08);
+        .feature-icon-wrapper.icon-navy {
+            background: linear-gradient(135deg, var(--navy-100) 0%, #dbe8fa 100%);
+            color: var(--navy-800);
+            border: 1px solid rgba(20, 55, 110, 0.15);
         }
 
-        .feature-icon svg {
-            width: 24px;
-            height: 24px;
-            color: var(--navy);
+        .feature-icon-wrapper.icon-gold {
+            background: linear-gradient(135deg, var(--gold-100) 0%, #fde68a 100%);
+            color: var(--gold-600);
+            border: 1px solid var(--gold-200);
         }
 
-        body.dark .feature-icon svg {
-            color: var(--gold);
+        .feature-icon-wrapper.icon-emerald {
+            background: linear-gradient(135deg, var(--emerald-100) 0%, #a7f3d0 100%);
+            color: var(--emerald-600);
+            border: 1px solid var(--emerald-200);
+        }
+
+        .feature-icon-wrapper svg {
+            width: 26px;
+            height: 26px;
         }
 
         .feature-card h3 {
             font-family: 'Outfit', sans-serif;
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 800;
-            color: var(--text-h);
+            color: var(--text-heading);
             margin-bottom: 10px;
             letter-spacing: -0.2px;
         }
 
         .feature-card p {
-            font-size: 13.5px;
+            font-size: 14px;
             line-height: 1.65;
-            color: var(--text-p);
+            color: var(--text-body);
         }
 
-        /* ═══════════════════════════════════════
-           WORKFLOW
-           ═══════════════════════════════════════ */
-        .workflow-grid {
+        /* ════════════════════════════════════════════════════════
+           HOW IT WORKS (WORKFLOW)
+           ════════════════════════════════════════════════════════ */
+        .workflow-timeline {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 18px;
+            gap: 22px;
             margin-top: 60px;
             position: relative;
         }
 
-        .workflow-connector {
+        .workflow-timeline::before {
+            content: '';
             position: absolute;
-            top: 38px;
-            left: 14%;
-            right: 14%;
+            top: 44px;
+            left: 12%;
+            right: 12%;
             height: 2px;
+            background: linear-gradient(90deg,
+                    var(--navy-600) 0%,
+                    var(--gold-400) 50%,
+                    var(--emerald-500) 100%);
+            opacity: 0.3;
             z-index: 0;
-            background: linear-gradient(90deg,
-                    var(--navy) 0%, var(--gold) 33%,
-                    var(--emerald) 66%, var(--navy) 100%);
-            opacity: 0.25;
         }
 
-        body.dark .workflow-connector {
-            background: linear-gradient(90deg,
-                    var(--gold) 0%, var(--gold-light) 33%,
-                    var(--emerald) 66%, var(--gold) 100%);
-            opacity: 0.2;
-        }
-
-        .workflow-card {
+        .workflow-step-card {
             position: relative;
             z-index: 1;
-            background: var(--surface);
-            border: 1.5px solid var(--border);
+            background: var(--white);
+            border: 1.5px solid var(--border-light);
             border-radius: var(--r-xl);
-            padding: 32px 22px 28px;
+            padding: 32px 22px 26px;
             text-align: center;
-            transition: all 0.4s var(--ease-out);
-            box-shadow: var(--shadow-card);
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-smooth);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
-        .workflow-card:hover {
-            transform: translateY(-6px);
-            box-shadow: var(--shadow-card-hover);
+        .workflow-step-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--navy-500);
+            box-shadow: var(--shadow-lg);
         }
 
-        .workflow-badge {
-            width: 48px;
-            height: 48px;
+        .workflow-step-badge {
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-600) 100%);
+            background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-600) 100%);
             color: var(--white);
             font-family: 'Outfit', sans-serif;
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 900;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 18px;
-            box-shadow: 0 4px 14px rgba(15, 50, 96, 0.25);
-            transition: all 0.3s var(--ease-out);
+            margin-bottom: 18px;
+            box-shadow: 0 4px 16px rgba(15, 43, 87, 0.3);
+            border: 3px solid var(--white);
+            transition: var(--transition-smooth);
         }
 
-        body.dark .workflow-badge {
-            background: linear-gradient(135deg, var(--gold) 0%, #F5B800 100%);
-            color: var(--navy-900);
-            box-shadow: 0 4px 14px rgba(251, 192, 45, 0.25);
+        .workflow-step-card:hover .workflow-step-badge {
+            background: linear-gradient(135deg, var(--gold-400) 0%, #d99300 100%);
+            color: var(--navy-950);
+            transform: scale(1.12);
+            box-shadow: var(--shadow-gold);
         }
 
-        .workflow-card:hover .workflow-badge {
-            transform: scale(1.1);
+        .step-duration-pill {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--slate-500);
+            background: var(--slate-100);
+            padding: 3px 10px;
+            border-radius: var(--r-full);
+            margin-bottom: 14px;
         }
 
-        .workflow-card h4 {
+        .workflow-step-card h4 {
             font-family: 'Outfit', sans-serif;
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 800;
-            color: var(--text-h);
+            color: var(--text-heading);
             margin-bottom: 8px;
-            letter-spacing: -0.1px;
+            letter-spacing: -0.2px;
         }
 
-        .workflow-card p {
-            font-size: 13px;
-            color: var(--text-p);
+        .workflow-step-card p {
+            font-size: 13.5px;
+            color: var(--text-body);
             line-height: 1.6;
         }
 
-        /* ═══════════════════════════════════════
-           PORTALS
-           ═══════════════════════════════════════ */
+        /* ════════════════════════════════════════════════════════
+           ACCESS PORTALS SECTION
+           ════════════════════════════════════════════════════════ */
         .portals-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 28px;
+            gap: 32px;
             margin-top: 60px;
         }
 
-        .portal-card {
-            border-radius: var(--r-2xl);
-            border: 1.5px solid var(--border);
+        .portal-access-card {
+            background: var(--white);
+            border-radius: var(--r-xl);
+            border: 1.5px solid var(--border-light);
+            box-shadow: var(--shadow-md);
             overflow: hidden;
-            background: var(--surface);
-            transition: all 0.4s var(--ease-out);
-            box-shadow: var(--shadow-card);
+            transition: var(--transition-smooth);
+            display: flex;
+            flex-direction: column;
         }
 
-        .portal-card:hover {
-            transform: translateY(-6px);
+        .portal-access-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-xl);
         }
 
-        .portal-card-img {
+        .portal-student:hover {
+            border-color: var(--navy-500);
+        }
+
+        .portal-admin:hover {
+            border-color: var(--gold-400);
+        }
+
+        .portal-card-media {
             height: 220px;
-            overflow: hidden;
             position: relative;
+            overflow: hidden;
         }
 
-        .portal-card-img img {
+        .portal-card-media img {
             width: 100%;
             height: 100%;
             object-fit: cover;
             transition: transform 0.6s var(--ease-out);
         }
 
-        .portal-card:hover .portal-card-img img {
-            transform: scale(1.08);
+        .portal-access-card:hover .portal-card-media img {
+            transform: scale(1.06);
         }
 
-        .portal-card-img::after {
-            content: '';
+        .portal-media-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(to top, rgba(6, 21, 48, 0.55) 0%, rgba(6, 21, 48, 0.1) 50%, transparent 100%);
+            background: linear-gradient(to top, rgba(6, 21, 45, 0.8) 0%, transparent 60%);
         }
 
-        .portal-card-body {
-            padding: 32px 30px 30px;
+        .portal-card-content {
+            padding: 34px 30px;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
         }
 
-        .portal-card-label {
-            font-size: 10px;
+        .portal-pill-badge {
+            align-self: flex-start;
+            font-size: 10.5px;
             font-weight: 800;
-            letter-spacing: 2px;
+            letter-spacing: 1.8px;
             text-transform: uppercase;
-            margin-bottom: 12px;
-            display: inline-block;
             padding: 5px 12px;
             border-radius: var(--r-full);
+            margin-bottom: 14px;
         }
 
-        .portal-student .portal-card-label {
-            background: rgba(15, 50, 96, 0.06);
-            color: var(--navy);
+        .portal-student .portal-pill-badge {
+            background: var(--navy-100);
+            color: var(--navy-800);
         }
 
-        body.dark .portal-student .portal-card-label {
-            background: rgba(251, 192, 45, 0.1);
-            color: var(--gold);
+        .portal-admin .portal-pill-badge {
+            background: var(--gold-100);
+            color: var(--gold-600);
         }
 
-        .portal-admin .portal-card-label {
-            background: rgba(251, 192, 45, 0.08);
-            color: var(--gold-dark);
-        }
-
-        body.dark .portal-admin .portal-card-label {
-            background: rgba(251, 192, 45, 0.1);
-            color: var(--gold);
-        }
-
-        .portal-card h3 {
+        .portal-card-content h3 {
             font-family: 'Outfit', sans-serif;
             font-size: 24px;
             font-weight: 800;
-            color: var(--text-h);
+            color: var(--text-heading);
             margin-bottom: 10px;
             letter-spacing: -0.3px;
         }
 
-        .portal-card .portal-desc {
-            font-size: 14px;
-            color: var(--text-p);
-            line-height: 1.7;
-            margin-bottom: 22px;
+        .portal-card-content .portal-desc {
+            font-size: 14.5px;
+            line-height: 1.65;
+            color: var(--text-body);
+            margin-bottom: 24px;
         }
 
-        .portal-features {
+        .portal-check-list {
             list-style: none;
-            margin-bottom: 28px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
+            margin-bottom: 30px;
+            flex-grow: 1;
         }
 
-        .portal-features li {
-            font-size: 13.5px;
+        .portal-check-list li {
+            font-size: 14px;
             font-weight: 600;
-            color: var(--text-h);
+            color: var(--text-heading);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .portal-features li svg {
-            width: 17px;
-            height: 17px;
-            color: var(--emerald);
+        .portal-check-list li svg {
+            width: 18px;
+            height: 18px;
+            color: var(--emerald-500);
             flex-shrink: 0;
         }
 
-        .portal-card .btn {
+        .portal-admin .portal-check-list li svg {
+            color: var(--gold-500);
+        }
+
+        .portal-card-content .btn {
             width: 100%;
-            justify-content: center;
+            padding: 14px 20px;
+            font-size: 15px;
         }
 
-        .portal-student:hover {
-            border-color: rgba(15, 50, 96, 0.2);
-            box-shadow: 0 16px 48px rgba(15, 50, 96, 0.08);
-        }
-
-        body.dark .portal-student:hover {
-            border-color: rgba(251, 192, 45, 0.15);
-            box-shadow: 0 16px 48px rgba(251, 192, 45, 0.06);
-        }
-
-        .portal-admin:hover {
-            border-color: rgba(251, 192, 45, 0.25);
-            box-shadow: 0 16px 48px rgba(251, 192, 45, 0.08);
-        }
-
-        /* ═══════════════════════════════════════
-           CONTACT
-           ═══════════════════════════════════════ */
+        /* ════════════════════════════════════════════════════════
+           CONTACT & SUPPORT SECTION
+           ════════════════════════════════════════════════════════ */
         .contact-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1260,224 +1414,311 @@
             align-items: flex-start;
         }
 
-        .contact-info-list {
+        .contact-info-block {
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 20px;
             margin-top: 36px;
         }
 
-        .contact-info-item {
+        .contact-item-card {
             display: flex;
-            gap: 16px;
             align-items: flex-start;
-            padding: 16px 18px;
+            gap: 16px;
+            padding: 18px 20px;
             border-radius: var(--r-lg);
-            background: var(--bg);
-            border: 1px solid var(--border);
-            transition: all 0.3s var(--ease-out);
+            background: var(--white);
+            border: 1.5px solid var(--border-light);
+            box-shadow: var(--shadow-xs);
+            transition: var(--transition-smooth);
         }
 
-        .contact-info-item:hover {
-            border-color: rgba(15, 50, 96, 0.12);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        .contact-item-card:hover {
+            transform: translateX(4px);
+            border-color: var(--navy-500);
+            box-shadow: var(--shadow-sm);
         }
 
-        body.dark .contact-info-item:hover {
-            border-color: rgba(251, 192, 45, 0.1);
-        }
-
-        .contact-info-icon {
+        .contact-item-icon {
             width: 44px;
             height: 44px;
             border-radius: var(--r-md);
-            background: linear-gradient(135deg, rgba(15, 50, 96, 0.06) 0%, rgba(15, 50, 96, 0.02) 100%);
+            background: var(--navy-100);
+            color: var(--navy-800);
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            border: 1px solid rgba(15, 50, 96, 0.04);
         }
 
-        body.dark .contact-info-icon {
-            background: rgba(251, 192, 45, 0.06);
-            border-color: rgba(251, 192, 45, 0.08);
+        .contact-item-icon svg {
+            width: 20px;
+            height: 20px;
         }
 
-        .contact-info-icon svg {
-            width: 19px;
-            height: 19px;
-            color: var(--navy);
-        }
-
-        body.dark .contact-info-icon svg {
-            color: var(--gold);
-        }
-
-        .contact-info-item h4 {
-            font-size: 14px;
+        .contact-item-text h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 15px;
             font-weight: 800;
-            color: var(--text-h);
-            letter-spacing: -0.1px;
+            color: var(--text-heading);
+            margin-bottom: 2px;
         }
 
-        .contact-info-item p {
-            font-size: 13px;
-            color: var(--text-p);
-            margin-top: 1px;
+        .contact-item-text p {
+            font-size: 13.5px;
+            color: var(--text-body);
         }
 
-        .contact-form-card {
-            background: var(--surface);
-            border: 1.5px solid var(--border);
-            border-radius: var(--r-2xl);
-            padding: 40px;
-            box-shadow: var(--shadow-card);
-            transition: box-shadow 0.3s var(--ease-out);
+        /* FAQ Quick Helper Card */
+        .faq-quick-helper {
+            margin-top: 24px;
+            padding: 20px 22px;
+            border-radius: var(--r-lg);
+            background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-800) 100%);
+            color: var(--white);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
-        .contact-form-card:hover {
-            box-shadow: var(--shadow-card-hover);
+        .faq-helper-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--r-sm);
+            background: rgba(245, 166, 11, 0.2);
+            color: var(--gold-300);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
 
-        .contact-form-card h3 {
+        .faq-helper-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .faq-helper-text h5 {
+            font-size: 13.5px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            color: var(--white);
+        }
+
+        .faq-helper-text p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Inquiry Form Card */
+        .inquiry-card {
+            background: var(--white);
+            border: 1.5px solid var(--border-light);
+            border-radius: var(--r-xl);
+            padding: 38px 34px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .inquiry-card h3 {
             font-family: 'Outfit', sans-serif;
             font-size: 22px;
             font-weight: 800;
-            color: var(--text-h);
-            margin-bottom: 28px;
-            letter-spacing: -0.2px;
+            color: var(--text-heading);
+            margin-bottom: 6px;
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        .inquiry-card-subtitle {
+            font-size: 13.5px;
+            color: var(--text-body);
+            margin-bottom: 26px;
+        }
+
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 18px;
         }
 
         .form-label {
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 1px;
+            font-size: 11.5px;
+            font-weight: 700;
             text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            display: block;
+            letter-spacing: 0.8px;
+            color: var(--slate-700);
         }
 
-        .form-input {
+        .form-input-field {
             width: 100%;
             padding: 13px 16px;
             border-radius: var(--r-md);
-            border: 1.5px solid var(--border);
-            background: var(--bg);
+            border: 1.5px solid var(--border-light);
+            background: var(--slate-50);
             font-family: 'Inter', sans-serif;
             font-size: 14px;
-            color: var(--text-h);
-            transition: all 0.25s var(--ease-out);
+            color: var(--text-heading);
+            transition: var(--transition-smooth);
             outline: none;
         }
 
-        .form-input::placeholder {
-            color: var(--text-muted);
-            font-weight: 400;
+        .form-input-field:focus {
+            background: var(--white);
+            border-color: var(--navy-600);
+            box-shadow: 0 0 0 3px rgba(20, 55, 110, 0.1);
         }
 
-        .form-input:focus {
-            border-color: var(--navy);
-            box-shadow: 0 0 0 3px rgba(15, 50, 96, 0.06), 0 2px 8px rgba(15, 50, 96, 0.04);
-        }
-
-        body.dark .form-input:focus {
-            border-color: var(--gold);
-            box-shadow: 0 0 0 3px rgba(251, 192, 45, 0.08), 0 2px 8px rgba(251, 192, 45, 0.04);
-        }
-
-        textarea.form-input {
-            resize: vertical;
+        textarea.form-input-field {
             min-height: 110px;
+            resize: vertical;
         }
 
-        /* ═══════════════════════════════════════
-           FOOTER
-           ═══════════════════════════════════════ */
+        /* ════════════════════════════════════════════════════════
+           FOOTER SECTION
+           ════════════════════════════════════════════════════════ */
         .site-footer {
-            background: var(--bg-alt);
-            border-top: 1px solid var(--border);
-            padding: 48px 0 28px;
+            background: var(--navy-950);
+            color: rgba(255, 255, 255, 0.75);
+            padding: 70px 0 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .footer-inner {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 20px;
+        .footer-top {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr 1.2fr;
+            gap: 40px;
+            padding-bottom: 50px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .footer-brand {
+        .footer-brand-wrap {
             display: flex;
             align-items: center;
             gap: 12px;
+            margin-bottom: 16px;
         }
 
-        .footer-brand img {
-            width: 34px;
-            height: 34px;
+        .footer-brand-wrap img {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--r-xs);
         }
 
-        .footer-brand-name {
+        .footer-brand-wrap .brand-name {
             font-family: 'Outfit', sans-serif;
-            font-size: 16px;
+            font-size: 20px;
             font-weight: 900;
-            background: linear-gradient(135deg, #0A1E3D 0%, #0F3260 40%, #D49B00 75%, #FBC02D 100%) !important;
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            background-clip: text !important;
-            display: inline-block;
+            color: var(--white);
         }
 
-        .footer-brand-copy {
-            font-size: 11px;
-            color: var(--text-muted);
+        .footer-bio {
+            font-size: 13.5px;
+            line-height: 1.7;
+            color: rgba(255, 255, 255, 0.65);
+            max-width: 320px;
+            margin-bottom: 20px;
         }
 
-        .footer-links {
+        .footer-col h5 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+        }
+
+        .footer-links-list {
+            list-style: none;
             display: flex;
-            gap: 28px;
+            flex-direction: column;
+            gap: 10px;
         }
 
-        .footer-links a {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-p);
-            transition: color 0.2s ease;
-            position: relative;
+        .footer-links-list a {
+            font-size: 13.5px;
+            color: rgba(255, 255, 255, 0.65);
+            transition: var(--transition-smooth);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .footer-links a::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: currentColor;
-            transform: scaleX(0);
-            transition: transform 0.3s var(--ease-out);
-            transform-origin: right;
+        .footer-links-list a:hover {
+            color: var(--gold-300);
+            transform: translateX(3px);
         }
 
-        .footer-links a:hover {
-            color: var(--text-h);
+        .footer-system-status {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--r-md);
+            padding: 16px;
         }
 
-        .footer-links a:hover::after {
-            transform: scaleX(1);
-            transform-origin: left;
+        .status-indicator-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--emerald-400);
+            margin-bottom: 6px;
         }
 
-        /* ═══════════════════════════════════════
-           SCROLL REVEAL
-           ═══════════════════════════════════════ */
+        .status-indicator-pill .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--emerald-400);
+            box-shadow: 0 0 8px var(--emerald-400);
+            animation: pulseDot 2s infinite;
+        }
+
+        .footer-system-status p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.5;
+        }
+
+        .footer-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 30px;
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.5);
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .back-to-top-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: var(--r-full);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: var(--transition-smooth);
+        }
+
+        .back-to-top-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        .back-to-top-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* ─── Scroll Reveal Animations ─── */
         .reveal {
             opacity: 0;
             transform: translateY(28px);
@@ -1489,76 +1730,62 @@
             transform: translateY(0);
         }
 
-        /* Staggered children */
         .reveal-stagger>* {
             opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+            transform: translateY(24px);
+            transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
         }
 
-        .reveal-stagger.visible>*:nth-child(1) {
-            transition-delay: 0.05s;
-        }
-
-        .reveal-stagger.visible>*:nth-child(2) {
-            transition-delay: 0.1s;
-        }
-
-        .reveal-stagger.visible>*:nth-child(3) {
-            transition-delay: 0.15s;
-        }
-
-        .reveal-stagger.visible>*:nth-child(4) {
-            transition-delay: 0.2s;
-        }
-
-        .reveal-stagger.visible>*:nth-child(5) {
-            transition-delay: 0.25s;
-        }
-
-        .reveal-stagger.visible>*:nth-child(6) {
-            transition-delay: 0.3s;
-        }
+        .reveal-stagger.visible>*:nth-child(1) { transition-delay: 0.06s; }
+        .reveal-stagger.visible>*:nth-child(2) { transition-delay: 0.12s; }
+        .reveal-stagger.visible>*:nth-child(3) { transition-delay: 0.18s; }
+        .reveal-stagger.visible>*:nth-child(4) { transition-delay: 0.24s; }
+        .reveal-stagger.visible>*:nth-child(5) { transition-delay: 0.30s; }
+        .reveal-stagger.visible>*:nth-child(6) { transition-delay: 0.36s; }
 
         .reveal-stagger.visible>* {
             opacity: 1;
             transform: translateY(0);
         }
 
-        /* ═══════════════════════════════════════
-           MOBILE RESPONSIVE
-           ═══════════════════════════════════════ */
-        .mobile-menu-btn {
-            display: none;
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-h);
-            padding: 4px;
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .mobile-menu-btn svg {
-            width: 22px;
-            height: 22px;
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-16px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes fadeInRight {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .spin {
+            animation: spinRotate 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spinRotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* ════════════════════════════════════════════════════════
+           RESPONSIVE BREAKPOINTS
+           ════════════════════════════════════════════════════════ */
         @media (max-width: 1024px) {
-            .container {
-                padding: 0 24px;
-            }
-
             .hero-content {
                 grid-template-columns: 1fr;
-                gap: 40px;
-                padding: 50px 24px 60px;
+                gap: 50px;
             }
 
             .hero-showcase {
-                display: none;
-            }
-
-            .hero-title {
-                font-size: 42px;
+                max-width: 580px;
+                margin: 0 auto;
+                width: 100%;
             }
 
             .about-grid {
@@ -1567,16 +1794,108 @@
             }
 
             .features-grid {
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: repeat(2, 1fr);
             }
 
-            .workflow-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 16px;
+            .workflow-timeline {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
             }
 
-            .workflow-connector {
+            .workflow-timeline::before {
                 display: none;
+            }
+
+            .footer-top {
+                grid-template-columns: 1fr 1fr;
+                gap: 34px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-bar {
+                height: 70px;
+            }
+
+            .mobile-menu-toggle {
+                display: flex;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .nav-actions .btn,
+            .nav-actions .nav-btn-support {
+                display: none;
+            }
+
+            /* Mobile menu dropdown */
+            .nav-links.mobile-open {
+                display: flex;
+                flex-direction: column;
+                position: absolute;
+                top: 70px;
+                left: 0;
+                right: 0;
+                background: var(--white);
+                border-bottom: 1.5px solid var(--border-light);
+                padding: 16px 24px 24px;
+                gap: 8px;
+                box-shadow: var(--shadow-xl);
+                animation: fadeInDown 0.3s var(--ease-out);
+            }
+
+            .nav-links.mobile-open .nav-link {
+                width: 100%;
+                padding: 10px 14px;
+                font-size: 15px;
+            }
+
+            .nav-links.mobile-open .mobile-auth-cta {
+                display: flex !important;
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 12px;
+                padding-top: 14px;
+                border-top: 1px solid var(--border-light);
+            }
+
+            .nav-links.mobile-open .mobile-auth-cta .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .hero {
+                padding: 100px 0 60px;
+                min-height: auto;
+            }
+
+            .hero-title {
+                font-size: 34px;
+                letter-spacing: -0.8px;
+            }
+
+            .hero-stats {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .hero-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .hero-actions .btn {
+                width: 100%;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-timeline {
+                grid-template-columns: 1fr;
             }
 
             .portals-grid {
@@ -1585,123 +1904,56 @@
 
             .contact-grid {
                 grid-template-columns: 1fr;
-                gap: 36px;
+                gap: 40px;
             }
 
-            section {
-                padding: 80px 0;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .nav-links {
-                display: none;
+            .inquiry-card {
+                padding: 28px 22px;
             }
 
-            .nav-links.show {
-                display: flex;
-                flex-direction: column;
-                position: absolute;
-                top: 72px;
-                left: 0;
-                right: 0;
-                background: var(--surface);
-                border-bottom: 1px solid var(--border);
-                padding: 12px 20px;
-                gap: 4px;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-            }
-
-            .nav-links.show .mobile-nav-auth {
-                display: flex !important;
-                align-items: center;
-                gap: 8px;
-            }
-
-            body.dark .nav-links.show {
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-            }
-
-            .mobile-menu-btn {
-                display: flex;
-                align-items: center;
-            }
-
-            .nav-actions .btn,
-            .nav-actions .nav-link {
-                display: none !important;
-            }
-
-            .section-title {
-                font-size: 26px;
-                letter-spacing: -0.5px;
-            }
-
-            .hero-title {
-                font-size: 30px;
-                letter-spacing: -1px;
-            }
-
-            .hero-desc {
-                font-size: 15px;
-            }
-
-            .hero-stats {
-                flex-direction: column;
-                gap: 20px;
-            }
-
-            .hero-stat+.hero-stat::before {
-                display: none;
-            }
-
-            .hero-buttons {
-                flex-direction: column;
-            }
-
-            .hero-buttons .btn {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .features-grid {
+            .footer-top {
                 grid-template-columns: 1fr;
-                gap: 16px;
+                gap: 30px;
             }
 
-            .workflow-grid {
-                grid-template-columns: 1fr;
-                gap: 14px;
-            }
-
-            .portals-grid {
-                gap: 20px;
-            }
-
-            section {
-                padding: 64px 0;
-            }
-
-            .showcase-banner {
-                padding: 48px 0;
+            .section-padding {
+                padding: 70px 0;
             }
         }
 
         @media (max-width: 480px) {
+            .container {
+                padding: 0 20px;
+            }
+
             .hero-title {
-                font-size: 26px;
+                font-size: 29px;
             }
 
-            .hero-stat-num {
-                font-size: 28px;
+            .mockup-image-wrap {
+                height: 220px;
             }
 
-            .portal-card-body {
-                padding: 24px 22px 22px;
+            .mockup-float-card {
+                padding: 8px 12px;
             }
 
-            .contact-form-card {
-                padding: 28px 24px;
+            .mockup-float-top {
+                top: 14px;
+                right: 14px;
+            }
+
+            .mockup-float-bottom {
+                bottom: 14px;
+                left: 14px;
+            }
+
+            .float-card-info h5 {
+                font-size: 11px;
+            }
+
+            .float-card-info p {
+                font-size: 9.5px;
             }
         }
     </style>
@@ -1709,149 +1961,150 @@
 
 <body>
 
-
-    <!-- ─── Navigation ─── -->
+    <!-- ═══════════════════════════════════════
+         NAVBAR
+         ═══════════════════════════════════════ -->
     <nav class="nav-bar" id="navbar">
         <div class="nav-inner">
-            <a href="#" class="nav-logo">
-                <img src="app_logo3.png" alt="ScholarDoc">
-                <div>
-                    <div class="nav-logo-text">ScholarDoc</div>
-                    <div class="nav-logo-sub">USTP Oroquieta City<br>Campus</div>
+            <a href="#home" class="nav-brand" aria-label="ScholarDoc Home">
+                <img src="app_logo3.png" alt="ScholarDoc Logo" class="nav-brand-logo">
+                <div class="nav-brand-info">
+                    <span class="nav-brand-title">ScholarDoc</span>
+                    <span class="nav-brand-sub">USTP Oroquieta Campus</span>
                 </div>
             </a>
 
             <div class="nav-links" id="navLinks">
+                <a href="#home" class="nav-link active">Home</a>
                 <a href="#about" class="nav-link">About</a>
                 <a href="#features" class="nav-link">Features</a>
                 <a href="#workflow" class="nav-link">How It Works</a>
                 <a href="#portals" class="nav-link">Portals</a>
                 <a href="#contact" class="nav-link">Contact</a>
-                <a href="/login.html" class="nav-link mobile-nav-auth" style="display: none;">Login</a>
-                <a href="#contact" class="nav-link mobile-nav-auth" style="display: none;">Register</a>
+
+                <!-- Mobile Only CTA buttons inside menu -->
+                <div class="mobile-auth-cta" style="display: none;">
+                    <a href="/login.html" class="btn btn-primary">
+                        <i data-lucide="log-in"></i> Sign In to Portal
+                    </a>
+                    <a href="#contact" class="btn btn-secondary">
+                        <i data-lucide="help-circle"></i> Student Inquiries
+                    </a>
+                </div>
             </div>
 
             <div class="nav-actions">
-                <a href="/login.html" class="nav-link"
-                    style="display: inline-flex; align-items: center; gap: 6px;">
-                    <i data-lucide="log-in" style="width: 15px; height: 15px;"></i> Login
+                <a href="#contact" class="nav-btn-support">
+                    <i data-lucide="help-circle"></i> Help & Support
                 </a>
-                <a href="#contact" class="nav-link"
-                    style="display: inline-flex; align-items: center; gap: 6px;">
-                    <i data-lucide="user-plus" style="width: 15px; height: 15px;"></i> Register
+                <a href="/login.html" class="btn btn-primary" id="navLoginBtn">
+                    <i data-lucide="log-in"></i> Portal Login <i data-lucide="arrow-right" class="arrow-icon"></i>
                 </a>
-                <button class="mobile-menu-btn" onclick="document.getElementById('navLinks').classList.toggle('show')"
-                    aria-label="Menu">
-                    <i data-lucide="menu"></i>
+                <button class="mobile-menu-toggle" id="mobileMenuBtn" aria-label="Toggle navigation menu">
+                    <i data-lucide="menu" id="menuIcon"></i>
                 </button>
             </div>
         </div>
     </nav>
 
-    <!-- ─── Hero ─── -->
+    <!-- ═══════════════════════════════════════
+         HERO SECTION
+         ═══════════════════════════════════════ -->
     <section class="hero" id="home">
         <div class="hero-bg">
-            <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta City Campus">
+            <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta Campus Backdrop" class="hero-bg-img">
+            <div class="hero-bg-overlay"></div>
+            <div class="hero-grid-pattern"></div>
         </div>
-        <div class="hero-content">
-            <div class="hero-text">
-                <div class="hero-eyebrow">
-                    <i data-lucide="sparkles"></i>
-                    OFFICIAL SCHOLARSHIP MANAGEMENT SYSTEM
-                </div>
-                <h1 class="hero-title">
-                    Digitalizing Scholarship Verification & <em>Disbursement</em>
-                </h1>
-                <p class="hero-desc">
-                    The unified university platform for USTP Oroquieta City Campus scholars and administrators. Fast
-                    document capture, real-time OCR verification, digital signatures, and transparent billing tracking.
-                </p>
-                <div class="hero-buttons">
-                    <a href="/login.html" class="btn btn-gold" style="font-size: 15px; padding: 14px 28px;">
-                        <i data-lucide="log-in"></i> Sign In to Portal <i data-lucide="arrow-right"></i>
-                    </a>
-                    <a href="#features" class="btn btn-ghost" style="font-size: 15px; padding: 14px 24px;">
-                        Explore Features
-                    </a>
-                </div>
-                <div class="hero-stats">
-                    <div class="hero-stat">
-                        <div class="hero-stat-num" data-count="1200">0</div>
-                        <div class="hero-stat-label">Active Scholars</div>
-                    </div>
-                    <div class="hero-stat">
-                        <div class="hero-stat-num" data-count="99.4" data-suffix="%">0</div>
-                        <div class="hero-stat-label">OCR Accuracy</div>
-                    </div>
-                    <div class="hero-stat">
-                        <div class="hero-stat-num" data-count="100" data-suffix="%">0</div>
-                        <div class="hero-stat-label">Paperless</div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="hero-showcase">
-                <div class="hero-showcase-grid">
-                    <div class="hero-showcase-img">
-                        <img src="assets/Slide_image1.jpg" alt="USTP Students on Campus">
-                    </div>
-                    <div class="hero-showcase-img">
-                        <img src="assets/Slide_image2.jpg" alt="Students Collaborating">
-                    </div>
-                    <div class="hero-showcase-img">
-                        <img src="assets/slide_image3.jpg" alt="Students Studying">
-                    </div>
-                </div>
-                <div class="hero-float-badge">
-                    <i data-lucide="shield-check"></i>
-                    <span>Verified & Secure Platform</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ─── About ─── -->
-    <section id="about" class="section-alt">
         <div class="container">
-            <div class="about-grid reveal">
-                <div class="about-img-wrapper">
-                    <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta City Campus Building">
-                    <div class="about-img-overlay">
-                        <div class="about-img-overlay-text">
-                            <h4>USTP Oroquieta City Campus</h4>
-                            <p>Mobod, Oroquieta City, Misamis Occidental</p>
+            <div class="hero-content">
+                <div class="hero-text-side">
+                    <div class="hero-badge">
+                        <span class="status-dot"></span>
+                        USTP Oroquieta Campus &bull; AY 2026-2027 Active
+                    </div>
+                    <h1 class="hero-title">
+                        Digitalizing Scholarship Verification & <span class="hero-gradient-text">Disbursement</span>
+                    </h1>
+                    <p class="hero-desc">
+                        The unified university platform for USTP Oroquieta City Campus scholars and administrators.
+                        Instant document capture, real-time AI OCR extraction, digital specimen signatures, and
+                        transparent billing tracking.
+                    </p>
+
+                    <div class="hero-actions">
+                        <a href="/login.html" class="btn btn-gold">
+                            <i data-lucide="log-in"></i> Sign In to Portal <i data-lucide="arrow-right" class="arrow-icon"></i>
+                        </a>
+                        <a href="#workflow" class="btn btn-ghost-white">
+                            <i data-lucide="route"></i> How It Works
+                        </a>
+                    </div>
+
+                    <div class="hero-stats">
+                        <div class="hero-stat-card">
+                            <div class="hero-stat-num" data-count="1200">0</div>
+                            <div class="hero-stat-label">Active Scholars</div>
+                        </div>
+                        <div class="hero-stat-card">
+                            <div class="hero-stat-num" data-count="99.4" data-suffix="%">0</div>
+                            <div class="hero-stat-label">OCR Accuracy</div>
+                        </div>
+                        <div class="hero-stat-card">
+                            <div class="hero-stat-num" data-count="100" data-suffix="%">0</div>
+                            <div class="hero-stat-label">Paperless TES</div>
                         </div>
                     </div>
                 </div>
-                <div>
-                    <span class="section-eyebrow"><i data-lucide="info"></i> SYSTEM OVERVIEW</span>
-                    <h2 class="section-title">Empowering Scholars with Fast, Transparent Verification</h2>
-                    <p class="section-desc">
-                        ScholarDoc eliminates paper-heavy document submissions and long queueing for Tertiary Education
-                        Subsidy (TES) and university scholarship programs. Scholars can capture ID cards, draw digital
-                        specimen signatures, and monitor their status in real-time.
-                    </p>
-                    <div class="about-highlights">
-                        <div class="about-highlight-item">
-                            <div class="about-highlight-icon"><i data-lucide="zap"></i></div>
-                            <div class="about-highlight-text">
-                                <h4>Instant Processing</h4>
-                                <p>Documents are verified within minutes, not days.</p>
+
+                <!-- Showcase Preview Card Mockup -->
+                <div class="hero-showcase">
+                    <div class="showcase-mockup-frame">
+                        <div class="mockup-header">
+                            <div class="mockup-dots">
+                                <span class="mockup-dot red"></span>
+                                <span class="mockup-dot yellow"></span>
+                                <span class="mockup-dot green"></span>
+                            </div>
+                            <div class="mockup-title">
+                                <i data-lucide="shield-check"></i> ScholarDoc Live Verification Hub
                             </div>
                         </div>
-                        <div class="about-highlight-item">
-                            <div class="about-highlight-icon"><i data-lucide="lock"></i></div>
-                            <div class="about-highlight-text">
-                                <h4>Data Privacy Compliant</h4>
-                                <p>Fully compliant with the Data Privacy Act of 2012.</p>
+
+                        <div class="mockup-body">
+                            <div class="mockup-image-wrap">
+                                <img src="assets/Slide_image1.jpg" alt="USTP Scholars Collaborating">
+                            </div>
+
+                            <!-- Floating Widget 1: Landbank Verified -->
+                            <div class="mockup-float-card mockup-float-top">
+                                <div class="float-card-icon emerald">
+                                    <i data-lucide="landmark"></i>
+                                </div>
+                                <div class="float-card-info">
+                                    <h5>Landbank SA Verified</h5>
+                                    <p><i data-lucide="check-circle-2" style="width: 12px; height: 12px; color: var(--emerald-400);"></i> 10-Digit Validated</p>
+                                </div>
+                            </div>
+
+                            <!-- Floating Widget 2: AI OCR Match -->
+                            <div class="mockup-float-card mockup-float-bottom">
+                                <div class="float-card-icon gold">
+                                    <i data-lucide="scan-line"></i>
+                                </div>
+                                <div class="float-card-info">
+                                    <h5>AI OCR Review Match</h5>
+                                    <p><i data-lucide="sparkles" style="width: 12px; height: 12px; color: var(--gold-300);"></i> 99.4% Confidence Score</p>
+                                </div>
                             </div>
                         </div>
-                        <div class="about-highlight-item">
-                            <div class="about-highlight-icon"><i data-lucide="smartphone"></i></div>
-                            <div class="about-highlight-text">
-                                <h4>Cross-Platform Access</h4>
-                                <p>Access from mobile app, web browser, or admin console.</p>
-                            </div>
+
+                        <div class="mockup-footer-strip">
+                            <span>USTP TES Billing Cycle 2026-2027</span>
+                            <span class="mockup-footer-badge">
+                                <i data-lucide="check-circle-2"></i> Verified & Secure
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1859,337 +2112,635 @@
         </div>
     </section>
 
-    <div class="section-divider"></div>
+    <!-- ═══════════════════════════════════════
+         INSTITUTIONAL TRUST & CAMPUS PHOTO TICKER
+         ═══════════════════════════════════════ -->
+    <div class="trust-ticker-section">
+        <div class="trust-badges-bar">
+            <div class="trust-badge-item">
+                <i data-lucide="award"></i> USTP Oroquieta City Campus
+            </div>
+            <div class="trust-badge-item">
+                <i data-lucide="shield-check"></i> CHED UniFAST Compliant
+            </div>
+            <div class="trust-badge-item">
+                <i data-lucide="file-check"></i> Republic Act 10931
+            </div>
+            <div class="trust-badge-item">
+                <i data-lucide="lock"></i> Data Privacy Act of 2012
+            </div>
+        </div>
 
-    <!-- ─── Image Showcase Banner ─── -->
-    <div class="showcase-banner">
-        <div class="showcase-banner-label">Campus Life at USTP Oroquieta</div>
-        <div class="showcase-scroll">
-            <div class="showcase-item"><img src="assets/Slide_image1.jpg" alt="Campus Scholars"></div>
-            <div class="showcase-item"><img src="assets/Slide_image2.jpg" alt="Student Collaboration"></div>
-            <div class="showcase-item"><img src="assets/slide_image3.jpg" alt="Library Study"></div>
-            <div class="showcase-item"><img src="assets/ustp_imag.jpg" alt="USTP Campus"></div>
-            <!-- Duplicate for seamless loop -->
-            <div class="showcase-item"><img src="assets/Slide_image1.jpg" alt="Campus Scholars"></div>
-            <div class="showcase-item"><img src="assets/Slide_image2.jpg" alt="Student Collaboration"></div>
-            <div class="showcase-item"><img src="assets/slide_image3.jpg" alt="Library Study"></div>
-            <div class="showcase-item"><img src="assets/ustp_imag.jpg" alt="USTP Campus"></div>
+        <div class="trust-ticker-wrapper">
+            <div class="photo-marquee">
+                <!-- Group 1 -->
+                <div class="marquee-card">
+                    <img src="assets/Slide_image1.jpg" alt="USTP Campus Scholars">
+                    <div class="marquee-card-label">Active Scholars at USTP</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/Slide_image2.jpg" alt="Student Academic Collaboration">
+                    <div class="marquee-card-label">Student Collaboration</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/slide_image3.jpg" alt="Library Study & Research">
+                    <div class="marquee-card-label">Academic Study & Verification</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta Campus Facade">
+                    <div class="marquee-card-label">USTP Oroquieta Campus Building</div>
+                </div>
+
+                <!-- Group 2 (Duplicate for smooth infinite ticker) -->
+                <div class="marquee-card">
+                    <img src="assets/Slide_image1.jpg" alt="USTP Campus Scholars">
+                    <div class="marquee-card-label">Active Scholars at USTP</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/Slide_image2.jpg" alt="Student Academic Collaboration">
+                    <div class="marquee-card-label">Student Collaboration</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/slide_image3.jpg" alt="Library Study & Research">
+                    <div class="marquee-card-label">Academic Study & Verification</div>
+                </div>
+                <div class="marquee-card">
+                    <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta Campus Facade">
+                    <div class="marquee-card-label">USTP Oroquieta Campus Building</div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- ─── Features ─── -->
-    <section id="features">
+    <!-- ═══════════════════════════════════════
+         ABOUT / SYSTEM OVERVIEW
+         ═══════════════════════════════════════ -->
+    <section id="about" class="section-padding bg-subtle-section">
         <div class="container">
-            <div class="section-center reveal">
-                <span class="section-eyebrow"><i data-lucide="layers"></i> KEY FEATURES</span>
-                <h2 class="section-title">Built for Modern Education</h2>
-                <p class="section-desc">Every capability designed to make scholarship management fast, accurate, and
-                    transparent.</p>
-            </div>
-            <div class="features-grid reveal reveal-stagger">
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="camera"></i></div>
-                    <h3>Instant ID Capture</h3>
-                    <p>Photograph front and back of student ID cards and specimen signatures directly from web or
-                        mobile.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="scan-line"></i></div>
-                    <h3>AI OCR Extraction</h3>
-                    <p>Automatically extract Savings Account numbers and student data with 99.4% accuracy.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="bell-ring"></i></div>
-                    <h3>Real-Time Alerts</h3>
-                    <p>Get instant push notifications on document verification status and resubmission requests.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="landmark"></i></div>
-                    <h3>Encrypted SA Tracking</h3>
-                    <p>Safely validate and store Savings Account numbers for accurate bank fund disbursements.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="users"></i></div>
-                    <h3>Scholar Directory</h3>
-                    <p>Browse and connect with verified scholars across programs and academic year levels.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i data-lucide="file-text"></i></div>
-                    <h3>PDF Audit Reports</h3>
-                    <p>Generate downloadable compliance reports and billing receipts for administrators.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <div class="section-divider"></div>
-
-    <!-- ─── How It Works ─── -->
-    <section id="workflow" class="section-alt">
-        <div class="container">
-            <div class="section-center reveal">
-                <span class="section-eyebrow"><i data-lucide="route"></i> HOW IT WORKS</span>
-                <h2 class="section-title">4 Steps to Verification</h2>
-                <p class="section-desc">A streamlined workflow from login to payout tracking.</p>
-            </div>
-            <div class="workflow-grid reveal reveal-stagger">
-                <div class="workflow-connector"></div>
-                <div class="workflow-card">
-                    <div class="workflow-badge">1</div>
-                    <h4>Login & Profile</h4>
-                    <p>Access the portal with your Student ID and set up your academic profile.</p>
-                </div>
-                <div class="workflow-card">
-                    <div class="workflow-badge">2</div>
-                    <h4>Capture Docs</h4>
-                    <p>Upload ID front/back, draw your digital signature, and enter SA details.</p>
-                </div>
-                <div class="workflow-card">
-                    <div class="workflow-badge">3</div>
-                    <h4>OCR Review</h4>
-                    <p>Automated text extraction verifies data against registered records.</p>
-                </div>
-                <div class="workflow-card">
-                    <div class="workflow-badge">4</div>
-                    <h4>Approval & Payout</h4>
-                    <p>Receive verification badge and track disbursement logs in real time.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ─── Portals ─── -->
-    <section id="portals">
-        <div class="container">
-            <div class="section-center reveal">
-                <span class="section-eyebrow"><i data-lucide="layout-grid"></i> ACCESS PORTALS</span>
-                <h2 class="section-title">Choose Your Portal</h2>
-                <p class="section-desc">Tailored experiences for students and administrators.</p>
-            </div>
-            <div class="portals-grid reveal reveal-stagger">
-                <div class="portal-card portal-student">
-                    <div class="portal-card-img">
-                        <img src="assets/Slide_image1.jpg" alt="USTP Students">
-                    </div>
-                    <div class="portal-card-body">
-                        <span class="portal-card-label">STUDENT ACCESS</span>
-                        <h3>Student Portal</h3>
-                        <p class="portal-desc">For active USTP scholars to submit requirements, manage SA numbers, and
-                            track verification status.</p>
-                        <ul class="portal-features">
-                            <li><i data-lucide="check-circle-2"></i> Submit Student ID & Signature</li>
-                            <li><i data-lucide="check-circle-2"></i> Track Document Approval</li>
-                            <li><i data-lucide="check-circle-2"></i> Connect with Fellow Scholars</li>
-                        </ul>
-                        <a href="/login.html" class="btn btn-primary">
-                            Login to Portal <i data-lucide="arrow-right"></i>
-                        </a>
+            <div class="about-grid reveal">
+                <div class="about-visual-column">
+                    <div class="about-img-frame">
+                        <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta City Campus Building">
+                        <div class="about-img-caption">
+                            <h4>USTP Oroquieta City Campus</h4>
+                            <p><i data-lucide="map-pin" style="width: 14px; height: 14px;"></i> Mobod, Oroquieta City, Misamis Occidental</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="portal-card portal-admin">
-                    <div class="portal-card-img">
-                        <img src="assets/slide_image3.jpg" alt="Admin Review">
-                    </div>
-                    <div class="portal-card-body">
-                        <span class="portal-card-label">ADMIN ACCESS</span>
-                        <h3>Admin Portal</h3>
-                        <p class="portal-desc">For scholarship evaluators and administrators to review records, verify
-                            billing data, and generate reports.</p>
-                        <ul class="portal-features">
-                            <li><i data-lucide="check-circle-2"></i> Side-by-Side OCR Verification</li>
-                            <li><i data-lucide="check-circle-2"></i> Batch Approval & Remarks</li>
-                            <li><i data-lucide="check-circle-2"></i> Export Compliance Logs</li>
-                        </ul>
-                        <a href="/login.html" class="btn btn-gold">
-                            Access Admin Portal <i data-lucide="arrow-right"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <div class="section-divider"></div>
-
-    <!-- ─── Contact ─── -->
-    <section id="contact" class="section-alt">
-        <div class="container">
-            <div class="contact-grid reveal">
-                <div>
-                    <span class="section-eyebrow"><i data-lucide="headphones"></i> SUPPORT</span>
-                    <h2 class="section-title">Need Help with Your Scholarship?</h2>
+                <div class="about-info-column">
+                    <span class="section-eyebrow">
+                        <i data-lucide="info"></i> SYSTEM OVERVIEW
+                    </span>
+                    <h2 class="section-title">Empowering Scholars with Fast, Transparent Verification</h2>
                     <p class="section-desc">
-                        Have questions about document requirements, TES billing, or account verification? Our
-                        scholarship office is here to help.
+                        ScholarDoc eliminates paper-heavy document submissions and long queueing for Tertiary Education
+                        Subsidy (TES) and university scholarship programs. Scholars capture ID cards, provide digital
+                        specimen signatures, and monitor disbursement status in real time.
                     </p>
-                    <div class="contact-info-list">
-                        <div class="contact-info-item">
-                            <div class="contact-info-icon"><i data-lucide="map-pin"></i></div>
-                            <div>
-                                <h4>Campus Location</h4>
-                                <p>USTP Oroquieta City Campus, Mobod, Oroquieta City</p>
+
+                    <div class="about-highlights-list">
+                        <div class="about-highlight-card">
+                            <div class="highlight-icon-box gold">
+                                <i data-lucide="zap"></i>
+                            </div>
+                            <div class="highlight-text">
+                                <h4>Instant Document Processing</h4>
+                                <p>Requirements are processed and validated within minutes rather than weeks.</p>
                             </div>
                         </div>
-                        <div class="contact-info-item">
-                            <div class="contact-info-icon"><i data-lucide="mail"></i></div>
-                            <div>
-                                <h4>Email Support</h4>
+
+                        <div class="about-highlight-card">
+                            <div class="highlight-icon-box navy">
+                                <i data-lucide="lock"></i>
+                            </div>
+                            <div class="highlight-text">
+                                <h4>Data Privacy & Bank-Grade Security</h4>
+                                <p>Strictly compliant with Republic Act 10173 (Data Privacy Act of 2012) with encrypted SA storage.</p>
+                            </div>
+                        </div>
+
+                        <div class="about-highlight-card">
+                            <div class="highlight-icon-box emerald">
+                                <i data-lucide="smartphone"></i>
+                            </div>
+                            <div class="highlight-text">
+                                <h4>Unified Multi-Platform Access</h4>
+                                <p>Seamlessly available on mobile smartphones, tablets, and university administrative workstations.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         KEY FEATURES SECTION
+         ═══════════════════════════════════════ -->
+    <section id="features" class="section-padding">
+        <div class="container">
+            <div class="section-center reveal">
+                <span class="section-eyebrow">
+                    <i data-lucide="layers"></i> POWERFUL CAPABILITIES
+                </span>
+                <h2 class="section-title">Built for Modern Campus Administration</h2>
+                <p class="section-desc">
+                    Every feature is precision-engineered to make scholarship billing, document capture, and student verification effortless.
+                </p>
+            </div>
+
+            <div class="features-grid reveal reveal-stagger">
+                <!-- Feature 1 -->
+                <div class="feature-card">
+                    <span class="feature-tag">MOBILE & WEB</span>
+                    <div class="feature-icon-wrapper icon-navy">
+                        <i data-lucide="camera"></i>
+                    </div>
+                    <h3>Instant ID Capture</h3>
+                    <p>Photograph front and back of student ID cards and draw digital specimen signatures directly in the browser.</p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="feature-card">
+                    <span class="feature-tag">AI OCR ENGINE</span>
+                    <div class="feature-icon-wrapper icon-gold">
+                        <i data-lucide="scan-line"></i>
+                    </div>
+                    <h3>AI OCR Extraction</h3>
+                    <p>Automatically extract Savings Account (SA) numbers, student names, and ID numbers with 99.4% verified accuracy.</p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="feature-card">
+                    <span class="feature-tag">LIVE NOTIFICATIONS</span>
+                    <div class="feature-icon-wrapper icon-emerald">
+                        <i data-lucide="bell-ring"></i>
+                    </div>
+                    <h3>Real-Time Alerts</h3>
+                    <p>Receive immediate status updates, verification badges, and correction notices without visiting the office.</p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="feature-card">
+                    <span class="feature-tag">BANKING SECURITY</span>
+                    <div class="feature-icon-wrapper icon-gold">
+                        <i data-lucide="landmark"></i>
+                    </div>
+                    <h3>Encrypted SA Tracking</h3>
+                    <p>Safely store, format, and audit Landbank Savings Account details for accurate fund distribution and payout runs.</p>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="feature-card">
+                    <span class="feature-tag">CAMPUS DIRECTORY</span>
+                    <div class="feature-icon-wrapper icon-navy">
+                        <i data-lucide="users"></i>
+                    </div>
+                    <h3>Scholar Directory</h3>
+                    <p>Easily browse and organize active scholars across college programs, academic year levels, and grant categories.</p>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="feature-card">
+                    <span class="feature-tag">AUDIT & COMPLIANCE</span>
+                    <div class="feature-icon-wrapper icon-emerald">
+                        <i data-lucide="file-text"></i>
+                    </div>
+                    <h3>PDF Audit Reports</h3>
+                    <p>Generate one-click official Annex 5 TES billing sheets, compliance exports, and institutional audit trails.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         HOW IT WORKS (WORKFLOW)
+         ═══════════════════════════════════════ -->
+    <section id="workflow" class="section-padding bg-subtle-section">
+        <div class="container">
+            <div class="section-center reveal">
+                <span class="section-eyebrow">
+                    <i data-lucide="route"></i> STEP-BY-STEP PROCESS
+                </span>
+                <h2 class="section-title">4 Simple Steps to Verification</h2>
+                <p class="section-desc">
+                    A streamlined, transparent workflow from initial login to final grant disbursement tracking.
+                </p>
+            </div>
+
+            <div class="workflow-timeline reveal reveal-stagger">
+                <!-- Step 1 -->
+                <div class="workflow-step-card">
+                    <div class="workflow-step-badge">1</div>
+                    <span class="step-duration-pill">~1 MINUTE</span>
+                    <h4>Sign In & Profile</h4>
+                    <p>Log in using your registered USTP credentials and review your student profile details.</p>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="workflow-step-card">
+                    <div class="workflow-step-badge">2</div>
+                    <span class="step-duration-pill">~2 MINUTES</span>
+                    <h4>Capture Documents</h4>
+                    <p>Upload clear front and back photos of your Student ID and draw your official specimen signature.</p>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="workflow-step-card">
+                    <div class="workflow-step-badge">3</div>
+                    <span class="step-duration-pill">INSTANT AI</span>
+                    <h4>AI OCR Review</h4>
+                    <p>The system cross-checks text on your documents against registered university masterlist records.</p>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="workflow-step-card">
+                    <div class="workflow-step-badge">4</div>
+                    <span class="step-duration-pill">REAL-TIME</span>
+                    <h4>Approval & Payout</h4>
+                    <p>Receive your digital verified badge and track scholarship billing disbursement schedules in real time.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         PORTALS SECTION
+         ═══════════════════════════════════════ -->
+    <section id="portals" class="section-padding">
+        <div class="container">
+            <div class="section-center reveal">
+                <span class="section-eyebrow">
+                    <i data-lucide="layout-grid"></i> SYSTEM ENTRY
+                </span>
+                <h2 class="section-title">Choose Your Portal Access</h2>
+                <p class="section-desc">
+                    Tailored workspaces crafted specifically for USTP scholars, evaluators, and campus administrators.
+                </p>
+            </div>
+
+            <div class="portals-grid reveal reveal-stagger">
+                <!-- Student Portal Card -->
+                <div class="portal-access-card portal-student">
+                    <div class="portal-card-media">
+                        <img src="assets/Slide_image1.jpg" alt="USTP Scholars">
+                        <div class="portal-media-overlay"></div>
+                    </div>
+                    <div class="portal-card-content">
+                        <span class="portal-pill-badge">STUDENT & GRANTEE ACCESS</span>
+                        <h3>Student Portal</h3>
+                        <p class="portal-desc">
+                            Designed for enrolled USTP scholars to submit required documents, validate Landbank SA numbers, and track grant statuses.
+                        </p>
+                        <ul class="portal-check-list">
+                            <li><i data-lucide="check-circle-2"></i> Submit Front & Back Student ID</li>
+                            <li><i data-lucide="check-circle-2"></i> Draw & Upload Digital Specimen Signature</li>
+                            <li><i data-lucide="check-circle-2"></i> Track Real-Time TES Billing Status</li>
+                            <li><i data-lucide="check-circle-2"></i> View Verified Scholar Certificate</li>
+                        </ul>
+                        <a href="/login.html" class="btn btn-primary">
+                            Enter Student Portal <i data-lucide="arrow-right" class="arrow-icon"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Admin Portal Card -->
+                <div class="portal-access-card portal-admin">
+                    <div class="portal-card-media">
+                        <img src="assets/slide_image3.jpg" alt="USTP Scholarship Office Administration">
+                        <div class="portal-media-overlay"></div>
+                    </div>
+                    <div class="portal-card-content">
+                        <span class="portal-pill-badge">ADMIN & EVALUATOR ACCESS</span>
+                        <h3>Admin & Staff Portal</h3>
+                        <p class="portal-desc">
+                            Equipped for scholarship coordinators, evaluators, and auditors to verify documents and generate official billing reports.
+                        </p>
+                        <ul class="portal-check-list">
+                            <li><i data-lucide="check-circle-2"></i> Side-by-Side Document & OCR Verification</li>
+                            <li><i data-lucide="check-circle-2"></i> Batch Approval with Remarks & Feedback</li>
+                            <li><i data-lucide="check-circle-2"></i> Export Annex 5 Billing Form to Excel/PDF</li>
+                            <li><i data-lucide="check-circle-2"></i> Comprehensive Student Masterlist Management</li>
+                        </ul>
+                        <a href="/login.html" class="btn btn-gold">
+                            Access Admin Console <i data-lucide="arrow-right" class="arrow-icon"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         CONTACT & SUPPORT SECTION
+         ═══════════════════════════════════════ -->
+    <section id="contact" class="section-padding bg-subtle-section">
+        <div class="container">
+            <div class="contact-grid reveal">
+                <div class="contact-left-col">
+                    <span class="section-eyebrow">
+                        <i data-lucide="headphones"></i> SCHOLARSHIP SUPPORT
+                    </span>
+                    <h2 class="section-title">Need Assistance With Your Scholarship?</h2>
+                    <p class="section-desc">
+                        Have questions about ID submission, Landbank SA validation, or TES billing status? Our scholarship coordination office is ready to assist.
+                    </p>
+
+                    <div class="contact-info-block">
+                        <div class="contact-item-card">
+                            <div class="contact-item-icon">
+                                <i data-lucide="map-pin"></i>
+                            </div>
+                            <div class="contact-item-text">
+                                <h4>Campus Location</h4>
+                                <p>Scholarship & Student Affairs Unit, USTP Oroquieta City Campus, Mobod, Oroquieta City</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-card">
+                            <div class="contact-item-icon">
+                                <i data-lucide="mail"></i>
+                            </div>
+                            <div class="contact-item-text">
+                                <h4>Official Email Support</h4>
                                 <p>scholarships.oroquieta@ustp.edu.ph</p>
                             </div>
                         </div>
-                        <div class="contact-info-item">
-                            <div class="contact-info-icon"><i data-lucide="clock"></i></div>
-                            <div>
-                                <h4>Office Hours</h4>
-                                <p>Monday – Friday, 8:00 AM – 5:00 PM</p>
+
+                        <div class="contact-item-card">
+                            <div class="contact-item-icon">
+                                <i data-lucide="clock"></i>
                             </div>
+                            <div class="contact-item-text">
+                                <h4>Office Hours</h4>
+                                <p>Monday to Friday, 8:00 AM – 5:00 PM (excluding holidays)</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="faq-quick-helper">
+                        <div class="faq-helper-icon">
+                            <i data-lucide="help-circle"></i>
+                        </div>
+                        <div class="faq-helper-text">
+                            <h5>Lost Student ID or Wrong Account Number?</h5>
+                            <p>Contact the scholarship unit directly or submit an inquiry right here for rapid assistance.</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="contact-form-card">
-                    <h3>Send an Inquiry</h3>
-                    <form
-                        onsubmit="event.preventDefault(); alert('Thank you! Our scholarship coordinator will contact you shortly.');">
-                        <div class="form-group">
-                            <label class="form-label">Full Name</label>
-                            <input type="text" class="form-input" placeholder="e.g. Juan Dela Cruz" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Email Address</label>
-                            <input type="email" class="form-input" placeholder="e.g. student@ustp.edu.ph" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Message</label>
-                            <textarea class="form-input" placeholder="Describe your inquiry..." required></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
-                            Submit Inquiry <i data-lucide="send"></i>
-                        </button>
-                    </form>
+                <!-- Inquiry Form -->
+                <div class="contact-right-col">
+                    <div class="inquiry-card">
+                        <h3>Send an Inquiry</h3>
+                        <p class="inquiry-card-subtitle">Fill in your information and our scholarship coordinator will get back to you promptly.</p>
+
+                        <form id="inquiryForm" onsubmit="handleInquirySubmit(event)">
+                            <div class="form-row">
+                                <label class="form-label" for="fullName">Full Name</label>
+                                <input type="text" id="fullName" class="form-input-field" placeholder="e.g. Juan Dela Cruz" required>
+                            </div>
+
+                            <div class="form-row">
+                                <label class="form-label" for="emailAddr">USTP Email Address</label>
+                                <input type="email" id="emailAddr" class="form-input-field" placeholder="e.g. student@ustp.edu.ph" required>
+                            </div>
+
+                            <div class="form-row">
+                                <label class="form-label" for="inquiryType">Inquiry Category</label>
+                                <select id="inquiryType" class="form-input-field">
+                                    <option value="tes_billing">TES Billing & Disbursement</option>
+                                    <option value="id_verification">Student ID & Signature Verification</option>
+                                    <option value="sa_number">Landbank Savings Account Issue</option>
+                                    <option value="general">General Scholarship Inquiry</option>
+                                </select>
+                            </div>
+
+                            <div class="form-row">
+                                <label class="form-label" for="messageText">Message / Description</label>
+                                <textarea id="messageText" class="form-input-field" placeholder="Describe your inquiry or concern in detail..." required></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+                                <i data-lucide="send"></i> Submit Inquiry
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ─── Footer ─── -->
+    <!-- ═══════════════════════════════════════
+         FOOTER
+         ═══════════════════════════════════════ -->
     <footer class="site-footer">
         <div class="container">
-            <div class="footer-inner">
-                <div class="footer-brand">
-                    <img src="app_logo3.png" alt="ScholarDoc">
-                    <div>
-                        <div class="footer-brand-name">ScholarDoc</div>
-                        <div class="footer-brand-copy">USTP Oroquieta City Campus &copy; 2026</div>
+            <div class="footer-top">
+                <div class="footer-col">
+                    <div class="footer-brand-wrap">
+                        <img src="app_logo3.png" alt="ScholarDoc Logo">
+                        <span class="brand-name">ScholarDoc</span>
+                    </div>
+                    <p class="footer-bio">
+                        Digital Scholarship Verification & Billing Management System designed specifically for the University of Science and Technology of Southern Philippines (USTP) Oroquieta City Campus.
+                    </p>
+                </div>
+
+                <div class="footer-col">
+                    <h5>Navigation</h5>
+                    <ul class="footer-links-list">
+                        <li><a href="#home">Home</a></li>
+                        <li><a href="#about">About System</a></li>
+                        <li><a href="#features">Key Features</a></li>
+                        <li><a href="#workflow">How It Works</a></li>
+                        <li><a href="#portals">Portal Access</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h5>Portals & Legal</h5>
+                    <ul class="footer-links-list">
+                        <li><a href="/login.html">Student Login</a></li>
+                        <li><a href="/login.html">Admin & Staff Console</a></li>
+                        <li><a href="#" onclick="showPrivacyNotice(event)">Data Privacy Policy</a></li>
+                        <li><a href="#contact">Scholarship Support</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h5>System Status</h5>
+                    <div class="footer-system-status">
+                        <div class="status-indicator-pill">
+                            <span class="dot"></span> All Systems Operational
+                        </div>
+                        <p>Academic Year 2026-2027 TES Billing & Verification Services are active.</p>
                     </div>
                 </div>
-                <div class="footer-links">
-                    <a href="/login.html">Portal Login</a>
-                    <a href="#contact">Register</a>
-                    <a href="#about">About</a>
-                    <a href="#features">Features</a>
-                    <a href="#contact">Contact</a>
-                    <a href="#"
-                        onclick="event.preventDefault(); alert('ScholarDoc complies with the Data Privacy Act of 2012.');">Privacy</a>
+            </div>
+
+            <div class="footer-bottom">
+                <div>
+                    &copy; 2026 USTP Oroquieta City Campus &bull; ScholarDoc Platform. All rights reserved.
                 </div>
+                <a href="#home" class="back-to-top-btn" aria-label="Back to top">
+                    <i data-lucide="chevron-up"></i> Back to Top
+                </a>
             </div>
         </div>
     </footer>
 
-    <!-- ─── Scripts ─── -->
+    <!-- ═══════════════════════════════════════
+         INTERACTIVE SCRIPTS
+         ═══════════════════════════════════════ -->
     <script>
-        // Initialize Lucide icons
-        lucide.createIcons();
+        // Initialize Lucide Icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
 
-        // Navbar scroll effect
-        let lastScrollY = 0;
+        // Sticky Navbar scroll reaction
         window.addEventListener('scroll', () => {
             const navbar = document.getElementById('navbar');
-            navbar.classList.toggle('scrolled', window.scrollY > 20);
+            if (window.scrollY > 20) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
         });
 
-        // Active nav link highlight on scroll
-        const sections = document.querySelectorAll('section[id]');
-        const navLinks = document.querySelectorAll('.nav-link');
-        const sectionObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    navLinks.forEach(link => {
-                        link.classList.toggle('active',
-                            link.getAttribute('href') === '#' + entry.target.id);
-                    });
-                }
-            });
-        }, { threshold: 0.3, rootMargin: '-80px 0px -40% 0px' });
-        sections.forEach(s => sectionObserver.observe(s));
+        // Mobile Menu Toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const navLinks = document.getElementById('navLinks');
 
-        // Scroll reveal (including staggered)
-        const revealEls = document.querySelectorAll('.reveal');
-        const revealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(e => {
-                if (e.isIntersecting) {
-                    e.target.classList.add('visible');
-                    revealObserver.unobserve(e.target);
-                }
-            });
-        }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-        revealEls.forEach(el => revealObserver.observe(el));
-
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(a => {
-            a.addEventListener('click', e => {
-                e.preventDefault();
-                const target = document.querySelector(a.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    // Close mobile menu
-                    document.getElementById('navLinks').classList.remove('show');
-                }
-            });
-        });
-
-        // Animated counter for hero stats
-        function animateCounters() {
-            document.querySelectorAll('.hero-stat-num[data-count]').forEach(el => {
-                const target = parseFloat(el.dataset.count);
-                const suffix = el.dataset.suffix || '';
-                const isDecimal = target % 1 !== 0;
-                const prefix = target >= 1000 ? '' : '';
-                const duration = 2000;
-                const start = performance.now();
-
-                function update(now) {
-                    const elapsed = now - start;
-                    const progress = Math.min(elapsed / duration, 1);
-                    // Ease out cubic
-                    const ease = 1 - Math.pow(1 - progress, 3);
-                    const current = target * ease;
-
-                    if (target >= 1000) {
-                        el.textContent = Math.floor(current).toLocaleString() + '+';
-                    } else if (isDecimal) {
-                        el.textContent = current.toFixed(1) + suffix;
-                    } else {
-                        el.textContent = Math.floor(current) + suffix;
-                    }
-
-                    if (progress < 1) requestAnimationFrame(update);
-                }
-                requestAnimationFrame(update);
+        if (mobileMenuBtn && navLinks) {
+            mobileMenuBtn.addEventListener('click', () => {
+                const isOpen = navLinks.classList.toggle('mobile-open');
+                mobileMenuBtn.setAttribute('aria-expanded', isOpen);
+                mobileMenuBtn.innerHTML = isOpen ? '<i data-lucide="x"></i>' : '<i data-lucide="menu"></i>';
+                lucide.createIcons();
             });
         }
 
-        // Trigger counters when hero is visible
-        const heroObserver = new IntersectionObserver((entries) => {
-            entries.forEach(e => {
-                if (e.isIntersecting) {
-                    animateCounters();
-                    heroObserver.unobserve(e.target);
+        // Close mobile menu on anchor click
+        document.querySelectorAll('.nav-link, .mobile-auth-cta a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (navLinks && navLinks.classList.contains('mobile-open')) {
+                    navLinks.classList.remove('mobile-open');
+                    if (mobileMenuBtn) {
+                        mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                        mobileMenuBtn.innerHTML = '<i data-lucide="menu"></i>';
+                        lucide.createIcons();
+                    }
                 }
             });
-        }, { threshold: 0.5 });
-        heroObserver.observe(document.querySelector('.hero-stats'));
+        });
+
+        // IntersectionObserver for active nav links
+        const trackedSections = document.querySelectorAll('section[id]');
+        const allNavLinks = document.querySelectorAll('.nav-link');
+
+        const navObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.getAttribute('id');
+                    allNavLinks.forEach(link => {
+                        const href = link.getAttribute('href');
+                        if (href === '#' + id) {
+                            link.classList.add('active');
+                        } else {
+                            link.classList.remove('active');
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.3, rootMargin: '-76px 0px -40% 0px' });
+
+        trackedSections.forEach(s => navObserver.observe(s));
+
+        // Scroll Reveal Observer
+        const revealElements = document.querySelectorAll('.reveal');
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+
+        revealElements.forEach(el => revealObserver.observe(el));
+
+        // Counter Animation for Hero Stats
+        function runCounters() {
+            const counterElements = document.querySelectorAll('.hero-stat-num[data-count]');
+            counterElements.forEach(el => {
+                const target = parseFloat(el.getAttribute('data-count'));
+                const suffix = el.getAttribute('data-suffix') || '';
+                const isDecimal = target % 1 !== 0;
+                const duration = 2000;
+                const startTime = performance.now();
+
+                function step(currentTime) {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const currentVal = target * easeOut;
+
+                    if (target >= 1000) {
+                        el.textContent = Math.floor(currentVal).toLocaleString() + '+';
+                    } else if (isDecimal) {
+                        el.textContent = currentVal.toFixed(1) + suffix;
+                    } else {
+                        el.textContent = Math.floor(currentVal) + suffix;
+                    }
+
+                    if (progress < 1) {
+                        requestAnimationFrame(step);
+                    }
+                }
+                requestAnimationFrame(step);
+            });
+        }
+
+        const statsSection = document.querySelector('.hero-stats');
+        if (statsSection) {
+            const statsObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        runCounters();
+                        statsObserver.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.4 });
+            statsObserver.observe(statsSection);
+        }
+
+        // Form Submission Feedback
+        function handleInquirySubmit(e) {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> Submitting...';
+            lucide.createIcons();
+
+            setTimeout(() => {
+                alert('Thank you! Your inquiry has been forwarded to the USTP Oroquieta Scholarship Coordinator.');
+                e.target.reset();
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+                lucide.createIcons();
+            }, 800);
+        }
+
+        // Privacy Policy Notice
+        function showPrivacyNotice(e) {
+            e.preventDefault();
+            alert('ScholarDoc is fully compliant with the Data Privacy Act of 2012 (RA 10173). All student document records, specimen signatures, and bank account information are strictly encrypted and used solely for university scholarship verification and billing.');
+        }
     </script>
 </body>
 

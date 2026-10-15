@@ -1528,7 +1528,7 @@ function parseTextLinesToStudents(text) {
 }
 
 // ── 4. Cross-Verification Engine Execution ──────────────────────────
-function runCrossVerification() {
+function runCrossVerification(forceFresh = false) {
     // If either table is empty or deleted from Supabase, clear verification results
     if (!rawSuperAdminGrantees || rawSuperAdminGrantees.length === 0 || !rawSchoolStudents || rawSchoolStudents.length === 0) {
         verifiedForm2List = [];
@@ -1544,8 +1544,8 @@ function runCrossVerification() {
 
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
-    // Check if we have previously verified/resolved data from Admin Review Queue or Database
-    const savedSync = AnnexSyncService.getVerifiedData();
+    // Check if we have previously verified/resolved data from Admin Review Queue or Database (bypassed if forceFresh)
+    const savedSync = forceFresh ? null : AnnexSyncService.getVerifiedData();
     if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
         const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
         const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -1564,12 +1564,22 @@ function runCrossVerification() {
             const savedF3 = resolvedForm3Map.get(key) || savedSync.form3List.find(s => AnnexSyncService.isSameStudent(s, item));
 
             if (savedF2) {
-                processedKeys.add(key);
-                if (savedF2) processedKeys.add(AnnexSyncService.getUniqueKey(savedF2));
-                combinedForm2.push({ ...item, ...savedF2, classification: 'MATCHED_FORM2', isEnrolled: true });
+                const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
+                const sL = (savedF2.matchedStudent?.lastName || savedF2.matchedStudent?.last_name || '').trim().toLowerCase();
+                const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
+                if (isValid) {
+                    processedKeys.add(key);
+                    processedKeys.add(AnnexSyncService.getUniqueKey(savedF2));
+                    combinedForm2.push({ ...item, ...savedF2, classification: 'MATCHED_FORM2', isEnrolled: true });
+                } else {
+                    processedKeys.add(key);
+                    if (item.classification === 'MATCHED_FORM2') combinedForm2.push(item);
+                    else if (item.classification === 'INACTIVE_FORM3') combinedForm3.push(item);
+                    else remainingReview.push(item);
+                }
             } else if (savedF3) {
                 processedKeys.add(key);
-                if (savedF3) processedKeys.add(AnnexSyncService.getUniqueKey(savedF3));
+                processedKeys.add(AnnexSyncService.getUniqueKey(savedF3));
                 combinedForm3.push({ ...item, ...savedF3, classification: 'INACTIVE_FORM3', isEnrolled: false });
             } else if (item.classification === 'MATCHED_FORM2') {
                 processedKeys.add(key);
@@ -1847,7 +1857,7 @@ function renderReviewQueue(items) {
 
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span style="font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(229,57,53,0.1); color: #D32F2F;">
-                            Match Confidence: ${confidence}%
+                            ${confidence > 0 ? `Match Confidence: ${confidence}%` : '<i class="icon-x-circle" style="font-size: 12px; margin-right: 4px;"></i> Unmatched Record (0%)'}
                         </span>
                     </div>
                 </div>
@@ -1861,7 +1871,7 @@ function renderReviewQueue(items) {
                     </div>
                     <div>
                         <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 2px;">School Student Masterlist:</span>
-                        <div>Name: <strong>${studentName}</strong></div>
+                        <div style="${!student ? 'color: #b91c1c; font-style: italic;' : ''}">Name: <strong>${studentName}</strong></div>
                         <div>Status: <span style="font-weight: 700; color: ${item.isEnrolled ? '#2E7D32' : '#E65100'};">${student?.status || student?.enrollmentStatus || 'Not in School File'}</span></div>
                     </div>
                 </div>
@@ -2353,7 +2363,7 @@ if (btnRunMatch) {
         btnRunMatch.disabled = true;
 
         setTimeout(() => {
-            runCrossVerification();
+            runCrossVerification(true);
             btnRunMatch.innerHTML = '<i class="icon-refresh-cw" style="font-size: 16px;"></i> Run Automated Cross-Verification';
             btnRunMatch.disabled = false;
             showToast('Cross-Verification completed! Forms updated.', 'check-circle');

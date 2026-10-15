@@ -1933,7 +1933,16 @@ async function loadSchoolStudentsAndVerify(grantees) {
 
                     if (resolvedForm2Map.has(key)) {
                         const saved = resolvedForm2Map.get(key);
-                        combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
+                        const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
+                        const sL = (saved.matchedStudent?.lastName || saved.matchedStudent?.last_name || '').trim().toLowerCase();
+                        const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
+                        if (isValid) {
+                            combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
+                        } else {
+                            if (item.classification === 'MATCHED_FORM2') combinedForm2.push(item);
+                            else if (item.classification === 'INACTIVE_FORM3') combinedForm3.push(item);
+                            else remainingReview.push(item);
+                        }
                     } else if (resolvedForm3Map.has(key)) {
                         const saved = resolvedForm3Map.get(key);
                         combinedForm3.push({ ...item, ...saved, classification: 'INACTIVE_FORM3', isEnrolled: false });
@@ -1950,8 +1959,13 @@ async function loadSchoolStudentsAndVerify(grantees) {
                 for (const item of savedSync.form2List) {
                     const key = AnnexSyncService.getUniqueKey(item);
                     if (!processedKeys.has(key)) {
-                        processedKeys.add(key);
-                        combinedForm2.push(item);
+                        const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
+                        const sL = (item.matchedStudent?.lastName || item.matchedStudent?.last_name || '').trim().toLowerCase();
+                        const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
+                        if (isValid) {
+                            processedKeys.add(key);
+                            combinedForm2.push(item);
+                        }
                     }
                 }
                 for (const item of savedSync.form3List) {
@@ -2256,7 +2270,8 @@ function renderAnnexReviewQueue(items) {
 
     container.innerHTML = items.map((item, idx) => {
         const grantee = item.grantee;
-        const confidence = item.confidence;
+        const student = item.matchedStudent;
+        const confidence = item.confidence || 0;
         const discrepancies = item.discrepancies || [];
 
         const gLast = (grantee.last_name || grantee.lastName || '').trim();
@@ -2273,6 +2288,23 @@ function renderAnnexReviewQueue(items) {
             }
         }
 
+        let studentName = 'No Matching Record in School File';
+        if (student) {
+            const sLast = (student.last_name || student.lastName || '').trim();
+            const sFirst = (student.first_name || student.firstName || '').trim();
+            const sMiddle = (student.middle_name || student.middleName || student.middle_initial || '').trim();
+            studentName = (student.fullName || student.full_name || student.name || '').replace(/^,\s*|,\s*$/g, '').trim();
+            if (!studentName || studentName === ',') {
+                if (sLast && sFirst) {
+                    studentName = `${sLast}, ${sFirst}${sMiddle ? ' ' + sMiddle : ''}`;
+                } else if (sFirst || sLast) {
+                    studentName = `${sFirst} ${sLast}`.trim();
+                } else {
+                    studentName = 'Enrolled Student';
+                }
+            }
+        }
+
         const granteeId = grantee.student_id || grantee.studentId || grantee.student_no || grantee.studentNo || 'Unassigned';
         const granteeProg = grantee.course || grantee.program || grantee.program_name || 'BSIT';
 
@@ -2285,14 +2317,29 @@ function renderAnnexReviewQueue(items) {
                             ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
                         </p>
                     </div>
-                    <span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: rgba(229,57,53,0.1); color: #D32F2F;">
-                        Match Confidence: ${confidence}%
+                    <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(229,57,53,0.1); color: #D32F2F;">
+                        ${confidence > 0 ? `Match Confidence: ${confidence}%` : '<i class="icon-x-circle" style="font-size: 11px; margin-right: 3px;"></i> Unmatched Record (0%)'}
                     </span>
                 </div>
+
+                <!-- Comparison Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: rgba(0,0,0,0.02); padding: 10px 14px; border-radius: 8px; font-size: 11px;">
+                    <div>
+                        <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 2px;">Super Admin Grantee List:</span>
+                        <div>Name: <strong>${granteeName}</strong></div>
+                        <div>Program: <strong>${granteeProg}</strong></div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 2px;">School Student Masterlist:</span>
+                        <div style="${!student ? 'color: #b91c1c; font-style: italic;' : ''}">Name: <strong>${studentName}</strong></div>
+                        <div>Status: <span style="font-weight: 700; color: ${item.isEnrolled ? '#2E7D32' : '#E65100'};">${student ? (student.status || student.enrollmentStatus || 'Active') : 'Not in School File'}</span></div>
+                    </div>
+                </div>
+
                 <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                     ${discrepancies.map(d => `
-                        <span style="padding: 2px 8px; border-radius: 6px; background: rgba(229,57,53,0.08); color: #C62828; font-size: 10px; font-weight: 600;">
-                            ${d}
+                        <span style="padding: 2px 8px; border-radius: 6px; background: rgba(229,57,53,0.08); color: #C62828; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                            <i class="icon-alert-circle" style="font-size: 11px;"></i> ${d}
                         </span>
                     `).join('')}
                 </div>
