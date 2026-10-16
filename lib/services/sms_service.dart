@@ -36,13 +36,14 @@ class SmsService {
   static String? normalizePhilippineMobile(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     String digits = raw.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('63') && digits.length == 12) {
-      digits = '0${digits.substring(2)}';
-    } else if (digits.startsWith('9') && digits.length == 10) {
-      digits = '0$digits';
+    if (digits.startsWith('63')) {
+      digits = digits.substring(2);
     }
-    if (RegExp(r'^09\d{9}$').hasMatch(digits)) {
-      return digits;
+    if (digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+    if (RegExp(r'^9\d{9}$').hasMatch(digits)) {
+      return '0$digits';
     }
     return null;
   }

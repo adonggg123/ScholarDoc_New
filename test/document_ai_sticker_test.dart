@@ -10,23 +10,40 @@ void main() {
     test('Academic Year normalization handles multiple formats and OCR typos', () {
       expect(AcademicTermService.normalizeYear('A.Y. 2026 - 2027'), '2026-2027');
       expect(AcademicTermService.normalizeYear('AY 2026–2027'), '2026-2027');
+      expect(AcademicTermService.normalizeYear('AY 2026—2027'), '2026-2027');
       expect(AcademicTermService.normalizeYear('2026/2027'), '2026-2027');
+      expect(AcademicTermService.normalizeYear('2026 - 27'), '2026-2027');
       expect(AcademicTermService.normalizeYear('2026-27'), '2026-2027');
+      expect(AcademicTermService.normalizeYear('2026 to 2027'), '2026-2027');
+      expect(AcademicTermService.normalizeYear('20 26 - 20 27'), '2026-2027'); // spaced digits
       expect(AcademicTermService.normalizeYear('Academic Year 2024-2025'), '2024-2025');
       expect(AcademicTermService.normalizeYear('2O26 - 2O27'), '2026-2027'); // OCR letter O
+      expect(AcademicTermService.normalizeYear('2026'), '2026-2027'); // single year fallback
     });
 
-    test('Semester normalization handles multiple formats', () {
+    test('Semester normalization handles multiple formats, superscripts, and typos', () {
       expect(AcademicTermService.normalizeSemester('1st Semester'), '1st Semester');
       expect(AcademicTermService.normalizeSemester('1st Sem'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('1stSem'), '1st Semester');
       expect(AcademicTermService.normalizeSemester('First Semester'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('1°* Semester'), '1st Semester'); // OCR degree + asterisk
+      expect(AcademicTermService.normalizeSemester('1* Semester'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('1º Sem'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('1 st Sem.'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('Sem 1'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('Sem. 1'), '1st Semester');
+      expect(AcademicTermService.normalizeSemester('Semester 1'), '1st Semester');
       expect(AcademicTermService.normalizeSemester('2nd Semester'), '2nd Semester');
+      expect(AcademicTermService.normalizeSemester('2nd Sem'), '2nd Semester');
       expect(AcademicTermService.normalizeSemester('Second Sem'), '2nd Semester');
+      expect(AcademicTermService.normalizeSemester('2°* Semester'), '2nd Semester');
+      expect(AcademicTermService.normalizeSemester('2* Semester'), '2nd Semester');
+      expect(AcademicTermService.normalizeSemester('Sem 2'), '2nd Semester');
       expect(AcademicTermService.normalizeSemester('Summer Term'), 'Summer / Midyear');
       expect(AcademicTermService.normalizeSemester('Midyear'), 'Summer / Midyear');
     });
 
-    test('Term validation accurately approves exact match and flags mismatches', () {
+    test('Term validation accurately approves exact match and harmless formatting differences', () {
       const activeTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
 
       // 1. Exact match
@@ -39,8 +56,20 @@ void main() {
       expect(matchResult.isFlagged, isFalse);
       expect(matchResult.yearMatches, isTrue);
       expect(matchResult.semesterMatches, isTrue);
+      expect(matchResult.statusTitle, 'Valid Current Sticker');
 
-      // 2. Outdated year (e.g. 2024-2025)
+      // 2. Harmless formatting difference (e.g. 1st Sem and en-dash year)
+      final normDiffResult = AcademicTermService.validateScannedTerm(
+        detectedYear: '2026–2027',
+        detectedSemester: '1st Sem',
+        targetTerm: activeTerm,
+      );
+      expect(normDiffResult.isValid, isTrue);
+      expect(normDiffResult.isFlagged, isFalse);
+      expect(normDiffResult.yearMatches, isTrue);
+      expect(normDiffResult.semesterMatches, isTrue);
+
+      // 3. Outdated year (e.g. 2024-2025)
       final expiredResult = AcademicTermService.validateScannedTerm(
         detectedYear: 'A.Y. 2024 - 2025',
         detectedSemester: '1st Semester',
@@ -51,7 +80,7 @@ void main() {
       expect(expiredResult.yearMatches, isFalse);
       expect(expiredResult.statusTitle, contains('Expired'));
 
-      // 3. Semester mismatch (e.g. 2nd Sem instead of 1st)
+      // 4. Semester mismatch (e.g. 2nd Sem instead of 1st)
       final semMismatchResult = AcademicTermService.validateScannedTerm(
         detectedYear: 'A.Y. 2026 - 2027',
         detectedSemester: '2nd Semester',
@@ -61,9 +90,27 @@ void main() {
       expect(semMismatchResult.isFlagged, isTrue);
       expect(semMismatchResult.yearMatches, isTrue);
       expect(semMismatchResult.semesterMatches, isFalse);
-      expect(semMismatchResult.statusTitle, contains('Mismatch'));
+      expect(semMismatchResult.statusTitle, 'Semester Mismatch');
 
-      // 4. Missing sticker
+      // 5. Unreadable semester with valid year
+      final unreadableSemResult = AcademicTermService.validateScannedTerm(
+        detectedYear: '2026-2027',
+        detectedSemester: null,
+        targetTerm: activeTerm,
+      );
+      expect(unreadableSemResult.isValid, isFalse);
+      expect(unreadableSemResult.statusTitle, 'Semester Unreadable');
+
+      // 6. Unreadable year with valid semester
+      final unreadableYearResult = AcademicTermService.validateScannedTerm(
+        detectedYear: null,
+        detectedSemester: '1st Semester',
+        targetTerm: activeTerm,
+      );
+      expect(unreadableYearResult.isValid, isFalse);
+      expect(unreadableYearResult.statusTitle, 'Academic Year Unreadable');
+
+      // 7. Missing sticker entirely
       final missingResult = AcademicTermService.validateScannedTerm(
         detectedYear: null,
         detectedSemester: null,
@@ -101,6 +148,118 @@ void main() {
       expect(result.termValidation.isValid, isTrue);
       expect(result.termValidation.isFlagged, isFalse);
       expect(result.confidence, greaterThanOrEqualTo(0.85));
+      expect(result.isValid, isTrue);
+      expect(result.errorMessage, isNull);
+    });
+
+    test('Parses real-world OCR text containing degree symbol 1°* Semester and VALID: tag', () {
+      const realWorldOcrText = '''
+        UST P
+        OROQUIETA
+        1°* Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALID:
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: realWorldOcrText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.hasValidationStamp, isTrue);
+      expect(result.termValidation.isValid, isTrue);
+      expect(result.isValid, isTrue);
+      expect(result.errorMessage, isNull);
+    });
+
+    test('Approves back ID when sticker matches, even if card does not print birthdate', () {
+      const stickerOnlyText = '''
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      // Student has birthdate on file, but physical card sticker has no DOB printed
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: stickerOnlyText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+        expectedBirthdate: '2003-10-24',
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.birthdateMatches, isTrue); // Not a mismatch because no conflicting DOB was detected
+      expect(result.isValid, isTrue); // Passes validation check!
+      expect(result.errorMessage, isNull);
+    });
+
+    test('Flags genuine birthdate mismatch if a contradicting birthdate is detected on card', () {
+      const cardWithWrongDob = '''
+        STUDENT NO: 2023-45678
+        DOB: 10/15/2000
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: cardWithWrongDob,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+        expectedBirthdate: '2003-10-24', // Registered is 2003, but card says 2000
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.birthdateMatches, isFalse);
+      expect(result.isValid, isFalse); // Flagged due to actual DOB conflict
+      expect(result.errorMessage, contains('does not match'));
+    });
+
+    test('Approves when matching birthdate is detected on back of ID', () {
+      const cardWithMatchingDob = '''
+        STUDENT NO: 2023-45678
+        DOB: 10/24/2003
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: cardWithMatchingDob,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+        expectedBirthdate: '2003-10-24',
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.birthdateMatches, isTrue);
+      expect(result.isValid, isTrue);
+      expect(result.errorMessage, isNull);
     });
 
     test('Works for other school periods and formats (e.g. 2nd Sem 2025-2026)', () {
@@ -124,33 +283,7 @@ void main() {
       expect(result2.academicYear, '2025-2026');
       expect(result2.semester, '2nd Semester');
       expect(result2.termValidation.isValid, isTrue);
-    });
-
-    test('Parses USTP ID Validation sticker text with OCR asterisk typo 1* Semester accurately', () {
-      const stickerOcrText = '''
-        USTP
-        OROQUIETA
-        1* Semester A.Y. 2026 - 2027
-        _alpedh
-        RIZALYN P. ALPANTE, LPI
-        Campus Registrar - Designate
-        VALIDO
-      ''';
-
-      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
-
-      final result = DocumentAIScannerService.parseStickerText(
-        rawText: stickerOcrText,
-        engineUsed: 'High-Accuracy Document OCR',
-        targetTerm: targetTerm,
-      );
-
-      expect(result.stickerFound, isTrue);
-      expect(result.academicYear, '2026-2027');
-      expect(result.semester, '1st Semester');
-      expect(result.hasValidationStamp, isTrue);
-      expect(result.termValidation.isValid, isTrue);
-      expect(result.termValidation.isFlagged, isFalse);
+      expect(result2.isValid, isTrue);
     });
 
     test('Prevents false positives on random numbers like Page 1 of 2', () {
@@ -163,7 +296,6 @@ void main() {
         targetTerm: targetTerm,
       );
 
-      // Semester should not be detected from Page 1 of 2
       expect(result.semester, isNull);
       expect(result.termValidation.isValid, isFalse);
     });
@@ -191,6 +323,7 @@ void main() {
       expect(result.academicYear, '2026-2027');
       expect(result.semester, '1st Semester');
       expect(result.termValidation.isValid, isTrue);
+      expect(result.isValid, isTrue);
     });
 
     test('Prevents address text like 2nd Floor from falsely triggering 2nd Semester', () {
@@ -211,6 +344,7 @@ void main() {
       expect(result.academicYear, '2026-2027');
       expect(result.semester, '1st Semester');
       expect(result.termValidation.isValid, isTrue);
+      expect(result.isValid, isTrue);
     });
 
     test('Correctly extracts variations like 1 st Sem, Ist Sem, and 2* Semester', () {
@@ -226,6 +360,7 @@ void main() {
       expect(r1.academicYear, '2026-2027');
       expect(r1.semester, '1st Semester');
       expect(r1.termValidation.isValid, isTrue);
+      expect(r1.isValid, isTrue);
 
       final r2 = DocumentAIScannerService.parseStickerText(
         rawText: sample2,
@@ -235,6 +370,7 @@ void main() {
       expect(r2.academicYear, '2026-2027');
       expect(r2.semester, '1st Semester');
       expect(r2.termValidation.isValid, isTrue);
+      expect(r2.isValid, isTrue);
 
       final r3 = DocumentAIScannerService.parseStickerText(
         rawText: sample3,
@@ -244,6 +380,7 @@ void main() {
       expect(r3.academicYear, '2025-2026');
       expect(r3.semester, '2nd Semester');
       expect(r3.termValidation.isValid, isTrue);
+      expect(r3.isValid, isTrue);
     });
 
     test('ROI cropping executes without error on local sticker asset', () async {

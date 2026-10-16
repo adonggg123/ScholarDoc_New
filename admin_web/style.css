@@ -599,3 +599,524 @@ body {
         height: 15px;
     }
 }
+
+/* =====================================================
+   ScholarDoc Grantee Error Modal & Modern Toast System
+   ===================================================== */
+
+/* Body locking when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* Modern Error Toast Notification */
+.error-toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #FFFFFF;
+    color: #0F172A;
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: 1px solid #FECACA;
+    border-left: 5px solid #DC2626;
+    box-shadow: 0 16px 36px -4px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(220, 38, 38, 0.05);
+    max-width: 420px;
+    opacity: 0;
+    transform: translateY(-20px) scale(0.96);
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+}
+
+.error-toast.toast-show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.toast-icon-box {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #FEF2F2;
+    color: #DC2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.toast-icon-box i {
+    width: 20px;
+    height: 20px;
+}
+
+.toast-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.toast-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 2px;
+}
+
+.toast-msg {
+    font-size: 12px;
+    color: #64748B;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.toast-close-btn {
+    background: none;
+    border: none;
+    color: #94A3B8;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.toast-close-btn:hover {
+    color: #0F172A;
+}
+
+/* Modal Backdrop */
+.grantee-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 25, 49, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.grantee-modal-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Modal Card */
+.grantee-modal-card {
+    width: 100%;
+    max-width: 500px;
+    background: #FFFFFF;
+    border-radius: 24px;
+    box-shadow: 0 25px 60px -12px rgba(10, 25, 49, 0.38);
+    border: 1px solid #E2E8F0;
+    padding: 32px 28px;
+    position: relative;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    transform: scale(0.93) translateY(16px);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    text-align: center;
+}
+
+.grantee-modal-backdrop.active .grantee-modal-card {
+    transform: scale(1) translateY(0);
+}
+
+.grantee-modal-card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.grantee-modal-card::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+/* Mobile drag indicator */
+.grantee-modal-handle {
+    display: none;
+    width: 44px;
+    height: 4px;
+    background: #CBD5E1;
+    border-radius: 2px;
+    margin: 0 auto 16px;
+}
+
+/* Close Button */
+.grantee-modal-close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #F1F5F9;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748B;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.grantee-modal-close:hover {
+    background: #E2E8F0;
+    color: #0F172A;
+    transform: rotate(90deg);
+}
+
+.grantee-modal-close i {
+    width: 18px;
+    height: 18px;
+}
+
+/* Hero Badge */
+.grantee-hero-icon-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+
+.grantee-hero-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #FEF2F2;
+    border: 2px solid #FECACA;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 24px rgba(239, 68, 68, 0.18);
+}
+
+.grantee-hero-icon i {
+    width: 36px;
+    height: 36px;
+    color: #DC2626;
+}
+
+/* Eyebrow badge */
+.grantee-eyebrow-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.grantee-eyebrow-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+    color: #475569;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+}
+
+.grantee-eyebrow-badge i {
+    width: 12px;
+    height: 12px;
+    color: #64748B;
+}
+
+/* Title & Subtitle */
+.grantee-modal-title {
+    font-size: 21px;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: -0.4px;
+    margin: 0 0 8px;
+}
+
+.grantee-modal-subtitle {
+    font-size: 13.5px;
+    color: #64748B;
+    line-height: 1.5;
+    margin: 0 0 18px;
+}
+
+/* Entered ID Chip */
+.grantee-id-box {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.grantee-id-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.grantee-id-icon {
+    width: 16px;
+    height: 16px;
+    color: #64748B;
+    flex-shrink: 0;
+}
+
+.grantee-id-label {
+    font-size: 12.5px;
+    color: #64748B;
+    font-weight: 500;
+}
+
+.grantee-id-value {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0F172A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.grantee-status-badge {
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    color: #DC2626;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Info Cards */
+.grantee-info-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    text-align: left;
+}
+
+.grantee-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.grantee-card-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F3260;
+}
+
+.grantee-card-header i {
+    width: 16px;
+    height: 16px;
+}
+
+.grantee-card-header.text-amber h4,
+.grantee-card-header.text-amber i {
+    color: #B45309;
+}
+
+.text-primary-navy {
+    color: #0F3260;
+}
+
+.grantee-bullet {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.grantee-bullet i {
+    width: 16px;
+    height: 16px;
+    color: #0F3260;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.grantee-bullet strong {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #1E293B;
+    margin-bottom: 2px;
+}
+
+.grantee-bullet p {
+    margin: 0;
+    font-size: 12px;
+    color: #64748B;
+    line-height: 1.45;
+}
+
+/* Actionable Card */
+.grantee-action-card {
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.grantee-steps-list {
+    margin: 0 0 10px;
+    padding-left: 20px;
+    color: #92400E;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.grantee-steps-list li {
+    margin-bottom: 4px;
+}
+
+.grantee-email-wrapper {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.grantee-email-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #FFFFFF;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #B45309;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-decoration: none;
+}
+
+.grantee-email-chip:hover {
+    background: #FEF3C7;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(180, 83, 9, 0.12);
+}
+
+.grantee-email-chip i {
+    width: 13px;
+    height: 13px;
+    color: #B45309;
+}
+
+.copy-feedback-pill {
+    background: #10B981;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+    animation: fadeIn 0.2s ease;
+}
+
+/* Action Buttons */
+.grantee-modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.grantee-btn-primary {
+    width: 100%;
+    height: 48px;
+    background: linear-gradient(135deg, #0F3260 0%, #1E4C87 100%);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 8px 20px rgba(15, 50, 96, 0.25);
+    transition: all 0.2s ease;
+}
+
+.grantee-btn-primary:hover {
+    background: linear-gradient(135deg, #153C70 0%, #265999 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(15, 50, 96, 0.35);
+}
+
+.grantee-btn-primary i {
+    width: 16px;
+    height: 16px;
+    color: #FBC02D;
+}
+
+.grantee-btn-secondary {
+    background: transparent;
+    border: none;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.grantee-btn-secondary:hover {
+    color: #0F172A;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+    .grantee-modal-backdrop {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .grantee-modal-card {
+        max-width: 100%;
+        border-radius: 28px 28px 0 0;
+        padding: 20px 20px 28px;
+        max-height: 88vh;
+        transform: translateY(100%);
+    }
+
+    .grantee-modal-backdrop.active .grantee-modal-card {
+        transform: translateY(0);
+    }
+
+    .grantee-modal-handle {
+        display: block;
+    }
+
+    .error-toast {
+        top: 16px;
+        left: 16px;
+        right: 16px;
+        max-width: none;
+    }
+}

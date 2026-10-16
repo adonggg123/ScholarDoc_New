@@ -272,7 +272,21 @@ export class BillingService {
                 default: return '23';
             }
         } else {
-            return colIdx === 11 ? '14' : '9';
+            // Form 3 column styles:
+            // Centered: Control No (1), Student No (2), TES App No (3), MI (6), Sex (7), Birthdate (8), Year (10)
+            // Left-aligned: Last Name (4), Given Name (5), Degree Program (9), Remarks (12)
+            // Status: (11)
+            switch (colIdx) {
+                case 4:
+                case 5:
+                case 9:
+                case 12:
+                    return '9';
+                case 11:
+                    return '14';
+                default:
+                    return '16';
+            }
         }
     }
 
@@ -613,7 +627,8 @@ export class BillingService {
             for (let r = footerStartRow; r < footerStartRow + shiftCount; r++) {
                 const newRow = this._getOrCreateRow(doc, sheetData, r);
                 newRow.setAttribute('spans', '1:27');
-                newRow.setAttribute('ht', '14.4');
+                newRow.setAttribute('ht', '15.75');
+                newRow.setAttribute('customHeight', '1');
                 newRow.setAttribute('thickBot', '1');
 
                 const addCell = (col, style) => {
@@ -682,6 +697,10 @@ export class BillingService {
             const remarks = String(s.remarks || s.adminRemarks || (status === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${status}`));
 
             const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
+            rowEl.setAttribute('spans', '1:27');
+            rowEl.setAttribute('ht', '15.75');
+            rowEl.setAttribute('customHeight', '1');
+            rowEl.setAttribute('thickBot', '1');
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
 
             const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, false));

@@ -45,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _shownNotificationIds = {};
   final DateTime _sessionStartTime = DateTime.now().subtract(const Duration(seconds: 1));
   bool _isInitialLoad = true;
-  OverlayEntry? _currentToastEntry;
 
   void _calculateWeek() {
     final today = DateTime.now();
@@ -68,10 +67,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _notificationSubscription?.cancel();
     _announcementsSubscription?.cancel();
-    if (_currentToastEntry != null) {
-      _currentToastEntry!.remove();
-      _currentToastEntry = null;
-    }
     super.dispose();
   }
 
@@ -128,157 +123,19 @@ class _HomeScreenState extends State<HomeScreen> {
           if (id != null && !_shownNotificationIds.contains(id) && isLive) {
             _shownNotificationIds.add(id);
 
-            // Skip Welcome notifications here since _checkAndShowFirstLoginWelcome handles it cleanly
-            if (n['title']?.toString().contains('Welcome') == true) {
-              continue;
-            }
-
-            _showToastPopup(
-              n['title'] ?? 'Notification',
-              n['message'] ?? '',
-              id,
-              announcementId: n['announcementId']?.toString(),
-            );
-            // Also trigger system push notification banner
+            // Trigger system device push notification (heads-up banner)
             PushNotificationService().showLocalNotification(
               title: n['title'] ?? 'ScholarDoc Notification',
               body: n['message'] ?? '',
               payload: {'id': id, 'announcementId': n['announcementId']},
             );
+
+            // Update notification counts in background
+            _notificationService.refreshNotificationCounts(uid);
           }
         }
       });
     }
-  }
-
-  void _showToastPopup(String title, String message, String notificationId, {String? announcementId}) {
-    if (_currentToastEntry != null) {
-      _currentToastEntry!.remove();
-      _currentToastEntry = null;
-    }
-
-    _currentToastEntry = OverlayEntry(
-      builder: (context) {
-        return Positioned(
-          top: MediaQuery.of(context).padding.top + 10,
-          left: 16,
-          right: 16,
-          child: Material(
-            color: Colors.transparent,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: -100.0, end: 0.0),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(0, value),
-                  child: child,
-                );
-              },
-              child: GestureDetector(
-                onTap: () {
-                  if (_currentToastEntry != null) {
-                    _currentToastEntry!.remove();
-                    _currentToastEntry = null;
-                  }
-                  // Mark as read immediately on click
-                  _notificationService.markAsRead(notificationId);
-                  
-                  if (announcementId != null && announcementId.isNotEmpty) {
-                    PushNotificationService().openAnnouncementById(announcementId, context: context);
-                  } else {
-                    // Redirect to Notifications screen
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationScreen(),
-                      ),
-                    );
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFFD4AF37).withOpacity(0.3),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F3260).withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          LucideIcons.bellRing,
-                          color: Color(0xFF0F3260),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Color(0xFF0F3260),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              message,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(
-                        LucideIcons.chevronRight,
-                        color: Color(0xFF0F3260),
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    Overlay.of(context).insert(_currentToastEntry!);
-
-    // Auto dismiss after 4 seconds
-    Future.delayed(const Duration(seconds: 4), () {
-      if (_currentToastEntry != null) {
-        _currentToastEntry!.remove();
-        _currentToastEntry = null;
-      }
-    });
   }
 
   Future<void> _loadData() async {
@@ -415,19 +272,12 @@ class _HomeScreenState extends State<HomeScreen> {
         await prefs.setBool(shownKey, true);
         if (!mounted) return;
         Future.delayed(const Duration(milliseconds: 700), () {
-          if (mounted) {
-            _showToastPopup(
-              'Welcome to ScholarDoc! 👋',
-              'Welcome, $displayName! Your scholarship portal is ready.',
-              'welcome_$uid',
-            );
-            // Trigger device push notification banner on first login
-            PushNotificationService().showLocalNotification(
-              title: 'Welcome to ScholarDoc! 👋',
-              body: 'Welcome, $displayName! Your scholarship portal is ready.',
-              payload: {'type': 'welcome', 'studentId': uid},
-            );
-          }
+          // Trigger device push notification banner on first login
+          PushNotificationService().showLocalNotification(
+            title: 'Welcome to ScholarDoc! 👋',
+            body: 'Welcome, $displayName! Your scholarship portal is ready.',
+            payload: {'type': 'welcome', 'studentId': uid},
+          );
         });
       }
     } catch (_) {}

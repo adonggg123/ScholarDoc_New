@@ -805,6 +805,16 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
                 isRead: false,
                 timestamp: new Date().toISOString()
             }]);
+
+            // Also inform Super Admin of verification activity
+            await supabase.from('notifications').insert([{
+                studentId: 'superadmin',
+                title: `SA Verification: ${newStatus}`,
+                message: `Admin ${newStatus.toLowerCase()} SA Number for ${s.fullName || s.full_name || 'student'}.`,
+                type: newStatus === 'Verified' ? 'success' : 'warning',
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
         } catch (notifErr) {
             console.warn('Could not send notification:', notifErr);
         }

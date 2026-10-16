@@ -363,33 +363,22 @@ async function loadProfileData() {
                 if (data && data.length > 0) {
                     studentRecord = data[0];
                     uid = studentRecord.uid;
-                } else {
-                    const { data: ssData } = await window.supabaseClient
-                        .from('school_students')
-                        .select('*')
-                        .or(`student_no.eq.${queryTarget},email_address.eq.${session?.user?.email}`)
-                        .limit(1);
-                    if (ssData && ssData.length > 0) {
-                        studentRecord = ssData[0];
-                        uid = studentRecord.id;
-                    }
                 }
             } catch (_) {}
         }
     }
 
-    // 3. Fallback: Fetch first active student from student_grantees
+    // 3. Strict Check: If user is not found in student_grantees, deny access and sign out
     if (!studentRecord) {
+        console.warn('Unauthorized access: User is not listed in student_grantees.');
         try {
-            const { data: defaultGrantees } = await window.supabaseClient
-                .from('student_grantees')
-                .select('*')
-                .limit(1);
-            if (defaultGrantees && defaultGrantees.length > 0) {
-                studentRecord = defaultGrantees[0];
-                uid = studentRecord.uid || studentRecord.id;
-            }
+            await window.supabaseClient.auth.signOut();
+            localStorage.removeItem(STUDENT_STORAGE_KEY);
+            sessionStorage.removeItem(STUDENT_STORAGE_KEY);
         } catch (_) {}
+        alert('Access denied: Your account is not registered as an eligible student grantee in the scholarship database.');
+        window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
+        return;
     }
 
     if (studentRecord) {

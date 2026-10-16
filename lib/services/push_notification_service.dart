@@ -21,27 +21,35 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (_) {}
-  debugPrint("ScholarDoc Push: Background message received: ${message.messageId} | ${message.data}");
+  debugPrint(
+    "ScholarDoc Push: Background message received: ${message.messageId} | ${message.data}",
+  );
 
   // If the message is a data-only payload received in the background, display it explicitly
   if (message.notification == null && message.data.isNotEmpty) {
     try {
       final localNotifications = FlutterLocalNotificationsPlugin();
-      const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
+      const androidInit = AndroidInitializationSettings(
+        '@drawable/ic_notification',
+      );
       const initSettings = InitializationSettings(android: androidInit);
       await localNotifications.initialize(initSettings);
 
       const channel = AndroidNotificationChannel(
         'scholardoc_announcements',
         'ScholarDoc Announcements',
-        description: 'Notifications for new scholarship announcements, deadlines, and updates',
+        description:
+            'Notifications for new scholarship announcements, deadlines, and updates',
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
       );
 
       final title = message.data['title'] ?? 'ScholarDoc Announcement';
-      final body = message.data['message'] ?? message.data['body'] ?? 'New scholarship announcement posted.';
+      final body =
+          message.data['message'] ??
+          message.data['body'] ??
+          'New scholarship announcement posted.';
 
       final androidDetails = AndroidNotificationDetails(
         channel.id,
@@ -57,7 +65,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       );
 
       final details = NotificationDetails(android: androidDetails);
-      final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(
+        100000,
+      );
       await localNotifications.show(
         notifId,
         title,
@@ -72,12 +82,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class PushNotificationService {
-  static final PushNotificationService _instance = PushNotificationService._internal();
+  static final PushNotificationService _instance =
+      PushNotificationService._internal();
   factory PushNotificationService() => _instance;
   PushNotificationService._internal();
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   final SupabaseClient _supabase = Supabase.instance.client;
 
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -88,7 +100,8 @@ class PushNotificationService {
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'scholardoc_announcements',
     'ScholarDoc Announcements',
-    description: 'Notifications for new scholarship announcements, deadlines, and updates',
+    description:
+        'Notifications for new scholarship announcements, deadlines, and updates',
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
@@ -115,10 +128,14 @@ class PushNotificationService {
         sound: true,
       );
 
-      debugPrint('ScholarDoc Push: Notification permission status: ${settings.authorizationStatus}');
+      debugPrint(
+        'ScholarDoc Push: Notification permission status: ${settings.authorizationStatus}',
+      );
 
       // 2. Initialize Local Notifications Plugin (for foreground display)
-      const androidInit = AndroidInitializationSettings('@mipmap/launcher_icon');
+      const androidInit = AndroidInitializationSettings(
+        '@mipmap/launcher_icon',
+      );
       const darwinInit = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -149,7 +166,9 @@ class PushNotificationService {
 
       // 3. Create Android High-Priority Notification Channel
       await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(_channel);
 
       // Set foreground notification presentation options for iOS/macOS
@@ -161,21 +180,28 @@ class PushNotificationService {
 
       // 4. Foreground Message Listener -> Display heads-up banner via flutter_local_notifications
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('ScholarDoc Push: Foreground message received: ${message.data}');
+        debugPrint(
+          'ScholarDoc Push: Foreground message received: ${message.data}',
+        );
         _showForegroundNotification(message);
       });
 
       // 5. Background Notification Tap Listener (when app in background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        debugPrint('ScholarDoc Push: Notification clicked from background: ${message.data}');
+        debugPrint(
+          'ScholarDoc Push: Notification clicked from background: ${message.data}',
+        );
         handleNotificationTap(message.data);
       });
 
       // 6. Terminated State Tap Check (when app was terminated and opened via notification)
       final initialMessage = await _fcm.getInitialMessage();
       if (initialMessage != null) {
-        debugPrint('ScholarDoc Push: App launched via notification: ${initialMessage.data}');
-        _pendingAnnouncementId = initialMessage.data['announcementId']?.toString();
+        debugPrint(
+          'ScholarDoc Push: App launched via notification: ${initialMessage.data}',
+        );
+        _pendingAnnouncementId = initialMessage.data['announcementId']
+            ?.toString();
         _pendingNotificationData = initialMessage.data;
       }
 
@@ -199,8 +225,13 @@ class PushNotificationService {
     final notification = message.notification;
     final data = message.data;
 
-    final title = notification?.title ?? data['title'] ?? 'ScholarDoc Announcement';
-    final body = notification?.body ?? data['body'] ?? data['message'] ?? 'New announcement posted.';
+    final title =
+        notification?.title ?? data['title'] ?? 'ScholarDoc Announcement';
+    final body =
+        notification?.body ??
+        data['body'] ??
+        data['message'] ??
+        'New announcement posted.';
 
     final androidDetails = AndroidNotificationDetails(
       _channel.id,
@@ -212,10 +243,7 @@ class PushNotificationService {
       color: const Color(0xFF0F3260),
       playSound: true,
       enableVibration: true,
-      styleInformation: BigTextStyleInformation(
-        body,
-        contentTitle: title,
-      ),
+      styleInformation: BigTextStyleInformation(body, contentTitle: title),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -224,7 +252,10 @@ class PushNotificationService {
       presentSound: true,
     );
 
-    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
 
     final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
     await _localNotifications.show(
@@ -253,10 +284,7 @@ class PushNotificationService {
         color: const Color(0xFF0F3260),
         playSound: true,
         enableVibration: true,
-        styleInformation: BigTextStyleInformation(
-          body,
-          contentTitle: title,
-        ),
+        styleInformation: BigTextStyleInformation(body, contentTitle: title),
       );
 
       const iosDetails = DarwinNotificationDetails(
@@ -265,8 +293,13 @@ class PushNotificationService {
         presentSound: true,
       );
 
-      final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-      final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(
+        100000,
+      );
       await _localNotifications.show(
         notifId,
         title,
@@ -303,21 +336,26 @@ class PushNotificationService {
   }
 
   /// Upsert device token in Supabase
-  Future<void> _saveTokenToSupabase(String userId, String token, {String? studentId}) async {
+  Future<void> _saveTokenToSupabase(
+    String userId,
+    String token, {
+    String? studentId,
+  }) async {
     try {
-      await _supabase.from('user_fcm_tokens').upsert(
-        {
-          'user_id': userId,
-          'student_id': studentId,
-          'fcm_token': token,
-          'device_type': defaultTargetPlatform.name.toLowerCase(),
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        onConflict: 'fcm_token',
+      await _supabase.from('user_fcm_tokens').upsert({
+        'user_id': userId,
+        'student_id': studentId,
+        'fcm_token': token,
+        'device_type': defaultTargetPlatform.name.toLowerCase(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'fcm_token');
+      debugPrint(
+        'ScholarDoc Push: Token successfully saved to user_fcm_tokens.',
       );
-      debugPrint('ScholarDoc Push: Token successfully saved to user_fcm_tokens.');
     } catch (e) {
-      debugPrint('ScholarDoc Push: Supabase token upsert error (table may need setup): $e');
+      debugPrint(
+        'ScholarDoc Push: Supabase token upsert error (table may need setup): $e',
+      );
     }
   }
 
@@ -326,10 +364,7 @@ class PushNotificationService {
     try {
       final token = await _fcm.getToken();
       if (token != null) {
-        await _supabase
-            .from('user_fcm_tokens')
-            .delete()
-            .eq('fcm_token', token);
+        await _supabase.from('user_fcm_tokens').delete().eq('fcm_token', token);
       }
     } catch (e) {
       debugPrint('ScholarDoc Push: Error clearing FCM token: $e');
@@ -351,7 +386,8 @@ class PushNotificationService {
             title: data['title']?.toString(),
             message: (data['body'] ?? data['message'])?.toString(),
             type: data['type']?.toString(),
-            announcementId: announcementId ?? data['announcementId']?.toString(),
+            announcementId:
+                announcementId ?? data['announcementId']?.toString(),
             data: data,
           );
         }
@@ -362,12 +398,16 @@ class PushNotificationService {
   /// Handle tapping on a notification
   Future<void> handleNotificationTap(Map<String, dynamic> data) async {
     final BuildContext? context = _navigatorKey?.currentContext;
-    final String? announcementId = data['announcementId']?.toString() ?? (data['target'] == 'announcement' ? data['id']?.toString() : null);
+    final String? announcementId =
+        data['announcementId']?.toString() ??
+        (data['target'] == 'announcement' ? data['id']?.toString() : null);
     final String? title = data['title']?.toString();
     final String? message = (data['body'] ?? data['message'])?.toString();
     final String? type = data['type']?.toString();
 
-    debugPrint('ScholarDoc Push: Handling notification tap: title=$title, announcementId=$announcementId');
+    debugPrint(
+      'ScholarDoc Push: Handling notification tap: title=$title, announcementId=$announcementId',
+    );
 
     navigateFromNotification(
       context,
@@ -400,7 +440,9 @@ class PushNotificationService {
       return;
     }
 
-    final combinedText = '${title ?? ''} ${message ?? ''} ${type ?? ''} ${data?['target'] ?? ''}'.toLowerCase();
+    final combinedText =
+        '${title ?? ''} ${message ?? ''} ${type ?? ''} ${data?['target'] ?? ''}'
+            .toLowerCase();
 
     // 2. Document Submission Update / Missing Documents / Resubmission
     if (combinedText.contains('missing documents') ||
@@ -410,9 +452,9 @@ class PushNotificationService {
         combinedText.contains('requires revision') ||
         combinedText.contains('document submission') ||
         combinedText.contains('upload documents')) {
-      Navigator.of(ctx).push(
-        MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()),
-      );
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()));
       return;
     }
 
@@ -426,9 +468,9 @@ class PushNotificationService {
         combinedText.contains('verified') ||
         combinedText.contains('status') ||
         combinedText.contains('grantee')) {
-      Navigator.of(ctx).push(
-        MaterialPageRoute(builder: (_) => const StatusTrackingScreen()),
-      );
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const StatusTrackingScreen()));
       return;
     }
 
@@ -464,7 +506,10 @@ class PushNotificationService {
       // If announcement does not exist or is inactive, it was deleted/archived by superadmin
       // Purge orphan notifications for this announcement from DB
       try {
-        await _supabase.from('notifications').delete().eq('announcementId', announcementId);
+        await _supabase
+            .from('notifications')
+            .delete()
+            .eq('announcementId', announcementId);
       } catch (_) {}
 
       if (ctx != null && ctx.mounted) {
@@ -489,7 +534,9 @@ class PushNotificationService {
             ),
             backgroundColor: const Color(0xFF0F3260),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
             duration: const Duration(seconds: 3),
           ),
@@ -508,9 +555,9 @@ class PushNotificationService {
   void navigateToNotificationsScreen({BuildContext? context}) {
     final ctx = context ?? _navigatorKey?.currentContext;
     if (ctx != null && ctx.mounted) {
-      Navigator.of(ctx).push(
-        MaterialPageRoute(builder: (_) => const NotificationScreen()),
-      );
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
     }
   }
 }

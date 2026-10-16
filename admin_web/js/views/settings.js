@@ -284,12 +284,15 @@ async function loadNotificationSettings() {
     try {
         const emailCb = document.getElementById('set-email');
         const smsCb = document.getElementById('set-sms');
+        const desktopCb = document.getElementById('set-desktop-notif');
 
         const savedEmail = localStorage.getItem('scholardoc_email_notifs');
         const savedSms = localStorage.getItem('scholardoc_sms_alerts');
+        const savedDesktop = localStorage.getItem('scholardoc_desktop_notifs');
 
         if (emailCb) emailCb.checked = savedEmail !== null ? savedEmail === 'true' : true;
         if (smsCb) smsCb.checked = savedSms !== null ? savedSms === 'true' : false;
+        if (desktopCb) desktopCb.checked = savedDesktop !== null ? savedDesktop === 'true' : true;
 
         const { data } = await supabase.from('system_settings').select('*').eq('key', 'notification_preferences').maybeSingle();
         if (data && data.value) {
@@ -309,7 +312,15 @@ async function loadNotificationSettings() {
 
 async function saveNotificationSettings(key, value) {
     try {
-        localStorage.setItem(key === 'email' ? 'scholardoc_email_notifs' : 'scholardoc_sms_alerts', value);
+        localStorage.setItem(key === 'email' ? 'scholardoc_email_notifs' : (key === 'desktop' ? 'scholardoc_desktop_notifs' : 'scholardoc_sms_alerts'), value);
+
+        if (key === 'desktop') {
+            if (value && window.requestDesktopNotificationPermission) {
+                window.requestDesktopNotificationPermission();
+            }
+            showToast(`Desktop Push Notifications ${value ? 'enabled' : 'disabled'}!`, 'success');
+            return;
+        }
 
         const emailVal = document.getElementById('set-email')?.checked ?? true;
         const smsVal = document.getElementById('set-sms')?.checked ?? false;
@@ -376,6 +387,39 @@ function setupListeners() {
     if (setSmsCb) {
         setSmsCb.addEventListener('change', (e) => {
             saveNotificationSettings('sms', e.target.checked);
+        });
+    }
+
+    const setDesktopCb = document.getElementById('set-desktop-notif');
+    if (setDesktopCb) {
+        setDesktopCb.addEventListener('change', (e) => {
+            saveNotificationSettings('desktop', e.target.checked);
+        });
+    }
+
+    const testDesktopBtn = document.getElementById('btn-test-desktop-notif');
+    if (testDesktopBtn) {
+        testDesktopBtn.addEventListener('click', async () => {
+            if (window.requestDesktopNotificationPermission) {
+                await window.requestDesktopNotificationPermission();
+            }
+            if (window.showDesktopPopupNotification) {
+                window.showDesktopPopupNotification({
+                    id: 'test_admin_' + Date.now(),
+                    title: 'Admin Push Alert Test',
+                    message: 'Desktop notifications are active and working properly in the lower-right corner!',
+                    type: 'success',
+                    role: 'Admin'
+                });
+            }
+            if (window.triggerSystemPushNotification) {
+                window.triggerSystemPushNotification({
+                    id: 'test_admin_os_' + Date.now(),
+                    title: '[Admin] Push Notification Active',
+                    message: 'Your Admin dashboard is connected and receiving real-time desktop push notifications.',
+                    role: 'admin'
+                });
+            }
         });
     }
 

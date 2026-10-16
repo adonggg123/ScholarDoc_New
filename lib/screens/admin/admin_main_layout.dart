@@ -15,6 +15,7 @@ import 'audit_log_screen.dart';
 import 'reports_screen.dart';
 import 'admin_settings_screen.dart';
 import 'id_validation_screen.dart';
+import '../../services/push_notification_service.dart';
 
 class AdminMainLayout extends StatefulWidget {
   const AdminMainLayout({super.key});
@@ -44,7 +45,6 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   bool _isValidationExpanded = false;
 
   Stream<List<Map<String, dynamic>>>? _notificationStream;
-  OverlayEntry? _currentToastEntry;
   final Set<String> _shownNotificationIds = {};
   final DateTime _sessionStartTime = DateTime.now().subtract(
     const Duration(seconds: 1),
@@ -59,10 +59,6 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
   @override
   void dispose() {
-    if (_currentToastEntry != null) {
-      _currentToastEntry!.remove();
-      _currentToastEntry = null;
-    }
     super.dispose();
   }
 
@@ -122,10 +118,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
 
             if (id != null && !_shownNotificationIds.contains(id) && isLive) {
               _shownNotificationIds.add(id);
-              _showToastPopup(
-                n['title'] ?? 'Notification',
-                n['message'] ?? '',
-                n,
+              // Trigger system device push notification (heads-up banner)
+              PushNotificationService().showLocalNotification(
+                title: n['title'] ?? 'ScholarDoc Admin Notification',
+                body: n['message'] ?? '',
+                payload: n,
               );
             }
           }
@@ -135,129 +132,6 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
         },
       );
     }
-  }
-
-  void _showToastPopup(
-    String title,
-    String message,
-    Map<String, dynamic> notification,
-  ) {
-    if (_currentToastEntry != null) {
-      _currentToastEntry!.remove();
-      _currentToastEntry = null;
-    }
-
-    _currentToastEntry = OverlayEntry(
-      builder: (context) {
-        return Positioned(
-          top: MediaQuery.of(context).padding.top + 10,
-          left: 16,
-          right: 16,
-          child: Material(
-            color: Colors.transparent,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: -100.0, end: 0.0),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(0, value),
-                  child: child,
-                );
-              },
-              child: GestureDetector(
-                onTap: () {
-                  if (_currentToastEntry != null) {
-                    _currentToastEntry!.remove();
-                    _currentToastEntry = null;
-                  }
-                  _handleNotificationClick(notification);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFF0F3260).withOpacity(0.3),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F3260).withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          LucideIcons.bellRing,
-                          color: Color(0xFF0F3260),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                color: Color(0xFF0F3260),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              message,
-                              style: const TextStyle(
-                                color: Colors.black87,
-                                fontSize: 11,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(
-                        LucideIcons.chevronRight,
-                        color: Color(0xFF0F3260),
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    Overlay.of(context).insert(_currentToastEntry!);
-
-    Future.delayed(const Duration(seconds: 4), () {
-      if (_currentToastEntry != null) {
-        _currentToastEntry!.remove();
-        _currentToastEntry = null;
-      }
-    });
   }
 
   void _handleNotificationClick(Map<String, dynamic> notification) async {

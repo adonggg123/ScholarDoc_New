@@ -186,9 +186,6 @@ class DocumentAIScannerService {
   /// and JPEG quality 85%. Reduces network payload by ~90-95% without compromising text legibility.
   static Future<Uint8List> optimizeImageForOcr(Uint8List originalBytes) async {
     try {
-      if (originalBytes.length < 200 * 1024) {
-        return originalBytes; // Already compact
-      }
       return await compute(_optimizeImageWorker, originalBytes);
     } catch (e) {
       debugPrint('Error optimizing image for OCR, using original: $e');
@@ -201,16 +198,20 @@ class DocumentAIScannerService {
       final decoded = img.decodeImage(bytes);
       if (decoded == null) return bytes;
 
+      final oriented = img.bakeOrientation(decoded);
       const int maxDimension = 1280;
-      img.Image processed = decoded;
+      img.Image processed = oriented;
 
-      if (decoded.width > maxDimension || decoded.height > maxDimension) {
-        if (decoded.width >= decoded.height) {
-          processed = img.copyResize(decoded, width: maxDimension);
+      if (oriented.width > maxDimension || oriented.height > maxDimension) {
+        if (oriented.width >= oriented.height) {
+          processed = img.copyResize(oriented, width: maxDimension);
         } else {
-          processed = img.copyResize(decoded, height: maxDimension);
+          processed = img.copyResize(oriented, height: maxDimension);
         }
       }
+
+      // Slightly enhance contrast and brightness for better text readability on glossy ID stickers
+      processed = img.adjustColor(processed, contrast: 1.15, brightness: 1.02);
 
       return Uint8List.fromList(img.encodeJpg(processed, quality: 85));
     } catch (_) {
@@ -341,17 +342,31 @@ class DocumentAIScannerService {
           final year = data['academicYear']?.toString();
           final sem = data['semester']?.toString();
           final bdate = data['birthdate']?.toString();
-          final bdateMatches = data['birthdateMatches'] == true;
+          final rawBdateMatches = data['birthdateMatches'] == true;
+          // If no birthdate was detected on the ID back, it is NOT a birthdate mismatch!
+          final bdateMatches = (bdate == null || bdate.trim().isEmpty) ? true : rawBdateMatches;
+
           final termValidation = AcademicTermService.validateScannedTerm(
             detectedYear: year,
             detectedSemester: sem,
             targetTerm: activeTerm,
           );
 
+          final isValid = data['stickerFound'] == true && termValidation.isValid && bdateMatches;
+          final errorMessage = isValid
+              ? null
+              : (!termValidation.isValid
+                  ? termValidation.message
+                  : (!bdateMatches
+                      ? 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.'
+                      : data['message']?.toString()));
+
+          debugPrint('[Document AI Scan] Back ID: AY=$year, Sem=$sem | Valid=$isValid (Term=${termValidation.isValid}, DOB=$bdateMatches)');
+
           final result = StickerScanResult(
             stickerFound: data['stickerFound'] == true,
-            academicYear: year,
-            semester: sem,
+            academicYear: year != null ? AcademicTermService.normalizeYear(year) : null,
+            semester: sem != null ? AcademicTermService.normalizeSemester(sem) : null,
             hasValidationStamp: data['hasValidationStamp'] == true,
             birthdate: bdate,
             birthdateMatches: bdateMatches,
@@ -359,7 +374,7 @@ class DocumentAIScannerService {
             rawExtractedText: data['rawText']?.toString() ?? '',
             engineUsed: data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
             termValidation: termValidation,
-            errorMessage: data['message']?.toString(),
+            errorMessage: errorMessage,
           );
           _backStickerCache[cacheKey] = result;
           return result;
@@ -508,13 +523,27 @@ class DocumentAIScannerService {
 
   /// Crops the upper portion (top 58%) of the back ID where the validation sticker is located.
   static Future<Uint8List> cropUpperStickerROI(Uint8List originalBytes) async {
+    // 1. Try package:image for cross-platform rotation handling and contrast boost
+    try {
+      final decoded = img.decodeImage(originalBytes);
+      if (decoded != null) {
+        final oriented = img.bakeOrientation(decoded);
+        final width = oriented.width;
+        final cropHeight = (oriented.height * 0.60).round().clamp(1, oriented.height);
+        var cropped = img.copyCrop(oriented, x: 0, y: 0, width: width, height: cropHeight);
+        cropped = img.adjustColor(cropped, contrast: 1.25, brightness: 1.05);
+        return Uint8List.fromList(img.encodeJpg(cropped, quality: 90));
+      }
+    } catch (_) {}
+
+    // 2. Fallback to dart:ui canvas
     try {
       final codec = await ui.instantiateImageCodec(originalBytes);
       final frame = await codec.getNextFrame();
       final image = frame.image;
 
       final width = image.width;
-      final cropHeight = (image.height * 0.58).round().clamp(1, image.height);
+      final cropHeight = (image.height * 0.60).round().clamp(1, image.height);
 
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
@@ -701,10 +730,10 @@ class DocumentAIScannerService {
     // 3. Extract Birthdate
     final bdateResult = verifyBirthdateLocally(cleanText, expectedBirthdate);
 
-    // 4. Extract Validation & Authenticity Cues
-    final hasValidationStamp = RegExp(r'\bVALIDATED\b', caseSensitive: false).hasMatch(cleanText) ||
-        RegExp(r'\bRegistrar\b', caseSensitive: false).hasMatch(cleanText) ||
-        RegExp(r'\bUSTP\b', caseSensitive: false).hasMatch(cleanText);
+    // 4. Extract Validation & Authenticity Cues (resilient to spacing & OCR variations)
+    final hasValidationStamp = RegExp(r'\b(?:VALIDATED|VALID|VALIDO|VALIDATION|ENROLLED)\b', caseSensitive: false).hasMatch(cleanText) ||
+        RegExp(r'\b(?:Campus\s+)?Registrar\b', caseSensitive: false).hasMatch(cleanText) ||
+        RegExp(r'\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b', caseSensitive: false).hasMatch(cleanText);
 
     String? registrarText;
     final registrarMatch = RegExp(
@@ -730,6 +759,17 @@ class DocumentAIScannerService {
       targetTerm: targetTerm,
     );
 
+    final isValid = stickerFound && termValidation.isValid && bdateResult.matches;
+    final finalErrorMessage = isValid
+        ? null
+        : (!termValidation.isValid
+            ? termValidation.message
+            : (!bdateResult.matches && bdateResult.detectedDate != null
+                ? bdateResult.message
+                : errorMessage));
+
+    debugPrint('[Document AI Parse] AY=$detectedYear, Sem=$detectedSem | Valid=$isValid');
+
     return StickerScanResult(
       stickerFound: stickerFound,
       academicYear: detectedYear != null ? AcademicTermService.normalizeYear(detectedYear) : null,
@@ -742,7 +782,7 @@ class DocumentAIScannerService {
       rawExtractedText: rawText,
       engineUsed: engineUsed,
       termValidation: termValidation,
-      errorMessage: errorMessage ?? (bdateResult.matches ? null : bdateResult.message),
+      errorMessage: finalErrorMessage,
     );
   }
 
@@ -774,6 +814,8 @@ class DocumentAIScannerService {
       targetTerm: term,
     );
 
+    final isValid = (normYear != null || normSem != null || stamp) && termValidation.isValid && bdateMatch;
+
     return StickerScanResult(
       stickerFound: normYear != null || normSem != null || stamp,
       academicYear: normYear,
@@ -786,7 +828,7 @@ class DocumentAIScannerService {
       rawExtractedText: original.rawExtractedText,
       engineUsed: original.engineUsed,
       termValidation: termValidation,
-      errorMessage: original.errorMessage,
+      errorMessage: isValid ? null : (termValidation.isValid ? original.errorMessage : termValidation.message),
     );
   }
 
@@ -911,14 +953,17 @@ class DocumentAIScannerService {
       }
     }
 
+    final bool isMismatch = (foundFormatted != null && !matches);
+    final bool effectiveMatch = !isMismatch;
+
     return (
-      matches: matches,
+      matches: effectiveMatch,
       detectedDate: foundFormatted,
       message: matches
           ? 'Birthdate verified! Matches registered information ($foundFormatted).'
           : (foundFormatted != null
-              ? 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.'
-              : 'Could not detect a matching birthdate on your ID.')
+              ? 'The birthdate on your school ID ($foundFormatted) does not match your registered information. Please check your ID and try again.'
+              : 'No conflicting birthdate detected on ID card.')
     );
   }
 
@@ -1052,12 +1097,42 @@ class DocumentAIScannerService {
     if (text.isEmpty) return null;
 
     var cleaned = text
-        .replaceAll(RegExp(r'\b2[oO]2'), '202')
+        .replaceAllMapped(RegExp(r'\b2[oO]([0-9]{2})', caseSensitive: false), (m) => '20${m[1]}')
         .replaceAll(RegExp(r'[oO](?=\d)'), '0')
-        .replaceAll(RegExp(r'(?<=\d)[oO]'), '0');
+        .replaceAll(RegExp(r'(?<=\d)[oO]'), '0')
+        .replaceAll(
+          RegExp(r'[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)'),
+          '-',
+        );
 
+    // Remove unintended spaces inside year digits, e.g. "20 26" -> "2026"
+    cleaned = cleaned.replaceAllMapped(RegExp(r'\b(20)\s+(\d{2})\b'), (m) => '${m[1]}${m[2]}');
+
+    // Priority 1: Sticker header context lines (lines containing semester/registrar/validated keywords)
+    final lines = cleaned.split(RegExp(r'[\r\n]+'));
+    for (final line in lines) {
+      final isStickerLine = RegExp(r'(?:sem|registrar|valid|ustp|campus)', caseSensitive: false).hasMatch(line);
+      if (isStickerLine) {
+        final lineAyMatch = RegExp(
+          r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b',
+          caseSensitive: false,
+        ).firstMatch(line);
+        if (lineAyMatch != null) {
+          final start = int.parse(lineAyMatch.group(1)!);
+          final endStr = lineAyMatch.group(2)!;
+          final end = endStr.length == 2
+              ? int.parse('${lineAyMatch.group(1)!.substring(0, 2)}$endStr')
+              : int.parse(endStr);
+          if (end == start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+            return '$start-$end';
+          }
+        }
+      }
+    }
+
+    // Priority 2: Explicit prefix A.Y. / S.Y. / Academic Year
     final explicitAyRegex = RegExp(
-      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(20\d{2})\s*[\u2013\u2014\u2212\-/–—~\.\s]+\s*(20\d{2}|\d{2})\b',
+      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)(20\d{2})\s*[-–—/\\~_\.\s]+\s*(20\d{2}|\d{2})\b',
       caseSensitive: false,
     );
 
@@ -1073,8 +1148,10 @@ class DocumentAIScannerService {
       }
     }
 
+    // Priority 3: Consecutive year range (e.g. 2026-2027 or 2026-27), ensuring end == start + 1
+    // (This ignores student IDs like 2023-45678 and dates like 2004-10-15)
     final rangeRegex = RegExp(
-      r'\b(202[0-9]|203[0-5])\s*[\u2013\u2014\u2212\-/–—~]\s*(202[0-9]|203[0-5]|\d{2})\b',
+      r'\b(202[0-9]|203[0-5])\s*[-–—/\\~_\.]\s*(202[0-9]|203[0-5]|\d{2})\b',
     );
     final rangeMatches = rangeRegex.allMatches(cleaned);
     for (final match in rangeMatches) {
@@ -1088,8 +1165,9 @@ class DocumentAIScannerService {
       }
     }
 
+    // Priority 4: Explicit single year with prefix (e.g. AY 2026)
     final singleAyRegex = RegExp(
-      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b',
+      r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b',
       caseSensitive: false,
     );
     final singleMatch = singleAyRegex.firstMatch(cleaned);
@@ -1107,31 +1185,35 @@ class DocumentAIScannerService {
     final lines = text.split(RegExp(r'[\r\n]+'));
 
     String? checkSem(String s) {
-      final lower = s.toLowerCase();
+      // Normalize superscript or punctuation symbols often produced by OCR for 1st/2nd
+      final lower = s.toLowerCase()
+          .replaceAll(RegExp(r'[\u00B0\u00BA˚]'), '*')
+          .replaceAll(RegExp(r'\s+'), ' ');
+
+      // Prevent non-semester words from falsely triggering (e.g. "2nd floor", "page 1 of 2")
+      final hasSemesterWord = RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\b', caseSensitive: false).hasMatch(lower);
 
       final is2nd = RegExp(
-            r'\b(?:2\s*nd|2\s*rd|second|2[\*+]|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b',
+            r'\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
             caseSensitive: false,
           ).hasMatch(lower) ||
-          RegExp(r'\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*2\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\b2\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b(?:2|ii)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
           RegExp(r'\b2nd\s+semester\b', caseSensitive: false).hasMatch(lower) ||
           RegExp(r'\bsecond\s+semester\b', caseSensitive: false).hasMatch(lower) ||
-          lower.contains('2* semester') ||
-          lower.contains('2* sem');
+          (hasSemesterWord && (lower.contains('2*') || lower.contains('2°') || lower.contains('2º')));
       if (is2nd) return '2nd Semester';
 
       final is1st = RegExp(
-            r'\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+]|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b',
+            r'\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
             caseSensitive: false,
           ).hasMatch(lower) ||
-          RegExp(r'\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*1\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\b1\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'\b(?:1|i)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
           RegExp(r'\b1st\s+semester\b', caseSensitive: false).hasMatch(lower) ||
           RegExp(r'\bfirst\s+semester\b', caseSensitive: false).hasMatch(lower) ||
           RegExp(r'\b[il]st\s+sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
-          lower.contains('1* semester') ||
-          lower.contains('1* sem');
+          (hasSemesterWord && (lower.contains('1*') || lower.contains('1°') || lower.contains('1º')));
       if (is1st) return '1st Semester';
 
       if (RegExp(r'\b(?:summer|mid\s*[\-]?year)\b', caseSensitive: false).hasMatch(lower)) {

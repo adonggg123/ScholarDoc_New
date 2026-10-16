@@ -808,6 +808,16 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
                 isRead: false,
                 timestamp: new Date().toISOString()
             }]);
+
+            // Notify Admin of Super Admin ID validation update
+            await supabase.from('notifications').insert([{
+                studentId: 'admin',
+                title: `ID Validation: ${newStatus}`,
+                message: `Super Admin marked ID Validation as ${newStatus} for ${s.fullName || s.full_name || 'student'}.`,
+                type: newStatus === 'Verified' ? 'success' : 'warning',
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
         } catch (notifErr) {
             console.warn('Could not send notification:', notifErr);
         }
@@ -1109,14 +1119,16 @@ window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: base64data,
-                        expectedBirthdate: expectedBdate
+                        expectedBirthdate: expectedBdate,
+                        academicYear: s.academicYear || (s.documents && s.documents.academicYear) || undefined,
+                        semester: s.semester || (s.documents && s.documents.semester) || undefined
                     })
                 });
 
                 const data = await apiRes.json();
                 if (data && data.success) {
-                    s.academicYear = data.academicYear || '2026-2027';
-                    s.semester = data.semester || '1st Semester';
+                    s.academicYear = data.academicYear || s.academicYear || '2026-2027';
+                    s.semester = data.semester || s.semester || '1st Semester';
                     s.stickerValidated = data.isValid;
                     s.stickerFlagged = !data.isValid;
                     s.backBirthdate = data.birthdate;
@@ -1129,7 +1141,7 @@ window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
                     s.documents.backBirthdateMatches = data.birthdateMatches;
 
                     const statusMsg = data.isValid
-                        ? `✓ Verified: ${data.semester} AY ${data.academicYear} (DOB Matched)`
+                        ? `✓ Verified: ${s.semester} AY ${s.academicYear}`
                         : `⚠️ ${data.message || 'Validation mismatch'}`;
 
                     if (window.showToast) {

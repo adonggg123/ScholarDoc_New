@@ -493,7 +493,7 @@ function verifyBirthdateMatch(rawText, expectedBirthdate) {
     }
 
     return {
-        matches,
+        matches: detectedDate ? matches : true,
         detectedBirthdate: detectedDate,
         message
     };
@@ -575,6 +575,94 @@ function verifyAtmProof(rawText, expectedName, expectedSaNumber) {
     };
 }
 
+function normalizeYear(raw) {
+    if (!raw) return '';
+    let clean = String(raw).trim()
+        .replace(/\b2[oO]([0-9]{2})/gi, '20$1')
+        .replace(/[oO](?=\d)/g, '0')
+        .replace(/(?<=\d)[oO]/g, '0');
+
+    // Replace all Unicode dashes, slashes, "to", dots, and underscores between numbers with hyphen
+    clean = clean.replace(
+        /[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)/g,
+        '-'
+    );
+
+    // Remove unintended spaces inside digit pairs (e.g. "20 26" -> "2026")
+    clean = clean.replace(/\b(20)\s+(\d{2})\b/g, '$1$2');
+
+    const match = clean.match(/(20\d{2})\s*-\s*(20\d{2}|\d{2})/);
+    if (match) {
+        const start = match[1];
+        let end = match[2];
+        if (end.length === 2) {
+            end = `${start.slice(0, 2)}${end}`;
+        }
+        return `${start}-${end}`;
+    }
+
+    const singleMatch = clean.match(/\b(20\d{2})\b/);
+    if (singleMatch) {
+        const y = parseInt(singleMatch[1], 10);
+        return `${y}-${y + 1}`;
+    }
+
+    return clean.trim();
+}
+
+function normalizeSemester(raw) {
+    if (!raw) return '';
+    const lower = String(raw).toLowerCase().trim()
+        .replace(/[\u00B0\u00BA˚]/g, '*')
+        .replace(/\s+/g, ' ');
+
+    // 2nd Semester check (handles 2nd, second, 2*, 2°*, 2 nd, 2-nd, 2rd, sem 2, sem2)
+    const is2nd = /\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
+        /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b/i.test(lower) ||
+        /\b(?:2|ii)\s*[\/\-]\s*sem\b/i.test(lower) ||
+        /\b2nd\s+semester\b/i.test(lower) ||
+        /\bsecond\s+semester\b/i.test(lower) ||
+        lower.includes('2* semester') || lower.includes('2* sem');
+    if (is2nd) return '2nd Semester';
+
+    // 1st Semester check (handles 1st, first, 1*, 1°*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1)
+    const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
+        /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b/i.test(lower) ||
+        /\b(?:1|i)\s*[\/\-]\s*sem\b/i.test(lower) ||
+        /\b1st\s+semester\b/i.test(lower) ||
+        /\bfirst\s+semester\b/i.test(lower) ||
+        /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
+        lower.includes('1* semester') || lower.includes('1* sem');
+    if (is1st) return '1st Semester';
+
+    if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(lower)) {
+        return 'Summer / Midyear';
+    }
+
+    if (lower === '1st sem' || lower === '1st semester' || lower === 'first sem' || lower === 'first semester' || lower === '1st') {
+        return '1st Semester';
+    }
+    if (lower === '2nd sem' || lower === '2nd semester' || lower === 'second sem' || lower === 'second semester' || lower === '2nd') {
+        return '2nd Semester';
+    }
+
+    return raw.trim();
+}
+
+function isYearMatching(a, b) {
+    const normA = normalizeYear(a);
+    const normB = normalizeYear(b);
+    if (!normA || !normB) return false;
+    return normA === normB;
+}
+
+function isSemesterMatching(a, b) {
+    const normA = normalizeSemester(a);
+    const normB = normalizeSemester(b);
+    if (!normA || !normB) return false;
+    return normA === normB;
+}
+
 function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem = activeSemester) {
     const text = (rawText || '').trim();
     if (!text) {
@@ -588,24 +676,52 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         };
     }
 
-    let cleaned = text.replace(/\b2[oO]2/g, '202');
+    let cleaned = text
+        .replace(/\b2[oO]([0-9]{2})/gi, '20$1')
+        .replace(/[oO](?=\d)/g, '0')
+        .replace(/(?<=\d)[oO]/g, '0')
+        .replace(/[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)/g, '-');
+    cleaned = cleaned.replace(/\b(20)\s+(\d{2})\b/g, '$1$2');
 
-    // 1. Extract Academic Year with priority
+    // 1. Extract Academic Year with priority scoring
     let detectedYear = null;
-    const explicitAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(20\d{2})\s*[\u2013\u2014\u2212\-/–—~\.\s]+\s*(20\d{2}|\d{2})\b/gi;
-    let match;
-    while ((match = explicitAyRegex.exec(cleaned)) !== null) {
-        const start = parseInt(match[1], 10);
-        let endStr = match[2];
-        let end = endStr.length === 2 ? parseInt(match[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
-        if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
-            detectedYear = `${start}-${end}`;
-            break;
+
+    // Priority 1: Lines containing sticker keywords (sem, registrar, valid, ustp)
+    const lines = cleaned.split(/[\r\n]+/);
+    for (const line of lines) {
+        if (/(?:sem|registrar|valid|ustp|campus)/i.test(line)) {
+            const lineAyMatch = line.match(/(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b/i);
+            if (lineAyMatch) {
+                const start = parseInt(lineAyMatch[1], 10);
+                const endStr = lineAyMatch[2];
+                const end = endStr.length === 2 ? parseInt(lineAyMatch[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+                if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+                    detectedYear = `${start}-${end}`;
+                    break;
+                }
+            }
         }
     }
 
+    // Priority 2: Explicit prefix A.Y. / S.Y. / Academic Year
     if (!detectedYear) {
-        const rangeRegex = /\b(202[0-9]|203[0-5])\s*[\u2013\u2014\u2212\-/–—~]\s*(202[0-9]|203[0-5]|\d{2})\b/g;
+        const explicitAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)(20\d{2})\s*[-–—/\\~_\.\s]+\s*(20\d{2}|\d{2})\b/gi;
+        let match;
+        while ((match = explicitAyRegex.exec(cleaned)) !== null) {
+            const start = parseInt(match[1], 10);
+            let endStr = match[2];
+            let end = endStr.length === 2 ? parseInt(match[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+            if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+                detectedYear = `${start}-${end}`;
+                break;
+            }
+        }
+    }
+
+    // Priority 3: Consecutive year range (e.g. 2026-2027) where end == start + 1
+    if (!detectedYear) {
+        const rangeRegex = /\b(202[0-9]|203[0-5])\s*[-–—/\\~_\.]\s*(202[0-9]|203[0-5]|\d{2})\b/g;
+        let match;
         while ((match = rangeRegex.exec(cleaned)) !== null) {
             const start = parseInt(match[1], 10);
             let endStr = match[2];
@@ -617,8 +733,9 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         }
     }
 
+    // Priority 4: Explicit single year with prefix
     if (!detectedYear) {
-        const singleAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b/i;
+        const singleAyRegex = /(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)(202[0-9]|203[0-5])\b/i;
         const singleMatch = cleaned.match(singleAyRegex);
         if (singleMatch) {
             const y = parseInt(singleMatch[1], 10);
@@ -628,27 +745,29 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
 
     // 2. Extract Semester
     let detectedSem = null;
-    const lines = cleaned.split(/[\r\n]+/);
 
     function checkSem(s) {
-        const is2nd = /\b(?:2\s*nd|2\s*rd|second|2[\*+]|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b/i.test(s) ||
-            /\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*2\b/i.test(s) ||
-            /\b2\s*[\/\-]\s*sem\b/i.test(s) ||
-            /\b2nd\s+semester\b/i.test(s) ||
-            /\bsecond\s+semester\b/i.test(s) ||
-            s.includes('2* semester') || s.includes('2* sem');
+        const lower = s.toLowerCase().replace(/[\u00B0\u00BA˚]/g, '*').replace(/\s+/g, ' ');
+        const hasSemesterWord = /\bsem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower);
+
+        const is2nd = /\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
+            /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b/i.test(lower) ||
+            /\b(?:2|ii)\s*[\/\-]\s*sem\b/i.test(lower) ||
+            /\b2nd\s+semester\b/i.test(lower) ||
+            /\bsecond\s+semester\b/i.test(lower) ||
+            (hasSemesterWord && (lower.includes('2*') || lower.includes('2°') || lower.includes('2º')));
         if (is2nd) return '2nd Semester';
 
-        const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+]|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev)?)?\b/i.test(s) ||
-            /\bsem(?:est(?:er|el|r|ev)?)?\s*[\.\-:\/]?\s*1\b/i.test(s) ||
-            /\b1\s*[\/\-]\s*sem\b/i.test(s) ||
-            /\b1st\s+semester\b/i.test(s) ||
-            /\bfirst\s+semester\b/i.test(s) ||
-            /\b[il]st\s+sem(?:ester)?\b/i.test(s) ||
-            s.includes('1* semester') || s.includes('1* sem');
+        const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
+            /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b/i.test(lower) ||
+            /\b(?:1|i)\s*[\/\-]\s*sem\b/i.test(lower) ||
+            /\b1st\s+semester\b/i.test(lower) ||
+            /\bfirst\s+semester\b/i.test(lower) ||
+            /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
+            (hasSemesterWord && (lower.includes('1*') || lower.includes('1°') || lower.includes('1º')));
         if (is1st) return '1st Semester';
 
-        if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(s)) {
+        if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(lower)) {
             return 'Summer / Midyear';
         }
         return null;
@@ -662,31 +781,49 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         detectedSem = checkSem(cleaned);
     }
 
-    const hasValidationStamp = /\bVALIDATED\b/i.test(text) || /\bRegistrar\b/i.test(text) || /\bUSTP\b/i.test(text);
-    const yearMatches = detectedYear === currentYear;
-    const semMatches = detectedSem === currentSem;
+    const hasValidationStamp = /\b(?:VALIDATED|VALID|VALIDO|VALIDATION|ENROLLED)\b/i.test(text) ||
+        /\b(?:Campus\s+)?Registrar\b/i.test(text) ||
+        /\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b/i.test(text);
+
+    const normDetectedYear = detectedYear ? normalizeYear(detectedYear) : null;
+    const normDetectedSem = detectedSem ? normalizeSemester(detectedSem) : null;
+    const targetNormYear = normalizeYear(currentYear);
+    const targetNormSem = normalizeSemester(currentSem);
+
+    const yearMatches = !!(normDetectedYear && isYearMatching(normDetectedYear, targetNormYear));
+    const semMatches = !!(normDetectedSem && isSemesterMatching(normDetectedSem, targetNormSem));
     const isValid = yearMatches && semMatches;
 
-    let message = `Validation sticker verified! Matches active school period (AY ${currentYear} • ${currentSem}).`;
-    if (!detectedYear && !detectedSem) {
+    let message = '';
+    if (!normDetectedYear && !normDetectedSem) {
         message = 'Could not detect an academic year or semester validation sticker on ID.';
-    } else if (!yearMatches || !semMatches) {
-        const issues = [];
-        if (!yearMatches) issues.push(`Year mismatch (Detected: ${detectedYear || 'None'}, Required: ${currentYear})`);
-        if (!semMatches) issues.push(`Semester mismatch (Detected: ${detectedSem || 'None'}, Required: ${currentSem})`);
-        message = `The academic year or semester on your ID sticker is not current. Please scan the correct ID.`;
+    } else if (isValid) {
+        message = `Validation sticker verified! Matched active school period (AY ${targetNormYear} • ${targetNormSem}).`;
+    } else if (!normDetectedYear) {
+        message = `Academic Year unreadable on validation sticker (Detected: None, Required: ${targetNormYear}).`;
+    } else if (!normDetectedSem) {
+        message = `Semester unreadable on validation sticker (Detected: None, Required: ${targetNormSem}).`;
+    } else if (!yearMatches && !semMatches) {
+        message = `The validation sticker does not match the active school period (Detected: AY ${normDetectedYear} • ${normDetectedSem}, Required: AY ${targetNormYear} • ${targetNormSem}).`;
+    } else if (!yearMatches) {
+        const isExpired = normDetectedYear && normDetectedYear < targetNormYear;
+        message = isExpired
+            ? `The validation sticker on your ID is expired (${normDetectedYear}). The active school period requires AY ${targetNormYear} • ${targetNormSem}.`
+            : `Academic Year mismatch (Detected: ${normDetectedYear}, Required: ${targetNormYear}).`;
+    } else {
+        message = `Semester mismatch (Detected: ${normDetectedSem}, Required: ${targetNormSem}).`;
     }
 
     return {
-        stickerFound: !!(detectedYear || detectedSem || hasValidationStamp),
+        stickerFound: !!(normDetectedYear || normDetectedSem || hasValidationStamp),
         isValid,
         yearMatches,
         semesterMatches: semMatches,
-        academicYear: detectedYear,
-        semester: detectedSem,
+        academicYear: normDetectedYear,
+        semester: normDetectedSem,
         hasValidationStamp,
-        currentYear,
-        currentSem,
+        currentYear: targetNormYear,
+        currentSem: targetNormSem,
         message,
         rawText
     };
@@ -814,13 +951,14 @@ function getSemaphoreSenderName() {
 function normalizePhilippineMobile(rawPhone) {
     if (!rawPhone) return null;
     let digits = String(rawPhone).replace(/\D/g, '');
-    if (digits.startsWith('63') && digits.length === 12) {
-        digits = '0' + digits.substring(2);
-    } else if (digits.startsWith('9') && digits.length === 10) {
-        digits = '0' + digits;
+    if (digits.startsWith('63')) {
+        digits = digits.substring(2);
     }
-    if (/^09\d{9}$/.test(digits)) {
-        return digits;
+    if (digits.startsWith('0')) {
+        digits = digits.substring(1);
+    }
+    if (/^9\d{9}$/.test(digits)) {
+        return '0' + digits;
     }
     return null;
 }
@@ -844,6 +982,79 @@ function buildStudentQueryFilter(targetId) {
     } else {
         return `or=(student_no.eq.${encodeURIComponent(cleanId)},studentId.eq.${encodeURIComponent(cleanId)})`;
     }
+}
+
+/**
+ * Validates whether a student identifier exists in the Supabase student_grantees table.
+ * Students not in student_grantees are strictly denied access.
+ */
+async function validateGranteeEligibility(identifier) {
+    if (!identifier) {
+        return {
+            success: false,
+            isEligible: false,
+            message: 'Student identifier is required.'
+        };
+    }
+
+    const cleanId = String(identifier).trim();
+    const cleanNo = cleanId.replace(/[- ]/g, '');
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+    };
+
+    const filterTerms = [
+        `student_no.eq.${encodeURIComponent(cleanId)}`,
+        `studentId.eq.${encodeURIComponent(cleanId)}`
+    ];
+
+    if (cleanNo && cleanNo !== cleanId) {
+        filterTerms.push(`student_no.eq.${encodeURIComponent(cleanNo)}`);
+        filterTerms.push(`studentId.eq.${encodeURIComponent(cleanNo)}`);
+    }
+
+    if (cleanId.includes('@')) {
+        filterTerms.push(`email_address.eq.${encodeURIComponent(cleanId)}`);
+        filterTerms.push(`email.eq.${encodeURIComponent(cleanId)}`);
+    }
+
+    if (isUuidString(cleanId)) {
+        filterTerms.push(`id.eq.${encodeURIComponent(cleanId)}`);
+        filterTerms.push(`uid.eq.${encodeURIComponent(cleanId)}`);
+    }
+
+    try {
+        const url = `${SUPABASE_REST_URL}/student_grantees?or=(${filterTerms.join(',')})&limit=1`;
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+                const grantee = rows[0];
+                return {
+                    success: true,
+                    isEligible: true,
+                    grantee: {
+                        id: grantee.id,
+                        uid: grantee.uid,
+                        student_no: grantee.student_no || grantee.studentId,
+                        full_name: grantee.full_name || grantee.fullName,
+                        course: grantee.course || grantee.program_name
+                    },
+                    message: 'Student is registered as an eligible grantee.'
+                };
+            }
+        }
+    } catch (e) {
+        console.error('[validateGranteeEligibility error]', e.message);
+    }
+
+    return {
+        success: false,
+        isEligible: false,
+        message: `Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database.`
+    };
 }
 
 /**
@@ -1821,6 +2032,39 @@ const server = http.createServer(async (req, res) => {
         urlPath = decodeURIComponent(urlPath);
     } catch (_) {}
 
+    // ── API: Validate Grantee Eligibility for Student Login ───────────────
+    if (urlPath === '/api/auth/validate-grantee' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const rawIdentifier = parsed.identifier || parsed.studentId || parsed.student_no || parsed.email || parsed.uid || '';
+                const cleanId = String(rawIdentifier).trim();
+
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        isEligible: false,
+                        message: 'Student identifier is required.'
+                    }));
+                    return;
+                }
+
+                const result = await validateGranteeEligibility(cleanId);
+                const statusCode = result.isEligible ? 200 : 403;
+                res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                console.error('[API validate-grantee error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, isEligible: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
     // ── API: Get Current Academic Period ─────────────────────────────────
     if (urlPath === '/api/academic-term/current' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1995,6 +2239,8 @@ const server = http.createServer(async (req, res) => {
                 const expectedBirthdate = parsed.expectedBirthdate || parsed.birthdate;
                 const targetYear = parsed.academicYear || parsed.currentYear || activeAcademicYear;
                 const targetSem = parsed.semester || parsed.currentSem || activeSemester;
+                const normTargetYear = normalizeYear(targetYear);
+                const normTargetSem = normalizeSemester(targetSem);
 
                 if (!base64Image) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2002,7 +2248,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const cacheKey = getSha256(`back:${expectedBirthdate || ''}:${targetYear}:${targetSem}:${base64Image}`);
+                const cacheKey = getSha256(`back:${expectedBirthdate || ''}:${normTargetYear}:${normTargetSem}:${base64Image}`);
                 const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
                 if (cachedRes) {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2014,20 +2260,25 @@ const server = http.createServer(async (req, res) => {
                 const sticker = parseStickerText(text, targetYear, targetSem) || {};
                 const birthdateRes = verifyBirthdateMatch(text, expectedBirthdate) || {};
 
-                const hasExpectedBdate = !!expectedBirthdate;
-                const birthdateValid = hasExpectedBdate ? (birthdateRes.matches === true) : true;
+                // Only treat as mismatch if birthdate was actually detected on ID and conflicts
+                const hasDetectedBdate = !!birthdateRes.detectedBirthdate;
+                const birthdateValid = hasDetectedBdate ? (birthdateRes.matches === true) : true;
                 const isValid = (sticker.isValid === true) && birthdateValid;
 
                 let message = '';
                 if (!sticker.stickerFound) {
-                    message = "Could not detect a valid academic year or semester validation sticker on ID.";
+                    message = "Could not clearly detect an academic year or semester validation sticker on ID. Please ensure the sticker is well-lit and retake the scan.";
+                } else if (isValid) {
+                    message = `Validation sticker verified! Matched active school period (AY ${sticker.academicYear} • ${sticker.semester}${birthdateRes.detectedBirthdate ? ` • DOB: ${birthdateRes.detectedBirthdate}` : ''}).`;
+                } else if (hasDetectedBdate && !birthdateRes.matches) {
+                    message = `The birthdate on your school ID (${birthdateRes.detectedBirthdate}) does not match your registered information. Please check your ID and try again.`;
                 } else if (!sticker.isValid) {
-                    message = "The academic year or semester on your ID sticker is not current. Please scan the correct ID.";
-                } else if (hasExpectedBdate && !birthdateRes.matches) {
-                    message = "The birthdate on your school ID does not match your registered information. Please check your ID and try again.";
+                    message = sticker.message;
                 } else {
-                    message = `Back of ID validated successfully (AY ${sticker.academicYear || targetYear} • ${sticker.semester || targetSem}${birthdateRes.detectedBirthdate ? ` • DOB: ${birthdateRes.detectedBirthdate}` : ''}).`;
+                    message = "The academic year or semester on your ID sticker is not current. Please scan the correct ID.";
                 }
+
+                console.log(`[Document AI Scan] Back ID: AY=${sticker.academicYear}, Sem=${sticker.semester} | Req: AY=${normTargetYear}, Sem=${normTargetSem} | Valid=${isValid} | Reason=${message}`);
 
                 const responseData = {
                     success: true,
@@ -2038,7 +2289,7 @@ const server = http.createServer(async (req, res) => {
                     yearMatches: !!sticker.yearMatches,
                     semesterMatches: !!sticker.semesterMatches,
                     birthdate: birthdateRes.detectedBirthdate,
-                    birthdateMatches: birthdateRes.matches === true,
+                    birthdateMatches: birthdateValid,
                     isValid,
                     engine,
                     rawText: text,
@@ -2720,7 +2971,73 @@ async function lookupStudentForNotification(studentId, notif = null) {
         }
     } catch (_) {}
 
-    // 2. Check school_students
+    // 2. Check user_fcm_tokens for mapped student_id
+    if (isUuidString(cleanId)) {
+        try {
+            const fcmRes = await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?user_id=eq.${encodeURIComponent(cleanId)}&limit=1`, { headers });
+            if (fcmRes.ok) {
+                const tokens = await fcmRes.json();
+                if (Array.isArray(tokens) && tokens.length > 0 && tokens[0].student_id) {
+                    const stNo = tokens[0].student_id;
+                    const res = await fetch(`${SUPABASE_REST_URL}/school_students?student_no=eq.${encodeURIComponent(stNo)}&limit=1`, { headers });
+                    if (res.ok) {
+                        const rows = await res.json();
+                        if (rows.length > 0) {
+                            return {
+                                student_no: rows[0].student_no,
+                                uid: cleanId,
+                                full_name: rows[0].full_name,
+                                rawPhone: rows[0].mobile_number
+                            };
+                        }
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 3. Extract name from notification message (e.g. "Welcome, JARIOL, JUDE ESIDORE Z.! Your scholarship portal is ready...")
+    if (notif && notif.message) {
+        const welcomeMatch = notif.message.match(/Welcome,\s+([^!]+)!/i) ||
+                             notif.message.match(/(?:Student\s+|grantee\s+|Dear\s+)([\w\s,.'-]+?)(?:!|\s+has|\s+updated|\s+submitted|\s+Your|\.|\$)/i);
+        if (welcomeMatch && welcomeMatch[1]) {
+            const extractedName = welcomeMatch[1].trim();
+
+            // Search school_students by full_name
+            try {
+                const sRes = await fetch(`${SUPABASE_REST_URL}/school_students?full_name=ilike.%25${encodeURIComponent(extractedName)}%25&limit=1`, { headers });
+                if (sRes.ok) {
+                    const rows = await sRes.json();
+                    if (Array.isArray(rows) && rows.length > 0) {
+                        return {
+                            student_no: rows[0].student_no,
+                            uid: cleanId,
+                            full_name: rows[0].full_name,
+                            rawPhone: rows[0].mobile_number
+                        };
+                    }
+                }
+            } catch (_) {}
+
+            // Search student_grantees by full_name
+            try {
+                const gRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(full_name.ilike.%25${encodeURIComponent(extractedName)}%25,fullName.ilike.%25${encodeURIComponent(extractedName)}%25)&limit=1`, { headers });
+                if (gRes.ok) {
+                    const rows = await gRes.json();
+                    if (Array.isArray(rows) && rows.length > 0) {
+                        return {
+                            student_no: rows[0].student_no || rows[0].studentId,
+                            uid: rows[0].uid || cleanId,
+                            full_name: rows[0].full_name || rows[0].fullName,
+                            rawPhone: rows[0].mobile_number || rows[0].contactNumber
+                        };
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+
+    // 4. Check school_students directly by cleanId (student_no, email, or id)
     try {
         let filter;
         if (isUuidString(cleanId)) {
@@ -2738,7 +3055,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                 const s = rows[0];
                 return {
                     student_no: s.student_no,
-                    uid: s.id,
+                    uid: s.id || cleanId,
                     full_name: s.full_name,
                     rawPhone: s.mobile_number
                 };
@@ -2900,24 +3217,47 @@ async function pollNotificationsAndSendSms() {
 async function startNotificationSmsWatcher() {
     loadProcessedNotificationIds();
 
-    // On initial startup, cache existing notifications older than 5 minutes so we don't blast historical rows
+    // Cache existing notifications on startup ONLY IF an SMS was already recorded for them
     try {
         const headers = {
             'apikey': SUPABASE_ANON_KEY,
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
         };
-        const res = await fetch(`${SUPABASE_REST_URL}/notifications?select=id,timestamp&order=timestamp.desc&limit=100`, {
+        const res = await fetch(`${SUPABASE_REST_URL}/notifications?order=timestamp.desc&limit=100`, {
             headers,
             signal: AbortSignal.timeout(8000)
         });
         if (res.ok) {
             const rows = await res.json();
             if (Array.isArray(rows)) {
+                // Fetch recent successful SMS logs to know which notifications have already been delivered
+                const smsLogsRes = await fetch(`${SUPABASE_REST_URL}/sms_logs?status=eq.sent&limit=200`, { headers });
+                let existingSentSmsMessages = [];
+                if (smsLogsRes.ok) {
+                    const logs = await smsLogsRes.json();
+                    if (Array.isArray(logs)) {
+                        existingSentSmsMessages = logs.map(l => (l.message || '').trim().toLowerCase());
+                    }
+                }
+
                 const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
                 for (const row of rows) {
-                    const rowTime = row.timestamp ? new Date(row.timestamp).getTime() : 0;
-                    if (rowTime < fiveMinsAgo) {
-                        processedNotificationIds.add(String(row.id));
+                    const notifId = String(row.id);
+                    let rowMsg = (row.message || '').trim().toLowerCase();
+                    const title = (row.title || '').trim().toLowerCase();
+                    const isWelcome = title.includes('welcome') || rowMsg.includes('welcome');
+
+                    const wasSent = existingSentSmsMessages.some(m => m.includes(rowMsg) || (title && m.includes(title)));
+                    if (wasSent) {
+                        processedNotificationIds.add(notifId);
+                    } else if (isWelcome) {
+                        // Ensure welcome notifications that have not been delivered via SMS are queued for delivery
+                        processedNotificationIds.delete(notifId);
+                    } else {
+                        const rowTime = row.timestamp ? new Date(row.timestamp).getTime() : 0;
+                        if (rowTime < fiveMinsAgo) {
+                            processedNotificationIds.add(notifId);
+                        }
                     }
                 }
                 saveProcessedNotificationIds();
@@ -2974,6 +3314,12 @@ module.exports = {
     parseStickerText,
     verifyBirthdateMatch,
     verifyAtmProof,
-    normalizeName
+    normalizeName,
+    normalizeYear,
+    normalizeSemester,
+    isYearMatching,
+    isSemesterMatching,
+    validateGranteeEligibility,
+    server
 };
 

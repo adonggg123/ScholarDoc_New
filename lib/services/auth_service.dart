@@ -1,9 +1,12 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'audit_service.dart';
 import 'notification_service.dart';
 import 'presence_service.dart';
 import 'push_notification_service.dart';
+import 'sms_service.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -16,6 +19,15 @@ class AuthService {
     final clean = studentId.trim();
     if (clean.contains('@')) return clean;
     return '${clean.replaceAll(' ', '_')}@scholardoc.com';
+  }
+
+  /// Default server URL for backend validation (Android emulator / localhost)
+  static String get serverBaseUrl {
+    if (kIsWeb) return '';
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8080';
+    }
+    return 'http://localhost:8080';
   }
 
   // Sign up student
@@ -103,6 +115,8 @@ class AuthService {
           message:
               'Your account has been created successfully. Use your Student ID ($studentId) to login next time.',
           type: 'success',
+          phone: studentData['contactNumber'] ?? studentData['mobile_number'],
+          studentNo: studentId,
         );
 
         // Send Registration Notification to Admin
@@ -137,14 +151,19 @@ class AuthService {
     final String trimmedId = studentId.trim();
     final String trimmedPassword = password.trim();
     String authEmail = _getAuthEmail(trimmedId);
+    final cleanLower = trimmedId.toLowerCase();
+    bool isAdmin = cleanLower == 'admin' ||
+        cleanLower == 'superadmin' ||
+        cleanLower.contains('admin@');
 
     // Resolve admin emails if input is admin / superadmin or matches custom admin username
     if (!trimmedId.contains('@')) {
-      final cleanLower = trimmedId.toLowerCase();
       if (cleanLower == 'superadmin') {
         authEmail = 'superadmin@scholardoc.com';
+        isAdmin = true;
       } else if (cleanLower == 'admin') {
         authEmail = 'admin@scholardoc.com';
+        isAdmin = true;
       } else {
         try {
           final adminRes = await _supabase
@@ -154,12 +173,25 @@ class AuthService {
               .limit(1);
           if (adminRes.isNotEmpty && adminRes.first['email'] != null) {
             authEmail = adminRes.first['email'] as String;
+            isAdmin = true;
+          }
+        } catch (_) {}
+      }
+    } else {
+      if (!isAdmin) {
+        try {
+          final adminRes = await _supabase
+              .from('admins')
+              .select('email')
+              .ilike('email', trimmedId)
+              .limit(1);
+          if (adminRes.isNotEmpty && adminRes.first['email'] != null) {
+            authEmail = adminRes.first['email'] as String;
+            isAdmin = true;
           }
         } catch (_) {}
       }
     }
-
-    AuthResponse? authResponse;
 
     // Helper to format password to satisfy Supabase Auth's minimum 6-character requirement
     String formatAuthPassword(String pwd) {
@@ -170,218 +202,214 @@ class AuthService {
       return clean;
     }
 
-    debugPrint('AuthService: Starting login for ID: $trimmedId');
-    debugPrint('AuthService: Step 1 - Trying ID-based email: $authEmail');
+    AuthResponse? authResponse;
+    List<Map<String, dynamic>> matchingRecords = [];
+    bool isFromGranteesTable = false;
 
-    // --- Step 1: Try ID-based email ---
-    final step1Passwords = <String>{};
-    if (trimmedPassword.length >= 6) step1Passwords.add(trimmedPassword);
-    step1Passwords.add(formatAuthPassword(trimmedPassword));
-
-    for (final pwd in step1Passwords) {
+    // --- Mandatory Pre-check for Students: Must exist in student_grantees table ---
+    if (!isAdmin) {
+      // 1a. Secure Backend Validation against student_grantees table
       try {
-        authResponse = await _supabase.auth.signInWithPassword(
-          email: authEmail,
-          password: pwd,
-        );
-        if (authResponse.user != null) {
-          debugPrint(
-            'AuthService: Step 1 SUCCESS (UID: ${authResponse.user?.id})',
-          );
-          break;
+        final validateUrl = Uri.parse('$serverBaseUrl/api/auth/validate-grantee');
+        final res = await http.post(
+          validateUrl,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'identifier': trimmedId}),
+        ).timeout(const Duration(seconds: 4));
+
+        if (res.statusCode == 200 || res.statusCode == 403) {
+          final data = jsonDecode(res.body);
+          if (data is Map && data['isEligible'] == false) {
+            final errorMsg = data['message'] ??
+                'Access denied. Student ID "$trimmedId" is not registered as an eligible grantee in the scholarship database.';
+            debugPrint('AuthService: Backend eligibility check REJECTED: $errorMsg');
+            throw Exception(errorMsg);
+          }
         }
-      } on AuthException catch (e) {
-        debugPrint('AuthService: Step 1 attempt ($authEmail) -> ${e.message}');
+      } catch (backendErr) {
+        if (backendErr.toString().contains('Access denied')) {
+          rethrow;
+        }
+        debugPrint('AuthService: Backend verification notice (fallback to direct query): $backendErr');
       }
+
+      // 1b. Direct Supabase query strictly on student_grantees table (NO school_students fallback)
+      final cleanNo = trimmedId.replaceAll('-', '').replaceAll(' ', '');
+      final filterParts = <String>{
+        'student_no.eq.$trimmedId',
+        'studentId.eq.$trimmedId',
+      };
+      if (cleanNo.isNotEmpty && cleanNo != trimmedId) {
+        filterParts.add('student_no.eq.$cleanNo');
+        filterParts.add('studentId.eq.$cleanNo');
+      }
+      if (trimmedId.contains('@')) {
+        filterParts.add('email_address.eq.$trimmedId');
+        filterParts.add('email.eq.$trimmedId');
+      }
+
+      final query = await _supabase
+          .from('student_grantees')
+          .select()
+          .or(filterParts.join(','));
+
+      // If NOT in student_grantees table, CANNOT login!
+      if (query.isEmpty) {
+        debugPrint(
+          'AuthService: Login REJECTED - Student ID "$trimmedId" not found in student_grantees.',
+        );
+        throw Exception(
+          'Access denied. Student ID "$trimmedId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.',
+        );
+      }
+
+      matchingRecords = List<Map<String, dynamic>>.from(query);
+      isFromGranteesTable = true;
     }
 
-    // --- Step 2: Fallback — look up student by ID/Email in Supabase and try all linked credentials ---
-    if (authResponse == null) {
+    if (isAdmin) {
+      // --- Admin login flow ---
+      final step1Passwords = <String>{};
+      if (trimmedPassword.length >= 6) step1Passwords.add(trimmedPassword);
+      step1Passwords.add(formatAuthPassword(trimmedPassword));
+
+      for (final pwd in step1Passwords) {
+        try {
+          authResponse = await _supabase.auth.signInWithPassword(
+            email: authEmail,
+            password: pwd,
+          );
+          if (authResponse.user != null) break;
+        } catch (_) {}
+      }
+    } else {
+      // --- Student login flow ---
+      final firstRecord = matchingRecords.first;
+      final primaryStudentNo = (firstRecord['student_no'] ??
+              firstRecord['studentId'] ??
+              trimmedId)
+          .toString()
+          .trim();
+      final primaryEmail = _getAuthEmail(primaryStudentNo);
+
+      final candidateEmails = <String>{};
+      final candidatePasswords = <String>{};
+
+      void addCandidatePassword(String? p) {
+        if (p == null || p.trim().isEmpty) return;
+        final clean = p.trim();
+        if (clean.length >= 6) {
+          candidatePasswords.add(clean);
+        }
+        candidatePasswords.add(clean.padLeft(6, '0'));
+      }
+
+      candidateEmails.add(primaryEmail);
+      candidateEmails.add(_getAuthEmail(trimmedId));
+      addCandidatePassword(trimmedPassword);
+      addCandidatePassword(trimmedId);
+      addCandidatePassword(primaryStudentNo);
+
+      for (final data in matchingRecords) {
+        final sNo = data['student_no']?.toString().trim();
+        final sId = data['studentId']?.toString().trim();
+        final authEmailField = data['authEmail']?.toString().trim();
+        final emailField = (data['email_address'] ?? data['email'])
+            ?.toString()
+            .trim();
+
+        if (sNo != null && sNo.isNotEmpty) {
+          candidateEmails.add(_getAuthEmail(sNo));
+          addCandidatePassword(sNo);
+        }
+        if (sId != null && sId.isNotEmpty) {
+          candidateEmails.add(_getAuthEmail(sId));
+          addCandidatePassword(sId);
+        }
+        if (authEmailField != null && authEmailField.isNotEmpty) {
+          candidateEmails.add(authEmailField);
+        }
+        if (emailField != null && emailField.isNotEmpty) {
+          candidateEmails.add(emailField);
+        }
+      }
+
       debugPrint(
-        'AuthService: Step 2 - Falling back to Supabase lookup for ID: $trimmedId',
+        'AuthService: Student candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options',
       );
-      try {
-        final filterParts = <String>{
-          'student_no.eq.$trimmedId',
-          'studentId.eq.$trimmedId',
-        };
-        if (trimmedId.contains('@')) {
-          filterParts.add('email_address.eq.$trimmedId');
-          filterParts.add('email.eq.$trimmedId');
-        }
-        var query = await _supabase
-            .from('student_grantees')
-            .select()
-            .or(filterParts.join(','));
 
-        if (query.isEmpty) {
-          final schoolFilter = <String>{
-            'student_no.eq.$trimmedId',
-          };
-          if (trimmedId.contains('@')) {
-            schoolFilter.add('email_address.eq.$trimmedId');
-          }
-          final schoolQuery = await _supabase
-              .from('school_students')
-              .select()
-              .or(schoolFilter.join(','));
-          if (schoolQuery.isNotEmpty) {
-            query = schoolQuery;
-          }
-        }
-
-        if (query.isEmpty) {
-          debugPrint(
-            'AuthService: Step 2 FAILED - No record found for ID: $trimmedId',
-          );
-          throw Exception(
-            'No account found for Student ID "$trimmedId". Please contact your administrator.',
-          );
-        }
-
-        // Build list of candidate emails and passwords across all matching records
-        final candidateEmails = <String>{};
-        final candidatePasswords = <String>{};
-
-        void addCandidatePassword(String? p) {
-          if (p == null || p.trim().isEmpty) return;
-          final clean = p.trim();
-          if (clean.length >= 6) {
-            candidatePasswords.add(clean);
-          }
-          candidatePasswords.add(clean.padLeft(6, '0'));
-        }
-
-        candidateEmails.add(_getAuthEmail(trimmedId));
-        addCandidatePassword(trimmedPassword);
-        addCandidatePassword(trimmedId);
-
-        final foundEmails = <String>{};
-
-        for (final data in query) {
-          final studentNo = data['student_no']?.toString().trim();
-          final studentIdField = data['studentId']?.toString().trim();
-          final authEmailField = data['authEmail']?.toString().trim();
-          final emailField = (data['email_address'] ?? data['email'])
-              ?.toString()
-              .trim();
-
-          if (studentNo != null && studentNo.isNotEmpty) {
-            candidateEmails.add(_getAuthEmail(studentNo));
-            addCandidatePassword(studentNo);
-          }
-          if (studentIdField != null && studentIdField.isNotEmpty) {
-            candidateEmails.add(_getAuthEmail(studentIdField));
-            addCandidatePassword(studentIdField);
-          }
-          if (authEmailField != null && authEmailField.isNotEmpty) {
-            candidateEmails.add(authEmailField);
-          }
-          if (emailField != null && emailField.isNotEmpty) {
-            candidateEmails.add(emailField);
-            foundEmails.add(emailField);
-          }
-        }
-
-        // If email was found, query other companion rows to discover primary student numbers
-        for (final email in foundEmails) {
+      for (final candidateEmail in candidateEmails) {
+        for (final candidatePassword in candidatePasswords) {
+          if (candidatePassword.length < 6) continue;
           try {
-            final companionRows = await _supabase
-                .from('student_grantees')
-                .select('student_no, studentId')
-                .or('email_address.eq.$email,email.eq.$email');
-            for (final comp in companionRows) {
-              final sNo = comp['student_no']?.toString().trim();
-              final sId = comp['studentId']?.toString().trim();
-              if (sNo != null && sNo.isNotEmpty) {
-                candidateEmails.add(_getAuthEmail(sNo));
-                addCandidatePassword(sNo);
-              }
-              if (sId != null && sId.isNotEmpty) {
-                candidateEmails.add(_getAuthEmail(sId));
-                addCandidatePassword(sId);
-              }
+            authResponse = await _supabase.auth.signInWithPassword(
+              email: candidateEmail,
+              password: candidatePassword,
+            );
+            if (authResponse.user != null) {
+              debugPrint(
+                'AuthService: Student login SUCCESS with email: $candidateEmail (UID: ${authResponse.user?.id})',
+              );
+              break;
             }
-          } catch (_) {}
+          } on AuthException catch (e) {
+            debugPrint(
+              'AuthService: Student login attempt ($candidateEmail) -> ${e.message}',
+            );
+          }
         }
+        if (authResponse != null && authResponse.user != null) {
+          break;
+        }
+      }
 
-        debugPrint(
-          'AuthService: Step 2 - Candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options',
+      // Auto-provision student account if student exists in the database but Auth account does not
+      if (authResponse == null || authResponse.user == null) {
+        final autoProvisionPassword = formatAuthPassword(
+          trimmedPassword.isNotEmpty ? trimmedPassword : primaryStudentNo,
         );
 
-        for (final candidateEmail in candidateEmails) {
-          for (final candidatePassword in candidatePasswords) {
-            if (candidatePassword.length < 6) continue;
-            try {
-              authResponse = await _supabase.auth.signInWithPassword(
-                email: candidateEmail,
-                password: candidatePassword,
-              );
-              if (authResponse.user != null) {
-                debugPrint(
-                  'AuthService: Step 2 SUCCESS with email: $candidateEmail (UID: ${authResponse.user?.id})',
-                );
-                break;
-              }
-            } on AuthException catch (e) {
-              debugPrint(
-                'AuthService: Step 2 attempt ($candidateEmail) -> ${e.message}',
-              );
-            }
-          }
-          if (authResponse != null && authResponse.user != null) {
-            break;
-          }
-        }
-
-        // Auto-provision student account if student exists in the database but Auth account does not
-        if (authResponse == null || authResponse.user == null) {
-          final firstRecord = query.first;
-          final primaryId =
-              (firstRecord['student_no'] ??
-                      firstRecord['studentId'] ??
-                      trimmedId)
-                  .toString()
-                  .trim();
-          final primaryEmail = _getAuthEmail(primaryId);
-          final autoProvisionPassword = formatAuthPassword(trimmedPassword);
-
-          debugPrint(
-            'AuthService: Step 2 - Auto-provisioning student Auth account ($primaryEmail)...',
+        debugPrint(
+          'AuthService: Auto-provisioning student Auth account ($primaryEmail)...',
+        );
+        try {
+          final signUpRes = await _supabase.auth.signUp(
+            email: primaryEmail,
+            password: autoProvisionPassword,
           );
-          try {
-            final signUpRes = await _supabase.auth.signUp(
-              email: primaryEmail,
-              password: autoProvisionPassword,
+          if (signUpRes.user != null) {
+            authResponse = signUpRes;
+            debugPrint(
+              'AuthService: Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})',
             );
-            if (signUpRes.user != null) {
-              authResponse = signUpRes;
-              debugPrint(
-                'AuthService: Step 2 - Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})',
-              );
+            if (isFromGranteesTable) {
               try {
                 await _supabase
                     .from('student_grantees')
                     .update({'uid': signUpRes.user!.id})
-                    .or('student_no.eq.$primaryId,studentId.eq.$primaryId');
+                    .or('student_no.eq.$primaryStudentNo,studentId.eq.$primaryStudentNo');
               } catch (upErr) {
                 debugPrint(
                   'AuthService: Auto-provision student UID link notice: $upErr',
                 );
               }
             }
-          } catch (signUpErr) {
-            debugPrint('AuthService: Auto-provisioning failed: $signUpErr');
+          }
+        } catch (signUpErr) {
+          debugPrint('AuthService: Auto-provisioning error: $signUpErr');
+          final errStr = signUpErr.toString().toLowerCase();
+          if (errStr.contains('already registered') ||
+              errStr.contains('user already exists')) {
+            throw Exception(
+              'Incorrect password for Student ID "$trimmedId". Please enter your registered password.',
+            );
           }
         }
-
-        if (authResponse == null || authResponse.user == null) {
-          throw Exception('Login failed. Please verify your ID and password.');
-        }
-      } catch (e) {
-        debugPrint('AuthService: Step 2 - Supabase query FAILED ($e)');
-        rethrow;
       }
+    }
+
+    if (authResponse == null || authResponse.user == null) {
+      throw Exception('Login failed. Please verify your ID and password.');
     }
 
     // --- Step 3: Verify the user record exists in Supabase students or admins collection ---
@@ -495,90 +523,14 @@ class AuthService {
           }
         }
 
-        // 3c. If still not in student_grantees, check school_students table (read-only, DO NOT insert into student_grantees)
         if (doc.isEmpty) {
+          debugPrint('AuthService: Step 3 REJECTED - No student grantee record in student_grantees for UID: $uid ($userEmail)');
           try {
-            final cleanNo = trimmedId.replaceAll(' ', '');
-            final emailPrefix = userEmail.contains('@') ? userEmail.split('@').first.replaceAll('_', '') : '';
-            final schoolFilterParts = <String>{
-              'student_no.eq.$trimmedId',
-              'email_address.eq.$trimmedId',
-            };
-            if (cleanNo.isNotEmpty) schoolFilterParts.add('student_no.eq.$cleanNo');
-            if (emailPrefix.isNotEmpty) schoolFilterParts.add('student_no.eq.$emailPrefix');
-            if (userEmail.isNotEmpty) schoolFilterParts.add('email_address.eq.$userEmail');
-            if (cleanNo.length >= 6) {
-              final suffix = cleanNo.substring(cleanNo.length - 6);
-              schoolFilterParts.add('student_no.like.%$suffix');
-            }
-
-            final schoolDoc = await _supabase
-                .from('school_students')
-                .select()
-                .or(schoolFilterParts.join(','))
-                .limit(1);
-
-            if (schoolDoc.isNotEmpty) {
-              final s = schoolDoc.first;
-              debugPrint('AuthService: Step 3 - Found student in school_students! Loading profile without inserting into student_grantees.');
-              final studentProfile = {
-                'uid': uid,
-                'student_no': s['student_no'],
-                'studentId': s['student_no'],
-                'full_name': s['full_name'],
-                'fullName': s['full_name'],
-                'program_name': s['program_name'],
-                'course': s['program_name'],
-                'year_level': s['year_level'],
-                'year': s['year_level'],
-                'date_of_birth': s['date_of_birth'],
-                'birthdate': s['date_of_birth'],
-                'gender': s['gender'],
-                'civil_status': s['civil_status'],
-                'religion': s['religion'],
-                'mobile_number': s['mobile_number'],
-                'contactNumber': s['mobile_number'],
-                'email_address': s['email_address'],
-                'email': s['email_address'],
-                'status': 'No Submission Yet',
-                'scholarship_name': 'CHED TES',
-                'role': 'student',
-              };
-              doc = [studentProfile];
-              isGranteeRecord = false;
-            }
-          } catch (schoolErr) {
-            debugPrint('AuthService: Step 3 - school_students check error: $schoolErr');
-          }
-        }
-
-        if (doc.isEmpty) {
-          debugPrint('AuthService: Step 3 - In-memory fallback student profile for UID: $uid ($userEmail)');
-          final extractedId = userEmail.contains('@')
-              ? userEmail.split('@').first.replaceAll('_', ' ').trim()
-              : trimmedId;
-          final fallbackStudent = {
-            'uid': uid,
-            'student_no': extractedId,
-            'studentId': extractedId,
-            'full_name': authResponse.user?.userMetadata?['fullName'] ??
-                authResponse.user?.userMetadata?['full_name'] ??
-                extractedId,
-            'fullName': authResponse.user?.userMetadata?['fullName'] ??
-                authResponse.user?.userMetadata?['full_name'] ??
-                extractedId,
-            'program_name': 'CHED TES Scholar',
-            'course': 'CHED TES Scholar',
-            'year_level': '1',
-            'year': '1',
-            'email_address': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
-            'email': userEmail.isNotEmpty ? userEmail : '$trimmedId@scholardoc.com',
-            'status': 'No Submission Yet',
-            'scholarship_name': 'CHED TES',
-            'role': 'student',
-          };
-          doc = [fallbackStudent];
-          isGranteeRecord = false;
+            await _supabase.auth.signOut();
+          } catch (_) {}
+          throw Exception(
+            'Access denied. Student ID "$trimmedId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.',
+          );
         }
 
         // If multiple student records exist (e.g. legacy/duplicate), prioritize the active/complete one
@@ -630,6 +582,10 @@ class AuthService {
 
         // Send Welcome notification on first login
         try {
+          final String? studentPhone = studentData['mobile_number'] ??
+              studentData['contactNumber'] ??
+              studentData['phone_number'];
+
           final existingWelcome = await _supabase
               .from('notifications')
               .select('id')
@@ -637,9 +593,16 @@ class AuthService {
               .ilike('title', '%Welcome%')
               .limit(1);
 
+          final existingWelcomeSms = await _supabase
+              .from('sms_logs')
+              .select('id')
+              .or('grantee_uid.eq.$uid,student_id.eq.$trimmedId')
+              .ilike('message', '%Welcome%')
+              .limit(1);
+
           if (existingWelcome.isEmpty) {
             debugPrint(
-              'AuthService: First login detected for $displayName - generating Welcome notification',
+              'AuthService: First login detected for $displayName - generating Welcome notification & SMS',
             );
             await _notificationService.sendNotification(
               studentId: uid,
@@ -647,6 +610,22 @@ class AuthService {
               message:
                   'Welcome, $displayName! Your scholarship portal is ready. Check your profile, submitted documents, and stay updated on announcements.',
               type: 'success',
+              phone: studentPhone,
+              studentNo: trimmedId,
+            );
+          } else if (existingWelcomeSms.isEmpty) {
+            // In-app notification already exists, but Welcome SMS was never delivered to student phone
+            debugPrint(
+              'AuthService: Welcome SMS pending delivery for $displayName ($studentPhone) - dispatching SMS',
+            );
+            final String smsContent =
+                '[ScholarDoc] Welcome to ScholarDoc!: Welcome, $displayName! Your scholarship portal is ready. Check your profile, submitted documents, and stay updated on announcements.';
+            await SmsService().sendStudentSms(
+              studentId: trimmedId,
+              phone: studentPhone,
+              title: 'Welcome to ScholarDoc!',
+              message: smsContent,
+              eventType: 'success',
             );
           }
         } catch (notifErr) {

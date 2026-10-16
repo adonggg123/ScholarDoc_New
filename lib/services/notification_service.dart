@@ -97,6 +97,8 @@ class NotificationService {
     required String title,
     required String message,
     required String type, // 'success', 'warning', 'error', 'info'
+    String? phone,
+    String? studentNo,
   }) async {
     try {
       await _supabase.from('notifications').insert({
@@ -112,7 +114,8 @@ class NotificationService {
       if (studentId != 'admin' && studentId != 'superadmin') {
         final String smsContent = '[ScholarDoc] $title: $message';
         SmsService().sendStudentSms(
-          studentId: studentId,
+          studentId: studentNo ?? studentId,
+          phone: phone,
           title: title,
           message: smsContent,
           eventType: type,

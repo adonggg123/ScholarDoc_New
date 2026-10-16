@@ -759,29 +759,35 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
           roiBytes,
           expectedBirthdate: _expectedBirthdate,
         );
+
         if (roiResult.isValid) {
-          result = roiResult;
-        } else if (!result.stickerFound && roiResult.stickerFound) {
-          result = roiResult;
+          result = roiResult.copyWith(
+            birthdate: result.birthdate ?? roiResult.birthdate,
+            birthdateMatches: (result.birthdate != null && !result.birthdateMatches) ? false : true,
+          );
         } else if (roiResult.stickerFound) {
-          final bestYear = result.academicYear ?? roiResult.academicYear;
-          final bestSem = result.semester ?? roiResult.semester;
+          final bestYear = roiResult.termValidation.yearMatches
+              ? roiResult.academicYear
+              : (result.termValidation.yearMatches ? result.academicYear : (roiResult.academicYear ?? result.academicYear));
+          final bestSem = roiResult.termValidation.semesterMatches
+              ? roiResult.semester
+              : (result.termValidation.semesterMatches ? result.semester : (roiResult.semester ?? result.semester));
           final bestStamp = result.hasValidationStamp || roiResult.hasValidationStamp;
-          final bestRegistrar = result.registrarText ?? roiResult.registrarText;
+          final bestRegistrar = roiResult.registrarText ?? result.registrarText;
           final bestDob = result.birthdate ?? roiResult.birthdate;
-          final bestDobMatch = result.birthdateMatches && roiResult.birthdateMatches;
-          if (bestYear != result.academicYear || bestSem != result.semester) {
-            result = DocumentAIScannerService.revalidateWithTerms(
-              result,
-              academicYear: bestYear,
-              semester: bestSem,
-              hasValidationStamp: bestStamp,
-              registrarText: bestRegistrar,
-            ).copyWith(
-              birthdate: bestDob,
-              birthdateMatches: bestDobMatch,
-            );
-          }
+          // Genuine mismatch only if a birthdate was found that contradicts profile
+          final bestDobMatch = (result.birthdate != null && !result.birthdateMatches) ? false : true;
+
+          result = DocumentAIScannerService.revalidateWithTerms(
+            result,
+            academicYear: bestYear,
+            semester: bestSem,
+            hasValidationStamp: bestStamp,
+            registrarText: bestRegistrar,
+          ).copyWith(
+            birthdate: bestDob,
+            birthdateMatches: bestDobMatch,
+          );
         }
       }
 
@@ -846,20 +852,20 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   }
 
   void _showStickerWarningDialog(StickerScanResult result) {
-    final bool isBirthdateMismatch = result.birthdateMatches == false;
+    final bool isBirthdateMismatch = result.birthdate != null && result.birthdateMatches == false;
     final bool isUnreadable = !result.stickerFound && result.birthdate == null;
     
     String title;
     String message;
     if (isBirthdateMismatch) {
       title = 'Birthdate Mismatch';
-      message = 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.';
+      message = 'The birthdate on your school ID (${result.birthdate}) does not match your registered information ($_expectedBirthdate). Please check your ID and try again.';
     } else if (isUnreadable) {
-      title = 'Unreadable Back ID';
-      message = "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.";
+      title = result.termValidation.statusTitle;
+      message = result.termValidation.message;
     } else {
-      title = 'ID Sticker Outdated';
-      message = 'The academic year or semester on your ID sticker is not current. Please scan the correct ID.';
+      title = result.termValidation.statusTitle;
+      message = result.termValidation.message;
     }
 
     showDialog(
@@ -2241,8 +2247,8 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
               runSpacing: 6,
               children: [
                 if (res.stickerFound) ...[
-                  _buildStickerInfoPill('Detected AY', res.academicYear ?? 'Unknown', res.isValid ? const Color(0xFF10B981) : AppTheme.error),
-                  _buildStickerInfoPill('Semester', res.semester ?? 'Unknown', res.isValid ? const Color(0xFF10B981) : AppTheme.error),
+                  _buildStickerInfoPill('Detected AY', res.academicYear ?? 'Unknown', res.termValidation.yearMatches ? const Color(0xFF10B981) : AppTheme.error),
+                  _buildStickerInfoPill('Semester', res.semester ?? 'Unknown', res.termValidation.semesterMatches ? const Color(0xFF10B981) : AppTheme.error),
                 ],
                 if (res.birthdate != null)
                   _buildStickerInfoPill('Birthdate', res.birthdate!, res.birthdateMatches == true ? const Color(0xFF10B981) : AppTheme.error),
@@ -2254,7 +2260,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             Text(
               isBirthdateValid
                   ? res.termValidation.message
-                  : 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.',
+                  : 'The birthdate on your school ID (${res.birthdate}) does not match your registered information. Please check your ID and try again.',
               style: TextStyle(fontSize: 12, color: context.textPri, height: 1.35),
             ),
             if (!isValid) ...[

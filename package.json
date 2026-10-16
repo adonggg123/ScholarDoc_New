@@ -16,7 +16,9 @@
   "author": "ScholarDoc Team",
   "license": "ISC",
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
     "firebase-admin": "^14.5.0",
+    "jszip": "^3.10.2",
     "nodemailer": "^10.0.13"
   }
 }

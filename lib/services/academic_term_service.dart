@@ -202,12 +202,18 @@ class AcademicTermService {
 
     // Replace common OCR confusion: uppercase 'O' inside year numbers with '0'
     var clean = raw
-        .replaceAll(RegExp(r'\b2[oO]2'), '202')
+        .replaceAllMapped(RegExp(r'\b2[oO]([0-9]{2})', caseSensitive: false), (m) => '20${m[1]}')
         .replaceAll(RegExp(r'[oO](?=\d)'), '0')
         .replaceAll(RegExp(r'(?<=\d)[oO]'), '0');
 
-    // Replace em/en dashes, slashes, "to", dots, and underscores between numbers with hyphen
-    clean = clean.replaceAll(RegExp(r'[\u2013\u2014\u2212/\.~_]|(?<=\d)\s*to\s*(?=\d)'), '-');
+    // Replace all Unicode dashes, slashes, "to", dots, and underscores between numbers with hyphen
+    clean = clean.replaceAll(
+      RegExp(r'[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)'),
+      '-',
+    );
+
+    // Remove unintended spaces inside digit pairs (e.g. "20 26" -> "2026")
+    clean = clean.replaceAllMapped(RegExp(r'\b(20)\s+(\d{2})\b'), (m) => '${m[1]}${m[2]}');
 
     // Extract 4-digit start year and 2-to-4 digit end year
     final match = RegExp(r'(20\d{2})\s*-\s*(20\d{2}|\d{2})').firstMatch(clean);
@@ -234,42 +240,47 @@ class AcademicTermService {
   /// Normalizes semester string into "1st Semester", "2nd Semester", or "Summer / Midyear".
   static String normalizeSemester(String raw) {
     if (raw.isEmpty) return '';
-    final lower = raw.toLowerCase().trim();
+    final lower = raw.toLowerCase().trim()
+        .replaceAll(RegExp(r'[\u00B0\u00BA˚]'), '*')
+        .replaceAll(RegExp(r'\s+'), ' ');
 
-    // 2nd Semester check first (handles 2nd, second, 2*, 2 nd, 2-nd, 2rd, sem 2, sem2)
-    if (lower.contains('2nd') ||
-        lower.contains('second') ||
-        lower.contains('sem 2') ||
-        lower.contains('sem2') ||
-        lower.contains('2*') ||
-        lower.contains('2 nd') ||
-        lower.contains('2-nd') ||
-        lower.contains('2rd') ||
-        lower == '2' ||
-        lower.startsWith('2 ') ||
-        lower.endsWith(' 2')) {
-      return '2nd Semester';
+    // 2nd Semester check first (handles 2nd, second, 2*, 2°*, 2 nd, 2-nd, 2rd, sem 2, sem2)
+    final is2nd = RegExp(
+          r'\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
+          caseSensitive: false,
+        ).hasMatch(lower) ||
+        RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\b(?:2|ii)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\b2nd\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\bsecond\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+        lower.contains('2* semester') ||
+        lower.contains('2* sem');
+    if (is2nd) return '2nd Semester';
+
+    // 1st Semester (handles 1st, first, 1*, 1°*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1)
+    final is1st = RegExp(
+          r'\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
+          caseSensitive: false,
+        ).hasMatch(lower) ||
+        RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\b(?:1|i)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\b1st\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\bfirst\s+semester\b', caseSensitive: false).hasMatch(lower) ||
+        RegExp(r'\b[il]st\s+sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
+        lower.contains('1* semester') ||
+        lower.contains('1* sem');
+    if (is1st) return '1st Semester';
+
+    if (lower.contains('summer') || lower.contains('midyear') || lower.contains('mid-year') || lower.contains('mid year')) {
+      return 'Summer / Midyear';
     }
 
-    // 1st Semester (handles 1st, first, 1*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1)
-    if (lower.contains('1st') ||
-        lower.contains('first') ||
-        lower.contains('sem 1') ||
-        lower.contains('sem1') ||
-        lower.contains('1*') ||
-        lower.contains('1 st') ||
-        lower.contains('1-st') ||
-        lower.contains('ist') ||
-        lower.contains('1sl') ||
-        lower.contains('1si') ||
-        lower == '1' ||
-        lower.startsWith('1 ') ||
-        lower.endsWith(' 1')) {
+    // Direct standalone short forms without other text
+    if (lower == '1st sem' || lower == '1st semester' || lower == 'first sem' || lower == 'first semester' || lower == '1st') {
       return '1st Semester';
     }
-
-    if (lower.contains('summer') || lower.contains('midyear') || lower.contains('mid-year')) {
-      return 'Summer / Midyear';
+    if (lower == '2nd sem' || lower == '2nd semester' || lower == 'second sem' || lower == 'second semester' || lower == '2nd') {
+      return '2nd Semester';
     }
 
     return raw.trim();
@@ -316,8 +327,8 @@ class AcademicTermService {
       );
     }
 
-    final normDetectedYear = detectedYear != null ? normalizeYear(detectedYear) : null;
-    final normDetectedSem = detectedSemester != null ? normalizeSemester(detectedSemester) : null;
+    final normDetectedYear = detectedYear != null && detectedYear.trim().isNotEmpty ? normalizeYear(detectedYear) : null;
+    final normDetectedSem = detectedSemester != null && detectedSemester.trim().isNotEmpty ? normalizeSemester(detectedSemester) : null;
 
     final detected = AcademicTerm(
       academicYear: normDetectedYear ?? 'Unknown AY',
@@ -340,26 +351,81 @@ class AcademicTermService {
       );
     }
 
-    // Handle mismatches
-    final List<String> issues = [];
-    if (!yearMatches) {
-      issues.add('Academic Year mismatch (Detected: ${normDetectedYear ?? "None"}, Required: ${target.academicYear})');
-    }
-    if (!semMatches) {
-      issues.add('Semester mismatch (Detected: ${normDetectedSem ?? "None"}, Required: ${target.semester})');
+    // Specific granular status titles and messages
+    if (normDetectedYear == null && normDetectedSem != null) {
+      return TermValidationResult(
+        isValid: false,
+        yearMatches: false,
+        semesterMatches: semMatches,
+        currentTerm: target,
+        detectedTerm: detected,
+        statusTitle: 'Academic Year Unreadable',
+        message: 'Detected $normDetectedSem, but could not clearly read the academic year from the validation sticker. Required period: ${target.displayString}. Please retake the scan with better lighting.',
+        isFlagged: true,
+      );
     }
 
-    final issueDesc = issues.join(' and ');
+    if (normDetectedYear != null && normDetectedSem == null) {
+      return TermValidationResult(
+        isValid: false,
+        yearMatches: yearMatches,
+        semesterMatches: false,
+        currentTerm: target,
+        detectedTerm: detected,
+        statusTitle: 'Semester Unreadable',
+        message: 'Detected AY $normDetectedYear, but could not clearly read the semester from the validation sticker. Required period: ${target.displayString}. Please retake the scan with better lighting.',
+        isFlagged: true,
+      );
+    }
+
     final isExpired = normDetectedYear != null && normDetectedYear.compareTo(target.academicYear) < 0;
+    if (isExpired) {
+      return TermValidationResult(
+        isValid: false,
+        yearMatches: false,
+        semesterMatches: semMatches,
+        currentTerm: target,
+        detectedTerm: detected,
+        statusTitle: 'Expired Validation Sticker',
+        message: 'The validation sticker on your ID is expired ($normDetectedYear). The active school period requires ${target.displayString}. You cannot proceed with an outdated ID sticker.',
+        isFlagged: true,
+      );
+    }
+
+    if (!yearMatches && !semMatches) {
+      return TermValidationResult(
+        isValid: false,
+        yearMatches: false,
+        semesterMatches: false,
+        currentTerm: target,
+        detectedTerm: detected,
+        statusTitle: 'Sticker Term Mismatch',
+        message: 'The validation sticker does not match the active school period. Both the academic year ($normDetectedYear) and semester ($normDetectedSem) do not match the required period (${target.displayString}).',
+        isFlagged: true,
+      );
+    }
+
+    if (!yearMatches) {
+      return TermValidationResult(
+        isValid: false,
+        yearMatches: false,
+        semesterMatches: semMatches,
+        currentTerm: target,
+        detectedTerm: detected,
+        statusTitle: 'Academic Year Mismatch',
+        message: 'The academic year on your ID sticker ($normDetectedYear) does not match the active school period (${target.academicYear}).',
+        isFlagged: true,
+      );
+    }
 
     return TermValidationResult(
       isValid: false,
       yearMatches: yearMatches,
-      semesterMatches: semMatches,
+      semesterMatches: false,
       currentTerm: target,
       detectedTerm: detected,
-      statusTitle: isExpired ? 'Expired Validation Sticker' : 'Sticker Term Mismatch',
-      message: 'The validation sticker does not match the active school period. $issueDesc. You cannot proceed with an unvalidated or outdated ID card.',
+      statusTitle: 'Semester Mismatch',
+      message: 'The semester on your ID sticker ($normDetectedSem) does not match the active school period (${target.semester}).',
       isFlagged: true,
     );
   }
