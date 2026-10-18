@@ -125,41 +125,76 @@ async function syncAcademicTermFromDb() {
 }
 setTimeout(syncAcademicTermFromDb, 1500);
 
-function callOcrSpace(base64Image) {
+const OCR_SPACE_KEYS = [
+    'helloworld',
+    'K88828859988957',
+    'K87878892488957',
+];
+
+function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientation = true } = {}) {
     return new Promise((resolve) => {
-        const postData = 'apikey=helloworld&language=eng&isOverlayRequired=false&OCREngine=2&base64Image=' + encodeURIComponent('data:image/jpeg;base64,' + base64Image);
-        const req = https.request({
-            hostname: 'api.ocr.space',
-            path: '/parse/image',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(postData)
+        if (!base64Image) return resolve('');
+
+        let keyIndex = 0;
+        function tryNextKey() {
+            if (keyIndex >= OCR_SPACE_KEYS.length) {
+                return resolve('');
             }
-        }, (res) => {
-            let data = '';
-            res.on('data', c => data += c);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    const text = json.ParsedResults?.[0]?.ParsedText || '';
-                    resolve(text);
-                } catch (_) {
-                    resolve('');
+            const apiKey = OCR_SPACE_KEYS[keyIndex++];
+            const postData = 'apikey=' + encodeURIComponent(apiKey) +
+                '&language=eng' +
+                '&isOverlayRequired=false' +
+                '&OCREngine=' + encodeURIComponent(engine) +
+                '&scale=' + (scale ? 'true' : 'false') +
+                '&detectOrientation=' + (detectOrientation ? 'true' : 'false') +
+                '&base64Image=' + encodeURIComponent('data:image/jpeg;base64,' + base64Image);
+
+            const req = https.request({
+                hostname: 'api.ocr.space',
+                path: '/parse/image',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Length': Buffer.byteLength(postData),
+                    'User-Agent': 'ScholarDoc-OCR/2.0'
                 }
+            }, (res) => {
+                let data = '';
+                res.on('data', c => data += c);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        if (json.IsErroredOnProcessing && json.ErrorMessage) {
+                            console.warn('[OCR.space API Error]', json.ErrorMessage);
+                            return tryNextKey();
+                        }
+                        const text = json.ParsedResults?.[0]?.ParsedText || '';
+                        resolve(text.trim());
+                    } catch (_) {
+                        tryNextKey();
+                    }
+                });
             });
-        });
-        req.on('error', () => resolve(''));
-        req.setTimeout(8000, () => {
-            req.destroy();
-            resolve('');
-        });
-        req.write(postData);
-        req.end();
+
+            req.on('error', (err) => {
+                console.warn('[OCR.space Network Error]', err.message);
+                tryNextKey();
+            });
+
+            req.setTimeout(8000, () => {
+                req.destroy();
+                tryNextKey();
+            });
+
+            req.write(postData);
+            req.end();
+        }
+
+        tryNextKey();
     });
 }
 
-// ── Document AI & OCR Caching Layer ──────────────────────────────────────────
+// ── Document OCR Caching Layer ────────────────────────────────────────────────
 const ocrTextCache = new Map(); // SHA-256(image) -> { text, engine, timestamp }
 const documentAiEndpointCache = new Map(); // SHA-256(urlPath + payload) -> { response, timestamp }
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes TTL
@@ -187,83 +222,52 @@ function setInCache(cache, key, value) {
     cache.set(key, { value, timestamp: Date.now() });
 }
 
-function callVisionApi(base64Image) {
-    return new Promise((resolve) => {
-        if (!base64Image) return resolve({ text: '', engine: 'None' });
+// Dedicated High-Accuracy Document OCR pipeline (No Google Document AI API dependency)
+async function callDocumentOcr(base64Image, { isSticker = false } = {}) {
+    if (!base64Image) return { text: '', engine: 'None' };
 
-        const imgHash = getSha256(base64Image);
-        const cached = getFromCache(ocrTextCache, imgHash);
-        if (cached) {
-            return resolve({ text: cached.text, engine: `${cached.engine} (Server Cached)` });
-        }
+    const imgHash = getSha256(base64Image);
+    const cached = getFromCache(ocrTextCache, imgHash);
+    if (cached) {
+        return { text: cached.text, engine: `${cached.engine} (Server Cached)` };
+    }
 
-        const visionPayload = JSON.stringify({
-            requests: [{
-                image: { content: base64Image },
-                features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
-            }]
-        });
+    // Pass 1: OCR.space Engine 2 (specialized for alphanumeric text, codes, dates, numbers)
+    let text = await callOcrSpace(base64Image, { engine: '2', scale: true, detectOrientation: true });
+    let engine = 'High-Accuracy Document OCR Engine 2';
 
-        let finished = false;
-        function finish(text, engine) {
-            if (finished) return;
-            finished = true;
-            if (text && text.trim().length > 0) {
-                setInCache(ocrTextCache, imgHash, { text, engine });
-            }
-            resolve({ text, engine });
-        }
+    // Pass 2 (Sticker Ensemble): If scanning a sticker and year/semester is missing or text is sparse, run Engine 1
+    if (isSticker) {
+        const hasYear = /(?:202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(?:202[0-9]|203[0-5]|\d{2})/i.test(text);
+        const hasSem = /(?:1\s*st|2\s*nd|first|second|sem(?:ester)?)/i.test(text);
 
-        const visionReq = https.request({
-            hostname: 'vision.googleapis.com',
-            path: '/v1/images:annotate?key=' + GOOGLE_API_KEY,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(visionPayload)
-            }
-        }, (visionRes) => {
-            let visionData = '';
-            visionRes.on('data', c => visionData += c);
-            visionRes.on('end', async () => {
-                let extractedText = '';
-                let engine = 'Google Document AI via ScholarDoc Server';
-                try {
-                    const vJson = JSON.parse(visionData);
-                    if (vJson.responses && vJson.responses[0]?.fullTextAnnotation) {
-                        extractedText = vJson.responses[0].fullTextAnnotation.text || '';
-                    } else if (vJson.responses && vJson.responses[0]?.textAnnotations?.[0]?.description) {
-                        extractedText = vJson.responses[0].textAnnotations[0].description || '';
-                    }
-                } catch (_) {}
-
-                if (!extractedText) {
-                    extractedText = await callOcrSpace(base64Image);
-                    if (extractedText) {
-                        engine = 'High-Accuracy Document OCR via ScholarDoc Server';
-                    }
+        if (!hasYear || !hasSem || text.length < 15) {
+            console.log('[Document OCR] Running Engine 1 ensemble for sticker recognition...');
+            const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
+            if (textE1 && textE1.length > 0) {
+                if (!text || textE1.length > text.length || (!hasYear && /(?:202[0-9]|203[0-5])/i.test(textE1))) {
+                    text = text ? `${text}\n${textE1}` : textE1;
+                    engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
                 }
-                finish(extractedText, engine);
-            });
-        });
+            }
+        }
+    } else if (!text || text.length < 5) {
+        const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
+        if (textE1) {
+            text = textE1;
+            engine = 'High-Accuracy Document OCR Engine 1';
+        }
+    }
 
-        visionReq.on('error', async (err) => {
-            console.warn('[Document AI] Google Vision error:', err.message);
-            const ocrText = await callOcrSpace(base64Image);
-            finish(ocrText, ocrText ? 'High-Accuracy Document OCR via ScholarDoc Server' : 'Fallback Engine');
-        });
+    if (text && text.trim().length > 0) {
+        setInCache(ocrTextCache, imgHash, { text, engine });
+    }
 
-        // Fast failover timeout: 4s instead of 12s to prevent long hangs
-        visionReq.setTimeout(4000, async () => {
-            visionReq.destroy();
-            const ocrText = await callOcrSpace(base64Image);
-            finish(ocrText, ocrText ? 'High-Accuracy Document OCR via ScholarDoc Server' : 'Fallback Engine');
-        });
-
-        visionReq.write(visionPayload);
-        visionReq.end();
-    });
+    return { text: text.trim(), engine };
 }
+
+// Backward-compatible alias for existing callers
+const callVisionApi = callDocumentOcr;
 
 function normalizeName(name) {
     if (!name) return '';
@@ -758,16 +762,9 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
             /\b2nd\s+semester\b/i.test(lower) ||
             /\bsecond\s+semester\b/i.test(lower) ||
             (hasSemesterWord && (lower.includes('2*') || lower.includes('2°') || lower.includes('2º')));
-        if (is2nd) return '2nd Semester';
-
-        const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
-            /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b/i.test(lower) ||
-            /\b(?:1|i)\s*[\/\-]\s*sem\b/i.test(lower) ||
-            /\b1st\s+semester\b/i.test(lower) ||
-            /\bfirst\s+semester\b/i.test(lower) ||
-            /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
-            (hasSemesterWord && (lower.includes('1*') || lower.includes('1°') || lower.includes('1º')));
-        if (is1st) return '1st Semester';
+        const isNearYearOrSticker = /(?:20\d{2}|ay|sy|valid|reg|ustp|campus)/i.test(lower);
+        if (is2nd || (isNearYearOrSticker && /\b(?:2\s*nd|2\s*rd|second)\b/i.test(lower))) return '2nd Semester';
+        if (is1st || (isNearYearOrSticker && /\b(?:1\s*st|1\s*sl|1\s*si|first)\b/i.test(lower))) return '1st Semester';
 
         if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(lower)) {
             return 'Summer / Midyear';
@@ -2159,7 +2156,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const { text, engine } = await callVisionApi(base64Image);
+                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: true });
                 const parsedSticker = parseStickerText(text) || {};
                 const birthdateRes = verifyBirthdateMatch(text, expectedBirthdate) || {};
 
@@ -2206,7 +2203,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const { text, engine } = await callVisionApi(base64Image);
+                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: false });
                 const nameRes = verifyNameMatch(text, expectedName);
 
                 const responseData = {
@@ -2258,7 +2255,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const { text, engine } = await callVisionApi(base64Image);
+                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: true });
                 const sticker = parseStickerText(text, targetYear, targetSem) || {};
                 const birthdateRes = verifyBirthdateMatch(text, expectedBirthdate) || {};
 
@@ -2271,7 +2268,7 @@ const server = http.createServer(async (req, res) => {
                 if (!sticker.stickerFound) {
                     message = "Could not clearly detect an academic year or semester validation sticker on ID. Please ensure the sticker is well-lit and retake the scan.";
                 } else if (isValid) {
-                    message = `Validation sticker verified! Matched active school period (AY ${sticker.academicYear} • ${sticker.semester}${birthdateRes.detectedBirthdate ? ` • DOB: ${birthdateRes.detectedBirthdate}` : ''}).`;
+                    message = `Validation sticker verified via OCR! Matched active school period (AY ${sticker.academicYear} • ${sticker.semester}${birthdateRes.detectedBirthdate ? ` • DOB: ${birthdateRes.detectedBirthdate}` : ''}).`;
                 } else if (hasDetectedBdate && !birthdateRes.matches) {
                     message = `The birthdate on your school ID (${birthdateRes.detectedBirthdate}) does not match your registered information. Please check your ID and try again.`;
                 } else if (!sticker.isValid) {
@@ -2280,7 +2277,7 @@ const server = http.createServer(async (req, res) => {
                     message = "The academic year or semester on your ID sticker is not current. Please scan the correct ID.";
                 }
 
-                console.log(`[Document AI Scan] Back ID: AY=${sticker.academicYear}, Sem=${sticker.semester} | Req: AY=${normTargetYear}, Sem=${normTargetSem} | Valid=${isValid} | Reason=${message}`);
+                console.log(`[Document OCR Scan] Back ID: AY=${sticker.academicYear}, Sem=${sticker.semester} | Req: AY=${normTargetYear}, Sem=${normTargetSem} | Valid=${isValid} | Reason=${message}`);
 
                 const responseData = {
                     success: true,
@@ -2334,7 +2331,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const { text, engine } = await callVisionApi(base64Image);
+                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: false });
                 const atmRes = verifyAtmProof(text, expectedName, expectedSa) || {};
 
                 const responseData = {

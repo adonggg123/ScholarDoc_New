@@ -60,7 +60,8 @@ class StickerScanResult {
   });
 
   /// Quick check if the sticker is fully valid and approved for submission.
-  bool get isValid => stickerFound && termValidation.isValid && birthdateMatches;
+  bool get isValid =>
+      stickerFound && termValidation.isValid && birthdateMatches;
 
   /// User-friendly one-line summary.
   String get summaryString {
@@ -256,11 +257,16 @@ class DocumentAIScannerService {
     onProgress?.call('Analyzing Document AI text...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-front-id');
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'image': base64Img, 'expectedName': expectedName}),
-      ).timeout(const Duration(seconds: 8));
+      final res = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'image': base64Img,
+              'expectedName': expectedName,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -270,8 +276,10 @@ class DocumentAIScannerService {
             detectedName: data['detectedName']?.toString(),
             confidence: (data['confidence'] as num?)?.toDouble() ?? 0.85,
             rawExtractedText: data['rawText']?.toString() ?? '',
-            engineUsed: data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
-            message: data['message']?.toString() ?? 'Name verified successfully.',
+            engineUsed:
+                data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
+            message:
+                data['message']?.toString() ?? 'Name verified successfully.',
           );
           _frontIdCache[cacheKey] = result;
           return result;
@@ -299,7 +307,7 @@ class DocumentAIScannerService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 2. BACK ID SCANNING — Google Document AI (AY, Semester, Birthdate)
+  // 2. BACK ID SCANNING — High-Accuracy Document OCR (AY, Semester, Birthdate)
   // ──────────────────────────────────────────────────────────────────────────
   static Future<StickerScanResult> scanIdBackSticker(
     Uint8List imageBytes, {
@@ -309,32 +317,35 @@ class DocumentAIScannerService {
   }) async {
     final activeTerm = targetTerm ?? AcademicTermService.currentTerm;
     final imgHash = computeImageHash(imageBytes);
-    final cacheKey = '$imgHash:${activeTerm.academicYear}:${activeTerm.semester}:${expectedBirthdate ?? ""}';
+    final cacheKey =
+        '$imgHash:${activeTerm.academicYear}:${activeTerm.semester}:${expectedBirthdate ?? ""}';
 
     // 1. Check in-memory client cache
     if (_backStickerCache.containsKey(cacheKey)) {
-      debugPrint('[DocumentAI Cache Hit] Back ID sticker');
+      debugPrint('[DocumentOCR Cache Hit] Back ID sticker');
       return _backStickerCache[cacheKey]!;
     }
 
-    onProgress?.call('Optimizing document scan...');
+    onProgress?.call('Optimizing sticker image for OCR...');
     final optimizedBytes = await optimizeImageForOcr(imageBytes);
     final base64Img = base64Encode(optimizedBytes);
 
-    // 2. Try Backend Proxy first (fast 8s timeout)
-    onProgress?.call('Scanning AY, Semester & Birthdate...');
+    // 2. Try Backend High-Accuracy OCR Proxy first (fast 8s timeout)
+    onProgress?.call('Scanning sticker with Document OCR...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-back-id');
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'image': base64Img,
-          'expectedBirthdate': expectedBirthdate,
-          'academicYear': activeTerm.academicYear,
-          'semester': activeTerm.semester,
-        }),
-      ).timeout(const Duration(seconds: 8));
+      final res = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'image': base64Img,
+              'expectedBirthdate': expectedBirthdate,
+              'academicYear': activeTerm.academicYear,
+              'semester': activeTerm.semester,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -344,7 +355,9 @@ class DocumentAIScannerService {
           final bdate = data['birthdate']?.toString();
           final rawBdateMatches = data['birthdateMatches'] == true;
           // If no birthdate was detected on the ID back, it is NOT a birthdate mismatch!
-          final bdateMatches = (bdate == null || bdate.trim().isEmpty) ? true : rawBdateMatches;
+          final bdateMatches = (bdate == null || bdate.trim().isEmpty)
+              ? true
+              : rawBdateMatches;
 
           final termValidation = AcademicTermService.validateScannedTerm(
             detectedYear: year,
@@ -352,27 +365,37 @@ class DocumentAIScannerService {
             targetTerm: activeTerm,
           );
 
-          final isValid = data['stickerFound'] == true && termValidation.isValid && bdateMatches;
+          final isValid =
+              data['stickerFound'] == true &&
+              termValidation.isValid &&
+              bdateMatches;
           final errorMessage = isValid
               ? null
               : (!termValidation.isValid
-                  ? termValidation.message
-                  : (!bdateMatches
-                      ? 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.'
-                      : data['message']?.toString()));
+                    ? termValidation.message
+                    : (!bdateMatches
+                          ? 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.'
+                          : data['message']?.toString()));
 
-          debugPrint('[Document AI Scan] Back ID: AY=$year, Sem=$sem | Valid=$isValid (Term=${termValidation.isValid}, DOB=$bdateMatches)');
+          debugPrint(
+            '[Document OCR Scan] Back ID: AY=$year, Sem=$sem | Valid=$isValid (Term=${termValidation.isValid}, DOB=$bdateMatches)',
+          );
 
           final result = StickerScanResult(
             stickerFound: data['stickerFound'] == true,
-            academicYear: year != null ? AcademicTermService.normalizeYear(year) : null,
-            semester: sem != null ? AcademicTermService.normalizeSemester(sem) : null,
+            academicYear: year != null
+                ? AcademicTermService.normalizeYear(year)
+                : null,
+            semester: sem != null
+                ? AcademicTermService.normalizeSemester(sem)
+                : null,
             hasValidationStamp: data['hasValidationStamp'] == true,
             birthdate: bdate,
             birthdateMatches: bdateMatches,
-            confidence: 0.90,
+            confidence: 0.92,
             rawExtractedText: data['rawText']?.toString() ?? '',
-            engineUsed: data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
+            engineUsed:
+                data['engine']?.toString() ?? 'High-Accuracy Document OCR',
             termValidation: termValidation,
             errorMessage: errorMessage,
           );
@@ -381,11 +404,11 @@ class DocumentAIScannerService {
         }
       }
     } catch (e) {
-      debugPrint('Backend back-id proxy note: $e');
+      debugPrint('Backend back-id OCR proxy note: $e');
     }
 
-    // 3. Direct extraction fallback
-    onProgress?.call('Finalizing sticker validation...');
+    // 3. Direct High-Accuracy OCR extraction fallback
+    onProgress?.call('Verifying academic year & semester with OCR...');
     final rawText = await extractDocumentText(optimizedBytes);
     final result = parseStickerText(
       rawText: rawText,
@@ -407,7 +430,8 @@ class DocumentAIScannerService {
     void Function(String status)? onProgress,
   }) async {
     final imgHash = computeImageHash(imageBytes);
-    final cacheKey = '$imgHash:${expectedName.trim().toUpperCase()}:${expectedSaNumber.trim()}';
+    final cacheKey =
+        '$imgHash:${expectedName.trim().toUpperCase()}:${expectedSaNumber.trim()}';
 
     // 1. Check in-memory client cache
     if (_atmProofCache.containsKey(cacheKey)) {
@@ -423,15 +447,17 @@ class DocumentAIScannerService {
     onProgress?.call('Scanning Account Name and SA Number...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-atm-proof');
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'image': base64Img,
-          'expectedName': expectedName,
-          'expectedSaNumber': expectedSaNumber,
-        }),
-      ).timeout(const Duration(seconds: 8));
+      final res = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'image': base64Img,
+              'expectedName': expectedName,
+              'expectedSaNumber': expectedSaNumber,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -443,8 +469,11 @@ class DocumentAIScannerService {
             detectedSaNumber: data['detectedSaNumber']?.toString(),
             detectedName: data['detectedName']?.toString(),
             rawExtractedText: data['rawText']?.toString() ?? '',
-            engineUsed: data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
-            message: data['message']?.toString() ?? 'ATM Proof verified successfully.',
+            engineUsed:
+                data['engine']?.toString() ?? 'ScholarDoc Server Document AI',
+            message:
+                data['message']?.toString() ??
+                'ATM Proof verified successfully.',
           );
           _atmProofCache[cacheKey] = result;
           return result;
@@ -457,7 +486,11 @@ class DocumentAIScannerService {
     // 3. Direct extraction fallback
     onProgress?.call('Verifying Landbank account records...');
     final rawText = await extractDocumentText(optimizedBytes);
-    final localResult = verifyAtmLocally(rawText, expectedName, expectedSaNumber);
+    final localResult = verifyAtmLocally(
+      rawText,
+      expectedName,
+      expectedSaNumber,
+    );
 
     final result = AtmProofScanResult(
       isValid: localResult.isValid,
@@ -473,7 +506,7 @@ class DocumentAIScannerService {
     return result;
   }
 
-  /// Centralized OCR text extraction attempting Google Cloud Vision, then OCR Space, then backend
+  /// Centralized High-Accuracy OCR text extraction using backend proxy and OCR Space engines
   static Future<String> extractDocumentText(Uint8List imageBytes) async {
     final imgHash = computeImageHash(imageBytes);
     if (_extractedTextCache.containsKey(imgHash)) {
@@ -483,27 +516,15 @@ class DocumentAIScannerService {
     final optimizedBytes = await optimizeImageForOcr(imageBytes);
     String rawText = '';
 
-    // 1. Google Cloud Vision REST API (fast 5s timeout)
+    // 1. Backend proxy OCR (fast 5s timeout)
     try {
-      final googleResult = await _callGoogleDocumentTextDetection(optimizedBytes);
-      if (googleResult != null && googleResult.trim().isNotEmpty) {
-        rawText = googleResult.trim();
+      final proxyResult = await _callBackendProxy(optimizedBytes);
+      if (proxyResult != null && proxyResult.trim().isNotEmpty) {
+        rawText = proxyResult.trim();
       }
-    } catch (e) {
-      debugPrint('Google Vision call note: $e');
-    }
+    } catch (_) {}
 
-    // 2. Backend proxy fallback (5s timeout)
-    if (rawText.isEmpty) {
-      try {
-        final proxyResult = await _callBackendProxy(optimizedBytes);
-        if (proxyResult != null && proxyResult.trim().isNotEmpty) {
-          rawText = proxyResult.trim();
-        }
-      } catch (_) {}
-    }
-
-    // 3. OCR Space High-Accuracy API fallback (7s timeout)
+    // 2. Direct OCR Space High-Accuracy API fallback (7s timeout)
     if (rawText.isEmpty) {
       try {
         final ocrResult = await _callOcrSpace(optimizedBytes);
@@ -511,7 +532,7 @@ class DocumentAIScannerService {
           rawText = ocrResult.trim();
         }
       } catch (e) {
-        debugPrint('OCR Space call note: $e');
+        debugPrint('OCR Space direct call note: $e');
       }
     }
 
@@ -529,8 +550,17 @@ class DocumentAIScannerService {
       if (decoded != null) {
         final oriented = img.bakeOrientation(decoded);
         final width = oriented.width;
-        final cropHeight = (oriented.height * 0.60).round().clamp(1, oriented.height);
-        var cropped = img.copyCrop(oriented, x: 0, y: 0, width: width, height: cropHeight);
+        final cropHeight = (oriented.height * 0.60).round().clamp(
+          1,
+          oriented.height,
+        );
+        var cropped = img.copyCrop(
+          oriented,
+          x: 0,
+          y: 0,
+          width: width,
+          height: cropHeight,
+        );
         cropped = img.adjustColor(cropped, contrast: 1.25, brightness: 1.05);
         return Uint8List.fromList(img.encodeJpg(cropped, quality: 90));
       }
@@ -548,14 +578,26 @@ class DocumentAIScannerService {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
 
-      final srcRect = ui.Rect.fromLTWH(0, 0, width.toDouble(), cropHeight.toDouble());
-      final dstRect = ui.Rect.fromLTWH(0, 0, width.toDouble(), cropHeight.toDouble());
+      final srcRect = ui.Rect.fromLTWH(
+        0,
+        0,
+        width.toDouble(),
+        cropHeight.toDouble(),
+      );
+      final dstRect = ui.Rect.fromLTWH(
+        0,
+        0,
+        width.toDouble(),
+        cropHeight.toDouble(),
+      );
 
       canvas.drawImageRect(image, srcRect, dstRect, ui.Paint());
 
       final picture = recorder.endRecording();
       final croppedImage = await picture.toImage(width, cropHeight);
-      final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await croppedImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
 
       if (byteData != null) {
         return byteData.buffer.asUint8List();
@@ -564,57 +606,6 @@ class DocumentAIScannerService {
       debugPrint('Error cropping sticker ROI: $e');
     }
     return originalBytes;
-  }
-
-  /// Calls Google Cloud Vision DOCUMENT_TEXT_DETECTION REST API with base64 image bytes.
-  static Future<String?> _callGoogleDocumentTextDetection(Uint8List imageBytes) async {
-    if (googleApiKey.isEmpty) return null;
-
-    final url = Uri.parse('https://vision.googleapis.com/v1/images:annotate?key=$googleApiKey');
-    final base64Image = base64Encode(imageBytes);
-
-    final payload = jsonEncode({
-      'requests': [
-        {
-          'image': {'content': base64Image},
-          'features': [
-            {'type': 'DOCUMENT_TEXT_DETECTION'},
-            {'type': 'TEXT_DETECTION'},
-          ],
-          'imageContext': {
-            'languageHints': ['en']
-          }
-        }
-      ]
-    });
-
-    final response = await http
-        .post(
-          url,
-          headers: {'Content-Type': 'application/json'},
-          body: payload,
-        )
-        .timeout(const Duration(seconds: 12));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final responses = data['responses'] as List?;
-      if (responses != null && responses.isNotEmpty) {
-        final firstResp = responses[0];
-        final fullText = firstResp['fullTextAnnotation']?['text'];
-        if (fullText != null && fullText.toString().trim().isNotEmpty) {
-          return fullText.toString().trim();
-        }
-        final textAnn = firstResp['textAnnotations'] as List?;
-        if (textAnn != null && textAnn.isNotEmpty) {
-          final desc = textAnn[0]['description'];
-          if (desc != null && desc.toString().trim().isNotEmpty) {
-            return desc.toString().trim();
-          }
-        }
-      }
-    }
-    return null;
   }
 
   /// Calls backend proxy endpoint in server.js
@@ -633,7 +624,9 @@ class DocumentAIScannerService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['text']?.toString() ?? data['extractedText']?.toString() ?? data['rawText']?.toString();
+        return data['text']?.toString() ??
+            data['extractedText']?.toString() ??
+            data['rawText']?.toString();
       }
     } catch (_) {}
     return null;
@@ -641,7 +634,8 @@ class DocumentAIScannerService {
 
   /// Calls high-accuracy document OCR engine using multipart streaming
   static Future<String?> _callOcrSpace(Uint8List imageBytes) async {
-    final isPng = imageBytes.length > 8 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50;
+    final isPng =
+        imageBytes.length > 8 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50;
     const keys = ['helloworld'];
     String combinedText = '';
 
@@ -665,7 +659,9 @@ class DocumentAIScannerService {
             ),
           );
 
-          final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+          final streamedResponse = await request.send().timeout(
+            const Duration(seconds: 15),
+          );
           final response = await http.Response.fromStream(streamedResponse);
 
           if (response.statusCode == 200) {
@@ -674,7 +670,9 @@ class DocumentAIScannerService {
             if (results != null && results.isNotEmpty) {
               final text = (results[0]['ParsedText']?.toString() ?? '').trim();
               if (text.isNotEmpty) {
-                combinedText = combinedText.isEmpty ? text : '$combinedText\n$text';
+                combinedText = combinedText.isEmpty
+                    ? text
+                    : '$combinedText\n$text';
               }
             }
           }
@@ -717,7 +715,9 @@ class DocumentAIScannerService {
         rawExtractedText: rawText,
         engineUsed: engineUsed,
         termValidation: validation,
-        errorMessage: errorMessage ?? "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.",
+        errorMessage:
+            errorMessage ??
+            "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.",
       );
     }
 
@@ -731,9 +731,19 @@ class DocumentAIScannerService {
     final bdateResult = verifyBirthdateLocally(cleanText, expectedBirthdate);
 
     // 4. Extract Validation & Authenticity Cues (resilient to spacing & OCR variations)
-    final hasValidationStamp = RegExp(r'\b(?:VALIDATED|VALID|VALIDO|VALIDATION|ENROLLED)\b', caseSensitive: false).hasMatch(cleanText) ||
-        RegExp(r'\b(?:Campus\s+)?Registrar\b', caseSensitive: false).hasMatch(cleanText) ||
-        RegExp(r'\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b', caseSensitive: false).hasMatch(cleanText);
+    final hasValidationStamp =
+        RegExp(
+          r'\b(?:VALIDATED|VALID|VALIDO|VALIDATION|ENROLLED)\b',
+          caseSensitive: false,
+        ).hasMatch(cleanText) ||
+        RegExp(
+          r'\b(?:Campus\s+)?Registrar\b',
+          caseSensitive: false,
+        ).hasMatch(cleanText) ||
+        RegExp(
+          r'\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b',
+          caseSensitive: false,
+        ).hasMatch(cleanText);
 
     String? registrarText;
     final registrarMatch = RegExp(
@@ -744,7 +754,8 @@ class DocumentAIScannerService {
       registrarText = registrarMatch.group(0);
     }
 
-    final bool stickerFound = (detectedYear != null || detectedSem != null || hasValidationStamp);
+    final bool stickerFound =
+        (detectedYear != null || detectedSem != null || hasValidationStamp);
 
     double confidence = 0.0;
     if (detectedYear != null) confidence += 0.40;
@@ -759,21 +770,28 @@ class DocumentAIScannerService {
       targetTerm: targetTerm,
     );
 
-    final isValid = stickerFound && termValidation.isValid && bdateResult.matches;
+    final isValid =
+        stickerFound && termValidation.isValid && bdateResult.matches;
     final finalErrorMessage = isValid
         ? null
         : (!termValidation.isValid
-            ? termValidation.message
-            : (!bdateResult.matches && bdateResult.detectedDate != null
-                ? bdateResult.message
-                : errorMessage));
+              ? termValidation.message
+              : (!bdateResult.matches && bdateResult.detectedDate != null
+                    ? bdateResult.message
+                    : errorMessage));
 
-    debugPrint('[Document AI Parse] AY=$detectedYear, Sem=$detectedSem | Valid=$isValid');
+    debugPrint(
+      '[Document AI Parse] AY=$detectedYear, Sem=$detectedSem | Valid=$isValid',
+    );
 
     return StickerScanResult(
       stickerFound: stickerFound,
-      academicYear: detectedYear != null ? AcademicTermService.normalizeYear(detectedYear) : null,
-      semester: detectedSem != null ? AcademicTermService.normalizeSemester(detectedSem) : null,
+      academicYear: detectedYear != null
+          ? AcademicTermService.normalizeYear(detectedYear)
+          : null,
+      semester: detectedSem != null
+          ? AcademicTermService.normalizeSemester(detectedSem)
+          : null,
       hasValidationStamp: hasValidationStamp,
       registrarText: registrarText,
       birthdate: bdateResult.detectedDate,
@@ -805,8 +823,12 @@ class DocumentAIScannerService {
     final bdate = birthdate ?? original.birthdate;
     final bdateMatch = birthdateMatches ?? original.birthdateMatches;
 
-    final normYear = year != null && year.isNotEmpty ? AcademicTermService.normalizeYear(year) : null;
-    final normSem = sem != null && sem.isNotEmpty ? AcademicTermService.normalizeSemester(sem) : null;
+    final normYear = year != null && year.isNotEmpty
+        ? AcademicTermService.normalizeYear(year)
+        : null;
+    final normSem = sem != null && sem.isNotEmpty
+        ? AcademicTermService.normalizeSemester(sem)
+        : null;
 
     final termValidation = AcademicTermService.validateScannedTerm(
       detectedYear: normYear,
@@ -814,7 +836,10 @@ class DocumentAIScannerService {
       targetTerm: term,
     );
 
-    final isValid = (normYear != null || normSem != null || stamp) && termValidation.isValid && bdateMatch;
+    final isValid =
+        (normYear != null || normSem != null || stamp) &&
+        termValidation.isValid &&
+        bdateMatch;
 
     return StickerScanResult(
       stickerFound: normYear != null || normSem != null || stamp,
@@ -828,26 +853,39 @@ class DocumentAIScannerService {
       rawExtractedText: original.rawExtractedText,
       engineUsed: original.engineUsed,
       termValidation: termValidation,
-      errorMessage: isValid ? null : (termValidation.isValid ? original.errorMessage : termValidation.message),
+      errorMessage: isValid
+          ? null
+          : (termValidation.isValid
+                ? original.errorMessage
+                : termValidation.message),
     );
   }
 
   /// Verifies expected name in OCR text locally
-  static ({bool matches, String? detectedName, double confidence, String message}) verifyNameLocally(
-    String rawText,
-    String expectedName,
-  ) {
+  static ({
+    bool matches,
+    String? detectedName,
+    double confidence,
+    String message,
+  })
+  verifyNameLocally(String rawText, String expectedName) {
     final raw = rawText.toUpperCase();
     final expClean = normalizeNameString(expectedName);
     if (expClean.isEmpty) {
-      return (matches: true, detectedName: expectedName, confidence: 1.0, message: 'Name verified.');
+      return (
+        matches: true,
+        detectedName: expectedName,
+        confidence: 1.0,
+        message: 'Name verified.',
+      );
     }
     if (raw.trim().isEmpty) {
       return (
         matches: false,
         detectedName: null,
         confidence: 0.0,
-        message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        message:
+            "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.",
       );
     }
 
@@ -856,30 +894,38 @@ class DocumentAIScannerService {
         matches: true,
         detectedName: expectedName,
         confidence: 0.98,
-        message: 'The name on your school ID matches your registered profile.'
+        message: 'The name on your school ID matches your registered profile.',
       );
     }
 
     final expTokens = expClean.split(' ').where((t) => t.length > 1).toList();
     if (expTokens.isEmpty) {
-      return (matches: true, detectedName: expectedName, confidence: 1.0, message: 'Name verified.');
+      return (
+        matches: true,
+        detectedName: expectedName,
+        confidence: 1.0,
+        message: 'Name verified.',
+      );
     }
 
     final surname = expTokens.last;
     final firstName = expTokens.first;
 
     final matchedTokens = expTokens.where((token) {
-      if (RegExp('\\b$token\\b', caseSensitive: false).hasMatch(raw)) return true;
+      if (RegExp('\\b$token\\b', caseSensitive: false).hasMatch(raw))
+        return true;
       if (token.length >= 4 && raw.contains(token)) return true;
       return false;
     }).toList();
 
     final tokenRatio = matchedTokens.length / expTokens.length;
 
-    final hasFirstAndLast = (raw.contains(firstName) || matchedTokens.contains(firstName)) &&
+    final hasFirstAndLast =
+        (raw.contains(firstName) || matchedTokens.contains(firstName)) &&
         (raw.contains(surname) || matchedTokens.contains(surname));
 
-    final isMatch = (tokenRatio >= 0.60 && (hasFirstAndLast || expTokens.length <= 2));
+    final isMatch =
+        (tokenRatio >= 0.60 && (hasFirstAndLast || expTokens.length <= 2));
 
     return (
       matches: isMatch,
@@ -887,17 +933,19 @@ class DocumentAIScannerService {
       confidence: tokenRatio,
       message: isMatch
           ? 'The name on your school ID matches your registered profile.'
-          : 'The name on your school ID does not match your registered profile. Please scan your own valid school ID again.'
+          : 'The name on your school ID does not match your registered profile. Please scan your own valid school ID again.',
     );
   }
 
   /// Verifies birthdate in OCR text locally
-  static ({bool matches, String? detectedDate, String message}) verifyBirthdateLocally(
-    String rawText,
-    String? expectedBirthdate,
-  ) {
+  static ({bool matches, String? detectedDate, String message})
+  verifyBirthdateLocally(String rawText, String? expectedBirthdate) {
     if (expectedBirthdate == null || expectedBirthdate.trim().isEmpty) {
-      return (matches: true, detectedDate: null, message: 'No birthdate on file to compare.');
+      return (
+        matches: true,
+        detectedDate: null,
+        message: 'No birthdate on file to compare.',
+      );
     }
 
     final cleanText = rawText.trim();
@@ -905,13 +953,18 @@ class DocumentAIScannerService {
       return (
         matches: false,
         detectedDate: null,
-        message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        message:
+            "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.",
       );
     }
 
     final expParsed = parseDateComponents(expectedBirthdate);
     if (expParsed == null) {
-      return (matches: true, detectedDate: null, message: 'Unrecognized registered birthdate format.');
+      return (
+        matches: true,
+        detectedDate: null,
+        message: 'Unrecognized registered birthdate format.',
+      );
     }
 
     // Look for date patterns
@@ -930,12 +983,16 @@ class DocumentAIScannerService {
         final cand = match.group(0)!;
         final candParsed = parseDateComponents(cand);
         if (candParsed != null) {
-          foundFormatted ??= '${candParsed.month.toString().padLeft(2, '0')}/${candParsed.day.toString().padLeft(2, '0')}/${candParsed.year}';
+          foundFormatted ??=
+              '${candParsed.month.toString().padLeft(2, '0')}/${candParsed.day.toString().padLeft(2, '0')}/${candParsed.year}';
           if (candParsed.year == expParsed.year) {
-            if ((candParsed.month == expParsed.month && candParsed.day == expParsed.day) ||
-                (candParsed.month == expParsed.day && candParsed.day == expParsed.month)) {
+            if ((candParsed.month == expParsed.month &&
+                    candParsed.day == expParsed.day) ||
+                (candParsed.month == expParsed.day &&
+                    candParsed.day == expParsed.month)) {
               matches = true;
-              foundFormatted = '${candParsed.month.toString().padLeft(2, '0')}/${candParsed.day.toString().padLeft(2, '0')}/${candParsed.year}';
+              foundFormatted =
+                  '${candParsed.month.toString().padLeft(2, '0')}/${candParsed.day.toString().padLeft(2, '0')}/${candParsed.year}';
               break;
             }
           }
@@ -949,7 +1006,8 @@ class DocumentAIScannerService {
       final hasDay = RegExp('\\b${expParsed.day}\\b').hasMatch(cleanText);
       if (hasYear && hasDay) {
         matches = true;
-        foundFormatted = '${expParsed.month.toString().padLeft(2, '0')}/${expParsed.day.toString().padLeft(2, '0')}/${expParsed.year}';
+        foundFormatted =
+            '${expParsed.month.toString().padLeft(2, '0')}/${expParsed.day.toString().padLeft(2, '0')}/${expParsed.year}';
       }
     }
 
@@ -962,13 +1020,21 @@ class DocumentAIScannerService {
       message: matches
           ? 'Birthdate verified! Matches registered information ($foundFormatted).'
           : (foundFormatted != null
-              ? 'The birthdate on your school ID ($foundFormatted) does not match your registered information. Please check your ID and try again.'
-              : 'No conflicting birthdate detected on ID card.')
+                ? 'The birthdate on your school ID ($foundFormatted) does not match your registered information. Please check your ID and try again.'
+                : 'No conflicting birthdate detected on ID card.'),
     );
   }
 
   /// Verifies ATM Proof locally
-  static ({bool isValid, bool saMatches, bool nameMatches, String? detectedSaNumber, String? detectedName, String message}) verifyAtmLocally(
+  static ({
+    bool isValid,
+    bool saMatches,
+    bool nameMatches,
+    String? detectedSaNumber,
+    String? detectedName,
+    String message,
+  })
+  verifyAtmLocally(
     String rawText,
     String expectedName,
     String expectedSaNumber,
@@ -981,28 +1047,38 @@ class DocumentAIScannerService {
         nameMatches: false,
         detectedSaNumber: null,
         detectedName: null,
-        message: "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible."
+        message:
+            "We couldn't read the document clearly. Please retake the scan with better lighting and ensure all details are visible.",
       );
     }
 
     final cleanExpectedSa = expectedSaNumber.replaceAll(RegExp(r'\D'), '');
 
     // Extract digits
-    final digitMatches = RegExp(r'\b\d{9,18}\b').allMatches(cleanText).map((m) => m.group(0)!).toList();
-    final spacedMatches = RegExp(r'\b\d{3,6}[\s\-]\d{3,6}[\s\-]\d{2,6}\b').allMatches(cleanText).map((m) => m.group(0)!.replaceAll(RegExp(r'\D'), '')).toList();
+    final digitMatches = RegExp(
+      r'\b\d{9,18}\b',
+    ).allMatches(cleanText).map((m) => m.group(0)!).toList();
+    final spacedMatches = RegExp(r'\b\d{3,6}[\s\-]\d{3,6}[\s\-]\d{2,6}\b')
+        .allMatches(cleanText)
+        .map((m) => m.group(0)!.replaceAll(RegExp(r'\D'), ''))
+        .toList();
 
     final allCand = [...digitMatches, ...spacedMatches];
     String? foundSa;
     bool saMatches = false;
 
     final strippedAllText = cleanText.replaceAll(RegExp(r'\D'), '');
-    if (cleanExpectedSa.isNotEmpty && strippedAllText.contains(cleanExpectedSa)) {
+    if (cleanExpectedSa.isNotEmpty &&
+        strippedAllText.contains(cleanExpectedSa)) {
       saMatches = true;
       foundSa = cleanExpectedSa;
     } else {
       for (final cand in allCand) {
         foundSa ??= cand;
-        if (cleanExpectedSa.isNotEmpty && (cand == cleanExpectedSa || cand.contains(cleanExpectedSa) || cleanExpectedSa.contains(cand))) {
+        if (cleanExpectedSa.isNotEmpty &&
+            (cand == cleanExpectedSa ||
+                cand.contains(cleanExpectedSa) ||
+                cleanExpectedSa.contains(cand))) {
           saMatches = true;
           foundSa = cand;
           break;
@@ -1015,13 +1091,17 @@ class DocumentAIScannerService {
 
     String msg = '';
     if (isValid) {
-      msg = 'ATM Proof verified! Account holder name and SA number match registered records.';
+      msg =
+          'ATM Proof verified! Account holder name and SA number match registered records.';
     } else if (!saMatches && !nameRes.matches) {
-      msg = "The account holder's name or SA number does not match your registered information. Please upload the correct ATM Proof.";
+      msg =
+          "The account holder's name or SA number does not match your registered information. Please upload the correct ATM Proof.";
     } else if (!saMatches) {
-      msg = "The SA number on your ATM proof does not match your entered SA number. Please upload the correct ATM Proof.";
+      msg =
+          "The SA number on your ATM proof does not match your entered SA number. Please upload the correct ATM Proof.";
     } else {
-      msg = "The account holder's name does not match your registered information. Please upload the correct ATM Proof.";
+      msg =
+          "The account holder's name does not match your registered information. Please upload the correct ATM Proof.";
     }
 
     return (
@@ -1038,7 +1118,10 @@ class DocumentAIScannerService {
     return name
         .toUpperCase()
         .replaceAll(RegExp(r'[^A-Z0-9\s]'), ' ')
-        .replaceAll(RegExp(r'\b(MR|MS|MRS|STUDENT|NAME|HON|DR|JR|SR|II|III|IV)\b'), '')
+        .replaceAll(
+          RegExp(r'\b(MR|MS|MRS|STUDENT|NAME|HON|DR|JR|SR|II|III|IV)\b'),
+          '',
+        )
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
@@ -1047,7 +1130,9 @@ class DocumentAIScannerService {
     final clean = dateStr.trim();
 
     // 1. YYYY-MM-DD
-    final iso = RegExp(r'^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$').firstMatch(clean);
+    final iso = RegExp(
+      r'^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$',
+    ).firstMatch(clean);
     if (iso != null) {
       return (
         year: int.parse(iso.group(1)!),
@@ -1057,7 +1142,9 @@ class DocumentAIScannerService {
     }
 
     // 2. MM/DD/YYYY or DD/MM/YYYY
-    final slash = RegExp(r'^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$').firstMatch(clean);
+    final slash = RegExp(
+      r'^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$',
+    ).firstMatch(clean);
     if (slash != null) {
       final p1 = int.parse(slash.group(1)!);
       final p2 = int.parse(slash.group(2)!);
@@ -1070,13 +1157,34 @@ class DocumentAIScannerService {
 
     // 3. Month DD, YYYY
     const months = {
-      'JAN': 1, 'JANUARY': 1, 'FEB': 2, 'FEBRUARY': 2, 'MAR': 3, 'MARCH': 3,
-      'APR': 4, 'APRIL': 4, 'MAY': 5, 'JUN': 6, 'JUNE': 6, 'JUL': 7, 'JULY': 7,
-      'AUG': 8, 'AUGUST': 8, 'SEP': 9, 'SEPTEMBER': 9, 'OCT': 10, 'OCTOBER': 10,
-      'NOV': 11, 'NOVEMBER': 11, 'DEC': 12, 'DECEMBER': 12
+      'JAN': 1,
+      'JANUARY': 1,
+      'FEB': 2,
+      'FEBRUARY': 2,
+      'MAR': 3,
+      'MARCH': 3,
+      'APR': 4,
+      'APRIL': 4,
+      'MAY': 5,
+      'JUN': 6,
+      'JUNE': 6,
+      'JUL': 7,
+      'JULY': 7,
+      'AUG': 8,
+      'AUGUST': 8,
+      'SEP': 9,
+      'SEPTEMBER': 9,
+      'OCT': 10,
+      'OCTOBER': 10,
+      'NOV': 11,
+      'NOVEMBER': 11,
+      'DEC': 12,
+      'DECEMBER': 12,
     };
 
-    final textMonth = RegExp(r'([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})').firstMatch(clean);
+    final textMonth = RegExp(
+      r'([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})',
+    ).firstMatch(clean);
     if (textMonth != null) {
       final mKey = textMonth.group(1)!.toUpperCase();
       final m = months[mKey];
@@ -1097,21 +1205,32 @@ class DocumentAIScannerService {
     if (text.isEmpty) return null;
 
     var cleaned = text
-        .replaceAllMapped(RegExp(r'\b2[oO]([0-9]{2})', caseSensitive: false), (m) => '20${m[1]}')
+        .replaceAllMapped(
+          RegExp(r'\b2[oO]([0-9]{2})', caseSensitive: false),
+          (m) => '20${m[1]}',
+        )
         .replaceAll(RegExp(r'[oO](?=\d)'), '0')
         .replaceAll(RegExp(r'(?<=\d)[oO]'), '0')
         .replaceAll(
-          RegExp(r'[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)'),
+          RegExp(
+            r'[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)',
+          ),
           '-',
         );
 
     // Remove unintended spaces inside year digits, e.g. "20 26" -> "2026"
-    cleaned = cleaned.replaceAllMapped(RegExp(r'\b(20)\s+(\d{2})\b'), (m) => '${m[1]}${m[2]}');
+    cleaned = cleaned.replaceAllMapped(
+      RegExp(r'\b(20)\s+(\d{2})\b'),
+      (m) => '${m[1]}${m[2]}',
+    );
 
     // Priority 1: Sticker header context lines (lines containing semester/registrar/validated keywords)
     final lines = cleaned.split(RegExp(r'[\r\n]+'));
     for (final line in lines) {
-      final isStickerLine = RegExp(r'(?:sem|registrar|valid|ustp|campus)', caseSensitive: false).hasMatch(line);
+      final isStickerLine = RegExp(
+        r'(?:sem|registrar|valid|ustp|campus)',
+        caseSensitive: false,
+      ).hasMatch(line);
       if (isStickerLine) {
         final lineAyMatch = RegExp(
           r'(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b',
@@ -1186,37 +1305,73 @@ class DocumentAIScannerService {
 
     String? checkSem(String s) {
       // Normalize superscript or punctuation symbols often produced by OCR for 1st/2nd
-      final lower = s.toLowerCase()
+      final lower = s
+          .toLowerCase()
           .replaceAll(RegExp(r'[\u00B0\u00BA˚]'), '*')
           .replaceAll(RegExp(r'\s+'), ' ');
 
       // Prevent non-semester words from falsely triggering (e.g. "2nd floor", "page 1 of 2")
-      final hasSemesterWord = RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\b', caseSensitive: false).hasMatch(lower);
+      final hasSemesterWord = RegExp(
+        r'\bsem(?:est(?:er|el|r|ev|or)?)?\b',
+        caseSensitive: false,
+      ).hasMatch(lower);
 
-      final is2nd = RegExp(
+      final is2nd =
+          RegExp(
             r'\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
             caseSensitive: false,
           ).hasMatch(lower) ||
-          RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\b(?:2|ii)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(
+            r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          RegExp(
+            r'\b(?:2|ii)\s*[\/\-]\s*sem\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
           RegExp(r'\b2nd\s+semester\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\bsecond\s+semester\b', caseSensitive: false).hasMatch(lower) ||
-          (hasSemesterWord && (lower.contains('2*') || lower.contains('2°') || lower.contains('2º')));
+          RegExp(
+            r'\bsecond\s+semester\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          (hasSemesterWord &&
+              (lower.contains('2*') ||
+                  lower.contains('2°') ||
+                  lower.contains('2º')));
       if (is2nd) return '2nd Semester';
 
-      final is1st = RegExp(
+      final is1st =
+          RegExp(
             r'\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b',
             caseSensitive: false,
           ).hasMatch(lower) ||
-          RegExp(r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\b(?:1|i)\s*[\/\-]\s*sem\b', caseSensitive: false).hasMatch(lower) ||
+          RegExp(
+            r'\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          RegExp(
+            r'\b(?:1|i)\s*[\/\-]\s*sem\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
           RegExp(r'\b1st\s+semester\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\bfirst\s+semester\b', caseSensitive: false).hasMatch(lower) ||
-          RegExp(r'\b[il]st\s+sem(?:ester)?\b', caseSensitive: false).hasMatch(lower) ||
-          (hasSemesterWord && (lower.contains('1*') || lower.contains('1°') || lower.contains('1º')));
+          RegExp(
+            r'\bfirst\s+semester\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          RegExp(
+            r'\b[il]st\s+sem(?:ester)?\b',
+            caseSensitive: false,
+          ).hasMatch(lower) ||
+          (hasSemesterWord &&
+              (lower.contains('1*') ||
+                  lower.contains('1°') ||
+                  lower.contains('1º')));
       if (is1st) return '1st Semester';
 
-      if (RegExp(r'\b(?:summer|mid\s*[\-]?year)\b', caseSensitive: false).hasMatch(lower)) {
+      if (RegExp(
+        r'\b(?:summer|mid\s*[\-]?year)\b',
+        caseSensitive: false,
+      ).hasMatch(lower)) {
         return 'Summer / Midyear';
       }
 

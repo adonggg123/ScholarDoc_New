@@ -82,7 +82,7 @@ async function loadStudents() {
 
     try {
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
                 <i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i>
                 <div>Loading student records...</div>
             </td></tr>`;
@@ -123,7 +123,7 @@ async function loadStudents() {
     } catch (e) {
         console.error('Error loading students:', e);
         if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="11" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--error);">Failed to load data: ${e.message || 'Check connection'}</td></tr>`;
         }
     } finally {
         if (refreshIcon) {
@@ -262,7 +262,7 @@ function getStatusBadge(status) {
 
 function renderTable() {
     if (filteredStudents.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">
             <i class="icon-users" style="font-size: 32px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>
             No students found matching your filters.
         </td></tr>`;
@@ -312,8 +312,6 @@ function renderTable() {
                 </td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
-                <td style="padding: 12px;">${EmailNotificationService.renderStatusBadge(s)}</td>
-                <td style="padding: 12px;">${SmsNotificationService.renderStatusBadge(s)}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${birthdate}</td>
                 <td style="padding: 12px 20px;">
@@ -326,12 +324,6 @@ function renderTable() {
                         </button>
                         <button class="sms-btn" data-id="${rowId}" title="${isSmsSent ? 'Resend Grantee SMS Notification' : 'Send Grantee SMS Notification'}" style="background: ${isSmsSent ? 'rgba(5, 150, 105, 0.1)' : 'rgba(5, 150, 105, 0.05)'}; border: 1px solid ${isSmsSent ? 'rgba(5, 150, 105, 0.3)' : 'rgba(5, 150, 105, 0.2)'}; color: #059669; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
                             <i class="icon-message-square" style="font-size: 14px;"></i>
-                        </button>
-                        <button class="approve-btn" data-id="${rowId}" title="${isApproved ? 'Approved Scholar' : 'Approve Student'}" style="background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)'}; border: 1px solid rgba(34, 197, 94, 0.3); color: #22C55E; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
-                            <i class="${isApproved ? 'icon-check-circle' : 'icon-check-square'}" style="font-size: 14px;"></i>
-                        </button>
-                        <button class="reject-btn" data-id="${rowId}" title="Reject Student" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; border-radius: 6px; padding: 4px 6px; cursor: pointer;">
-                            <i class="icon-x-square" style="font-size: 14px;"></i>
                         </button>
                     </div>
                 </td>
@@ -363,22 +355,6 @@ function renderTable() {
         btn.addEventListener('click', (e) => {
             const uid = e.currentTarget.getAttribute('data-id');
             window.sendGranteeSms(uid);
-        });
-    });
-
-    // Attach approve listeners
-    document.querySelectorAll('.approve-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const uid = e.currentTarget.getAttribute('data-id');
-            window.approveStudent(uid);
-        });
-    });
-
-    // Attach reject listeners
-    document.querySelectorAll('.reject-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const uid = e.currentTarget.getAttribute('data-id');
-            window.rejectStudent(uid);
         });
     });
 }

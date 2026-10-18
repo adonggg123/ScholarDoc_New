@@ -470,7 +470,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 const Icon(LucideIcons.alertCircle, color: Colors.white, size: 18),
                 const SizedBox(width: 10),
                 const Expanded(
-                  child: Text('Document AI name scan failed. Tap retry to try again.'),
+                  child: Text('OCR name scan failed. Tap retry to try again.'),
                 ),
                 TextButton(
                   onPressed: () => _scanFrontName(bytes),
@@ -824,7 +824,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       if (mounted) {
         setState(() {
           _isScanningSticker = false;
-          _backScanError = 'Document AI scan timed out or failed. Please check network connection.';
+          _backScanError = 'OCR sticker scan timed out or failed. Please check network connection.';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -833,7 +833,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 const Icon(LucideIcons.alertCircle, color: Colors.white, size: 18),
                 const SizedBox(width: 10),
                 const Expanded(
-                  child: Text('Document AI sticker scan failed. Tap retry to try again.'),
+                  child: Text('OCR sticker scan failed. Tap retry to try again.'),
                 ),
                 TextButton(
                   onPressed: () => _scanBackSticker(bytes),
@@ -1251,7 +1251,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         return;
       }
       if (_isAnalyzingBack || _isScanningSticker) {
-        _showWarning('Document AI is currently verifying your validation sticker and birthdate, please wait...');
+        _showWarning('OCR is currently verifying your validation sticker and birthdate, please wait...');
         return;
       }
       if (_backQuality?.isBlurry == true) {
@@ -1619,7 +1619,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    isFront ? 'OCR Name Verification' : 'Document AI Verification',
+                                    isFront ? 'OCR Name Verification' : 'OCR Sticker Verification',
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.7),
                                       fontSize: 11,
@@ -1642,7 +1642,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                                   const Icon(LucideIcons.alertCircle, color: AppTheme.error, size: 28),
                                   const SizedBox(height: 8),
                                   Text(
-                                    isFront ? 'Name Scan Failed' : 'Document AI Scan Failed',
+                                    isFront ? 'Name Scan Failed' : 'OCR Sticker Scan Failed',
                                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                                   ),
                                   const SizedBox(height: 4),
@@ -2128,7 +2128,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Document AI Verification in Progress',
+                    'OCR Sticker Verification in Progress',
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF0F3260)),
                   ),
                   const SizedBox(height: 2),
@@ -2162,7 +2162,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Document AI Scan Incomplete',
+                    'OCR Sticker Scan Incomplete',
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
                   ),
                 ),
@@ -2179,7 +2179,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                 if (_backProcessedBytes != null) _scanBackSticker(_backProcessedBytes!);
               },
               icon: const Icon(LucideIcons.refreshCw, size: 14),
-              label: const Text('Retry Document AI Scan'),
+              label: const Text('Retry OCR Sticker Scan'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F3260),
                 foregroundColor: Colors.white,

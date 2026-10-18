@@ -515,8 +515,8 @@ function renderPanel() {
                                         DOB: ${s.backBirthdate || (s.documents && s.documents.backBirthdate) || s.birthdate || s.dateOfBirth || 'Registered'} (${(s.backBirthdateMatches === false || (s.documents && s.documents.backBirthdateMatches === false)) ? 'MISMATCH' : 'MATCHED'})
                                     </div>
                                 </div>
-                                <button onclick="triggerDocumentAiScan('${backUrl}', ${selectedIndex})" title="Run Google Document AI Scan" style="padding: 3px 6px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
-                                    AI Scan
+                                <button onclick="triggerDocumentAiScan('${backUrl}', ${selectedIndex})" title="Run Document OCR Scan" style="padding: 3px 6px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--primary-color); cursor: pointer;">
+                                    OCR Scan
                                 </button>
                             </div>
                         ` : `
@@ -1095,14 +1095,14 @@ window.triggerFrontIdNameScan = async function (imageUrl, studentIndex) {
     }
 };
 
-// Google Document AI Scanner for Back ID validation sticker and birthdate
+// Document OCR Scanner for Back ID validation sticker and birthdate
 window.triggerDocumentAiScan = async function (imageUrl, studentIndex) {
     if (!imageUrl) return;
     const s = filteredIdStudents[studentIndex];
     if (!s) return;
 
     if (window.showToast) {
-        window.showToast('Scanning sticker & birthdate with Google Document AI...', 'refresh-cw');
+        window.showToast('Scanning sticker & birthdate with Document OCR...', 'refresh-cw');
     }
 
     try {
