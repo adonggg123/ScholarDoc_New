@@ -80,6 +80,29 @@ class ScholarshipService {
     return null;
   }
 
+  // Check if a scholarship name already exists (case-insensitive)
+  Future<bool> isDuplicateName(String name, {String? excludeId}) async {
+    try {
+      final cleanName = name.trim();
+      if (cleanName.isEmpty) return false;
+
+      final data = await _supabase
+          .from('scholarships')
+          .select('id, name')
+          .ilike('name', cleanName);
+
+      if (data.isEmpty) return false;
+
+      if (excludeId != null && excludeId.isNotEmpty) {
+        return data.any((item) => item['id']?.toString() != excludeId);
+      }
+      return true;
+    } catch (e) {
+      // Return false on error to avoid blocking if network/query issue
+      return false;
+    }
+  }
+
   // Add a scholarship
   Future<void> addScholarship(Scholarship scholarship) async {
     await _supabase.from('scholarships').insert(scholarship.toMap());

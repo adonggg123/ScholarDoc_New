@@ -18,7 +18,7 @@ try {
             }
         }
     }
-} catch (_) {}
+} catch (_) { }
 
 const adminStorage = {
     getItem: (key) => {
@@ -29,12 +29,12 @@ const adminStorage = {
         }
     },
     setItem: (key, value) => {
-        try { sessionStorage.setItem(key, value); } catch (_) {}
-        try { localStorage.setItem(key, value); } catch (_) {}
+        try { sessionStorage.setItem(key, value); } catch (_) { }
+        try { localStorage.setItem(key, value); } catch (_) { }
     },
     removeItem: (key) => {
-        try { sessionStorage.removeItem(key); } catch (_) {}
-        try { localStorage.removeItem(key); } catch (_) {}
+        try { sessionStorage.removeItem(key); } catch (_) { }
+        try { localStorage.removeItem(key); } catch (_) { }
     }
 };
 
@@ -86,8 +86,8 @@ async function loadAdminProfile(user) {
         const profileRoleEl = document.getElementById('profile-role');
         const profileEmailEl = document.getElementById('profile-email');
 
-        if (profileNameEl) profileNameEl.textContent = displayRole;
-        if (profileRoleEl) profileRoleEl.textContent = displayRole;
+        if (profileNameEl) profileNameEl.textContent = username || displayRole;
+        if (profileRoleEl) profileRoleEl.textContent = username || displayRole;
         if (profileEmailEl) profileEmailEl.textContent = email || (isSuper ? 'superadmin@scholardoc.com' : 'admin@scholardoc.com');
 
     } catch (e) {
@@ -98,7 +98,7 @@ async function loadAdminProfile(user) {
 // Role-Based Navigation & View Access Controls
 function applyRoleAccessControls() {
     const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
-    
+
     // Set active nav item
     const initialView = 'annex5_generator';
     navItems.forEach(nav => nav.classList.remove('active'));
@@ -182,7 +182,7 @@ async function loadView(viewName) {
         const response = await fetch(`views/${viewName}.html`);
         if (!response.ok) throw new Error('View not found');
         const html = await response.text();
-        
+
         // Inject HTML
         appContent.innerHTML = html;
         topbarTitle.textContent = viewTitles[viewName] || 'Admin';
@@ -300,7 +300,7 @@ if (themeToggleBtn) {
         const theme = isDark ? 'dark' : 'light';
         localStorage.setItem('theme', theme);
         updateThemeToggleIcon(theme);
-        
+
         // Dispatch theme change event so that other elements (like charts) can respond
         window.dispatchEvent(new CustomEvent('themechanged', { detail: { theme: theme } }));
     });
@@ -328,12 +328,12 @@ if (dropdownLogoutBtn) {
         if (confirm('Are you sure you want to log out of the Admin Panel?')) {
             try {
                 await window.supabaseClient.auth.signOut();
-            } catch (_) {}
+            } catch (_) { }
             try {
                 localStorage.removeItem(ADMIN_STORAGE_KEY);
                 sessionStorage.removeItem(ADMIN_STORAGE_KEY);
-            } catch (_) {}
-            window.location.href = 'login.html';
+            } catch (_) { }
+            window.location.href = window.location.protocol === 'file:' ? '../login.html' : '/login.html';
         }
     });
 }
@@ -343,7 +343,7 @@ let systemNotifications = [];
 const notificationDropdown = document.getElementById('notification-dropdown');
 const markAllReadBtn = document.getElementById('mark-all-read-btn');
 
-window.navigateToView = function(viewName, tabName) {
+window.navigateToView = function (viewName, tabName) {
     if (viewName !== 'settings' && viewName !== 'annex5_generator' && viewName !== 'view_annex') {
         viewName = 'annex5_generator';
     }
@@ -353,7 +353,7 @@ window.navigateToView = function(viewName, tabName) {
     if (targetNav) {
         navItems.forEach(nav => nav.classList.remove('active'));
         targetNav.classList.add('active');
-        
+
         // Expand the validation sub-menu if targeting a validation sub-screen
         if (viewName === 'sa_verification' || viewName === 'id_validation') {
             const valMenu = document.getElementById('validation-menu-btn');
@@ -365,7 +365,7 @@ window.navigateToView = function(viewName, tabName) {
     loadView(viewName);
 };
 
-window.navigateToReportsTab = function(tabName) {
+window.navigateToReportsTab = function (tabName) {
     window.requestedReportTab = tabName;
     if (currentViewName === 'reports' && window.switchReportTab) {
         window.switchReportTab(tabName);
@@ -380,12 +380,12 @@ const seenNotificationIds = new Set();
 // Register Service Worker for background push delivery if supported
 if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
     navigator.serviceWorker.register('/sw.js').catch(() => {
-        navigator.serviceWorker.register('../sw.js').catch(() => {});
+        navigator.serviceWorker.register('../sw.js').catch(() => { });
     });
 }
 
 // Request desktop notification permission gracefully
-window.requestDesktopNotificationPermission = async function() {
+window.requestDesktopNotificationPermission = async function () {
     if (!('Notification' in window)) return 'unsupported';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission !== 'denied') {
@@ -400,7 +400,7 @@ window.requestDesktopNotificationPermission = async function() {
 };
 
 // Trigger OS/Browser native desktop notification (visible even when dashboard tab is in background)
-window.triggerSystemPushNotification = function({ id, title, message, role = 'admin' }) {
+window.triggerSystemPushNotification = function ({ id, title, message, role = 'admin' }) {
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
 
@@ -414,7 +414,7 @@ window.triggerSystemPushNotification = function({ id, title, message, role = 'ad
             silent: false
         });
 
-        notif.onclick = function() {
+        notif.onclick = function () {
             window.focus();
             notif.close();
             window.handleWebNotificationClick(id, title);
@@ -425,7 +425,7 @@ window.triggerSystemPushNotification = function({ id, title, message, role = 'ad
 };
 
 // Display small pop-up notification in the LOWER-RIGHT corner of the computer screen
-window.showDesktopPopupNotification = function({ id, title, message, type = 'info', role = 'Admin', timestamp }) {
+window.showDesktopPopupNotification = function ({ id, title, message, type = 'info', role = 'Admin', timestamp }) {
     let container = document.getElementById('desktop-notifications-container');
     if (!container) {
         container = document.createElement('div');
@@ -531,12 +531,12 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
     startTimer();
 
     if (window.lucide) {
-        try { window.lucide.createIcons(); } catch (_) {}
+        try { window.lucide.createIcons(); } catch (_) { }
     }
 };
 
 // Backward-compatible alias for existing callers
-window.showWebPopupNotification = function(title, message, notificationId) {
+window.showWebPopupNotification = function (title, message, notificationId) {
     window.showDesktopPopupNotification({
         id: notificationId,
         title: title,
@@ -613,7 +613,7 @@ function renderNotificationsDropdown() {
             </div>
         `;
         if (window.lucide) {
-            try { window.lucide.createIcons(); } catch (_) {}
+            try { window.lucide.createIcons(); } catch (_) { }
         }
         return;
     }
@@ -653,11 +653,11 @@ function renderNotificationsDropdown() {
     }).join('');
 
     if (window.lucide) {
-        try { window.lucide.createIcons(); } catch (_) {}
+        try { window.lucide.createIcons(); } catch (_) { }
     }
 }
 
-window.handleWebNotificationClick = async function(notificationId, title) {
+window.handleWebNotificationClick = async function (notificationId, title) {
     try {
         if (notificationId) {
             await window.supabaseClient
@@ -787,7 +787,7 @@ if (markAllReadBtn) {
 navItems.forEach(item => {
     item.addEventListener('click', (e) => {
         e.preventDefault();
-        
+
         // Update active class
         navItems.forEach(nav => nav.classList.remove('active'));
         item.classList.add('active');
@@ -814,7 +814,7 @@ if (validationMenuBtn) {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
-    
+
     // Init notifications
     loadNotifications();
     setupRealtimeNotifications();

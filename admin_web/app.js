@@ -490,24 +490,26 @@ if (loginForm) {
 
             // Strategy 0: Check if identifier matches an admin username (custom or default)
             if (!rawIdentifier.includes('@')) {
-                if (lowerId === 'superadmin') {
-                    matchedAdminEmail = 'superadmin@scholardoc.com';
-                    isAdmin = true;
-                } else if (lowerId === 'admin') {
-                    matchedAdminEmail = 'admin@scholardoc.com';
-                    isAdmin = true;
-                } else {
-                    try {
-                        const { data: adminRows } = await supabaseClient
-                            .from('admins')
-                            .select('email, username')
-                            .ilike('username', rawIdentifier.trim())
-                            .limit(1);
-                        if (adminRows && adminRows.length > 0 && adminRows[0].email) {
-                            matchedAdminEmail = adminRows[0].email;
-                            isAdmin = true;
-                        }
-                    } catch (_) {}
+                try {
+                    const { data: adminRows } = await supabaseClient
+                        .from('admins')
+                        .select('email, username')
+                        .ilike('username', rawIdentifier.trim())
+                        .limit(1);
+                    if (adminRows && adminRows.length > 0 && adminRows[0].email) {
+                        matchedAdminEmail = adminRows[0].email;
+                        isAdmin = true;
+                    }
+                } catch (_) {}
+
+                if (!matchedAdminEmail) {
+                    if (lowerId === 'superadmin') {
+                        matchedAdminEmail = 'superadmin@scholardoc.com';
+                        isAdmin = true;
+                    } else if (lowerId === 'admin') {
+                        matchedAdminEmail = 'admin@scholardoc.com';
+                        isAdmin = true;
+                    }
                 }
             } else {
                 try {

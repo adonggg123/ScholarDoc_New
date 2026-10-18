@@ -86,8 +86,8 @@ async function loadAdminProfile(user) {
         const profileRoleEl = document.getElementById('profile-role');
         const profileEmailEl = document.getElementById('profile-email');
 
-        if (profileNameEl) profileNameEl.textContent = displayRole;
-        if (profileRoleEl) profileRoleEl.textContent = displayRole;
+        if (profileNameEl) profileNameEl.textContent = username || displayRole;
+        if (profileRoleEl) profileRoleEl.textContent = username || displayRole;
         if (profileEmailEl) profileEmailEl.textContent = email || (isSuper ? 'superadmin@scholardoc.com' : 'admin@scholardoc.com');
 
     } catch (e) {
@@ -345,7 +345,7 @@ if (dropdownLogoutBtn) {
                 localStorage.removeItem(SUPERADMIN_STORAGE_KEY);
                 sessionStorage.removeItem(SUPERADMIN_STORAGE_KEY);
             } catch (_) {}
-            window.location.href = 'login.html';
+            window.location.href = window.location.protocol === 'file:' ? '../login.html' : '/login.html';
         }
     });
 }

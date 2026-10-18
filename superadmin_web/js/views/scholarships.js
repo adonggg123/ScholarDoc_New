@@ -25,6 +25,8 @@ const modalTitle = document.getElementById('sch-modal-title');
 const modalAvatar = document.getElementById('sch-modal-avatar');
 const modalDocPreview = document.getElementById('sch-modal-doc-preview');
 const modalSaveBtn = document.getElementById('sch-modal-save-btn');
+const nameErrorEl = document.getElementById('sch-name-error');
+const nameErrorTextEl = document.getElementById('sch-name-error-text');
 
 // State
 let allScholarships = [];
@@ -428,9 +430,38 @@ window.toggleProgramStatus = async function(id, newStatus) {
     }
 };
 
-// Modal helpers
+// Modal helpers & error display
+function showNameError(msg) {
+    if (nameErrorEl && nameErrorTextEl) {
+        nameErrorTextEl.textContent = msg;
+        nameErrorEl.style.display = 'flex';
+        if (window.lucide) window.lucide.createIcons();
+    }
+    if (inpName) {
+        inpName.style.borderColor = '#EF4444';
+        inpName.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.15)';
+    }
+}
+
+function clearNameError() {
+    if (nameErrorEl) {
+        nameErrorEl.style.display = 'none';
+    }
+    if (nameErrorTextEl) {
+        nameErrorTextEl.textContent = '';
+    }
+    if (inpName) {
+        inpName.style.borderColor = 'var(--border-color)';
+        inpName.style.boxShadow = 'none';
+    }
+}
+
 function hideModal() {
     if (modal) modal.classList.add('hidden');
+    modalMode = 'add';
+    currentEditId = null;
+    clearNameError();
+    if (form) form.reset();
 }
 
 function updateDocPreview(text) {
@@ -455,6 +486,7 @@ if (btnAddProgram) {
     btnAddProgram.addEventListener('click', () => {
         modalMode = 'add';
         currentEditId = null;
+        clearNameError();
         if (modalTitle) modalTitle.textContent = 'Add Scholarship';
         if (modalAvatar) modalAvatar.style.background = 'linear-gradient(135deg, #0F3260 0%, #1E4976 100%)';
         form.reset();
@@ -471,6 +503,7 @@ window.editProgram = function(id) {
     if (!p) return;
     modalMode = 'edit';
     currentEditId = id;
+    clearNameError();
     if (modalTitle) modalTitle.textContent = `Edit Scholarship: ${p.name}`;
     
     const style = getProgramStyle(p.name);
@@ -529,18 +562,69 @@ if (inpDocs) {
     });
 }
 
-// Form Submit Handler
+// Clear error on name typing
+if (inpName) {
+    inpName.addEventListener('input', clearNameError);
+}
+
+// Form Submit Handler with Duplicate Validation
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        clearNameError();
+
+        const cleanName = inpName.value.trim();
+        if (!cleanName) {
+            showNameError('Program name is required.');
+            inpName.focus();
+            return;
+        }
+
+        // 1. In-memory duplicate check (case-insensitive & whitespace trimmed)
+        const isDuplicateLocal = allScholarships.some(p => {
+            if (modalMode === 'edit' && String(p.id) === String(currentEditId)) {
+                return false; // Allow saving same name for currently edited program
+            }
+            return (p.name || '').trim().toLowerCase() === cleanName.toLowerCase();
+        });
+
+        if (isDuplicateLocal) {
+            const msg = `A scholarship program with the name "${cleanName}" already exists.`;
+            showNameError(msg);
+            inpName.focus();
+            if (window.showToast) window.showToast(msg, 'alert-circle');
+            return;
+        }
+
         const oldTxt = modalSaveBtn.textContent;
         modalSaveBtn.disabled = true;
         modalSaveBtn.textContent = 'Saving...';
 
         try {
+            // 2. Database-level duplicate check (to prevent concurrent duplicates)
+            let dbCheck = supabase
+                .from('scholarships')
+                .select('id, name')
+                .ilike('name', cleanName);
+
+            if (modalMode === 'edit' && currentEditId) {
+                dbCheck = dbCheck.neq('id', currentEditId);
+            }
+
+            const { data: dbMatches, error: dbCheckErr } = await dbCheck;
+            if (!dbCheckErr && dbMatches && dbMatches.length > 0) {
+                const msg = `A scholarship program with the name "${cleanName}" already exists.`;
+                showNameError(msg);
+                inpName.focus();
+                if (window.showToast) window.showToast(msg, 'alert-circle');
+                modalSaveBtn.disabled = false;
+                modalSaveBtn.textContent = oldTxt;
+                return;
+            }
+
             const docs = inpDocs.value.split(',').map(s => s.trim()).filter(Boolean);
             const dataObj = {
-                name: inpName.value.trim(),
+                name: cleanName,
                 description: inpDesc.value.trim(),
                 requiredDocuments: docs,
                 isActive: inpActive.checked
@@ -548,19 +632,31 @@ if (form) {
 
             if (modalMode === 'add') {
                 const { error } = await supabase.from('scholarships').insert([dataObj]);
-                if (error) throw error;
-                if (window.showToast) window.showToast(`Added ${dataObj.name} successfully!`, 'check-circle');
+                if (error) {
+                    if (error.code === '23505' || (error.message && (error.message.toLowerCase().includes('already exists') || error.message.toLowerCase().includes('duplicate key')))) {
+                        throw new Error(`A scholarship program with the name "${cleanName}" already exists.`);
+                    }
+                    throw error;
+                }
+                if (window.showToast) window.showToast(`Added ${cleanName} successfully!`, 'check-circle');
             } else {
                 const { error } = await supabase.from('scholarships').update(dataObj).eq('id', currentEditId);
-                if (error) throw error;
-                if (window.showToast) window.showToast(`Updated ${dataObj.name} successfully!`, 'check-circle');
+                if (error) {
+                    if (error.code === '23505' || (error.message && (error.message.toLowerCase().includes('already exists') || error.message.toLowerCase().includes('duplicate key')))) {
+                        throw new Error(`A scholarship program with the name "${cleanName}" already exists.`);
+                    }
+                    throw error;
+                }
+                if (window.showToast) window.showToast(`Updated ${cleanName} successfully!`, 'check-circle');
             }
 
             hideModal();
             await loadPrograms();
         } catch (err) {
             console.error('Error saving program:', err);
-            alert('Failed to save program: ' + (err.message || 'Please check your inputs.'));
+            const errMsg = err.message || 'Please check your inputs.';
+            showNameError(errMsg);
+            alert('Failed to save program: ' + errMsg);
         } finally {
             modalSaveBtn.disabled = false;
             modalSaveBtn.textContent = oldTxt;

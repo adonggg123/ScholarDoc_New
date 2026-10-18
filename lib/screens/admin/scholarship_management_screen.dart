@@ -606,6 +606,37 @@ class _ScholarshipManagementScreenState
             ),
             ElevatedButton(
               onPressed: () async {
+                final cleanName = nameController.text.trim();
+                if (cleanName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Program name is required.'),
+                      backgroundColor: AppTheme.error,
+                    ),
+                  );
+                  return;
+                }
+
+                // Check duplicate scholarship name
+                final isDuplicate = await _scholarshipService.isDuplicateName(
+                  cleanName,
+                  excludeId: scholarship?.id,
+                );
+
+                if (isDuplicate) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'A scholarship program with the name "$cleanName" already exists.',
+                        ),
+                        backgroundColor: AppTheme.error,
+                      ),
+                    );
+                  }
+                  return;
+                }
+
                 final names = docsController.text
                     .split(',')
                     .map((e) => e.trim())
@@ -615,7 +646,7 @@ class _ScholarshipManagementScreenState
                   await _scholarshipService.addScholarship(
                     Scholarship(
                       id: '',
-                      name: nameController.text.trim(),
+                      name: cleanName,
                       description: descController.text.trim(),
                       isActive: isActive,
                       requiredDocuments: names,
@@ -623,7 +654,7 @@ class _ScholarshipManagementScreenState
                   );
                 } else {
                   await _scholarshipService.updateScholarship(scholarship.id, {
-                    'name': nameController.text.trim(),
+                    'name': cleanName,
                     'description': descController.text.trim(),
                     'isActive': isActive,
                     'requiredDocuments': names,

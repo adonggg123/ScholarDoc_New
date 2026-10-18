@@ -54,10 +54,52 @@
             </div>
         </div>
 
-        <!-- Two Column Forms: Username & Password -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;">
+        <!-- Three Column Forms: Email, Username & Password -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
             
-            <!-- Section 1: Edit Username -->
+            <!-- Section 1: Edit Email -->
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; gap: 20px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <i class="icon-mail" style="color: var(--primary-color); font-size: 16px;"></i>
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Change Email Address</h4>
+                    </div>
+                    <p style="margin: 0 0 16px 0; font-size: 12px; color: var(--text-secondary);">
+                        Update the login email used for administrative portal authentication.
+                    </p>
+
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label for="input-edit-email" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">New Email Address</label>
+                            <div style="position: relative;">
+                                <i class="icon-mail" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                                <input type="email" id="input-edit-email" placeholder="e.g. superadmin@scholardoc.com" style="width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary); transition: border-color 0.2s;">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label for="input-email-current-password" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+                                Current Password <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);">(for verification)</span>
+                            </label>
+                            <div style="position: relative;">
+                                <i class="icon-lock" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
+                                <input type="password" id="input-email-current-password" placeholder="Enter current password" style="width: 100%; padding: 10px 38px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary);">
+                                <button type="button" class="btn-toggle-eye" data-target="input-email-current-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
+                                    <i class="icon-eye" style="font-size: 15px;"></i>
+                                </button>
+                            </div>
+                            <span style="font-size: 11px; color: var(--text-secondary);">Authorizes update in Supabase Authentication.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" id="btn-submit-email" class="btn-primary-action" style="padding: 11px 18px; border-radius: 10px; border: none; background: var(--primary-color); color: white; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(15,50,96,0.2);">
+                    <i class="icon-save" style="font-size: 15px;"></i>
+                    <span>Save Email</span>
+                </button>
+            </div>
+
+            <!-- Section 2: Edit Username -->
             <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; gap: 20px;">
                 <div>
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
@@ -74,7 +116,7 @@
                             <i class="icon-at-sign" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 15px;"></i>
                             <input type="text" id="input-edit-username" placeholder="e.g. superadmin" style="width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; font-family: inherit; outline: none; background: rgba(0,0,0,0.02); color: var(--text-primary); transition: border-color 0.2s;">
                         </div>
-                        <span style="font-size: 11px; color: var(--text-secondary);">Minimum 3 characters (letters, numbers, underscores).</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">Minimum 3 characters (letters, numbers, spaces, underscores).</span>
                     </div>
                 </div>
 
@@ -84,7 +126,7 @@
                 </button>
             </div>
 
-            <!-- Section 2: Edit Password -->
+            <!-- Section 3: Edit Password -->
             <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px;">
                 <div>
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">

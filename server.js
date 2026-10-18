@@ -55,6 +55,8 @@ function findFilePath(urlPath) {
     }
 
     if (urlPath === '/login' || urlPath === '/login.html') {
+        const rootLogin = path.join(ROOT, 'login.html');
+        if (fs.existsSync(rootLogin)) return rootLogin;
         const loginSuperAdmin = path.join(ROOT, 'superadmin_web', 'login.html');
         if (fs.existsSync(loginSuperAdmin)) return loginSuperAdmin;
         const loginAdmin = path.join(ROOT, 'admin_web', 'login.html');

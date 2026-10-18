@@ -50,7 +50,7 @@ async function loadAdminsData() {
         const { data, error } = await supabase.from('admins').select('*');
         if (data && data.length > 0) {
             data.forEach(adm => {
-                const isSuper = (adm.role === 'Super Admin' || adm.role === 'SuperAdmin' || (adm.email && adm.email.includes('superadmin')));
+                const isSuper = (adm.role === 'Super Admin' || adm.role === 'SuperAdmin' || (adm.username && adm.username.toLowerCase() === 'superadmin') || (adm.email && adm.email.toLowerCase().includes('superadmin')));
                 const key = isSuper ? 'superadmin' : 'admin';
                 if (accounts[key]) {
                     accounts[key].username = adm.username || accounts[key].username;
@@ -85,6 +85,11 @@ function updateProfileCard() {
             ? 'Full Platform Management'
             : 'Annex 5 TES Generator & Settings';
     }
+
+    const profileName = document.getElementById('profile-name');
+    if (profileName && admin.username) profileName.textContent = admin.username;
+    const profileRole = document.getElementById('profile-role');
+    if (profileRole && admin.username) profileRole.textContent = admin.username;
 }
 
 function updateActiveAccountView() {
@@ -96,6 +101,8 @@ function updateActiveAccountView() {
     const badgeEl = document.getElementById('target-account-badge');
     const usernameDisplayEl = document.getElementById('target-account-username-display');
     const inputUsername = document.getElementById('input-edit-username');
+    const inputEmail = document.getElementById('input-edit-email');
+    const inputEmailPw = document.getElementById('input-email-current-password');
     const avatarEl = document.getElementById('target-account-avatar');
     const iconEl = document.getElementById('target-account-icon');
 
@@ -104,6 +111,8 @@ function updateActiveAccountView() {
     if (badgeEl) badgeEl.textContent = acc.badge;
     if (usernameDisplayEl) usernameDisplayEl.textContent = acc.username;
     if (inputUsername) inputUsername.value = acc.username;
+    if (inputEmail) inputEmail.value = acc.email;
+    if (inputEmailPw) inputEmailPw.value = '';
     if (avatarEl) avatarEl.style.background = acc.color;
     if (iconEl) iconEl.className = acc.icon;
 
@@ -118,6 +127,171 @@ function updateActiveAccountView() {
     if (window.lucide) window.lucide.createIcons();
 }
 
+async function handleSaveEmail() {
+    const inputEmail = document.getElementById('input-edit-email');
+    const inputPw = document.getElementById('input-email-current-password');
+    const btn = document.getElementById('btn-submit-email');
+
+    const newEmail = (inputEmail?.value || '').trim().toLowerCase();
+    const currentPw = inputPw?.value || '';
+
+    if (!newEmail) {
+        showToast('Please enter a new email address.', 'error');
+        if (inputEmail) inputEmail.focus();
+        return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        showToast('Please enter a valid email address (e.g. name@domain.com).', 'error');
+        if (inputEmail) inputEmail.focus();
+        return;
+    }
+
+    const acc = accounts[activeTarget];
+    if (newEmail === (acc.email || '').toLowerCase()) {
+        showToast('The new email must be different from current email.', 'error');
+        if (inputEmail) inputEmail.focus();
+        return;
+    }
+
+    if (!currentPw) {
+        showToast('Please enter the current password to authorize this email update.', 'error');
+        if (inputPw) inputPw.focus();
+        return;
+    }
+
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Saving...';
+
+    try {
+        // 1. Check if new email is already assigned to an admin account
+        const { data: existingAdmins } = await supabase
+            .from('admins')
+            .select('email, role')
+            .ilike('email', newEmail)
+            .limit(1);
+
+        if (existingAdmins && existingAdmins.length > 0) {
+            throw new Error(`The email "${newEmail}" is already assigned to ${existingAdmins[0].role}.`);
+        }
+
+        // 2. Verify current credentials using an isolated client
+        const tempClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: false }
+        });
+
+        const { error: curAuthErr } = await tempClient.auth.signInWithPassword({
+            email: acc.email,
+            password: currentPw
+        });
+
+        if (curAuthErr) {
+            throw new Error(`Current password for ${acc.role} is incorrect.`);
+        }
+
+        // 3. Provision the new email in Supabase Auth with current password
+        let newUid = null;
+        const { data: signData, error: signErr } = await tempClient.auth.signUp({
+            email: newEmail,
+            password: currentPw,
+            options: {
+                data: {
+                    role: acc.role,
+                    username: acc.username
+                }
+            }
+        });
+
+        if (signErr) {
+            if (signErr.message && (signErr.message.includes('already registered') || signErr.status === 422)) {
+                const { data: existAuth, error: existErr } = await tempClient.auth.signInWithPassword({
+                    email: newEmail,
+                    password: currentPw
+                });
+                if (existErr || !existAuth?.user) {
+                    throw new Error(`The email "${newEmail}" already exists with a different password. Please choose another email.`);
+                }
+                newUid = existAuth.user.id;
+            } else {
+                throw signErr;
+            }
+        } else if (signData?.user) {
+            newUid = signData.user.id;
+        }
+
+        if (!newUid) {
+            throw new Error('Unable to configure authentication credentials for the new email.');
+        }
+
+        // 4. Update the admins table in Supabase
+        const oldEmail = acc.email;
+        let updateQuery = supabase.from('admins').update({
+            email: newEmail,
+            uid: newUid
+        });
+        if (acc.uid) {
+            updateQuery = updateQuery.eq('uid', acc.uid);
+        } else {
+            updateQuery = updateQuery.eq('email', oldEmail);
+        }
+
+        const { error: dbErr } = await updateQuery;
+        if (dbErr) throw dbErr;
+
+        // 5. Update local state
+        acc.email = newEmail;
+        acc.uid = newUid;
+
+        const emailDisplay = document.getElementById('target-account-email');
+        if (emailDisplay) emailDisplay.textContent = newEmail;
+
+        const isSelf = window.currentAdmin && (
+            window.currentAdmin.email === oldEmail ||
+            (activeTarget === 'admin' && window.currentAdmin.displayRole === 'Admin') ||
+            (activeTarget === 'superadmin' && window.currentAdmin.displayRole === 'Super Admin')
+        );
+
+        if (isSelf) {
+            window.currentAdmin.email = newEmail;
+            window.currentAdmin.uid = newUid;
+            const profileEmail = document.getElementById('profile-email');
+            if (profileEmail) profileEmail.textContent = newEmail;
+            const accountEmail = document.getElementById('settings-account-email');
+            if (accountEmail) accountEmail.textContent = newEmail;
+
+            // Update active session with new email
+            try {
+                await window.supabaseClient.auth.signInWithPassword({
+                    email: newEmail,
+                    password: currentPw
+                });
+            } catch (_) { }
+        }
+
+        if (inputPw) inputPw.value = '';
+
+        // 6. Audit log
+        try {
+            await supabase.from('audit_logs').insert([{
+                action: `Updated email for ${acc.role} from "${oldEmail}" to "${newEmail}"`,
+                userName: window.currentAdmin?.username || window.currentAdmin?.displayRole || 'Super Admin',
+                role: window.currentAdmin?.displayRole || 'Super Admin',
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (_) { }
+
+        showToast(`Email for ${acc.role} updated successfully!`, 'success');
+    } catch (err) {
+        console.error('Save email error:', err);
+        showToast(err.message || 'Failed to update email.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        if (window.lucide) window.lucide.createIcons();
+    }
+}
+
 async function handleSaveUsername() {
     const input = document.getElementById('input-edit-username');
     const btn = document.getElementById('btn-submit-username');
@@ -129,8 +303,8 @@ async function handleSaveUsername() {
         return;
     }
 
-    if (!/^[a-zA-Z0-9_-]+$/.test(newUsername)) {
-        showToast('Username may only contain letters, numbers, hyphens, and underscores.', 'error');
+    if (!/^[a-zA-Z0-9_\- ]+$/.test(newUsername)) {
+        showToast('Username may only contain letters, numbers, spaces, hyphens, and underscores.', 'error');
         if (input) input.focus();
         return;
     }
@@ -141,11 +315,28 @@ async function handleSaveUsername() {
 
     try {
         const acc = accounts[activeTarget];
-        const { error } = await supabase
-            .from('admins')
-            .update({ username: newUsername })
-            .eq('email', acc.email);
 
+        // Check if username is already taken by another admin
+        const { data: existingUsers } = await supabase
+            .from('admins')
+            .select('username, email, role')
+            .ilike('username', newUsername)
+            .limit(2);
+
+        if (existingUsers && existingUsers.some(u => (u.email || '').toLowerCase() !== (acc.email || '').toLowerCase())) {
+            showToast(`Username "${newUsername}" is already taken by another admin.`, 'error');
+            if (input) input.focus();
+            return;
+        }
+
+        let updateQuery = supabase.from('admins').update({ username: newUsername });
+        if (acc.uid) {
+            updateQuery = updateQuery.eq('uid', acc.uid);
+        } else {
+            updateQuery = updateQuery.eq('email', acc.email);
+        }
+
+        const { error } = await updateQuery;
         if (error) throw error;
 
         acc.username = newUsername;
@@ -153,10 +344,16 @@ async function handleSaveUsername() {
         if (usernameDisplay) usernameDisplay.textContent = newUsername;
 
         // If updating the active logged-in admin's username
-        if (window.currentAdmin && (window.currentAdmin.email === acc.email || (activeTarget === 'superadmin' && window.currentAdmin.displayRole === 'Super Admin'))) {
+        if (window.currentAdmin && (
+            window.currentAdmin.email === acc.email ||
+            (activeTarget === 'admin' && window.currentAdmin.displayRole === 'Admin') ||
+            (activeTarget === 'superadmin' && window.currentAdmin.displayRole === 'Super Admin')
+        )) {
             window.currentAdmin.username = newUsername;
             const profileName = document.getElementById('profile-name');
-            if (profileName) profileName.textContent = window.currentAdmin.displayRole;
+            if (profileName) profileName.textContent = newUsername;
+            const profileRole = document.getElementById('profile-role');
+            if (profileRole) profileRole.textContent = newUsername;
             const accountUsername = document.getElementById('settings-account-username');
             if (accountUsername) accountUsername.textContent = newUsername;
         }
@@ -207,12 +404,6 @@ async function handleSavePassword() {
     if (newPw !== confPw) {
         showToast('New password and confirmation do not match.', 'error');
         confPwInput?.focus();
-        return;
-    }
-
-    if (newPw === currentPw) {
-        showToast('New password must be different from current password.', 'error');
-        newPwInput?.focus();
         return;
     }
 
@@ -336,7 +527,7 @@ async function saveNotificationSettings(key, value) {
                     updated_at: new Date().toISOString()
                 }
             });
-        } catch (_) {}
+        } catch (_) { }
 
         try {
             await supabase.from('audit_logs').insert([{
@@ -345,7 +536,7 @@ async function saveNotificationSettings(key, value) {
                 role: 'Super Admin',
                 timestamp: new Date().toISOString()
             }]);
-        } catch (_) {}
+        } catch (_) { }
 
         showToast(`${key === 'email' ? 'Email Notifications' : 'SMS Critical Alerts'} ${value ? 'enabled' : 'disabled'}!`, 'success');
     } catch (err) {
@@ -443,6 +634,11 @@ function setupListeners() {
     });
 
     // Save buttons
+    const btnSaveEmail = document.getElementById('btn-submit-email');
+    if (btnSaveEmail) {
+        btnSaveEmail.addEventListener('click', handleSaveEmail);
+    }
+
     const btnSaveUsername = document.getElementById('btn-submit-username');
     if (btnSaveUsername) {
         btnSaveUsername.addEventListener('click', handleSaveUsername);
