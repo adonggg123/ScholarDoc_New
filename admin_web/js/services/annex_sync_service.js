@@ -28,23 +28,36 @@ export class AnnexSyncService {
 
     /**
      * Extracts a stable, unique key for a grantee or verification item.
+     * Prioritizes semantic student identifiers (Student ID, SA Number, Full Name)
+     * over database row UUIDs so records from different tables or import runs
+     * match correctly.
      */
     static getUniqueKey(item) {
         if (!item) return '';
         const g = item.grantee || item;
+        const s = item.matchedStudent || {};
 
-        // 1. Primary: Database record ID of grantee if available
-        if (g.id) {
-            return `gid_${String(g.id)}`;
+        // 1. Primary: Valid Student ID (prefer matched student ID or grantee student ID)
+        const idRaw = String(s.studentId || s.studentNo || s.student_no || g.student_id || g.studentId || g.studentNo || g.student_no || item.student_id || item.studentId || '').trim().toLowerCase();
+        const cleanId = idRaw.replace(/[^a-z0-9]/g, '');
+        const isPlaceholderId = (v) => !v || v === 'na' || v === 'unassigned' || v === 'null' || v === 'undefined' || v.length < 3;
+        if (!isPlaceholderId(cleanId)) {
+            return `id_${cleanId}`;
         }
 
-        // 2. Grantee's own valid student ID if present
-        const granteeId = String(g.student_id || g.studentId || g.studentNo || g.student_no || '').trim().toLowerCase();
-        if (granteeId && granteeId !== 'n/a' && granteeId !== 'unassigned' && granteeId.length >= 3) {
-            return `id_${granteeId.replace(/[^a-z0-9]/g, '')}`;
+        // 2. TES / SA App Number if valid
+        const saRaw = String(s.saNumber || g.saNumber || g.sa_number || g.tes_application_number || item.saNumber || item.tes_application_number || g.familyDetails?.saNumber || s.familyDetails?.saNumber || '').trim().toLowerCase();
+        const cleanSa = saRaw.replace(/[^a-z0-9]/g, '');
+        if (cleanSa && cleanSa !== 'na' && cleanSa !== 'unassigned' && cleanSa !== 'null' && cleanSa.length >= 4) {
+            return `sa_${cleanSa}`;
         }
 
-        // 3. Grantee's normalized name (Last + First + Middle)
+        // 3. Normalized Name (Last + First + Middle)
+        const nameParts = this.parseNameParts(item);
+        if (nameParts.cleanKey && nameParts.cleanKey.length >= 3) {
+            return `name_${nameParts.cleanKey}`;
+        }
+
         const lName = (g.last_name || g.lastName || '').trim().toLowerCase();
         const fName = (g.first_name || g.firstName || '').trim().toLowerCase();
         const mName = (g.middle_name || g.middleName || '').trim().toLowerCase();
@@ -52,7 +65,13 @@ export class AnnexSyncService {
         if (combined && combined.length >= 3) return `name_${combined}`;
 
         const rawName = (g.name || g.fullName || `${lName} ${fName}`).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (rawName) return `raw_${rawName}`;
+        if (rawName && rawName.length >= 3) return `raw_${rawName}`;
+
+        // 4. Fallback: Database record ID if no student ID, SA number, or name is available
+        const dbId = String(g.id || item.id || '').trim();
+        if (dbId) {
+            return `gid_${dbId}`;
+        }
 
         return Math.random().toString(36).substring(2, 9);
     }
@@ -127,10 +146,10 @@ export class AnnexSyncService {
             if (idA === idB) return true;
         }
 
-        // 3. Unique Key match (if not random or uuid-based)
+        // 3. Unique Key match (if not random or uuid/gid-based)
         const keyA = this.getUniqueKey(itemA);
         const keyB = this.getUniqueKey(itemB);
-        if (keyA && keyB && keyA === keyB && !keyA.startsWith('uuid_')) {
+        if (keyA && keyB && keyA === keyB && !keyA.startsWith('gid_') && !keyA.startsWith('rnd_')) {
             return true;
         }
 
@@ -181,6 +200,7 @@ export class AnnexSyncService {
     /**
      * Strictly deduplicates records across Form 2, Form 3, and Needs Review Queue.
      * Prevents any record from appearing in multiple lists simultaneously.
+     * Uses dual-layer protection: unique key matching and deep isSameStudent comparison.
      */
     static deduplicateLists(form2List = [], form3List = [], needsReviewList = []) {
         const seenKeys = new Set();
@@ -191,8 +211,9 @@ export class AnnexSyncService {
         // 1. Form 2: Included / Enrolled Grantees
         for (const item of (form2List || [])) {
             const key = this.getUniqueKey(item);
-            if (key && !seenKeys.has(key)) {
-                seenKeys.add(key);
+            const isDuplicate = (key && seenKeys.has(key)) || cleanForm2.some(existing => this.isSameStudent(existing, item));
+            if (!isDuplicate) {
+                if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
                 itemCopy.classification = 'MATCHED_FORM2';
                 itemCopy.isEnrolled = true;
@@ -203,8 +224,9 @@ export class AnnexSyncService {
         // 2. Form 3: Not Included Grantees (Special statuses: Not enrolled, Dropped, Waived, LOA, Transferee, Graduated)
         for (const item of (form3List || [])) {
             const key = this.getUniqueKey(item);
-            if (key && !seenKeys.has(key)) {
-                seenKeys.add(key);
+            const isDuplicate = (key && seenKeys.has(key)) || cleanForm2.some(existing => this.isSameStudent(existing, item)) || cleanForm3.some(existing => this.isSameStudent(existing, item));
+            if (!isDuplicate) {
+                if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
                 itemCopy.classification = 'INACTIVE_FORM3';
                 itemCopy.isEnrolled = false;
@@ -217,8 +239,9 @@ export class AnnexSyncService {
         // 3. Needs Review Queue: Discrepancy items awaiting Admin action
         for (const item of (needsReviewList || [])) {
             const key = this.getUniqueKey(item);
-            if (key && !seenKeys.has(key)) {
-                seenKeys.add(key);
+            const isDuplicate = (key && seenKeys.has(key)) || cleanForm2.some(existing => this.isSameStudent(existing, item)) || cleanForm3.some(existing => this.isSameStudent(existing, item)) || cleanReview.some(existing => this.isSameStudent(existing, item));
+            if (!isDuplicate) {
+                if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
                 itemCopy.classification = 'NEEDS_REVIEW';
                 cleanReview.push(itemCopy);
@@ -235,7 +258,15 @@ export class AnnexSyncService {
     /**
      * Saves verified lists to persistent storage, broadcasts updates, and auto-syncs to Supabase.
      */
-    static saveVerifiedData({ form2List, form3List, needsReviewList, updatedBy = 'Admin', syncToDb = true }) {
+    static saveVerifiedData({
+        form2List,
+        form3List,
+        needsReviewList,
+        updatedBy = 'Admin',
+        syncToDb = true,
+        academicYear = '2024-2025',
+        semester = '1st Semester'
+    }) {
         try {
             const deduplicated = this.deduplicateLists(form2List, form3List, needsReviewList);
             const totalCount = deduplicated.form2List.length + deduplicated.form3List.length + deduplicated.needsReviewList.length;
@@ -244,6 +275,8 @@ export class AnnexSyncService {
                 timestamp: Date.now(),
                 updatedBy: updatedBy,
                 totalCount: totalCount,
+                academicYear: academicYear,
+                semester: semester,
                 form2Count: deduplicated.form2List.length,
                 form3Count: deduplicated.form3List.length,
                 reviewCount: deduplicated.needsReviewList.length,
@@ -270,7 +303,9 @@ export class AnnexSyncService {
             if (syncToDb && (deduplicated.form2List.length > 0 || deduplicated.form3List.length > 0)) {
                 this.saveToSupabase({
                     form2List: deduplicated.form2List,
-                    form3List: deduplicated.form3List
+                    form3List: deduplicated.form3List,
+                    academicYear: academicYear,
+                    semester: semester
                 }).catch(err => console.warn('Background Supabase auto-sync error:', err));
             }
 
@@ -490,19 +525,20 @@ export class AnnexSyncService {
         if (!supabase) return null;
 
         try {
-            let { data: f2Data, error: errF2 } = await supabase
-                .from('annex_form_2')
-                .select('*')
-                .eq('academic_year', academicYear)
-                .eq('semester', semester)
-                .order('control_number', { ascending: true });
+            let qF2 = supabase.from('annex_form_2').select('*').order('control_number', { ascending: true });
+            let qF3 = supabase.from('annex_form_3').select('*').order('control_number', { ascending: true });
 
-            let { data: f3Data, error: errF3 } = await supabase
-                .from('annex_form_3')
-                .select('*')
-                .eq('academic_year', academicYear)
-                .eq('semester', semester)
-                .order('control_number', { ascending: true });
+            if (academicYear && academicYear !== 'All') {
+                qF2 = qF2.eq('academic_year', academicYear);
+                qF3 = qF3.eq('academic_year', academicYear);
+            }
+            if (semester && semester !== 'All') {
+                qF2 = qF2.eq('semester', semester);
+                qF3 = qF3.eq('semester', semester);
+            }
+
+            let { data: f2Data, error: errF2 } = await qF2;
+            let { data: f3Data, error: errF3 } = await qF3;
 
             // Fallback: If no records found for specified AY/Sem, check if any records exist in annex_form_2 / annex_form_3
             if (fallbackToLatest && (!f2Data || f2Data.length === 0) && (!f3Data || f3Data.length === 0)) {
@@ -516,6 +552,8 @@ export class AnnexSyncService {
                 const form2List = (f2Data || []).map(row => ({
                     classification: 'MATCHED_FORM2',
                     isEnrolled: true,
+                    academic_year: row.academic_year,
+                    semester: row.semester,
                     grantee: {
                         id: row.id,
                         student_id: row.student_number,
@@ -526,7 +564,9 @@ export class AnnexSyncService {
                         course: row.degree_program,
                         year: row.year_level,
                         batch: row.tes_batch,
-                        saNumber: row.tes_application_number
+                        saNumber: row.tes_application_number,
+                        academic_year: row.academic_year,
+                        semester: row.semester
                     },
                     matchedStudent: {
                         studentId: row.student_number,
@@ -540,7 +580,9 @@ export class AnnexSyncService {
                         year: row.year_level,
                         email: row.email_address,
                         phone: row.phone_number,
-                        saNumber: row.tes_application_number
+                        saNumber: row.tes_application_number,
+                        academic_year: row.academic_year,
+                        semester: row.semester
                     }
                 }));
 
@@ -549,6 +591,8 @@ export class AnnexSyncService {
                     isEnrolled: false,
                     specialStatusReason: row.status,
                     remarks: row.remarks,
+                    academic_year: row.academic_year,
+                    semester: row.semester,
                     grantee: {
                         id: row.id,
                         student_id: row.student_number,
@@ -558,7 +602,9 @@ export class AnnexSyncService {
                         middle_name: row.middle_initial,
                         course: row.degree_program,
                         year: row.year_level,
-                        saNumber: row.tes_application_number
+                        saNumber: row.tes_application_number,
+                        academic_year: row.academic_year,
+                        semester: row.semester
                     },
                     matchedStudent: {
                         studentId: row.student_number,
@@ -570,13 +616,16 @@ export class AnnexSyncService {
                         birthdate: row.birthdate,
                         course: row.degree_program,
                         year: row.year_level,
-                        saNumber: row.tes_application_number
+                        saNumber: row.tes_application_number,
+                        academic_year: row.academic_year,
+                        semester: row.semester
                     }
                 }));
 
+                const deduplicated = this.deduplicateLists(form2List, form3List, []);
                 return {
-                    form2List,
-                    form3List,
+                    form2List: deduplicated.form2List,
+                    form3List: deduplicated.form3List,
                     needsReviewList: [],
                     fromDb: true
                 };

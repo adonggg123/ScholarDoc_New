@@ -99,6 +99,17 @@ let saSearchF2 = null;
 let saSearchF3 = null;
 let btnAutoResolveAll = null;
 
+// Term Filter State & Elements (Semester & Academic Year)
+let filterAcademicYear = null;
+let filterSemester = null;
+let headerFilterAcademicYear = null;
+let headerFilterSemester = null;
+let btnRefreshTerm = null;
+let iconRefreshTerm = null;
+
+let selectedAcademicYear = '2024-2025';
+let selectedSemester = '1st Semester';
+
 function getTableName() {
     return 'new_grantees_masterlist';
 }
@@ -1928,24 +1939,27 @@ async function loadSchoolStudentsAndVerify(grantees) {
 
                 for (const item of allItems) {
                     const key = AnnexSyncService.getUniqueKey(item);
-                    if (processedKeys.has(key)) continue;
+                    if (processedKeys.has(key) || combinedForm2.some(c => AnnexSyncService.isSameStudent(c, item)) || combinedForm3.some(c => AnnexSyncService.isSameStudent(c, item))) continue;
                     processedKeys.add(key);
 
-                    if (resolvedForm2Map.has(key)) {
-                        const saved = resolvedForm2Map.get(key);
+                    const savedF2 = resolvedForm2Map.get(key) || savedSync.form2List.find(s => AnnexSyncService.isSameStudent(s, item));
+                    const savedF3 = resolvedForm3Map.get(key) || savedSync.form3List.find(s => AnnexSyncService.isSameStudent(s, item));
+
+                    if (savedF2) {
+                        processedKeys.add(AnnexSyncService.getUniqueKey(savedF2));
                         const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
-                        const sL = (saved.matchedStudent?.lastName || saved.matchedStudent?.last_name || '').trim().toLowerCase();
+                        const sL = (savedF2.matchedStudent?.lastName || savedF2.matchedStudent?.last_name || '').trim().toLowerCase();
                         const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
                         if (isValid) {
-                            combinedForm2.push({ ...item, ...saved, classification: 'MATCHED_FORM2', isEnrolled: true });
+                            combinedForm2.push({ ...item, ...savedF2, classification: 'MATCHED_FORM2', isEnrolled: true });
                         } else {
                             if (item.classification === 'MATCHED_FORM2') combinedForm2.push(item);
                             else if (item.classification === 'INACTIVE_FORM3') combinedForm3.push(item);
                             else remainingReview.push(item);
                         }
-                    } else if (resolvedForm3Map.has(key)) {
-                        const saved = resolvedForm3Map.get(key);
-                        combinedForm3.push({ ...item, ...saved, classification: 'INACTIVE_FORM3', isEnrolled: false });
+                    } else if (savedF3) {
+                        processedKeys.add(AnnexSyncService.getUniqueKey(savedF3));
+                        combinedForm3.push({ ...item, ...savedF3, classification: 'INACTIVE_FORM3', isEnrolled: false });
                     } else if (item.classification === 'MATCHED_FORM2') {
                         combinedForm2.push(item);
                     } else if (item.classification === 'INACTIVE_FORM3') {
@@ -1955,24 +1969,28 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     }
                 }
 
-                // Preserve any manually approved records from savedSync
-                for (const item of savedSync.form2List) {
-                    const key = AnnexSyncService.getUniqueKey(item);
-                    if (!processedKeys.has(key)) {
-                        const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
-                        const sL = (item.matchedStudent?.lastName || item.matchedStudent?.last_name || '').trim().toLowerCase();
+                // Preserve any manually approved records from savedSync that were not already merged
+                for (const savedItem of (savedSync.form2List || [])) {
+                    const key = AnnexSyncService.getUniqueKey(savedItem);
+                    const alreadyInF2 = combinedForm2.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+                    const alreadyInF3 = combinedForm3.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+                    if (!processedKeys.has(key) && !alreadyInF2 && !alreadyInF3) {
+                        processedKeys.add(key);
+                        const gL = (savedItem.grantee?.last_name || savedItem.grantee?.lastName || '').trim().toLowerCase();
+                        const sL = (savedItem.matchedStudent?.lastName || savedItem.matchedStudent?.last_name || '').trim().toLowerCase();
                         const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
                         if (isValid) {
-                            processedKeys.add(key);
-                            combinedForm2.push(item);
+                            combinedForm2.push(savedItem);
                         }
                     }
                 }
-                for (const item of savedSync.form3List) {
-                    const key = AnnexSyncService.getUniqueKey(item);
-                    if (!processedKeys.has(key)) {
+                for (const savedItem of (savedSync.form3List || [])) {
+                    const key = AnnexSyncService.getUniqueKey(savedItem);
+                    const alreadyInF2 = combinedForm2.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+                    const alreadyInF3 = combinedForm3.some(c => AnnexSyncService.isSameStudent(c, savedItem));
+                    if (!processedKeys.has(key) && !alreadyInF2 && !alreadyInF3) {
                         processedKeys.add(key);
-                        combinedForm3.push(item);
+                        combinedForm3.push(savedItem);
                     }
                 }
 
@@ -1996,7 +2014,9 @@ async function loadSchoolStudentsAndVerify(grantees) {
                 form2List: verifiedForm2List,
                 form3List: verifiedForm3List,
                 needsReviewList: needsReviewList,
-                updatedBy: 'Super Admin (Initial Verification)'
+                updatedBy: 'Super Admin (Initial Verification)',
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
         }
 
@@ -2090,7 +2110,9 @@ function resolveSuperAdminReviewItem(reviewIndex, targetForm, specialReason = 'N
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
-        updatedBy: 'Super Admin'
+        updatedBy: 'Super Admin',
+        academicYear: selectedAcademicYear,
+        semester: selectedSemester
     });
     if (synced) {
         verifiedForm2List = synced.form2List;
@@ -2142,7 +2164,14 @@ function renderAnnexForm2Table(items) {
     if (!tbody) return;
 
     if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 30px; color: var(--text-secondary);">No verified enrolled grantees for Form 2.</td></tr>`;
+        const termLabel = `${selectedSemester !== 'All' ? selectedSemester : 'All Semesters'} (${selectedAcademicYear !== 'All' ? 'AY ' + selectedAcademicYear : 'All School Years'})`;
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 42px 20px; color: var(--text-secondary);">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                <i class="icon-calendar-x" style="font-size: 32px; color: #94a3b8; opacity: 0.7;"></i>
+                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">No verified enrolled grantees found for ${termLabel}.</div>
+                <div style="font-size: 12px; color: #94a3b8;">Switch academic year/semester above or import a new grantee list.</div>
+            </div>
+        </td></tr>`;
         return;
     }
 
@@ -2194,7 +2223,14 @@ function renderAnnexForm3Table(items) {
     if (!tbody) return;
 
     if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">No Form 3 special status records.</td></tr>`;
+        const termLabel = `${selectedSemester !== 'All' ? selectedSemester : 'All Semesters'} (${selectedAcademicYear !== 'All' ? 'AY ' + selectedAcademicYear : 'All School Years'})`;
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 42px 20px; color: var(--text-secondary);">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                <i class="icon-user-x" style="font-size: 32px; color: #94a3b8; opacity: 0.7;"></i>
+                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">No Form 3 special status records found for ${termLabel}.</div>
+                <div style="font-size: 12px; color: #94a3b8;">Switch academic year/semester above or import a new grantee list.</div>
+            </div>
+        </td></tr>`;
         return;
     }
 
@@ -2711,6 +2747,125 @@ export function initMasterlistImport() {
     saSearchF3 = document.getElementById('sa-search-form3');
     btnAutoResolveAll = document.getElementById('sa-btn-auto-resolve-all');
 
+    filterAcademicYear = document.getElementById('sa-filter-ay');
+    filterSemester = document.getElementById('sa-filter-sem');
+    headerFilterAcademicYear = document.getElementById('sa-header-filter-ay');
+    headerFilterSemester = document.getElementById('sa-header-filter-sem');
+    btnRefreshTerm = document.getElementById('sa-btn-refresh-term');
+    iconRefreshTerm = document.getElementById('sa-icon-refresh-term');
+
+    const handleTermChange = async (newAY, newSem) => {
+        if (newAY !== undefined) selectedAcademicYear = newAY;
+        if (newSem !== undefined) selectedSemester = newSem;
+
+        if (filterAcademicYear && filterAcademicYear.value !== selectedAcademicYear) filterAcademicYear.value = selectedAcademicYear;
+        if (headerFilterAcademicYear && headerFilterAcademicYear.value !== selectedAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
+        if (filterSemester && filterSemester.value !== selectedSemester) filterSemester.value = selectedSemester;
+        if (headerFilterSemester && headerFilterSemester.value !== selectedSemester) headerFilterSemester.value = selectedSemester;
+
+        await loadTermData(selectedAcademicYear, selectedSemester);
+    };
+
+    if (filterAcademicYear) {
+        filterAcademicYear.addEventListener('change', (e) => handleTermChange(e.target.value, undefined));
+    }
+    if (headerFilterAcademicYear) {
+        headerFilterAcademicYear.addEventListener('change', (e) => handleTermChange(e.target.value, undefined));
+    }
+    if (filterSemester) {
+        filterSemester.addEventListener('change', (e) => handleTermChange(undefined, e.target.value));
+    }
+    if (headerFilterSemester) {
+        headerFilterSemester.addEventListener('change', (e) => handleTermChange(undefined, e.target.value));
+    }
+    if (btnRefreshTerm) {
+        btnRefreshTerm.addEventListener('click', () => handleTermChange(selectedAcademicYear, selectedSemester));
+    }
+
+    const populateDistinctAcademicYears = async () => {
+        const baseYears = new Set(['2024-2025', '2023-2024', '2022-2023', '2021-2022']);
+        try {
+            if (window.supabaseClient) {
+                const [resF2, resF3] = await Promise.all([
+                    window.supabaseClient.from('annex_form_2').select('academic_year'),
+                    window.supabaseClient.from('annex_form_3').select('academic_year')
+                ]);
+                (resF2.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
+                (resF3.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
+            }
+        } catch (e) {
+            console.warn('Could not query distinct academic years in Superadmin:', e);
+        }
+
+        const sortedYears = Array.from(baseYears).sort().reverse();
+        const html = sortedYears.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('') +
+            `<option value="All" ${selectedAcademicYear === 'All' ? 'selected' : ''}>All School Years</option>`;
+
+        if (filterAcademicYear) filterAcademicYear.innerHTML = html;
+        if (headerFilterAcademicYear) headerFilterAcademicYear.innerHTML = html;
+    };
+
+    const loadTermData = async (ay, sem) => {
+        if (iconRefreshTerm) iconRefreshTerm.classList.add('sync-spin');
+        const syncBadge = document.getElementById('sa-sync-status-badge');
+        if (syncBadge) {
+            syncBadge.innerHTML = `<i class="icon-refresh-cw sync-spin" style="font-size: 13px;"></i> Loading ${sem} (${ay})...`;
+            syncBadge.style.display = 'inline-flex';
+        }
+
+        try {
+            const dbSync = await AnnexSyncService.loadFromSupabase({
+                academicYear: ay,
+                semester: sem,
+                fallbackToLatest: false
+            });
+
+            if (dbSync && dbSync.fromDb) {
+                verifiedForm2List = dbSync.form2List || [];
+                verifiedForm3List = dbSync.form3List || [];
+                needsReviewList = [];
+                updateAnnexKPIs();
+                renderAnnexForm2Table(verifiedForm2List);
+                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexReviewQueue(needsReviewList);
+
+                AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: [],
+                    updatedBy: `Term Filter (${ay} ${sem})`,
+                    syncToDb: false,
+                    academicYear: ay,
+                    semester: sem
+                });
+
+                if (syncBadge) {
+                    if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
+                        syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> ${ay} ${sem} (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                    } else {
+                        syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> 0 Records for ${ay} ${sem}`;
+                    }
+                }
+            } else {
+                verifiedForm2List = [];
+                verifiedForm3List = [];
+                needsReviewList = [];
+                updateAnnexKPIs();
+                renderAnnexForm2Table(verifiedForm2List);
+                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexReviewQueue(needsReviewList);
+                if (syncBadge) {
+                    syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> 0 Records for ${ay} ${sem}`;
+                }
+            }
+        } catch (err) {
+            console.error('Error loading term data:', err);
+            if (window.showToast) window.showToast('Failed to load records for term: ' + (err.message || err), 'error');
+        } finally {
+            if (iconRefreshTerm) iconRefreshTerm.classList.remove('sync-spin');
+        }
+    };
+
     // Drag and drop events
     if (dropZone) {
         dropZone.addEventListener('dragover', (e) => {
@@ -2899,7 +3054,8 @@ export function initMasterlistImport() {
                     };
                 });
                 const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
+                const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
+                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${selectedAcademicYear}_${semClean}_${Date.now()}.xlsx`);
             } catch (err) {
                 console.error('Form 2 export error:', err);
                 alert('Failed to generate Form 2: ' + err.message);
@@ -2941,7 +3097,8 @@ export function initMasterlistImport() {
                 });
 
                 const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
+                const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
+                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${selectedAcademicYear}_${semClean}_${Date.now()}.xlsx`);
             } catch (err) {
                 console.error('Form 3 export error:', err);
                 alert('Failed to generate Form 3: ' + err.message);
@@ -3058,43 +3215,8 @@ export function initMasterlistImport() {
 
     // Manual DB Refresh Action
     const refreshFromDb = async () => {
-        const syncBadge = document.getElementById('sa-sync-status-badge');
-        if (syncBadge) {
-            syncBadge.innerHTML = `<i class="icon-refresh-cw sync-spin" style="font-size: 13px;"></i> Syncing with Database...`;
-            syncBadge.style.display = 'inline-flex';
-        }
-        try {
-            const dbSync = await AnnexSyncService.loadFromSupabase();
-            if (dbSync && dbSync.fromDb) {
-                verifiedForm2List = dbSync.form2List || [];
-                verifiedForm3List = dbSync.form3List || [];
-                needsReviewList = [];
-                updateAnnexKPIs();
-                renderAnnexForm2Table(verifiedForm2List);
-                renderAnnexForm3Table(verifiedForm3List);
-                renderAnnexReviewQueue(needsReviewList);
-
-                AnnexSyncService.saveVerifiedData({
-                    form2List: verifiedForm2List,
-                    form3List: verifiedForm3List,
-                    needsReviewList: [],
-                    updatedBy: 'Supabase Manual Refresh',
-                    syncToDb: false
-                });
-
-                if (syncBadge) {
-                    if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
-                        syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
-                    } else {
-                        syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Database in Sync (0 Records)`;
-                    }
-                }
-                if (window.showToast) window.showToast(`Database synced: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3 records.`, 'check-circle');
-            }
-        } catch (err) {
-            console.error('Error refreshing from database:', err);
-            if (window.showToast) window.showToast('Failed to sync from database: ' + (err.message || err), 'error');
-        }
+        await loadTermData(selectedAcademicYear, selectedSemester);
+        if (window.showToast) window.showToast(`Database synced for ${selectedAcademicYear} ${selectedSemester}: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3 records.`, 'check-circle');
     };
 
     const saBtnRefreshF2 = document.getElementById('sa-btn-refresh-form2-db');
@@ -3216,12 +3338,35 @@ export function initMasterlistImport() {
         }
     });
 
-    // Automatically restore verified state from Supabase on boot
-    AnnexSyncService.loadFromSupabase().then(dbSync => {
+    // Populate distinct academic years from database
+    populateDistinctAcademicYears();
+
+    // Automatically restore verified state from Supabase for selected term on boot
+    AnnexSyncService.loadFromSupabase({
+        academicYear: selectedAcademicYear,
+        semester: selectedSemester,
+        fallbackToLatest: true
+    }).then(dbSync => {
         if (dbSync && dbSync.fromDb) {
             verifiedForm2List = dbSync.form2List || [];
             verifiedForm3List = dbSync.form3List || [];
             needsReviewList = [];
+
+            // If fallback matched an existing term, sync dropdown selections
+            const firstRow = verifiedForm2List[0] || verifiedForm3List[0];
+            if (firstRow) {
+                if (firstRow.academic_year) {
+                    selectedAcademicYear = firstRow.academic_year;
+                    if (filterAcademicYear) filterAcademicYear.value = selectedAcademicYear;
+                    if (headerFilterAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
+                }
+                if (firstRow.semester) {
+                    selectedSemester = firstRow.semester;
+                    if (filterSemester) filterSemester.value = selectedSemester;
+                    if (headerFilterSemester) headerFilterSemester.value = selectedSemester;
+                }
+            }
+
             updateAnnexKPIs();
             renderAnnexForm2Table(verifiedForm2List);
             renderAnnexForm3Table(verifiedForm3List);
@@ -3233,13 +3378,15 @@ export function initMasterlistImport() {
                 form3List: verifiedForm3List,
                 needsReviewList: [],
                 updatedBy: 'Supabase Sync',
-                syncToDb: false
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
 
             const syncBadge = document.getElementById('sa-sync-status-badge');
             if (syncBadge) {
                 if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
-                    syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
+                    syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${selectedAcademicYear} ${selectedSemester}: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
                 } else {
                     syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Database in Sync (0 Records)`;
                 }
