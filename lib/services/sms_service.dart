@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/api_config.dart';
 
 /// Service responsible for managing SMS communications in ScholarDoc.
 /// 
@@ -16,15 +17,8 @@ class SmsService {
 
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Default server URL for local development/emulator
-  static String get serverBaseUrl {
-    if (kIsWeb) return '';
-    // Android emulator alias for host machine
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8080';
-    }
-    return 'http://localhost:8080';
-  }
+  /// Default server URL dynamically resolved by ApiConfig
+  static String get serverBaseUrl => ApiConfig.baseUrl;
 
   /// Normalizes any Philippine mobile phone number into standard '09XXXXXXXXX' format.
   /// Valid formats include:

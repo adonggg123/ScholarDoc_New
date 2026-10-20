@@ -2830,6 +2830,19 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // ── API: SMS Watcher Poll Trigger (for Vercel Cron or webhook) ────────
+    if ((urlPath === '/api/sms/poll-watcher' || urlPath === '/api/cron/sms-watcher') && (req.method === 'GET' || req.method === 'POST')) {
+        try {
+            const result = await pollNotificationsAndSendSms();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, message: 'SMS watcher poll executed', result }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+        return;
+    }
+
     const resolvedFile = findFilePath(urlPath);
 
     if (!resolvedFile) {

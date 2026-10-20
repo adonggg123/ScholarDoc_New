@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:image/image.dart' as img;
 import 'academic_term_service.dart';
+import '../config/api_config.dart';
 
 /// Result of scanning and analyzing a student ID validation sticker and birthdate on the back of ID.
 class StickerScanResult {
@@ -221,15 +222,7 @@ class DocumentAIScannerService {
   }
 
   /// Resolves the backend proxy base URL across Web, Android emulator, and desktop
-  static String get backendBaseUrl {
-    if (kIsWeb) return '';
-    try {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        return 'http://10.0.2.2:8080';
-      }
-    } catch (_) {}
-    return 'http://localhost:8080';
-  }
+  static String get backendBaseUrl => ApiConfig.baseUrl;
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. FRONT ID SCANNING — Name Verification

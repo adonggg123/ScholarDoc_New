@@ -2256,7 +2256,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           ),
           if (_pdfFileName != null)
             Container(
-              margin: const EdgeInsets.only(top: -8, bottom: 16),
+              margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: (_frontNameMatches == true && _stickerValidated == true && _backBirthdateMatches == true)
@@ -2312,7 +2312,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           ),
           if (_atmCardFileName != null && _atmProofNameMatches != null)
             Container(
-              margin: const EdgeInsets.only(top: -8, bottom: 16),
+              margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: (_atmProofNameMatches == true && _atmProofSaMatches == true)

@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/", "destination": "/student_web/landing.html" },
+    { "source": "/landing", "destination": "/student_web/landing.html" },
+    { "source": "/landing.html", "destination": "/student_web/landing.html" },
+    { "source": "/login", "destination": "/superadmin_web/login.html" },
+    { "source": "/login.html", "destination": "/superadmin_web/login.html" },
+    { "source": "/student", "destination": "/student_web/dashboard.html" },
+    { "source": "/dashboard", "destination": "/student_web/dashboard.html" },
+    { "source": "/admin", "destination": "/admin_web/admin.html" },
+    { "source": "/superadmin", "destination": "/superadmin_web/superadmin.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+      ]
+    }
+  ]
+}
