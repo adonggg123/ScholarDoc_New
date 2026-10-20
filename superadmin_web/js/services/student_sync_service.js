@@ -61,7 +61,7 @@ export class StudentSyncService {
         // 3. Exact or Substring Clean String Match
         const sFullName = student.full_name || student.fullName || student.name || `${student.given_name || student.first_name || ''} ${student.last_name || ''}`.trim();
         const gFullName = grantee.full_name || grantee.fullName || grantee.name || `${grantee.given_name || grantee.first_name || ''} ${grantee.last_name || ''}`.trim();
-        
+
         const sClean = this.clean(sFullName);
         const gClean = this.clean(gFullName);
 
@@ -113,15 +113,33 @@ export class StudentSyncService {
         const hasPdf = !!(existing.submissionPdfUrl || existing.submission_pdf_url || docs.submissionPdfUrl || docs.submission_pdf_url);
         const hasFront = !!(existing.idFrontUrl || existing.id_front_url || docs.idFrontUrl || docs.id_front_url);
         const hasBack = !!(existing.idBackUrl || existing.id_back_url || docs.idBackUrl || docs.id_back_url);
-        const hasAtm = !!(existing.atmCardUrl || existing.atm_card_url || docs.atmCardUrl || docs.atm_card_url);
+        const hasAtm = !!(existing.atmCardUrl || existing.atm_card_url || docs.atmCardUrl || docs.atm_card_url || docs.atmProofUrl);
+        const hasDeposit = !!(existing.depositSlipUrl || existing.deposit_slip_url || docs.depositSlipUrl || docs.deposit_slip_url);
 
-        if (hasPdf || hasFront || hasBack || hasAtm) {
+        if (hasPdf || hasFront || hasBack || hasAtm || hasDeposit) {
             return true;
         }
 
         // 3. Meaningful student-provided SA Number (distinct from default 'N/A' placeholder)
-        const sa = existing.saNumber || existing.sa_number || docs.saNumber || existing.familyDetails?.saNumber;
-        if (sa && String(sa).trim() !== '' && String(sa).trim().toUpperCase() !== 'N/A' && String(sa).trim() !== 'null') {
+        const saCandidates = [
+            docs.saNumber,
+            docs.sa_number,
+            docs.atmExtractedSaNumber,
+            existing.saNumber,
+            existing.sa_number,
+            existing.familyDetails?.saNumber
+        ];
+        let sa = '';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const str = String(c).trim();
+                if (str !== '' && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null') {
+                    sa = str;
+                    break;
+                }
+            }
+        }
+        if (sa) {
             // Considered a submission if explicitly edited/saved with an SA number
             if (existing.updated_at && existing.updated_at !== existing.created_at) {
                 return true;
@@ -197,18 +215,34 @@ export class StudentSyncService {
         const yearLevel = ss.year_level || ss.year || f2Match?.year_level || existing.year_level || '1';
         const birthdate = ss.date_of_birth || ss.birthdate || f2Match?.birthdate || existing.date_of_birth || 'N/A';
         const gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
-        
-        const saNumber = f2Match?.tes_application_number && f2Match.tes_application_number !== 'N/A'
-            ? f2Match.tes_application_number
-            : (existing.sa_number || existing.saNumber || existing.familyDetails?.saNumber || 'N/A');
+
+        const existingDocs = existing.documents || {};
+        const saCandidates = [
+            f2Match?.tes_application_number,
+            existingDocs.saNumber,
+            existingDocs.sa_number,
+            existingDocs.atmExtractedSaNumber,
+            existing.sa_number,
+            existing.saNumber,
+            existing.familyDetails?.saNumber
+        ];
+        let saNumber = 'N/A';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const s = String(c).trim();
+                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                    saNumber = s;
+                    break;
+                }
+            }
+        }
 
         const scholarshipName = f2Match?.scholarship_name || ss.scholarship_name || existing.scholarship_name || existing.scholarshipProgram || 'CHED TES';
-        
+
         // Dynamically compute status based on actual submission and admin validation
         const hasSubmitted = this.hasStudentSubmitted(existing, f2Match, ss);
         const status = this.computeDynamicStatus(existing, f2Match, ss, activeDeadline);
 
-        const existingDocs = existing.documents || {};
         let saVerificationStatus = 'No Submission Yet';
         let idValidationStatus = 'No Submission Yet';
 
@@ -230,7 +264,7 @@ export class StudentSyncService {
         let localBatchMap = {};
         try {
             localBatchMap = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
-        } catch (_) {}
+        } catch (_) { }
 
         const sNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || '';
         const saNum = f2Match?.tes_application_number || existing.sa_number || existing.saNumber || '';
@@ -297,7 +331,7 @@ export class StudentSyncService {
         return {
             id: ss.id || f2Match?.id || existing.id || existing.uid || undefined,
             uid: ss.id || f2Match?.id || existing.uid || undefined,
-            
+
             // Identification
             student_no: studentNo,
             studentId: studentNo,
@@ -471,7 +505,7 @@ export class StudentSyncService {
                     sgList = sgRes.data;
                     console.log(`StudentSyncService: Loaded ${sgList.length} existing student_grantees records.`);
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // 3b. Fetch New Grantees Masterlist records to cross-reference batches
             let newGranteesList = [];
@@ -481,7 +515,7 @@ export class StudentSyncService {
                     newGranteesList = ngRes.data;
                     console.log(`StudentSyncService: Loaded ${newGranteesList.length} new_grantees_masterlist records.`);
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // If annex_form_2 is completely empty, fallback to student_grantees records if available
             if (!Array.isArray(form2List) || form2List.length === 0) {

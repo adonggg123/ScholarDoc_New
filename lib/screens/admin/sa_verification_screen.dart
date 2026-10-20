@@ -28,6 +28,38 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
     _studentsStream = _authService.getStudentsStream();
   }
 
+  static String _extractSaNumber(Map<String, dynamic> data) {
+    final docs = (data['documents'] is Map) ? (data['documents'] as Map) : {};
+    final candidates = [
+      docs['saNumber'],
+      docs['sa_number'],
+      docs['atmExtractedSaNumber'],
+      data['saNumber'],
+      data['sa_number'],
+      data['familyDetails']?['saNumber'],
+    ];
+    for (final c in candidates) {
+      if (c != null) {
+        final s = c.toString().trim();
+        if (s.isNotEmpty && s.toUpperCase() != 'N/A' && s.toLowerCase() != 'null') {
+          return s;
+        }
+      }
+    }
+    return '';
+  }
+
+  static bool _hasSaSubmission(Map<String, dynamic> data) {
+    final sa = _extractSaNumber(data);
+    if (sa.isNotEmpty) return true;
+    final docs = (data['documents'] is Map) ? (data['documents'] as Map) : {};
+    final hasAtm = (data['atmCardUrl'] ?? data['atm_card_url'] ?? docs['atmCardUrl'] ?? docs['atm_card_url']) != null;
+    final hasDeposit = (data['depositSlipUrl'] ?? data['deposit_slip_url'] ?? docs['depositSlipUrl'] ?? docs['deposit_slip_url']) != null;
+    final saStatus = docs['saVerificationStatus'] ?? data['saVerificationStatus'] ?? data['sa_verification_status'];
+    final hasStatus = saStatus != null && saStatus.toString().toLowerCase() != 'no submission yet';
+    return hasAtm || hasDeposit || hasStatus;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -43,11 +75,8 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
         List<Map<String, dynamic>> allDocs = snapshot.data?.toList() ?? [];
 
-        // Filter for students who have submitted SA number
-        allDocs = allDocs.where((data) {
-          final sa = data['saNumber'] ?? data['familyDetails']?['saNumber'];
-          return sa != null && sa.toString().trim().isNotEmpty && sa.toString().trim() != 'N/A';
-        }).toList();
+        // Filter for students who have submitted SA number, ATM card, or deposit slip
+        allDocs = allDocs.where((data) => _hasSaSubmission(data)).toList();
 
         if (allDocs.isEmpty) {
           return Center(
@@ -177,8 +206,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
         itemBuilder: (context, index) {
           final data = docs[index];
           final String name = data['fullName'] ?? 'N/A';
-          final String saNumber =
-              data['saNumber'] ?? data['familyDetails']?['saNumber'] ?? 'N/A';
+          final String saNumber = _extractSaNumber(data).isNotEmpty ? _extractSaNumber(data) : 'N/A';
 
           bool isSelected = _selectedStudentIndex == index;
 
@@ -291,10 +319,7 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
     Map<String, dynamic> data,
     bool isMobile,
   ) {
-    final String saNumber =
-        data['saNumber'] ??
-        data['familyDetails']?['saNumber'] ??
-        'Not Submitted';
+    final String saNumber = _extractSaNumber(data).isNotEmpty ? _extractSaNumber(data) : 'Not Submitted';
     final String name = data['fullName'] ?? 'N/A';
     final String studentId = data['studentId'] ?? 'N/A';
     final String course = data['course'] ?? 'N/A';
@@ -569,6 +594,10 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
 
       // Update saVerificationStatus inside documents
       currentDocs['saVerificationStatus'] = newStatus;
+      final String actualSa = _extractSaNumber(studentData);
+      if (actualSa.isNotEmpty) {
+        currentDocs['saNumber'] = actualSa;
+      }
 
       final Map<String, dynamic> updatePayload = {
         'documents': currentDocs,
@@ -576,6 +605,10 @@ class _SaVerificationScreenState extends State<SaVerificationScreen> {
         'requiresResubmission': !isFinalRejection && (newStatus == 'Missing' || newStatus == 'Rejected'),
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
       };
+      if (actualSa.isNotEmpty) {
+        updatePayload['saNumber'] = actualSa;
+        updatePayload['sa_number'] = actualSa;
+      }
 
       // Auto-calculate overall status:
       // Only set global status to Verified when BOTH SA and ID are verified

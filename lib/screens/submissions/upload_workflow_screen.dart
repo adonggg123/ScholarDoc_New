@@ -93,8 +93,24 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         final docs = (data['documents'] is Map) ? data['documents'] : {};
         setState(() {
           _studentFullName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
-          _studentBirthdate = (data['birthdate'] ?? data['date_of_birth'] ?? '').toString().trim();
-          _saController.text = (data['saNumber'] ?? data['sa_number'] ?? docs['saNumber'] ?? docs['sa_number'] ?? '').toString();
+          final saCandidates = [
+            docs['saNumber'],
+            docs['sa_number'],
+            docs['atmExtractedSaNumber'],
+            data['saNumber'],
+            data['sa_number'],
+          ];
+          String resolvedSa = '';
+          for (final cand in saCandidates) {
+            if (cand != null) {
+              final s = cand.toString().trim();
+              if (s.isNotEmpty && s.toUpperCase() != 'N/A' && s.toLowerCase() != 'null') {
+                resolvedSa = s;
+                break;
+              }
+            }
+          }
+          _saController.text = resolvedSa;
 
           final existingAtm = data['atmCardUrl'] ?? data['atm_card_url'] ?? docs['atmCardUrl'] ?? docs['atm_card_url'];
           if (existingAtm != null && existingAtm.toString().isNotEmpty) {
@@ -1869,8 +1885,21 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             documents['idBackUrl'] = _idBackUrl;
             documents['id_back_url'] = _idBackUrl;
           }
-          documents['saNumber'] = _saController.text.trim();
-          documents['sa_number'] = _saController.text.trim();
+          String effectiveSa = _saController.text.trim();
+          if (effectiveSa.isEmpty || effectiveSa.toUpperCase() == 'N/A') {
+            if (_atmExtractedSaNumber != null &&
+                _atmExtractedSaNumber!.trim().isNotEmpty &&
+                _atmExtractedSaNumber!.trim().toUpperCase() != 'N/A') {
+              effectiveSa = _atmExtractedSaNumber!.trim();
+            } else if (documents['saNumber'] != null &&
+                documents['saNumber'].toString().trim().isNotEmpty &&
+                documents['saNumber'].toString().trim().toUpperCase() != 'N/A') {
+              effectiveSa = documents['saNumber'].toString().trim();
+            }
+          }
+
+          documents['saNumber'] = effectiveSa;
+          documents['sa_number'] = effectiveSa;
           documents['saVerificationStatus'] = 'Pending';
           documents['idValidationStatus'] = 'Pending';
           if (_stickerAcademicYear != null) {
@@ -1921,8 +1950,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
           final Map<String, dynamic> studentPayload = {
             'status': 'Pending',
-            'saNumber': _saController.text.trim(),
-            'sa_number': _saController.text.trim(),
+            'saNumber': effectiveSa,
+            'sa_number': effectiveSa,
+            'saVerificationStatus': 'Pending',
+            'sa_verification_status': 'Pending',
             'submissionPdfUrl': _submissionPdfUrl,
             'submission_pdf_url': _submissionPdfUrl,
             'submissionPdfName': _pdfFileName,
@@ -1987,13 +2018,13 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             type: 'success',
           );
           await notificationService.sendNotification(
-            studentId: 'admin',
+            studentId: 'superadmin',
             title: 'SA Number Submitted',
             message: 'Student $fullName has submitted SA Number for verification.',
             type: 'info',
           );
           await notificationService.sendNotification(
-            studentId: 'admin',
+            studentId: 'superadmin',
             title: 'ID Validation Submitted',
             message: 'Student $fullName has uploaded ID documents for validation.',
             type: 'info',

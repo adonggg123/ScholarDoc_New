@@ -1138,6 +1138,18 @@ async function saveRecordsToDatabase() {
             btnSaveRecords.style.background = '#10b981';
         }
 
+        // Notify Admin of newly imported grantees ready for Annex 5 TES Billing
+        try {
+            await window.supabaseClient.from('notifications').insert([{
+                studentId: 'admin',
+                title: 'New Grantees Masterlist Imported',
+                message: `Super Admin imported ${validToInsert.length} new grantees. Records ready for Annex 5 TES Billing review.`,
+                type: 'info',
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (_) {}
+
         await fetchExistingMasterlist();
 
     } catch (err) {

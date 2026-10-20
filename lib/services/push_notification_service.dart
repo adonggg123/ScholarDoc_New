@@ -30,12 +30,21 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     try {
       final localNotifications = FlutterLocalNotificationsPlugin();
       const androidInit = AndroidInitializationSettings(
-        '@drawable/ic_notification',
+        '@mipmap/launcher_icon',
       );
       const initSettings = InitializationSettings(android: androidInit);
       await localNotifications.initialize(initSettings);
 
-      const channel = AndroidNotificationChannel(
+      const generalChannel = AndroidNotificationChannel(
+        'scholardoc_general',
+        'ScholarDoc Updates & Alerts',
+        description:
+            'Application updates, status tracking, SA verification, and document submission alerts',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+      const announcementsChannel = AndroidNotificationChannel(
         'scholardoc_announcements',
         'ScholarDoc Announcements',
         description:
@@ -45,19 +54,37 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         enableVibration: true,
       );
 
-      final title = message.data['title'] ?? 'ScholarDoc Announcement';
-      final body =
-          message.data['message'] ??
+      final androidPlugin = localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(generalChannel);
+        await androidPlugin.createNotificationChannel(announcementsChannel);
+      }
+
+      final isAnnouncement = message.data['announcementId'] != null &&
+          message.data['announcementId'].toString().isNotEmpty;
+      final targetChannel =
+          isAnnouncement ? announcementsChannel : generalChannel;
+
+      final title = message.data['title'] ??
+          (isAnnouncement
+              ? 'ScholarDoc Announcement'
+              : 'ScholarDoc Notification');
+      final body = message.data['message'] ??
           message.data['body'] ??
-          'New scholarship announcement posted.';
+          (isAnnouncement
+              ? 'New scholarship announcement posted.'
+              : 'You have a new update.');
 
       final androidDetails = AndroidNotificationDetails(
-        channel.id,
-        channel.name,
-        channelDescription: channel.description,
+        targetChannel.id,
+        targetChannel.name,
+        channelDescription: targetChannel.description,
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@drawable/ic_notification',
+        icon: '@mipmap/launcher_icon',
         color: const Color(0xFF0F3260),
         playSound: true,
         enableVibration: true,
@@ -97,7 +124,8 @@ class PushNotificationService {
   Map<String, dynamic>? _pendingNotificationData;
   bool _isInitialized = false;
 
-  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+  static const AndroidNotificationChannel _announcementsChannel =
+      AndroidNotificationChannel(
     'scholardoc_announcements',
     'ScholarDoc Announcements',
     description:
@@ -106,6 +134,32 @@ class PushNotificationService {
     playSound: true,
     enableVibration: true,
   );
+
+  static const AndroidNotificationChannel _generalChannel =
+      AndroidNotificationChannel(
+    'scholardoc_general',
+    'ScholarDoc Updates & Alerts',
+    description:
+        'Application updates, status tracking, SA verification, and document submission alerts',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  final Set<String> _recentNotificationKeys = {};
+
+  bool _isDuplicate(String key) {
+    if (key.isEmpty) return false;
+    if (_recentNotificationKeys.contains(key)) {
+      return true;
+    }
+    _recentNotificationKeys.add(key);
+    // Keep set bounded and prune older entries after 10 seconds
+    Future.delayed(const Duration(seconds: 10), () {
+      _recentNotificationKeys.remove(key);
+    });
+    return false;
+  }
 
   /// Initialize Firebase Messaging, Local Notifications, and click listeners
   Future<void> initialize({GlobalKey<NavigatorState>? navKey}) async {
@@ -164,12 +218,16 @@ class PushNotificationService {
         },
       );
 
-      // 3. Create Android High-Priority Notification Channel
-      await _localNotifications
+      // 3. Create Android High-Priority Notification Channels & Request Android 13+ permission
+      final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.createNotificationChannel(_channel);
+          >();
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(_announcementsChannel);
+        await androidPlugin.createNotificationChannel(_generalChannel);
+        await androidPlugin.requestNotificationsPermission();
+      }
 
       // Set foreground notification presentation options for iOS/macOS
       await _fcm.setForegroundNotificationPresentationOptions(
@@ -213,6 +271,12 @@ class PushNotificationService {
         debugPrint('ScholarDoc Push: Topic subscription note: $e');
       }
 
+      // 8. Auto-sync token if user is already signed in
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser != null) {
+        syncToken(currentUser.id);
+      }
+
       _isInitialized = true;
       debugPrint('ScholarDoc Push: Successfully initialized.');
     } catch (e) {
@@ -226,20 +290,38 @@ class PushNotificationService {
     final data = message.data;
 
     final title =
-        notification?.title ?? data['title'] ?? 'ScholarDoc Announcement';
+        notification?.title ?? data['title'] ?? 'ScholarDoc Notification';
     final body =
         notification?.body ??
         data['body'] ??
         data['message'] ??
-        'New announcement posted.';
+        'New notification received.';
+
+    final notifKey = data['notifId']?.toString() ??
+        data['id']?.toString() ??
+        data['announcementId']?.toString() ??
+        message.messageId ??
+        '${title}_$body';
+
+    if (_isDuplicate(notifKey)) {
+      debugPrint(
+        'ScholarDoc Push: Suppressing duplicate foreground notification ($notifKey)',
+      );
+      return;
+    }
+
+    final isAnnouncement = data['announcementId'] != null &&
+        data['announcementId'].toString().isNotEmpty;
+    final activeChannel =
+        isAnnouncement ? _announcementsChannel : _generalChannel;
 
     final androidDetails = AndroidNotificationDetails(
-      _channel.id,
-      _channel.name,
-      channelDescription: _channel.description,
+      activeChannel.id,
+      activeChannel.name,
+      channelDescription: activeChannel.description,
       importance: Importance.max,
       priority: Priority.high,
-      icon: '@drawable/ic_notification',
+      icon: '@mipmap/launcher_icon',
       color: const Color(0xFF0F3260),
       playSound: true,
       enableVibration: true,
@@ -272,15 +354,35 @@ class PushNotificationService {
     required String title,
     required String body,
     Map<String, dynamic>? payload,
+    String? channelId,
   }) async {
     try {
+      final notifKey = payload?['id']?.toString() ??
+          payload?['notifId']?.toString() ??
+          payload?['announcementId']?.toString() ??
+          '${title}_$body';
+
+      if (_isDuplicate(notifKey)) {
+        debugPrint(
+          'ScholarDoc Push: Suppressing duplicate local notification ($notifKey)',
+        );
+        return;
+      }
+
+      final isAnnouncement =
+          (payload?['announcementId'] != null &&
+              payload!['announcementId'].toString().isNotEmpty) ||
+          channelId == _announcementsChannel.id;
+      final activeChannel =
+          isAnnouncement ? _announcementsChannel : _generalChannel;
+
       final androidDetails = AndroidNotificationDetails(
-        _channel.id,
-        _channel.name,
-        channelDescription: _channel.description,
+        activeChannel.id,
+        activeChannel.name,
+        channelDescription: activeChannel.description,
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@drawable/ic_notification',
+        icon: '@mipmap/launcher_icon',
         color: const Color(0xFF0F3260),
         playSound: true,
         enableVibration: true,
@@ -342,19 +444,40 @@ class PushNotificationService {
     String? studentId,
   }) async {
     try {
+      final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+      );
+      String? validUserId;
+      if (uuidRegex.hasMatch(userId)) {
+        validUserId = userId;
+      } else {
+        final currentAuthUid = _supabase.auth.currentUser?.id;
+        if (currentAuthUid != null && uuidRegex.hasMatch(currentAuthUid)) {
+          validUserId = currentAuthUid;
+          studentId ??= userId;
+        }
+      }
+
+      if (validUserId == null) {
+        debugPrint(
+          'ScholarDoc Push: Skipping token upsert - userId ($userId) is not a valid UUID',
+        );
+        return;
+      }
+
       await _supabase.from('user_fcm_tokens').upsert({
-        'user_id': userId,
+        'user_id': validUserId,
         'student_id': studentId,
         'fcm_token': token,
         'device_type': defaultTargetPlatform.name.toLowerCase(),
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'fcm_token');
       debugPrint(
-        'ScholarDoc Push: Token successfully saved to user_fcm_tokens.',
+        'ScholarDoc Push: Token successfully saved to user_fcm_tokens for $validUserId ($studentId).',
       );
     } catch (e) {
       debugPrint(
-        'ScholarDoc Push: Supabase token upsert error (table may need setup): $e',
+        'ScholarDoc Push: Supabase token upsert error: $e',
       );
     }
   }

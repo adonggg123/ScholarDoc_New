@@ -17,8 +17,8 @@ self.addEventListener('push', (event) => {
         const title = payload.title || 'ScholarDoc Notification';
         const options = {
             body: payload.message || payload.body || '',
-            icon: payload.icon || '/assets/app_logo3.png',
-            badge: payload.badge || '/assets/app_logo3.png',
+            icon: payload.icon || '/app_logo3.png',
+            badge: payload.badge || '/app_logo3.png',
             tag: payload.tag || ('scholardoc_' + Date.now()),
             data: payload.data || {},
             renotify: true,
@@ -30,7 +30,7 @@ self.addEventListener('push', (event) => {
         event.waitUntil(
             self.registration.showNotification('ScholarDoc Alert', {
                 body: text,
-                icon: '/assets/app_logo3.png'
+                icon: '/app_logo3.png'
             })
         );
     }

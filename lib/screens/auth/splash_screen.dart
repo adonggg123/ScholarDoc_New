@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
+import '../../services/push_notification_service.dart';
+import '../main_layout.dart';
+import '../admin/admin_main_layout.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -34,21 +39,55 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to Login Screen after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LoginScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-            transitionDuration: const Duration(milliseconds: 800),
-          ),
-        );
+    // Check active session after animation finishes
+    Future.delayed(const Duration(milliseconds: 2200), () async {
+      if (!mounted) return;
+      try {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          final authService = AuthService();
+          final isUserAdmin = await authService.isCurrentUserAdmin();
+          if (!mounted) return;
+
+          if (isUserAdmin) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const AdminMainLayout()),
+            );
+            return;
+          }
+
+          // Student user: sync token and proceed to MainLayout
+          try {
+            final profile = await authService.getStudentProfile(session.user.id);
+            final studentId = profile?['studentId'] ?? profile?['student_no'];
+            await PushNotificationService().syncToken(
+              session.user.id,
+              studentId: studentId?.toString(),
+            );
+          } catch (_) {}
+
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainLayout()),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('SplashScreen session check notice: $e');
       }
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LoginScreen(),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+          transitionDuration: const Duration(milliseconds: 800),
+        ),
+      );
     });
   }
 

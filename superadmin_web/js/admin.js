@@ -398,11 +398,21 @@ window.navigateToReportsTab = function(tabName) {
 
 // Cache of processed notification IDs to prevent duplicate alerts
 const seenNotificationIds = new Set();
+const systemPushShownIds = new Set();
 
 // Register Service Worker for background push delivery if supported
 if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
     navigator.serviceWorker.register('/sw.js').catch(() => {
         navigator.serviceWorker.register('../sw.js').catch(() => {});
+    });
+}
+
+// Listen for service worker notification clicks
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'NOTIFICATION_CLICKED') {
+            window.handleWebNotificationClick(event.data.notificationId, event.data.title);
+        }
     });
 }
 
@@ -425,13 +435,40 @@ window.requestDesktopNotificationPermission = async function() {
 window.triggerSystemPushNotification = function({ id, title, message, role = 'superadmin' }) {
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
+    if (id && systemPushShownIds.has(String(id))) return;
+    if (id) systemPushShownIds.add(String(id));
 
+    const iconUrl = window.location.protocol === 'file:' ? '../app_logo3.png' : '/app_logo3.png';
+    const tag = `scholardoc_${role}_${id || Date.now()}`;
+
+    // Prefer Service Worker registration for reliable delivery when tab is in background
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification(title, {
+                body: message,
+                icon: iconUrl,
+                badge: iconUrl,
+                tag: tag,
+                data: { notificationId: id, role, title },
+                renotify: true
+            }).catch(() => {
+                _fallbackDirectNotification(title, message, iconUrl, tag, id);
+            });
+        }).catch(() => {
+            _fallbackDirectNotification(title, message, iconUrl, tag, id);
+        });
+    } else {
+        _fallbackDirectNotification(title, message, iconUrl, tag, id);
+    }
+};
+
+function _fallbackDirectNotification(title, message, iconUrl, tag, id) {
     try {
         const notif = new Notification(title, {
             body: message,
-            icon: '/assets/app_logo3.png',
-            badge: '/assets/app_logo3.png',
-            tag: `scholardoc_${role}_${id || Date.now()}`,
+            icon: iconUrl,
+            badge: iconUrl,
+            tag: tag,
             renotify: true,
             silent: false
         });
@@ -444,7 +481,7 @@ window.triggerSystemPushNotification = function({ id, title, message, role = 'su
     } catch (e) {
         console.warn('Native desktop notification notice:', e);
     }
-};
+}
 
 // Display small pop-up notification in the LOWER-RIGHT corner of the computer screen
 window.showDesktopPopupNotification = function({ id, title, message, type = 'info', role = 'Super Admin', timestamp }) {
@@ -456,10 +493,20 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
         document.body.appendChild(container);
     }
 
+    // Deduplication check: do not display if a popup with this ID is already visible
+    if (id && container.querySelector(`[data-id="${id}"]`)) return;
+
+    // Prevent overlapping: cap max simultaneous visible popups to 3
+    while (container.children.length >= 3) {
+        const oldest = container.firstElementChild;
+        if (oldest) oldest.remove();
+        else break;
+    }
+
     const popup = document.createElement('div');
     popup.className = 'desktop-popup-notification';
     popup.setAttribute('role', 'alert');
-    if (id) popup.dataset.id = id;
+    if (id) popup.dataset.id = String(id);
 
     let iconClass = 'icon-bell';
     let iconBg = 'rgba(15, 50, 96, 0.1)';
@@ -569,7 +616,9 @@ window.showWebPopupNotification = function(title, message, notificationId) {
 };
 
 // ── Role-Specific Notifications (Super Admin Web Interface ONLY) ────────────
-async function loadNotifications() {
+let isInitialNotificationLoad = true;
+
+async function loadNotifications(options = {}) {
     try {
         const superUsername = (window.currentAdmin?.username || 'superadmin').trim();
         const superUid = window.currentAdmin?.uid;
@@ -598,10 +647,36 @@ async function loadNotifications() {
             return sid !== 'admin' && (sid === 'superadmin' || sid === superUsername.toLowerCase() || sid === superUid);
         });
 
-        // Track seen notifications to prevent duplicate alerts
-        systemNotifications.forEach(n => {
-            if (n.id) seenNotificationIds.add(n.id);
-        });
+        // If background polling detects an unseen unread notification, trigger the alerts
+        if (options.checkNewAlerts && !isInitialNotificationLoad) {
+            for (const n of systemNotifications) {
+                if (n.id && !seenNotificationIds.has(String(n.id)) && !n.isRead) {
+                    seenNotificationIds.add(String(n.id));
+                    window.showDesktopPopupNotification({
+                        id: n.id,
+                        title: n.title || 'Super Admin Notification',
+                        message: n.message || '',
+                        type: n.type || 'info',
+                        role: 'Super Admin',
+                        timestamp: n.timestamp || new Date().toISOString()
+                    });
+                    window.triggerSystemPushNotification({
+                        id: n.id,
+                        title: `[Super Admin] ${n.title || 'New Notification'}`,
+                        message: n.message || '',
+                        role: 'superadmin'
+                    });
+                }
+            }
+        }
+
+        // On initial load, mark existing notifications as seen so we don't spam popups on login/refresh
+        if (isInitialNotificationLoad) {
+            systemNotifications.forEach(n => {
+                if (n.id) seenNotificationIds.add(String(n.id));
+            });
+            isInitialNotificationLoad = false;
+        }
 
         renderNotificationsDropdown();
         updateBellBadge();
@@ -748,14 +823,16 @@ function setupRealtimeNotifications() {
                     return; // Ignore regular Admin notifications completely!
                 }
 
-                loadNotifications();
-
                 if (payload.eventType === 'INSERT' && payload.new) {
                     const notif = payload.new;
 
                     // Deduplicate
-                    if (notif.id && seenNotificationIds.has(notif.id)) return;
-                    if (notif.id) seenNotificationIds.add(notif.id);
+                    const notifIdStr = String(notif.id || '');
+                    if (notifIdStr && seenNotificationIds.has(notifIdStr)) {
+                        loadNotifications();
+                        return;
+                    }
+                    if (notifIdStr) seenNotificationIds.add(notifIdStr);
 
                     // 1. Display desktop pop-up notification in LOWER-RIGHT corner of screen
                     window.showDesktopPopupNotification({
@@ -774,6 +851,11 @@ function setupRealtimeNotifications() {
                         message: notif.message || '',
                         role: 'superadmin'
                     });
+
+                    // 3. Refresh dropdown & bell badge
+                    loadNotifications();
+                } else {
+                    loadNotifications();
                 }
             }
         )
@@ -818,6 +900,17 @@ if (markAllReadBtn) {
     });
 }
 
+// Background tab sync: refresh notifications when returning to tab
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        loadNotifications({ checkNewAlerts: true });
+    }
+});
+
+// Periodic background check every 25 seconds for reliable background delivery
+setInterval(() => {
+    loadNotifications({ checkNewAlerts: true });
+}, 25000);
 
 // Sidebar Navigation
 navItems.forEach(item => {
@@ -847,16 +940,19 @@ if (validationMenuBtn) {
     });
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
+// Reliable Initialization (handles DOMContentLoaded already fired in module scripts)
+function initDashboard() {
     checkSession();
-    
-    // Init notifications
     loadNotifications();
     setupRealtimeNotifications();
 
-    // Init icons for main layout
     if (window.lucide) {
-        window.lucide.createIcons();
+        try { window.lucide.createIcons(); } catch (_) {}
     }
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboard);
+} else {
+    initDashboard();
+}

@@ -1634,47 +1634,8 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
             type: type || 'General'
         };
 
-        // A) Send to every registered student device token
-        for (const token of tokens) {
-            try {
-                const fcmRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`
-                    },
-                    body: JSON.stringify({
-                        message: {
-                            token,
-                            notification: {
-                                title: title || 'ScholarDoc Announcement',
-                                body: shortMessage || 'A new scholarship update has been posted.'
-                            },
-                            data: notificationData,
-                            android: fcmAndroid
-                        }
-                    })
-                });
-
-                if (fcmRes.ok) {
-                    pushSentCount++;
-                    const resJson = await fcmRes.json().catch(() => ({}));
-                    console.log(`[Push Notification] Delivered to device (${token.slice(0, 15)}...):`, resJson.name);
-                } else {
-                    const errJson = await fcmRes.json().catch(() => ({}));
-                    console.warn(`[Push Notification] Device ${token.slice(0, 15)}... delivery error:`, errJson.error?.message || fcmRes.status);
-                    // If unregistered/expired token, automatically clean it from database
-                    if (errJson.error?.details?.[0]?.errorCode === 'UNREGISTERED' || errJson.error?.status === 'NOT_FOUND') {
-                        await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?fcm_token=eq.${token}`, { method: 'DELETE', headers });
-                        console.log(`[Push Notification] Cleaned up unregistered token ${token.slice(0, 15)}...`);
-                    }
-                }
-            } catch (devErr) {
-                console.warn('[Push Notification] Error sending to device token:', devErr.message);
-            }
-        }
-
-        // B) Also broadcast to topic 'all_students'
+        // A) Broadcast via topic 'all_students' (reaches all subscribed devices in one request, no duplicates)
+        let topicDelivered = false;
         try {
             const topicRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
                 method: 'POST',
@@ -1695,12 +1656,52 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
                 })
             });
             if (topicRes.ok) {
-                console.log('[Push Notification] Topic broadcast delivered to "all_students" successfully.');
+                topicDelivered = true;
+                pushSentCount = Math.max(1, tokens.length);
+                console.log('[Push Notification] Topic broadcast delivered to "all_students" successfully (no duplicate device alerts).');
             } else {
                 console.warn('[Push Notification] Topic broadcast note:', await topicRes.text());
             }
         } catch (topErr) {
             console.warn('[Push Notification] Topic broadcast error:', topErr.message);
+        }
+
+        // B) If topic broadcast failed, fallback to delivering directly to device tokens
+        if (!topicDelivered && tokens.length > 0) {
+            for (const token of tokens) {
+                try {
+                    const fcmRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify({
+                            message: {
+                                token,
+                                notification: {
+                                    title: title || 'ScholarDoc Announcement',
+                                    body: shortMessage || 'A new scholarship update has been posted.'
+                                },
+                                data: notificationData,
+                                android: fcmAndroid
+                            }
+                        })
+                    });
+
+                    if (fcmRes.ok) {
+                        pushSentCount++;
+                        console.log(`[Push Notification] Delivered fallback to device (${token.slice(0, 15)}...)`);
+                    } else {
+                        const errJson = await fcmRes.json().catch(() => ({}));
+                        if (errJson.error?.details?.[0]?.errorCode === 'UNREGISTERED' || errJson.error?.status === 'NOT_FOUND') {
+                            await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?fcm_token=eq.${token}`, { method: 'DELETE', headers });
+                        }
+                    }
+                } catch (devErr) {
+                    console.warn('[Push Notification] Fallback token send note:', devErr.message);
+                }
+            }
         }
     }
 
@@ -1788,6 +1789,139 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
         smsFailedCount,
         message: `Notification broadcasted to ${tokens.length} device(s)${smsSentCount > 0 ? ` and texted to ${smsSentCount} mobile numbers` : ''} and recorded in student notification histories.`
     };
+}
+
+// ── Targeted FCM Push Notification Delivery for Individual Students ───────
+async function sendStudentPushNotification({ targetStudentId, title, message, type = 'info', notifId = '', announcementId = '' }) {
+    if (!targetStudentId || targetStudentId === 'admin' || targetStudentId === 'superadmin') {
+        return { success: false, reason: 'invalid_target' };
+    }
+
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    };
+
+    const cleanId = String(targetStudentId).trim();
+
+    // 1. Resolve student's registered FCM tokens
+    let tokens = [];
+    try {
+        let filter;
+        if (isUuidString(cleanId)) {
+            filter = `user_id=eq.${encodeURIComponent(cleanId)}`;
+        } else {
+            filter = `student_id=eq.${encodeURIComponent(cleanId)}`;
+        }
+
+        const res = await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?${filter}&select=fcm_token`, { headers });
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+                tokens = [...new Set(rows.map(r => r.fcm_token).filter(Boolean))];
+            }
+        }
+
+        // Secondary lookup if not found directly
+        if (tokens.length === 0) {
+            const stuInfo = await lookupStudentForNotification(cleanId);
+            if (stuInfo) {
+                const subFilterParts = [];
+                if (stuInfo.uid && isUuidString(stuInfo.uid)) subFilterParts.push(`user_id=eq.${encodeURIComponent(stuInfo.uid)}`);
+                if (stuInfo.student_no) subFilterParts.push(`student_id=eq.${encodeURIComponent(stuInfo.student_no)}`);
+                if (subFilterParts.length > 0) {
+                    const secRes = await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?or=(${subFilterParts.join(',')})&select=fcm_token`, { headers });
+                    if (secRes.ok) {
+                        const secRows = await secRes.json();
+                        if (Array.isArray(secRows) && secRows.length > 0) {
+                            tokens = [...new Set(secRows.map(r => r.fcm_token).filter(Boolean))];
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn(`[Push Notification] Error finding tokens for student ${cleanId}:`, e.message);
+    }
+
+    if (tokens.length === 0) {
+        return { success: false, reason: 'no_registered_device_tokens' };
+    }
+
+    // 2. Obtain Google OAuth2 access token for FCM v1
+    const accessToken = await getGoogleAccessToken();
+    if (!accessToken) {
+        console.warn('[Push Notification] No OAuth2 token available for FCM v1 delivery.');
+        return { success: false, reason: 'no_auth_token' };
+    }
+
+    const cleanBody = (message || '').trim();
+    const cleanTitle = (title || 'ScholarDoc Notification').trim();
+    const channelId = announcementId ? 'scholardoc_announcements' : 'scholardoc_general';
+
+    const fcmPayload = {
+        notification: {
+            title: cleanTitle,
+            body: cleanBody
+        },
+        data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            id: String(notifId || ''),
+            announcementId: String(announcementId || ''),
+            title: cleanTitle,
+            message: cleanBody,
+            body: cleanBody,
+            type: String(type || 'info'),
+            target: announcementId ? 'announcement' : 'notification'
+        },
+        android: {
+            priority: 'high',
+            notification: {
+                channel_id: channelId,
+                icon: 'ic_notification',
+                color: '#0F3260',
+                sound: 'default',
+                default_sound: true,
+                default_vibrate_timings: true,
+                click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            }
+        }
+    };
+
+    let deliveredCount = 0;
+    for (const token of tokens) {
+        try {
+            const fcmRes = await fetch('https://fcm.googleapis.com/v1/projects/scholardoc-40e03/messages:send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                    message: {
+                        token,
+                        ...fcmPayload
+                    }
+                })
+            });
+
+            if (fcmRes.ok) {
+                deliveredCount++;
+                console.log(`[Push Notification] Delivered personal notification "${cleanTitle}" to device (${token.slice(0, 15)}...) for ${cleanId}`);
+            } else {
+                const errJson = await fcmRes.json().catch(() => ({}));
+                console.warn(`[Push Notification] Device ${token.slice(0, 15)}... personal delivery error:`, errJson.error?.message || fcmRes.status);
+                if (errJson.error?.details?.[0]?.errorCode === 'UNREGISTERED' || errJson.error?.status === 'NOT_FOUND') {
+                    await fetch(`${SUPABASE_REST_URL}/user_fcm_tokens?fcm_token=eq.${token}`, { method: 'DELETE', headers });
+                    console.log(`[Push Notification] Cleaned up unregistered token ${token.slice(0, 15)}...`);
+                }
+            }
+        } catch (tokErr) {
+            console.warn('[Push Notification] Error sending personal push:', tokErr.message);
+        }
+    }
+
+    return { success: deliveredCount > 0, deliveredCount, totalTokens: tokens.length };
 }
 
 // ── Gmail SMTP Grantee Email Notification Engine ────────────────────────
@@ -2120,6 +2254,32 @@ const server = http.createServer(async (req, res) => {
                 res.end(JSON.stringify(result));
             } catch (err) {
                 console.error('[API broadcast-announcement error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Send Targeted Push Notification to a Student ─────────────────
+    if (urlPath === '/api/notifications/push' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const result = await sendStudentPushNotification({
+                    targetStudentId: parsed.studentId || parsed.student_id || parsed.userId || parsed.uid,
+                    title: parsed.title,
+                    message: parsed.message || parsed.body,
+                    type: parsed.type,
+                    notifId: parsed.id || parsed.notifId,
+                    announcementId: parsed.announcementId
+                });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                console.error('[API send-push error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: err.message }));
             }
@@ -3185,17 +3345,32 @@ async function pollNotificationsAndSendSms() {
             const targetStudentId = notif.studentId || notif.student_id;
 
             // Skip individual notification rows created as part of an announcement broadcast
-            // (announcements already handle broadcast SMS directly via broadcastAnnouncementNotification)
+            // (announcements already handle broadcast SMS and Push directly)
             if (notif.announcementId) {
                 processedNotificationIds.add(notifId);
                 continue;
             }
 
-            // Look up student details & registered phone number (or admin fallback)
+            // 1. Deliver FCM Push Notification directly to student mobile devices
+            if (targetStudentId !== 'admin' && targetStudentId !== 'superadmin') {
+                try {
+                    await sendStudentPushNotification({
+                        targetStudentId,
+                        title: notif.title,
+                        message: notif.message,
+                        type: notif.type,
+                        notifId: notifId
+                    });
+                } catch (pushErr) {
+                    console.warn(`[Push Dispatcher] Error sending push for ${notifId}:`, pushErr.message);
+                }
+            }
+
+            // 2. Look up student details & registered phone number (or admin fallback) for SMS
             const studentInfo = await lookupStudentForNotification(targetStudentId, notif);
             if (!studentInfo || !studentInfo.rawPhone) {
-                console.warn(`[SMS Watcher] Notification ${notifId}: Target ${targetStudentId} has no mobile number registered.`);
                 processedNotificationIds.add(notifId);
+                saveProcessedNotificationIds();
                 continue;
             }
 

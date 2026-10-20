@@ -119,10 +119,10 @@ class AuthService {
           studentNo: studentId,
         );
 
-        // Send Registration Notification to Admin
+        // Send Registration Notification to Super Admin
         final String fullName = studentData['fullName'] ?? 'A student';
         await _notificationService.sendNotification(
-          studentId: 'admin',
+          studentId: 'superadmin',
           title: 'New Student Registered',
           message: 'New student $fullName has registered in the system.',
           type: 'info',

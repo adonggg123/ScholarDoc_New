@@ -455,9 +455,9 @@ submitBtn?.addEventListener('click', async () => {
             }
         } catch (_) {}
 
-        // Notify admin
+        // Notify Super Admin (who handles document verification and approval)
         await sb.from('notifications').insert({
-            studentId: 'admin',
+            studentId: 'superadmin',
             title: 'New Document Submission',
             message: `${profile?.fullName || 'A student'} submitted documents via the web portal.`,
             type: 'info',

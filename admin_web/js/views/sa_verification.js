@@ -7,6 +7,43 @@ let selectedIndex = 0;
 let isUpdating = false;
 
 // ── Load Data ───────────────────────────────────────────────────────
+// ── Helper: Extract Authentic SA Number without Truthy 'N/A' Trap ─────
+function extractSaNumber(s) {
+    if (!s) return '';
+    const candidates = [
+        s.documents?.saNumber,
+        s.documents?.sa_number,
+        s.documents?.atmExtractedSaNumber,
+        s.documents?.atm_extracted_sa_number,
+        s.atmExtractedSaNumber,
+        s.atm_extracted_sa_number,
+        s.saNumber,
+        s.sa_number,
+        s.familyDetails?.saNumber
+    ];
+    for (const c of candidates) {
+        if (c !== undefined && c !== null) {
+            const str = String(c).trim();
+            if (str !== '' && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                return str;
+            }
+        }
+    }
+    return '';
+}
+
+function hasSaSubmission(s) {
+    if (!s) return false;
+    const sa = extractSaNumber(s);
+    if (sa) return true;
+    const hasAtm = !!(s.atmCardUrl || s.atm_card_url || s.documents?.atmCardUrl || s.documents?.atm_card_url || s.documents?.atmProofUrl);
+    const hasDeposit = !!(s.depositSlipUrl || s.deposit_slip_url || s.documents?.depositSlipUrl || s.documents?.deposit_slip_url);
+    const saStatus = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status;
+    const hasStatus = saStatus && String(saStatus).toLowerCase() !== 'no submission yet' && String(saStatus).toLowerCase() !== 'null';
+    return hasAtm || hasDeposit || hasStatus;
+}
+
+// ── Load Data ───────────────────────────────────────────────────────
 async function loadSaQueue() {
     const refreshBtn = document.getElementById('sa-refresh-btn');
     if (refreshBtn) {
@@ -28,11 +65,8 @@ async function loadSaQueue() {
         if (res.error) throw res.error;
         const data = res.data;
 
-        // Filter students who have submitted SA number
-        saStudents = (data || []).filter(s => {
-            const sa = s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber;
-            return sa && sa.toString().trim() !== '' && sa.toString().trim() !== 'N/A';
-        });
+        // Filter students who have submitted SA number, ATM card, or deposit slip
+        saStudents = (data || []).filter(s => hasSaSubmission(s));
 
         // Compute duplicate mapping across the whole pool
         computeDuplicateMap();
@@ -69,7 +103,7 @@ const duplicateSaMap = new Map(); // saNumber -> Array of students
 function computeDuplicateMap() {
     duplicateSaMap.clear();
     saStudents.forEach(s => {
-        const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || '').toString().trim();
+        const sa = extractSaNumber(s);
         if (sa) {
             if (!duplicateSaMap.has(sa)) {
                 duplicateSaMap.set(sa, []);
@@ -80,14 +114,14 @@ function computeDuplicateMap() {
 }
 
 function isStudentDuplicate(student) {
-    const sa = (student.saNumber || student.sa_number || student.documents?.saNumber || student.documents?.sa_number || student.familyDetails?.saNumber || '').toString().trim();
+    const sa = extractSaNumber(student);
     if (!sa) return false;
     const list = duplicateSaMap.get(sa);
     return list && list.length > 1;
 }
 
 function getDuplicateConflicts(student) {
-    const sa = (student.saNumber || student.sa_number || student.documents?.saNumber || student.documents?.sa_number || student.familyDetails?.saNumber || '').toString().trim();
+    const sa = extractSaNumber(student);
     if (!sa) return [];
     const list = duplicateSaMap.get(sa) || [];
     return list.filter(s => s.uid !== student.uid && s.id !== student.id);
@@ -140,7 +174,7 @@ function filterSaQueue() {
     filteredSaStudents = saStudents.filter(s => {
         const name = (s.fullName || s.full_name || '').toLowerCase();
         const studentId = (s.studentId || s.student_no || s.id || '').toLowerCase();
-        const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || '').toString().toLowerCase();
+        const sa = extractSaNumber(s).toLowerCase();
         const course = (s.course || s.program_name || '').toUpperCase();
         const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || 'Pending';
         const isDup = isStudentDuplicate(s);
@@ -178,8 +212,8 @@ function filterSaQueue() {
         } else if (sortBy === 'name_desc') {
             return (b.fullName || b.full_name || '').localeCompare(a.fullName || a.full_name || '');
         } else if (sortBy === 'sa_num') {
-            const saA = (a.saNumber || a.sa_number || a.documents?.saNumber || a.documents?.sa_number || a.familyDetails?.saNumber || '').toString();
-            const saB = (b.saNumber || b.sa_number || b.documents?.saNumber || b.documents?.sa_number || b.familyDetails?.saNumber || '').toString();
+            const saA = extractSaNumber(a);
+            const saB = extractSaNumber(b);
             return saA.localeCompare(saB);
         } else {
             // Latest First by createdAt or updatedAt
@@ -228,7 +262,7 @@ function renderQueue() {
         const name = s.fullName || s.full_name || 'Unnamed Student';
         const studentId = s.studentId || s.student_no || s.id || 'N/A';
         const course = s.course || s.program_name || 'N/A';
-        const sa = s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || 'N/A';
+        const sa = extractSaNumber(s) || 'N/A';
         const photo = s.profilePictureUrl || s.profile_picture_url || s.profileImageUrl || s.photoUrl || s.photoURL;
         const status = s.documents?.saVerificationStatus || s.documents?.sa_verification_status || s.saVerificationStatus || s.sa_verification_status || 'Pending';
         const isDup = isStudentDuplicate(s);
@@ -329,7 +363,7 @@ function renderPanel() {
     if (!s) return;
 
     const name = s.fullName || s.full_name || 'Unnamed Student';
-    const sa = (s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.sa_number || s.familyDetails?.saNumber || 'Not Submitted').toString();
+    const sa = extractSaNumber(s) || 'Not Submitted';
     const studentId = s.studentId || s.student_no || s.id || 'N/A';
     const course = s.course || s.program_name || 'N/A';
     const year = s.year || s.year_level || 'N/A';
@@ -441,7 +475,7 @@ function renderPanel() {
                                     ${(s.atmNameMatches === true && s.atmSaMatches === true) || (s.documents && s.documents.atmNameMatches === true && s.documents.atmSaMatches === true) ? 'AI MATCH: NAME & SA CONFIRMED' : ((s.atmNameMatches === false || s.atmSaMatches === false) || (s.documents && (s.documents.atmNameMatches === false || s.documents.atmSaMatches === false)) ? 'AI MISMATCH DETECTED' : 'AI ATM VERIFICATION')}
                                 </div>
                                 <div style="font-size: 9.5px; color: var(--text-primary); font-weight: 600; margin-top: 1px;">
-                                    Holder: ${s.atmExtractedName || (s.documents && s.documents.atmExtractedName) || name} • SA: ${s.atmExtractedSaNumber || (s.documents && s.documents.atmExtractedSaNumber) || (s.saNumber || s.sa_number || 'N/A')}
+                                    Holder: ${s.atmExtractedName || (s.documents && s.documents.atmExtractedName) || name} • SA: ${s.atmExtractedSaNumber || (s.documents && s.documents.atmExtractedSaNumber) || extractSaNumber(s) || 'N/A'}
                                 </div>
                             </div>
                             ${!isAtmPdf ? `
@@ -704,13 +738,17 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
 
     isUpdating = true;
     try {
-        // 1. Update SA Verification Status (stored in both documents JSON and top-level column)
+        const actualSa = extractSaNumber(s);
         const currentDocs = s.documents || {};
         const updatedDocs = {
             ...currentDocs,
             saVerificationStatus: newStatus,
             sa_verification_status: newStatus
         };
+        if (actualSa) {
+            updatedDocs.saNumber = actualSa;
+            updatedDocs.sa_number = actualSa;
+        }
 
         const currentIdStatus = s.idValidationStatus || s.id_validation_status || currentDocs.idValidationStatus || currentDocs.id_validation_status || 'Pending';
 
@@ -744,6 +782,10 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
             updatedAt: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
+        if (actualSa) {
+            updatePayload.saNumber = actualSa;
+            updatePayload.sa_number = actualSa;
+        }
 
         let updateRes = await supabase.from('student_grantees').update(updatePayload).eq('uid', s.uid);
         if (updateRes.error) {
@@ -755,9 +797,18 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
                 requiresResubmission: needsResubmission,
                 updated_at: new Date().toISOString()
             };
+            if (actualSa) {
+                fallbackPayload.sa_number = actualSa;
+                fallbackPayload.saNumber = actualSa;
+            }
             if (s.documents !== undefined) fallbackPayload.documents = updatedDocs;
             updateRes = await supabase.from('student_grantees').update(fallbackPayload).eq('uid', s.uid);
             if (updateRes.error) throw updateRes.error;
+        }
+
+        if (actualSa) {
+            s.saNumber = actualSa;
+            s.sa_number = actualSa;
         }
 
         // 2. Audit Log
@@ -880,7 +931,7 @@ window.triggerAtmProofScan = async function (imageUrl, studentIndex) {
                     body: JSON.stringify({
                         image: base64data,
                         expectedName: s.fullName || s.full_name || '',
-                        expectedSaNumber: s.saNumber || s.sa_number || (s.documents && s.documents.saNumber) || ''
+                        expectedSaNumber: extractSaNumber(s)
                     })
                 });
 

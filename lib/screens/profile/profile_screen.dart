@@ -99,8 +99,28 @@ class _ProfileScreenState extends State<ProfileScreen>
             _nameController.text = (data['fullName'] ?? data['full_name'] ?? '').toString();
             _emailController.text = (data['email'] ?? data['email_address'] ?? '').toString();
             _contactController.text = (data['contactNumber'] ?? data['mobile_number'] ?? '').toString();
-            _sectionController.text = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
-            _saController.text = (data['saNumber'] ?? data['sa_number'] ?? '').toString();
+            final docs = (data['documents'] is Map)
+                ? (data['documents'] as Map)
+                : {};
+            final saCandidates = [
+              docs['saNumber'],
+              docs['sa_number'],
+              docs['atmExtractedSaNumber'],
+              data['saNumber'],
+              data['sa_number'],
+              fam['saNumber']
+            ];
+            String resolvedSa = '';
+            for (final cand in saCandidates) {
+              if (cand != null) {
+                final s = cand.toString().trim();
+                if (s.isNotEmpty && s.toUpperCase() != 'N/A' && s.toLowerCase() != 'null') {
+                  resolvedSa = s;
+                  break;
+                }
+              }
+            }
+            _saController.text = resolvedSa;
             _birthdateController.text = (data['birthdate'] ?? data['birthday'] ?? data['date_of_birth'] ?? '').toString();
             _courseController.text = (data['course'] ?? data['program_name'] ?? '').toString();
             _yearLevelController.text = (data['year'] ?? data['year_level'] ?? '').toString();
@@ -1471,6 +1491,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             ? (SmsService.normalizePhilippineMobile(rawPhone) ?? rawPhone)
             : '';
 
+        final enteredSa = _saController.text.trim();
+        final existingDocs = (_profileData?['documents'] is Map) ? (_profileData!['documents'] as Map) : {};
+        final existingDocSa = (existingDocs['saNumber'] ?? existingDocs['sa_number'])?.toString().trim();
+        final validDocSa = (existingDocSa != null && existingDocSa.isNotEmpty && existingDocSa.toUpperCase() != 'N/A') ? existingDocSa : null;
+        final finalSa = (enteredSa.isNotEmpty && enteredSa.toUpperCase() != 'N/A') ? enteredSa : (validDocSa ?? enteredSa);
+
         final updates = <String, dynamic>{
           'fullName': _nameController.text.trim(),
           'full_name': _nameController.text.trim(),
@@ -1480,8 +1506,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           'contactNumber': normalizedMobile,
           'mobile_number': normalizedMobile,
           'section': _sectionController.text.trim(),
-          'saNumber': _saController.text.trim(),
-          'sa_number': _saController.text.trim(),
+          'saNumber': finalSa,
+          'sa_number': finalSa,
           'birthdate': _birthdateController.text.trim(),
           'date_of_birth': _birthdateController.text.trim(),
           'course': _courseController.text.trim(),
