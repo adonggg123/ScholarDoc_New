@@ -7,8 +7,8 @@ class ApiConfig {
 
   /// Default production URL for ScholarDoc on Vercel.
   /// Can be overridden at build time via:
-  /// `flutter build apk --dart-define=API_URL=https://your-scholardoc.vercel.app`
-  static const String defaultProductionUrl = 'https://scholardoc.vercel.app';
+  /// `flutter build apk --dart-define=API_URL=https://scholar-doc-new.vercel.app`
+  static const String defaultProductionUrl = 'https://scholar-doc-new.vercel.app';
 
   /// Optional override passed via compiler flag: --dart-define=API_URL=...
   static const String _envUrl = String.fromEnvironment('API_URL', defaultValue: '');
