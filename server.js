@@ -1986,6 +1986,10 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
             });
         } catch (_) {}
 
+        if (typeof recordGranteeEmailSent === 'function') {
+            recordGranteeEmailSent(grantee, targetEmail);
+        }
+
         return { success: true, student_id: targetId, email: targetEmail };
     } catch (err) {
         console.error(`[Gmail SMTP] Send failed to ${targetEmail}:`, err.message);
@@ -3290,6 +3294,201 @@ async function startNotificationSmsWatcher() {
     schedulePoll();
 }
 
+// ── Automatic Grantee Email Notification Watcher Daemon ──────────────────
+// Automatically sends an official scholarship acceptance email & download link
+// to any student newly added to the student_grantees table, without requiring
+// the Super Admin to click a manual send button.
+// Ensures each grantee receives the email only once.
+
+const processedGranteeEmailIds = new Set();
+const GRANTEE_EMAIL_PROCESSED_FILE = path.join(__dirname, 'scratch', 'processed_grantee_email_ids.json');
+
+function loadProcessedGranteeEmailIds() {
+    try {
+        if (fs.existsSync(GRANTEE_EMAIL_PROCESSED_FILE)) {
+            const data = JSON.parse(fs.readFileSync(GRANTEE_EMAIL_PROCESSED_FILE, 'utf8'));
+            if (Array.isArray(data)) {
+                data.forEach(id => processedGranteeEmailIds.add(String(id)));
+            }
+        }
+    } catch (_) {}
+}
+
+function saveProcessedGranteeEmailIds() {
+    try {
+        const dir = path.dirname(GRANTEE_EMAIL_PROCESSED_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const arr = Array.from(processedGranteeEmailIds).slice(-3000);
+        fs.writeFileSync(GRANTEE_EMAIL_PROCESSED_FILE, JSON.stringify(arr), 'utf8');
+    } catch (_) {}
+}
+
+function recordGranteeEmailSent(grantee, email) {
+    if (grantee) {
+        if (grantee.id) processedGranteeEmailIds.add(String(grantee.id));
+        if (grantee.uid) processedGranteeEmailIds.add(String(grantee.uid));
+        if (grantee.student_no) processedGranteeEmailIds.add(String(grantee.student_no));
+        if (grantee.studentId) processedGranteeEmailIds.add(String(grantee.studentId));
+    }
+    if (email) processedGranteeEmailIds.add(String(email).trim().toLowerCase());
+    saveProcessedGranteeEmailIds();
+}
+
+let isEmailWatcherPolling = false;
+let consecutiveEmailPollErrors = 0;
+
+async function pollNewGranteesAndSendEmail() {
+    if (isEmailWatcherPolling) return;
+    isEmailWatcherPolling = true;
+
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        };
+
+        // Query up to 30 pending grantees who haven't had an email sent yet
+        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?email_sent_at=is.null&order=created_at.desc&limit=30`, {
+            headers,
+            signal: AbortSignal.timeout(8000)
+        });
+
+        if (!res.ok) return;
+
+        if (consecutiveEmailPollErrors > 0) {
+            console.log('[Grantee Email Watcher] Connection to Supabase restored.');
+            consecutiveEmailPollErrors = 0;
+        }
+
+        const grantees = await res.json();
+        if (!Array.isArray(grantees) || grantees.length === 0) return;
+
+        for (const grantee of grantees) {
+            const granteeId = String(grantee.id || grantee.uid || grantee.student_no || '');
+            const targetEmail = (grantee.email_address || grantee.email || '').trim();
+            const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
+
+            // Check if any identifier or email is in processedGranteeEmailIds
+            const isProcessed = (grantee.id && processedGranteeEmailIds.has(String(grantee.id))) ||
+                                (grantee.uid && processedGranteeEmailIds.has(String(grantee.uid))) ||
+                                (grantee.student_no && processedGranteeEmailIds.has(String(grantee.student_no))) ||
+                                (grantee.studentId && processedGranteeEmailIds.has(String(grantee.studentId))) ||
+                                (targetEmail && processedGranteeEmailIds.has(targetEmail.toLowerCase()));
+
+            if (isProcessed) {
+                continue;
+            }
+
+            // If no valid email, mark as processed to prevent continuous polling
+            if (!targetEmail || !targetEmail.includes('@')) {
+                console.warn(`[Grantee Email Watcher] Grantee ${grantee.student_no || granteeId} (${fullName}) has no valid email address. Skipping.`);
+                recordGranteeEmailSent(grantee, targetEmail);
+                continue;
+            }
+
+            // Verify if email was already logged in grantee_email_logs
+            try {
+                const logRes = await fetch(`${SUPABASE_REST_URL}/grantee_email_logs?recipient_email=eq.${encodeURIComponent(targetEmail)}&status=eq.sent&limit=1`, { headers });
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+                    if (Array.isArray(logs) && logs.length > 0) {
+                        console.log(`[Grantee Email Watcher] Email already logged as sent to ${targetEmail} in grantee_email_logs. Skipping.`);
+                        recordGranteeEmailSent(grantee, targetEmail);
+                        continue;
+                    }
+                }
+            } catch (_) {}
+
+            console.log(`[Grantee Email Watcher] Newly added grantee detected: ${fullName} (${grantee.student_no || granteeId}) -> Dispatching automated email to ${targetEmail}...`);
+
+            const emailResult = await sendSingleGranteeEmail(grantee, { force: false });
+
+            if (emailResult.success) {
+                console.log(`[Grantee Email Watcher] Successfully sent automated grantee email to ${targetEmail} for ${fullName}.`);
+            } else if (emailResult.skipped) {
+                console.log(`[Grantee Email Watcher] Email skipped for ${fullName} (${emailResult.reason}).`);
+            } else {
+                console.error(`[Grantee Email Watcher] Failed to send email to ${targetEmail}:`, emailResult.error);
+            }
+
+            recordGranteeEmailSent(grantee, targetEmail);
+
+            // Pacing delay between sends to respect Gmail SMTP rate limits
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        saveProcessedGranteeEmailIds();
+
+    } catch (pollErr) {
+        consecutiveEmailPollErrors++;
+        if (consecutiveEmailPollErrors === 1) {
+            console.warn(`[Grantee Email Watcher] Temporary network issue reaching Supabase (${pollErr.message}). Waiting for connection...`);
+        } else if (consecutiveEmailPollErrors % 20 === 0) {
+            console.warn(`[Grantee Email Watcher] Still waiting for network connection (${consecutiveEmailPollErrors} failed attempts)...`);
+        }
+    } finally {
+        isEmailWatcherPolling = false;
+    }
+}
+
+async function startGranteeEmailWatcher() {
+    loadProcessedGranteeEmailIds();
+
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        };
+
+        const isFirstInit = !fs.existsSync(GRANTEE_EMAIL_PROCESSED_FILE) || processedGranteeEmailIds.size === 0;
+
+        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=id,uid,student_no,email_sent_at,email_address,email,created_at`, {
+            headers,
+            signal: AbortSignal.timeout(8000)
+        });
+
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows)) {
+                for (const row of rows) {
+                    const idStr = String(row.id || '');
+                    const uidStr = String(row.uid || '');
+                    const stuNo = String(row.student_no || '');
+                    const em = (row.email_address || row.email || '').trim().toLowerCase();
+
+                    // If already marked sent in DB, always cache
+                    if (row.email_sent_at) {
+                        if (idStr) processedGranteeEmailIds.add(idStr);
+                        if (uidStr) processedGranteeEmailIds.add(uidStr);
+                        if (stuNo) processedGranteeEmailIds.add(stuNo);
+                        if (em) processedGranteeEmailIds.add(em);
+                    } else if (isFirstInit) {
+                        // Baseline: Cache existing records so only newly added records trigger auto-send
+                        if (idStr) processedGranteeEmailIds.add(idStr);
+                        if (uidStr) processedGranteeEmailIds.add(uidStr);
+                        if (stuNo) processedGranteeEmailIds.add(stuNo);
+                        if (em) processedGranteeEmailIds.add(em);
+                    }
+                }
+                saveProcessedGranteeEmailIds();
+            }
+        }
+    } catch (initErr) {
+        console.warn('[Grantee Email Watcher] Baseline cache init warning:', initErr.message);
+    }
+
+    console.log(`[Grantee Email Watcher] Automated grantee email notification watcher started. Cached ${processedGranteeEmailIds.size} baseline/processed IDs.`);
+
+    function scheduleEmailPoll() {
+        pollNewGranteesAndSendEmail().finally(() => {
+            const delay = consecutiveEmailPollErrors > 0 ? 15000 : 4000;
+            setTimeout(scheduleEmailPoll, delay);
+        });
+    }
+
+    scheduleEmailPoll();
+}
+
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         console.error(`\n❌ [ScholarDoc] Port ${PORT} is already in use!`);
@@ -3316,8 +3515,9 @@ if (require.main === module) {
         console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
         console.log('=======================================================\n');
 
-        // Start background watcher daemon
+        // Start background watcher daemons
         startNotificationSmsWatcher();
+        startGranteeEmailWatcher();
     });
 }
 
@@ -3332,6 +3532,9 @@ module.exports = {
     isYearMatching,
     isSemesterMatching,
     validateGranteeEligibility,
+    sendSingleGranteeEmail,
+    pollNewGranteesAndSendEmail,
+    startGranteeEmailWatcher,
     server
 };
 

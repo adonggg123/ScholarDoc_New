@@ -380,42 +380,44 @@ const dynamicDetails = document.getElementById('dynamic-details');
 let modalMode = 'add'; // 'add', 'edit', 'view'
 let currentEditUid = null;
 
-addStudentBtn.addEventListener('click', () => {
-    modalMode = 'add';
-    modalTitle.textContent = 'Add New Student';
-    const subTitleEl = document.getElementById('modal-subtitle');
-    if (subTitleEl) subTitleEl.textContent = 'Fill in the information below';
-    document.getElementById('modal-icon').className = 'icon-user-plus';
-    const iconContainer = document.getElementById('modal-icon-container');
-    if (iconContainer) iconContainer.style.background = 'rgba(15, 50, 96, 0.08)';
+if (addStudentBtn) {
+    addStudentBtn.addEventListener('click', () => {
+        modalMode = 'add';
+        modalTitle.textContent = 'Add New Student';
+        const subTitleEl = document.getElementById('modal-subtitle');
+        if (subTitleEl) subTitleEl.textContent = 'Fill in the information below';
+        document.getElementById('modal-icon').className = 'icon-user-plus';
+        const iconContainer = document.getElementById('modal-icon-container');
+        if (iconContainer) iconContainer.style.background = 'rgba(15, 50, 96, 0.08)';
 
-    const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
-    if (modalCard) {
-        modalCard.style.maxWidth = '560px';
-        modalCard.style.padding = '24px';
-    }
-
-    // Ensure the form is visible
-    studentForm.style.display = 'flex';
-
-    // Show form inputs
-    Array.from(studentForm.querySelectorAll('input, select')).forEach(el => {
-        el.parentElement.style.display = '';
-        if (el.parentElement.previousElementSibling && el.parentElement.previousElementSibling.tagName === 'LABEL') {
-            el.parentElement.previousElementSibling.style.display = '';
+        const modalCard = document.getElementById('student-modal-card') || document.querySelector('#student-modal .card');
+        if (modalCard) {
+            modalCard.style.maxWidth = '560px';
+            modalCard.style.padding = '24px';
         }
-    });
-    addNotice.style.display = 'flex';
-    viewDetailsContainer.style.display = 'none';
-    document.getElementById('modal-save-btn').style.display = 'block';
-    document.getElementById('modal-save-btn').textContent = 'Add Student';
 
-    studentForm.reset();
-    if (inpBatch) inpBatch.value = 'Batch 1.1';
-    inpScholarYear.value = '';
-    inpPayouts.value = '';
-    modal.classList.remove('hidden');
-});
+        // Ensure the form is visible
+        studentForm.style.display = 'flex';
+
+        // Show form inputs
+        Array.from(studentForm.querySelectorAll('input, select')).forEach(el => {
+            el.parentElement.style.display = '';
+            if (el.parentElement.previousElementSibling && el.parentElement.previousElementSibling.tagName === 'LABEL') {
+                el.parentElement.previousElementSibling.style.display = '';
+            }
+        });
+        addNotice.style.display = 'flex';
+        viewDetailsContainer.style.display = 'none';
+        document.getElementById('modal-save-btn').style.display = 'block';
+        document.getElementById('modal-save-btn').textContent = 'Add Student';
+
+        studentForm.reset();
+        if (inpBatch) inpBatch.value = 'Batch 1.1';
+        inpScholarYear.value = '';
+        inpPayouts.value = '';
+        modal.classList.remove('hidden');
+    });
+}
 
 studentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -537,18 +539,21 @@ studentForm.addEventListener('submit', async (e) => {
                 ipAddress: 'Web Browser'
             }]);
 
-            if (isRegistered) {
-                const targetEmail = studentData.email_address || studentData.email;
-                if (targetEmail && targetEmail.includes('@')) {
-                    EmailNotificationService.notifyGrantee(studentData.uid).then(eRes => {
-                        console.log('[GranteeNotification] Notification result:', eRes);
-                    }).catch(eErr => {
-                        console.warn('[GranteeNotification] Notification failed:', eErr);
-                    });
-                    alert(`${studentData.fullName} is registered in the system and has been confirmed as a scholar grantee.\n\nAn automated email notification with the ScholarDoc download link has been sent to ${targetEmail}.`);
-                } else {
-                    alert(`${studentData.fullName} is registered in the system and has been confirmed as a scholar.`);
-                }
+            const targetEmail = (studentData.email_address || studentData.email || '').trim();
+            if (targetEmail && targetEmail.includes('@')) {
+                EmailNotificationService.notifyGrantee(studentData.uid || studentData.studentId, {
+                    email: targetEmail,
+                    fullName: studentData.fullName,
+                    studentNo: studentData.studentId,
+                    course: studentData.course,
+                    scholarshipName: studentData.scholarship_name,
+                    saNumber: studentData.saNumber
+                }).then(eRes => {
+                    console.log('[GranteeNotification] Automated notification dispatched:', eRes);
+                }).catch(eErr => {
+                    console.warn('[GranteeNotification] Automated notification failed:', eErr);
+                });
+                alert(`${studentData.fullName} has been added as a confirmed scholar grantee.\n\nAn automated email notification with the ScholarDoc download link has been dispatched to ${targetEmail}.`);
             } else {
                 alert(`${studentData.fullName} has been added successfully.`);
             }
