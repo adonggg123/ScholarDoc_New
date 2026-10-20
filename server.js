@@ -1288,6 +1288,8 @@ async function sendSingleGranteeSms(grantee, { force = false } = {}) {
         message: smsMessage
     });
 
+    const now = new Date().toISOString();
+
     await recordSmsLog({
         studentId: grantee.student_no || grantee.studentId || targetId,
         granteeUid: grantee.uid || grantee.id,
@@ -1299,6 +1301,33 @@ async function sendSingleGranteeSms(grantee, { force = false } = {}) {
         network: smsResult.network,
         errorMessage: smsResult.error
     });
+
+    // Directly update student_grantees row
+    let matchQuery = '';
+    if (grantee.id && isUuidString(grantee.id)) matchQuery = `id=eq.${encodeURIComponent(grantee.id)}`;
+    else if (grantee.uid && isUuidString(grantee.uid)) matchQuery = `uid=eq.${encodeURIComponent(grantee.uid)}`;
+    else if (grantee.student_no) matchQuery = `student_no=eq.${encodeURIComponent(grantee.student_no)}`;
+
+    if (matchQuery) {
+        try {
+            const patchHeaders = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            };
+            await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                method: 'PATCH',
+                headers: patchHeaders,
+                body: JSON.stringify({
+                    sms_sent_at: smsResult.success ? now : null,
+                    sms_status: smsResult.success ? 'sent' : 'failed',
+                    sms_sent_to: normalizedPhone,
+                    sms_error: smsResult.error || null,
+                    sms_message_id: smsResult.message_id ? String(smsResult.message_id) : null
+                })
+            });
+        } catch (_) {}
+    }
 
     return {
         ...smsResult,
@@ -1953,8 +1982,8 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
 
         // Update student_grantees in Supabase
         let matchQuery = '';
-        if (grantee.uid) matchQuery = `uid=eq.${encodeURIComponent(grantee.uid)}`;
-        else if (grantee.id) matchQuery = `id=eq.${encodeURIComponent(grantee.id)}`;
+        if (grantee.id && isUuidString(grantee.id)) matchQuery = `id=eq.${encodeURIComponent(grantee.id)}`;
+        else if (grantee.uid && isUuidString(grantee.uid)) matchQuery = `uid=eq.${encodeURIComponent(grantee.uid)}`;
         else if (grantee.student_no) matchQuery = `student_no=eq.${encodeURIComponent(grantee.student_no)}`;
 
         if (matchQuery) {
@@ -2847,6 +2876,19 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // ── API: Grantee Messaging Watcher Poll Trigger (Email & SMS) ─────────
+    if ((urlPath === '/api/grantees/poll-watcher' || urlPath === '/api/cron/grantee-watcher') && (req.method === 'GET' || req.method === 'POST')) {
+        try {
+            const result = await pollNewGranteesAndMessage();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, message: 'Grantee messaging watcher poll executed', result }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+        return;
+    }
+
     const resolvedFile = findFilePath(urlPath);
 
     if (!resolvedFile) {
@@ -3294,200 +3336,161 @@ async function startNotificationSmsWatcher() {
     schedulePoll();
 }
 
-// ── Automatic Grantee Email Notification Watcher Daemon ──────────────────
-// Automatically sends an official scholarship acceptance email & download link
-// to any student newly added to the student_grantees table, without requiring
-// the Super Admin to click a manual send button.
-// Ensures each grantee receives the email only once.
+// ── Automatic Grantee Messaging Watcher Daemon (Email & SMS) ─────────────
+// Automatically sends an official scholarship acceptance email (via Gmail SMTP)
+// AND SMS notification (via Semaphore) to any student record in student_grantees
+// whose notifications have not been dispatched yet (email_sent_at is null or sms_sent_at is null).
+// Continuously monitors in the background without requiring the Super Admin to click a button.
+// Ensures each grantee receives the email and SMS only once.
 
-const processedGranteeEmailIds = new Set();
-const GRANTEE_EMAIL_PROCESSED_FILE = path.join(__dirname, 'scratch', 'processed_grantee_email_ids.json');
+const inFlightGranteeIds = new Set();
+let isGranteeWatcherPolling = false;
+let consecutiveGranteePollErrors = 0;
 
-function loadProcessedGranteeEmailIds() {
-    try {
-        if (fs.existsSync(GRANTEE_EMAIL_PROCESSED_FILE)) {
-            const data = JSON.parse(fs.readFileSync(GRANTEE_EMAIL_PROCESSED_FILE, 'utf8'));
-            if (Array.isArray(data)) {
-                data.forEach(id => processedGranteeEmailIds.add(String(id)));
-            }
-        }
-    } catch (_) {}
-}
-
-function saveProcessedGranteeEmailIds() {
-    try {
-        const dir = path.dirname(GRANTEE_EMAIL_PROCESSED_FILE);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        const arr = Array.from(processedGranteeEmailIds).slice(-3000);
-        fs.writeFileSync(GRANTEE_EMAIL_PROCESSED_FILE, JSON.stringify(arr), 'utf8');
-    } catch (_) {}
-}
-
-function recordGranteeEmailSent(grantee, email) {
-    if (grantee) {
-        if (grantee.id) processedGranteeEmailIds.add(String(grantee.id));
-        if (grantee.uid) processedGranteeEmailIds.add(String(grantee.uid));
-        if (grantee.student_no) processedGranteeEmailIds.add(String(grantee.student_no));
-        if (grantee.studentId) processedGranteeEmailIds.add(String(grantee.studentId));
-    }
-    if (email) processedGranteeEmailIds.add(String(email).trim().toLowerCase());
-    saveProcessedGranteeEmailIds();
-}
-
-let isEmailWatcherPolling = false;
-let consecutiveEmailPollErrors = 0;
-
-async function pollNewGranteesAndSendEmail() {
-    if (isEmailWatcherPolling) return;
-    isEmailWatcherPolling = true;
+async function pollNewGranteesAndMessage() {
+    if (isGranteeWatcherPolling) return;
+    isGranteeWatcherPolling = true;
 
     try {
         const headers = {
             'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
         };
 
-        // Query up to 30 pending grantees who haven't had an email sent yet
-        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?email_sent_at=is.null&order=created_at.desc&limit=30`, {
+        // Query grantees who are missing either email_sent_at or sms_sent_at
+        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(email_sent_at.is.null,sms_sent_at.is.null)&order=created_at.desc&limit=25`, {
             headers,
-            signal: AbortSignal.timeout(8000)
+            signal: AbortSignal.timeout(10000)
         });
 
         if (!res.ok) return;
 
-        if (consecutiveEmailPollErrors > 0) {
-            console.log('[Grantee Email Watcher] Connection to Supabase restored.');
-            consecutiveEmailPollErrors = 0;
+        if (consecutiveGranteePollErrors > 0) {
+            console.log('[Grantee Messaging Watcher] Connection to Supabase restored.');
+            consecutiveGranteePollErrors = 0;
         }
 
         const grantees = await res.json();
         if (!Array.isArray(grantees) || grantees.length === 0) return;
 
         for (const grantee of grantees) {
-            const granteeId = String(grantee.id || grantee.uid || grantee.student_no || '');
-            const targetEmail = (grantee.email_address || grantee.email || '').trim();
+            const rowKey = String(grantee.id || grantee.uid || grantee.student_no || '');
+            if (!rowKey || inFlightGranteeIds.has(rowKey)) continue;
+
             const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
+            const targetEmail = (grantee.email_address || grantee.email || '').trim();
+            const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
+            const normalizedPhone = normalizePhilippineMobile(rawPhone);
 
-            // Check if any identifier or email is in processedGranteeEmailIds
-            const isProcessed = (grantee.id && processedGranteeEmailIds.has(String(grantee.id))) ||
-                                (grantee.uid && processedGranteeEmailIds.has(String(grantee.uid))) ||
-                                (grantee.student_no && processedGranteeEmailIds.has(String(grantee.student_no))) ||
-                                (grantee.studentId && processedGranteeEmailIds.has(String(grantee.studentId))) ||
-                                (targetEmail && processedGranteeEmailIds.has(targetEmail.toLowerCase()));
+            inFlightGranteeIds.add(rowKey);
 
-            if (isProcessed) {
-                continue;
-            }
-
-            // If no valid email, mark as processed to prevent continuous polling
-            if (!targetEmail || !targetEmail.includes('@')) {
-                console.warn(`[Grantee Email Watcher] Grantee ${grantee.student_no || granteeId} (${fullName}) has no valid email address. Skipping.`);
-                recordGranteeEmailSent(grantee, targetEmail);
-                continue;
-            }
-
-            // Verify if email was already logged in grantee_email_logs
             try {
-                const logRes = await fetch(`${SUPABASE_REST_URL}/grantee_email_logs?recipient_email=eq.${encodeURIComponent(targetEmail)}&status=eq.sent&limit=1`, { headers });
-                if (logRes.ok) {
-                    const logs = await logRes.json();
-                    if (Array.isArray(logs) && logs.length > 0) {
-                        console.log(`[Grantee Email Watcher] Email already logged as sent to ${targetEmail} in grantee_email_logs. Skipping.`);
-                        recordGranteeEmailSent(grantee, targetEmail);
-                        continue;
+                // 1. Dispatch Email if not yet sent
+                if (!grantee.email_sent_at) {
+                    if (targetEmail && targetEmail.includes('@')) {
+                        console.log(`[Grantee Messaging Watcher] Dispatching automated email to ${targetEmail} for ${fullName}...`);
+                        const emailRes = await sendSingleGranteeEmail(grantee, { force: false });
+                        if (emailRes.success) {
+                            console.log(`[Grantee Messaging Watcher] Email delivered to ${targetEmail} for ${fullName}.`);
+                            grantee.email_sent_at = new Date().toISOString();
+                        } else {
+                            console.error(`[Grantee Messaging Watcher] Email delivery failed for ${targetEmail}:`, emailRes.error);
+                        }
+                    } else {
+                        // Mark email_status as skipped_no_email to avoid infinite querying
+                        console.warn(`[Grantee Messaging Watcher] Grantee ${fullName} has no valid email. Marking email_status.`);
+                        const patchKey = (grantee.id && isUuidString(grantee.id)) ? `id=eq.${encodeURIComponent(grantee.id)}` : `uid=eq.${encodeURIComponent(grantee.uid)}`;
+                        await fetch(`${SUPABASE_REST_URL}/student_grantees?${patchKey}`, {
+                            method: 'PATCH',
+                            headers,
+                            body: JSON.stringify({ email_status: 'skipped_no_email', email_sent_at: new Date().toISOString() })
+                        });
+                        grantee.email_sent_at = new Date().toISOString();
                     }
+                    await new Promise(r => setTimeout(r, 400));
                 }
-            } catch (_) {}
 
-            console.log(`[Grantee Email Watcher] Newly added grantee detected: ${fullName} (${grantee.student_no || granteeId}) -> Dispatching automated email to ${targetEmail}...`);
+                // 2. Dispatch SMS if not yet sent
+                if (!grantee.sms_sent_at) {
+                    if (normalizedPhone) {
+                        console.log(`[Grantee Messaging Watcher] Dispatching automated SMS to ${normalizedPhone} for ${fullName}...`);
+                        const smsRes = await sendSingleGranteeSms(grantee, { force: false });
+                        if (smsRes.success) {
+                            console.log(`[Grantee Messaging Watcher] SMS delivered to ${normalizedPhone} for ${fullName}.`);
+                            grantee.sms_sent_at = new Date().toISOString();
+                        } else {
+                            console.error(`[Grantee Messaging Watcher] SMS delivery failed for ${normalizedPhone}:`, smsRes.error);
+                        }
+                    } else {
+                        // Mark sms_status as skipped_no_phone to avoid infinite querying
+                        console.warn(`[Grantee Messaging Watcher] Grantee ${fullName} has no valid phone number. Marking sms_status.`);
+                        const patchKey = (grantee.id && isUuidString(grantee.id)) ? `id=eq.${encodeURIComponent(grantee.id)}` : `uid=eq.${encodeURIComponent(grantee.uid)}`;
+                        await fetch(`${SUPABASE_REST_URL}/student_grantees?${patchKey}`, {
+                            method: 'PATCH',
+                            headers,
+                            body: JSON.stringify({ sms_status: 'skipped_no_phone', sms_sent_at: new Date().toISOString() })
+                        });
+                        grantee.sms_sent_at = new Date().toISOString();
+                    }
+                    await new Promise(r => setTimeout(r, 400));
+                }
 
-            const emailResult = await sendSingleGranteeEmail(grantee, { force: false });
+                // 3. Create In-App Notification if target has a uid/student_no
+                const notifTarget = grantee.uid || grantee.student_no;
+                if (notifTarget) {
+                    try {
+                        await fetch(`${SUPABASE_REST_URL}/notifications`, {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify({
+                                studentId: notifTarget,
+                                title: 'Scholarship Application Approved',
+                                message: `Congratulations ${fullName}! Your scholarship application for ${grantee.scholarship_name || 'CHED TES'} has been officially approved.`,
+                                type: 'success',
+                                isRead: false,
+                                timestamp: new Date().toISOString()
+                            })
+                        });
+                    } catch (_) {}
+                }
 
-            if (emailResult.success) {
-                console.log(`[Grantee Email Watcher] Successfully sent automated grantee email to ${targetEmail} for ${fullName}.`);
-            } else if (emailResult.skipped) {
-                console.log(`[Grantee Email Watcher] Email skipped for ${fullName} (${emailResult.reason}).`);
-            } else {
-                console.error(`[Grantee Email Watcher] Failed to send email to ${targetEmail}:`, emailResult.error);
+            } finally {
+                inFlightGranteeIds.delete(rowKey);
             }
 
-            recordGranteeEmailSent(grantee, targetEmail);
-
-            // Pacing delay between sends to respect Gmail SMTP rate limits
-            await new Promise(r => setTimeout(r, 500));
+            // Pacing delay between processing individual students
+            await new Promise(r => setTimeout(r, 300));
         }
-
-        saveProcessedGranteeEmailIds();
 
     } catch (pollErr) {
-        consecutiveEmailPollErrors++;
-        if (consecutiveEmailPollErrors === 1) {
-            console.warn(`[Grantee Email Watcher] Temporary network issue reaching Supabase (${pollErr.message}). Waiting for connection...`);
-        } else if (consecutiveEmailPollErrors % 20 === 0) {
-            console.warn(`[Grantee Email Watcher] Still waiting for network connection (${consecutiveEmailPollErrors} failed attempts)...`);
+        consecutiveGranteePollErrors++;
+        if (consecutiveGranteePollErrors === 1) {
+            console.warn(`[Grantee Messaging Watcher] Temporary network issue reaching Supabase (${pollErr.message}). Waiting for connection...`);
+        } else if (consecutiveGranteePollErrors % 20 === 0) {
+            console.warn(`[Grantee Messaging Watcher] Still waiting for network connection (${consecutiveGranteePollErrors} failed attempts)...`);
         }
     } finally {
-        isEmailWatcherPolling = false;
+        isGranteeWatcherPolling = false;
     }
 }
 
-async function startGranteeEmailWatcher() {
-    loadProcessedGranteeEmailIds();
+async function startGranteeMessagingWatcher() {
+    console.log('[Grantee Messaging Watcher] Automated grantee email & SMS notification watcher daemon started.');
 
-    try {
-        const headers = {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-        };
-
-        const isFirstInit = !fs.existsSync(GRANTEE_EMAIL_PROCESSED_FILE) || processedGranteeEmailIds.size === 0;
-
-        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=id,uid,student_no,email_sent_at,email_address,email,created_at`, {
-            headers,
-            signal: AbortSignal.timeout(8000)
-        });
-
-        if (res.ok) {
-            const rows = await res.json();
-            if (Array.isArray(rows)) {
-                for (const row of rows) {
-                    const idStr = String(row.id || '');
-                    const uidStr = String(row.uid || '');
-                    const stuNo = String(row.student_no || '');
-                    const em = (row.email_address || row.email || '').trim().toLowerCase();
-
-                    // If already marked sent in DB, always cache
-                    if (row.email_sent_at) {
-                        if (idStr) processedGranteeEmailIds.add(idStr);
-                        if (uidStr) processedGranteeEmailIds.add(uidStr);
-                        if (stuNo) processedGranteeEmailIds.add(stuNo);
-                        if (em) processedGranteeEmailIds.add(em);
-                    } else if (isFirstInit) {
-                        // Baseline: Cache existing records so only newly added records trigger auto-send
-                        if (idStr) processedGranteeEmailIds.add(idStr);
-                        if (uidStr) processedGranteeEmailIds.add(uidStr);
-                        if (stuNo) processedGranteeEmailIds.add(stuNo);
-                        if (em) processedGranteeEmailIds.add(em);
-                    }
-                }
-                saveProcessedGranteeEmailIds();
-            }
-        }
-    } catch (initErr) {
-        console.warn('[Grantee Email Watcher] Baseline cache init warning:', initErr.message);
-    }
-
-    console.log(`[Grantee Email Watcher] Automated grantee email notification watcher started. Cached ${processedGranteeEmailIds.size} baseline/processed IDs.`);
-
-    function scheduleEmailPoll() {
-        pollNewGranteesAndSendEmail().finally(() => {
-            const delay = consecutiveEmailPollErrors > 0 ? 15000 : 4000;
-            setTimeout(scheduleEmailPoll, delay);
+    function scheduleMessagingPoll() {
+        pollNewGranteesAndMessage().finally(() => {
+            const delay = consecutiveGranteePollErrors > 0 ? 15000 : 4000;
+            setTimeout(scheduleMessagingPoll, delay);
         });
     }
 
-    scheduleEmailPoll();
+    scheduleMessagingPoll();
 }
+
+// Backward compatibility aliases
+const pollNewGranteesAndSendEmail = pollNewGranteesAndMessage;
+const startGranteeEmailWatcher = startGranteeMessagingWatcher;
 
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -3517,7 +3520,7 @@ if (require.main === module) {
 
         // Start background watcher daemons
         startNotificationSmsWatcher();
-        startGranteeEmailWatcher();
+        startGranteeMessagingWatcher();
     });
 }
 
@@ -3533,7 +3536,10 @@ module.exports = {
     isSemesterMatching,
     validateGranteeEligibility,
     sendSingleGranteeEmail,
+    sendSingleGranteeSms,
+    pollNewGranteesAndMessage,
     pollNewGranteesAndSendEmail,
+    startGranteeMessagingWatcher,
     startGranteeEmailWatcher,
     server
 };
