@@ -481,16 +481,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  (() {
-                                    if (_profileData != null) {
-                                      final raw = (_profileData!['fullName'] ?? _profileData!['full_name'] ?? '').toString().trim();
-                                      final sId = (_profileData!['studentId'] ?? _profileData!['student_no'] ?? '').toString().trim();
-                                      if (raw.isNotEmpty && raw != sId && !RegExp(r'^\d+$').hasMatch(raw)) {
-                                        return '${raw.split(' ').first}!';
-                                      }
-                                    }
-                                    return 'Scholar!';
-                                  })(),
+                                  _getGreetingName(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 26,
@@ -569,16 +560,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSectionHeader('Quick Actions'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
                         child: _buildActionBtn(
-                          context,
-                          'Upload Docs',
-                          LucideIcons.uploadCloud,
-                          AppTheme.primaryColor,
-                          () {
+                          context: context,
+                          title: 'Upload Docs',
+                          subtitle: 'ATM & Deposit slip',
+                          category: 'Submission',
+                          icon: LucideIcons.uploadCloud,
+                          accentColor: const Color(0xFF1D4ED8),
+                          iconBgColor: const Color(0xFFEFF6FF),
+                          onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -589,14 +583,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: _buildActionBtn(
-                          context,
-                          'View History',
-                          LucideIcons.history,
-                          AppTheme.secondaryColor,
-                          () {
+                          context: context,
+                          title: 'View History',
+                          subtitle: 'Audit trail & logs',
+                          category: 'Tracking',
+                          icon: LucideIcons.history,
+                          accentColor: const Color(0xFF059669),
+                          iconBgColor: const Color(0xFFECFDF5),
+                          onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -1038,47 +1035,218 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good evening';
   }
 
-  Widget _buildActionBtn(
-    BuildContext context,
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: const Color(0xFFF1F5F9), // Very light gray border
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+  String _getGreetingName() {
+    if (_profileData != null) {
+      final sId = (_profileData!['studentId'] ??
+              _profileData!['student_no'] ??
+              '')
+          .toString()
+          .trim();
+
+      // 1. Direct first name check if available
+      final directFirst = (_profileData!['firstName'] ??
+              _profileData!['first_name'] ??
+              '')
+          .toString()
+          .trim();
+
+      if (directFirst.isNotEmpty &&
+          directFirst.toLowerCase() != 'null' &&
+          directFirst != sId &&
+          !RegExp(r'^\d+$').hasMatch(directFirst)) {
+        final clean = directFirst
+            .replaceAll(',', '')
+            .split(RegExp(r'\s+'))
+            .firstWhere((t) => t.isNotEmpty, orElse: () => '')
+            .replaceAll(RegExp(r'[,.!]'), '')
+            .trim();
+        if (clean.isNotEmpty) {
+          final formatted = clean.length == 1
+              ? clean.toUpperCase()
+              : '${clean[0].toUpperCase()}${clean.substring(1).toLowerCase()}';
+          return '$formatted!';
+        }
+      }
+
+      // 2. Parse from fullName / full_name
+      final raw = (_profileData!['fullName'] ??
+              _profileData!['full_name'] ??
+              '')
+          .toString()
+          .trim();
+
+      if (raw.isNotEmpty && raw != sId && !RegExp(r'^\d+$').hasMatch(raw)) {
+        String firstName = '';
+
+        if (raw.contains(',')) {
+          // Format: "LASTNAME, FIRSTNAME MIDDLE"
+          final parts = raw.split(',');
+          if (parts.length > 1) {
+            final afterComma = parts.sublist(1).join(',').trim();
+            final tokens = afterComma
+                .split(RegExp(r'\s+'))
+                .where((t) => t.isNotEmpty)
+                .toList();
+            if (tokens.isNotEmpty) {
+              firstName = tokens.first;
+            }
+          }
+          // Fallback if after comma was empty
+          if (firstName.isEmpty && parts.isNotEmpty) {
+            firstName = parts.first.trim();
+          }
+        } else {
+          // Format: "FIRSTNAME LASTNAME"
+          final tokens = raw
+              .replaceAll(',', '')
+              .split(RegExp(r'\s+'))
+              .where((t) => t.isNotEmpty)
+              .toList();
+          if (tokens.isNotEmpty) {
+            firstName = tokens.first;
+          }
+        }
+
+        firstName = firstName.replaceAll(RegExp(r'[,.!]'), '').trim();
+
+        if (firstName.isNotEmpty) {
+          final formatted = firstName.length == 1
+              ? firstName.toUpperCase()
+              : '${firstName[0].toUpperCase()}${firstName.substring(1).toLowerCase()}';
+          return '$formatted!';
+        }
+      }
+    }
+    return 'Scholar!';
+  }
+
+  Widget _buildActionBtn({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required String category,
+    required IconData icon,
+    required Color accentColor,
+    required Color iconBgColor,
+    required VoidCallback onTap,
+  }) {
+    const goldColor = Color(0xFFFBC02D); // Golden Yellow Laurel brand accent
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: goldColor,
+          width: 1.8,
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 16),
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B), // Slate 800
-                fontSize: 13,
-                letterSpacing: 0.3,
+        boxShadow: [
+          BoxShadow(
+            color: goldColor.withValues(alpha: 0.16),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            splashColor: goldColor.withValues(alpha: 0.12),
+            highlightColor: goldColor.withValues(alpha: 0.05),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top row: Action icon container & arrow shortcut badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: iconBgColor,
+                          borderRadius: BorderRadius.circular(13),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.20),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Icon(icon, color: accentColor, size: 22),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFFFFBEB), // Soft golden ivory
+                          border: Border.all(
+                            color: goldColor.withValues(alpha: 0.45),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Icon(
+                          LucideIcons.arrowUpRight,
+                          size: 13,
+                          color: Color(0xFFB45309), // Amber gold arrow
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // Micro Category Tag
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      category.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.7,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Title
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      fontSize: 15,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // Subtitle
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

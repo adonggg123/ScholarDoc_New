@@ -144,6 +144,7 @@ export class AnnexSyncService {
 
         if (!isPlaceholderId(idA) && !isPlaceholderId(idB)) {
             if (idA === idB) return true;
+            if (idA.length >= 5 && idB.length >= 5) return false;
         }
 
         // 3. Unique Key match (if not random or uuid/gid-based)

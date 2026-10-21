@@ -315,7 +315,7 @@
             </div>
 
             <!-- Left-aligned School Year & Semester Filter Pill Group -->
-            <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
                 <div style="display: inline-flex; align-items: center; gap: 8px; background: var(--surface-color, #ffffff); border: 1.5px solid var(--border-color); border-radius: 12px; padding: 4px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                     <div style="display: inline-flex; align-items: center; gap: 6px;">
                         <i class="icon-calendar" style="font-size: 14px; color: var(--primary-color);"></i>
@@ -340,6 +340,13 @@
                         </select>
                     </div>
                 </div>
+
+                <!-- Sync / Refresh Button -->
+                <button id="sa-btn-refresh-term" type="button" title="Sync database for selected school year and semester"
+                    style="display: inline-flex; align-items: center; gap: 5px; background: rgba(15, 50, 96, 0.06); color: var(--primary-color); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 10px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                    <i id="sa-icon-refresh-term" class="icon-refresh-cw" style="font-size: 12px;"></i>
+                    <span>Sync</span>
+                </button>
             </div>
         </div>
 
@@ -423,11 +430,18 @@
         <!-- Upload Card -->
         <div class="card"
             style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 20px; align-self: flex-start; padding: 28px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color);">
-            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 2px;">
-                <div class="step-badge">1</div>
-                <h3
-                    style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
-                    Upload New Grantees</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 2px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="step-badge">1</div>
+                    <h3
+                        style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                        Upload New Grantees</h3>
+                </div>
+                <div id="step1-target-term-badge"
+                    style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; background: rgba(15, 50, 96, 0.06); border: 1px solid rgba(15, 50, 96, 0.12); font-size: 11px; font-weight: 700; color: var(--primary-color);" title="Target School Year and Semester for new uploads">
+                    <i class="icon-calendar" style="font-size: 12px;"></i>
+                    <span id="step1-target-term-text">A.Y. 2024-2025 • 1st Semester</span>
+                </div>
             </div>
 
             <!-- Batch Selection Field (Required before import) -->
@@ -528,6 +542,10 @@
                     <select id="filter-batch" class="hidden glass-filter">
                         <option value="All Batches">All Batches</option>
                     </select>
+                </div>
+                <div id="step2-term-indicator" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px;">
+                    <i class="icon-filter" style="font-size: 12px; color: var(--primary-color);"></i>
+                    <span id="step2-term-text">Filtered by: 2024-2025 • 1st Semester</span>
                 </div>
             </div>
 
@@ -675,44 +693,6 @@
                 <button id="sa-tab-btn-form3" class="annex-tab-btn">
                     <i class="icon-file-text"></i> Annex 5 - Form 3 (Not Included Students)
                     <span id="sa-badge-form3-count" class="annex-tab-badge">0</span>
-                </button>
-            </div>
-
-            <div style="width: 1px; height: 26px; background: var(--border-color); margin: 0 4px;"></div>
-
-            <!-- Left-aligned Tab Filter Controls (Academic Year & Semester) -->
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0;">
-                <!-- Unified Academic Year & Semester Filter Pill Group -->
-                <div style="display: inline-flex; align-items: center; gap: 8px; background: var(--surface-color, #ffffff); border: 1.5px solid var(--border-color); border-radius: 12px; padding: 4px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-                    <div style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="icon-calendar" style="font-size: 14px; color: var(--primary-color);"></i>
-                        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">A.Y.</span>
-                        <select id="sa-filter-ay" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px;">
-                            <option value="2024-2025" selected>2024-2025</option>
-                            <option value="2023-2024">2023-2024</option>
-                            <option value="2022-2023">2022-2023</option>
-                            <option value="2021-2022">2021-2022</option>
-                            <option value="All">All School Years</option>
-                        </select>
-                    </div>
-                    <div style="width: 1px; height: 18px; background: var(--border-color);"></div>
-                    <div style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="icon-clock" style="font-size: 14px; color: #1E88E5;"></i>
-                        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Sem</span>
-                        <select id="sa-filter-sem" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px;">
-                            <option value="1st Semester" selected>1st Semester</option>
-                            <option value="2nd Semester">2nd Semester</option>
-                            <option value="Summer / Midyear">Summer / Midyear</option>
-                            <option value="All">All Semesters</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Sync / Refresh Button -->
-                <button id="sa-btn-refresh-term" type="button" title="Sync database for selected school year and semester"
-                    style="display: inline-flex; align-items: center; gap: 5px; background: rgba(15, 50, 96, 0.06); color: var(--primary-color); border: 1px solid rgba(15, 50, 96, 0.15); border-radius: 10px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
-                    <i id="sa-icon-refresh-term" class="icon-refresh-cw" style="font-size: 12px;"></i>
-                    <span>Sync</span>
                 </button>
             </div>
         </div>

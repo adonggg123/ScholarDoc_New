@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -226,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           slivers: [
           // --- Profile Header ---
           SliverAppBar(
-            expandedHeight: 260,
+            expandedHeight: 280,
             pinned: true,
             backgroundColor: AppTheme.primaryColor,
             automaticallyImplyLeading: false,
@@ -253,166 +254,195 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
                 child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 30),
-                      GestureDetector(
-                        onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
-                        child: Stack(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFFFBC02D), // Golden Yellow
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFFFBC02D,
-                                    ).withOpacity(0.3),
-                                    blurRadius: 16,
-                                    spreadRadius: 2,
+                  bottom: false,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: math.max(0.0, constraints.maxHeight),
+                            minWidth: constraints.maxWidth,
+                          ),
+                          child: IntrinsicHeight(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(height: 8),
+                                  GestureDetector(
+                                    onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(3),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: const Color(0xFFFBC02D), // Golden Yellow
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(
+                                                  0xFFFBC02D,
+                                                ).withOpacity(0.3),
+                                                blurRadius: 16,
+                                                spreadRadius: 2,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(3),
+                                            decoration: const BoxDecoration(
+                                              color: AppTheme.primaryColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: _buildAvatarWidget(),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          bottom: 2,
+                                          right: 2,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(7),
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFFFBC02D),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: _isUploadingPhoto
+                                                ? const SizedBox(
+                                                    width: 14,
+                                                    height: 14,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: AppTheme.primaryColor,
+                                                    ),
+                                                  )
+                                                : const Icon(
+                                                    LucideIcons.camera,
+                                                    size: 14,
+                                                    color: AppTheme.primaryColor,
+                                                  ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(height: 10),
+                                  if (_isProfileLoading)
+                                    const CircularProgressIndicator(color: Colors.white)
+                                  else ...[
+                                    () {
+                                      final String rawName =
+                                          (_profileData?['fullName'] ??
+                                                  _profileData?['full_name'] ??
+                                                  '')
+                                              .toString()
+                                              .trim();
+                                      final String sId =
+                                          (_profileData?['studentId'] ??
+                                                  _profileData?['student_no'] ??
+                                                  '')
+                                              .toString()
+                                              .trim();
+                                      final String displayName =
+                                          (rawName.isNotEmpty &&
+                                              rawName != sId &&
+                                              !RegExp(r'^\d+$').hasMatch(rawName))
+                                          ? rawName
+                                          : 'Student Scholar';
+
+                                      final String rawCourse =
+                                          (_profileData?['course'] ??
+                                                  _profileData?['program_name'] ??
+                                                  '')
+                                              .toString()
+                                              .trim();
+                                      final String displayCourse =
+                                          (rawCourse.isNotEmpty &&
+                                              rawCourse != 'CHED TES Scholar' &&
+                                              rawCourse != 'TES')
+                                          ? rawCourse
+                                          : 'Bachelor of Science in Information Technology';
+
+                                      final String rawYear =
+                                          (_profileData?['year'] ??
+                                                  _profileData?['year_level'] ??
+                                                  '')
+                                              .toString()
+                                              .trim();
+                                      final String displayYear = rawYear.isNotEmpty
+                                          ? (rawYear.toLowerCase().contains('year')
+                                                ? rawYear
+                                                : '$rawYear Year')
+                                          : '2nd Year';
+
+                                      return Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            displayName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 19,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              letterSpacing: -0.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                                            child: Text(
+                                              '$displayCourse • $displayYear',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.white.withOpacity(0.75),
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }(),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.accentColor.withOpacity(0.18),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: AppTheme.accentColor.withOpacity(0.4),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        _selectedScholarship ??
+                                            _profileData?['scholarshipName'] ??
+                                            'TES',
+                                        style: TextStyle(
+                                          color: AppTheme.accentColor,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 6),
                                 ],
                               ),
-                              child: Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: const BoxDecoration(
-                                  color: AppTheme.primaryColor,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: _buildAvatarWidget(),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 2,
-                              right: 2,
-                              child: Container(
-                                padding: const EdgeInsets.all(7),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFBC02D),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: _isUploadingPhoto
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        LucideIcons.camera,
-                                        size: 14,
-                                        color: AppTheme.primaryColor,
-                                      ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      if (_isProfileLoading)
-                        const CircularProgressIndicator(color: Colors.white)
-                      else ...[
-                        () {
-                          final String rawName =
-                              (_profileData?['fullName'] ??
-                                      _profileData?['full_name'] ??
-                                      '')
-                                  .toString()
-                                  .trim();
-                          final String sId =
-                              (_profileData?['studentId'] ??
-                                      _profileData?['student_no'] ??
-                                      '')
-                                  .toString()
-                                  .trim();
-                          final String displayName =
-                              (rawName.isNotEmpty &&
-                                  rawName != sId &&
-                                  !RegExp(r'^\d+$').hasMatch(rawName))
-                              ? rawName
-                              : 'Student Scholar';
-
-                          final String rawCourse =
-                              (_profileData?['course'] ??
-                                      _profileData?['program_name'] ??
-                                      '')
-                                  .toString()
-                                  .trim();
-                          final String displayCourse =
-                              (rawCourse.isNotEmpty &&
-                                  rawCourse != 'CHED TES Scholar' &&
-                                  rawCourse != 'TES')
-                              ? rawCourse
-                              : 'Bachelor of Science in Information Technology';
-
-                          final String rawYear =
-                              (_profileData?['year'] ??
-                                      _profileData?['year_level'] ??
-                                      '')
-                                  .toString()
-                                  .trim();
-                          final String displayYear = rawYear.isNotEmpty
-                              ? (rawYear.toLowerCase().contains('year')
-                                    ? rawYear
-                                    : '$rawYear Year')
-                              : '2nd Year';
-
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                displayName,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '$displayCourse • $displayYear',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.72),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          );
-                        }(),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentColor.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppTheme.accentColor.withOpacity(0.4),
-                            ),
-                          ),
-                          child: Text(
-                            _selectedScholarship ??
-                                _profileData?['scholarshipName'] ??
-                                'TES',
-                            style: TextStyle(
-                              color: AppTheme.accentColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.2,
                             ),
                           ),
                         ),
-                      ],
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -1357,7 +1387,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final String? url = _profilePictureUrl;
     if (url != null && url.isNotEmpty) {
       return CircleAvatar(
-        radius: 52,
+        radius: 46,
         backgroundColor: const Color(0xFF1A4F9E),
         backgroundImage: NetworkImage(url),
         child: _isUploadingPhoto
@@ -1372,11 +1402,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
     return CircleAvatar(
-      radius: 52,
+      radius: 46,
       backgroundColor: AppTheme.primaryColor.withOpacity(0.5),
       child: _isUploadingPhoto
           ? const CircularProgressIndicator(color: Colors.white)
-          : const Icon(LucideIcons.user, size: 52, color: Colors.white),
+          : const Icon(LucideIcons.user, size: 46, color: Colors.white),
     );
   }
 

@@ -357,7 +357,12 @@ export class VerificationService {
             let idSim = 0;
             if (canMatchId) {
                 idSim = this.matchStudentId(granteeId, studentId);
-                if (idSim >= 0.85) idMatch = true;
+                if (idSim >= 0.85) {
+                    idMatch = true;
+                } else if (granteeId.length >= 5 && studentId.length >= 5) {
+                    // Conflicting valid institutional student IDs -> Strict rejection
+                    continue;
+                }
             }
 
             const sLast = (student.lastName || student.last_name || studentName.lastName || '').trim();

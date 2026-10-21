@@ -63,16 +63,20 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         await androidPlugin.createNotificationChannel(announcementsChannel);
       }
 
-      final isAnnouncement = message.data['announcementId'] != null &&
+      final isAnnouncement =
+          message.data['announcementId'] != null &&
           message.data['announcementId'].toString().isNotEmpty;
-      final targetChannel =
-          isAnnouncement ? announcementsChannel : generalChannel;
+      final targetChannel = isAnnouncement
+          ? announcementsChannel
+          : generalChannel;
 
-      final title = message.data['title'] ??
+      final title =
+          message.data['title'] ??
           (isAnnouncement
               ? 'ScholarDoc Announcement'
               : 'ScholarDoc Notification');
-      final body = message.data['message'] ??
+      final body =
+          message.data['message'] ??
           message.data['body'] ??
           (isAnnouncement
               ? 'New scholarship announcement posted.'
@@ -124,8 +128,8 @@ class PushNotificationService {
   Map<String, dynamic>? _pendingNotificationData;
   bool _isInitialized = false;
 
-  static const AndroidNotificationChannel _announcementsChannel =
-      AndroidNotificationChannel(
+  static const AndroidNotificationChannel
+  _announcementsChannel = AndroidNotificationChannel(
     'scholardoc_announcements',
     'ScholarDoc Announcements',
     description:
@@ -135,8 +139,8 @@ class PushNotificationService {
     enableVibration: true,
   );
 
-  static const AndroidNotificationChannel _generalChannel =
-      AndroidNotificationChannel(
+  static const AndroidNotificationChannel
+  _generalChannel = AndroidNotificationChannel(
     'scholardoc_general',
     'ScholarDoc Updates & Alerts',
     description:
@@ -297,7 +301,8 @@ class PushNotificationService {
         data['message'] ??
         'New notification received.';
 
-    final notifKey = data['notifId']?.toString() ??
+    final notifKey =
+        data['notifId']?.toString() ??
         data['id']?.toString() ??
         data['announcementId']?.toString() ??
         message.messageId ??
@@ -310,10 +315,12 @@ class PushNotificationService {
       return;
     }
 
-    final isAnnouncement = data['announcementId'] != null &&
+    final isAnnouncement =
+        data['announcementId'] != null &&
         data['announcementId'].toString().isNotEmpty;
-    final activeChannel =
-        isAnnouncement ? _announcementsChannel : _generalChannel;
+    final activeChannel = isAnnouncement
+        ? _announcementsChannel
+        : _generalChannel;
 
     final androidDetails = AndroidNotificationDetails(
       activeChannel.id,
@@ -357,7 +364,8 @@ class PushNotificationService {
     String? channelId,
   }) async {
     try {
-      final notifKey = payload?['id']?.toString() ??
+      final notifKey =
+          payload?['id']?.toString() ??
           payload?['notifId']?.toString() ??
           payload?['announcementId']?.toString() ??
           '${title}_$body';
@@ -373,8 +381,9 @@ class PushNotificationService {
           (payload?['announcementId'] != null &&
               payload!['announcementId'].toString().isNotEmpty) ||
           channelId == _announcementsChannel.id;
-      final activeChannel =
-          isAnnouncement ? _announcementsChannel : _generalChannel;
+      final activeChannel = isAnnouncement
+          ? _announcementsChannel
+          : _generalChannel;
 
       final androidDetails = AndroidNotificationDetails(
         activeChannel.id,
@@ -476,9 +485,7 @@ class PushNotificationService {
         'ScholarDoc Push: Token successfully saved to user_fcm_tokens for $validUserId ($studentId).',
       );
     } catch (e) {
-      debugPrint(
-        'ScholarDoc Push: Supabase token upsert error: $e',
-      );
+      debugPrint('ScholarDoc Push: Supabase token upsert error: $e');
     }
   }
 

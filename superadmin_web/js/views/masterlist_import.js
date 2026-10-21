@@ -21,6 +21,7 @@ if (!window.mammoth) {
 
 // State
 let currentFile = null;
+let allMasterlistRecords = [];
 let extractedRecords = [];
 let schoolStudents = [];
 let selectedSchoolStudentIds = new Set();
@@ -206,6 +207,77 @@ function getCachedGranteeBatch(record) {
         if (rawName && cache[rawName]) return cache[rawName];
     } catch (_) { }
     return null;
+}
+
+function cacheGranteeTerms(records, ay, sem) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_terms') || '{}');
+        (records || []).forEach(r => {
+            const termVal = {
+                academicYear: r.academicYear || ay || selectedAcademicYear || '2024-2025',
+                semester: r.semester || sem || selectedSemester || '1st Semester'
+            };
+            if (r.id) cache[r.id] = termVal;
+            const normKey = normalizeName(r.lastName || r.last_name, r.firstName || r.first_name, r.middleName || r.middle_name);
+            if (normKey) cache[normKey] = termVal;
+            const rawName = (r.name || `${r.lastName || r.last_name || ''}, ${r.firstName || r.first_name || ''} ${r.middleName || r.middle_name || ''}`).trim().toLowerCase();
+            if (rawName) cache[rawName] = termVal;
+        });
+        localStorage.setItem('scholardoc_grantee_terms', JSON.stringify(cache));
+    } catch (e) {
+        console.warn('Error saving grantee terms cache:', e);
+    }
+}
+
+function getCachedGranteeTerm(record) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_terms') || '{}');
+        if (record.id && cache[record.id]) return cache[record.id];
+        const normKey = normalizeName(record.lastName || record.last_name, record.firstName || record.first_name, record.middleName || record.middle_name);
+        if (normKey && cache[normKey]) return cache[normKey];
+        const rawName = (record.name || `${record.lastName || record.last_name || ''}, ${record.firstName || record.first_name || ''} ${record.middleName || record.middle_name || ''}`).trim().toLowerCase();
+        if (rawName && cache[rawName]) return cache[rawName];
+    } catch (_) { }
+    return null;
+}
+
+function updateStep1TargetTermBadge(ay = selectedAcademicYear, sem = selectedSemester) {
+    const termBadgeText = document.getElementById('step1-target-term-text');
+    if (termBadgeText) {
+        const ayText = (!ay || ay === 'All') ? 'All School Years' : `A.Y. ${ay}`;
+        const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
+        termBadgeText.textContent = `${ayText} • ${semText}`;
+    }
+}
+
+function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemester) {
+    const termIndicatorText = document.getElementById('step2-term-text');
+    if (termIndicatorText) {
+        const ayText = (!ay || ay === 'All') ? 'All School Years' : `${ay}`;
+        const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
+        termIndicatorText.textContent = `Filtered by: ${ayText} • ${semText}`;
+    }
+}
+
+function applyTermFilterToMasterlist(ay = selectedAcademicYear, sem = selectedSemester) {
+    if (!allMasterlistRecords) allMasterlistRecords = [];
+
+    // Filter allMasterlistRecords by selected AY and Semester
+    extractedRecords = allMasterlistRecords.filter(r => {
+        const matchAY = !ay || ay === 'All' || r.academicYear === ay;
+        const matchSem = !sem || sem === 'All' || r.semester === sem;
+        return matchAY && matchSem;
+    });
+
+    if (badgeToggleGrantees) {
+        badgeToggleGrantees.textContent = extractedRecords.length;
+    }
+
+    updateStep1TargetTermBadge(ay, sem);
+    updateStep2TermIndicator(ay, sem);
+    populateBatchFilter();
+    renderTable();
+    updateClearMasterlistButtonVisibility();
 }
 
 function splitFullName(raw) {
@@ -712,6 +784,8 @@ async function checkAndFlagDuplicates(records, selectedBatch) {
         return {
             ...r,
             batch: recordBatch,
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester,
             isDuplicate,
             duplicateReason
         };
@@ -844,8 +918,21 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 });
             }
 
-            // Cache grantee batches locally so they survive reload even if DB column is pending
-            cacheGranteeBatches(extractedRecords);
+            // Merge newly saved records into allMasterlistRecords master state
+            validToInsert.forEach(newR => {
+                const alreadyExists = allMasterlistRecords.some(x => x.id && x.id === newR.id);
+                if (!alreadyExists) {
+                    allMasterlistRecords.push({
+                        ...newR,
+                        academicYear: selectedAcademicYear,
+                        semester: selectedSemester
+                    });
+                }
+            });
+
+            // Cache grantee batches and terms locally
+            cacheGranteeBatches(allMasterlistRecords);
+            cacheGranteeTerms(allMasterlistRecords, selectedAcademicYear, selectedSemester);
 
             if (ocrStatusText) ocrStatusText.textContent = `Complete: Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!`;
             if (ocrProgressBar) ocrProgressBar.style.width = '100%';
@@ -854,32 +941,22 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 window.showToast(`Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
             }
 
-            // Re-render table to display updated "Saved to DB" status
-            renderTable();
+            // Re-render table and badges according to active term filter
+            applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
 
-            // Sync with Annex 5 and verification
-            const { data: allCurrentGrantees } = await window.supabaseClient
-                .from(tableName)
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (allCurrentGrantees && allCurrentGrantees.length > 0) {
-                const granteesForVerification = allCurrentGrantees.map(m => {
-                    const assignedBatch = m.batch || getCachedGranteeBatch(m) || 'Batch 1.1';
-                    return {
-                        id: m.id,
-                        name: m.name || `${m.last_name || ''}, ${m.first_name || ''} ${m.middle_name || ''}`.trim(),
-                        last_name: m.last_name,
-                        first_name: m.first_name,
-                        middle_name: m.middle_name,
-                        batch: assignedBatch,
-                        student_id: m.student_id || '',
-                        course: m.course || 'BSIT',
-                        year: m.year || '1'
-                    };
-                });
-                await loadSchoolStudentsAndVerify(granteesForVerification);
-            }
+            // Sync with Annex 5 and verification for active term grantees
+            const granteesForVerification = extractedRecords.map(m => ({
+                id: m.id,
+                name: m.name || `${m.lastName || m.last_name || ''}, ${m.firstName || m.first_name || ''} ${m.middleName || m.middle_name || ''}`.trim(),
+                last_name: m.lastName || m.last_name,
+                first_name: m.firstName || m.first_name,
+                middle_name: m.middleName || m.middle_name,
+                batch: m.batch || selectedBatch,
+                student_id: m.studentId || m.student_id || '',
+                course: m.course || 'BSIT',
+                year: '1'
+            }));
+            await loadSchoolStudentsAndVerify(granteesForVerification);
 
         } else {
             // All records were duplicates
@@ -956,12 +1033,19 @@ function renderTable() {
     updateClearMasterlistButtonVisibility();
 
     if (extractedRecords.length === 0) {
+        const hasFilter = (selectedAcademicYear && selectedAcademicYear !== 'All') || (selectedSemester && selectedSemester !== 'All');
+        const termLabel = (selectedAcademicYear !== 'All' ? `A.Y. ${selectedAcademicYear}` : 'All School Years') +
+            (selectedSemester !== 'All' ? ` (${selectedSemester})` : '');
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="4" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                        <i class="icon-file-search" style="font-size: 40px; color: #cbd5e1;"></i>
-                        <span>Upload a document and extract data to see new grantees listed here.</span>
+                        <div style="position: relative;">
+                            <i class="icon-file-search" style="font-size: 44px; color: #cbd5e1; opacity: 0.6;"></i>
+                            <i class="icon-filter" style="font-size: 18px; color: var(--primary-color); position: absolute; bottom: -2px; right: -4px;"></i>
+                        </div>
+                        <span style="font-size: 14px; font-weight: 700; color: var(--text-primary);">${hasFilter ? `No grantees found for ${termLabel}` : 'No grantees in masterlist'}</span>
+                        <span style="font-size: 12px; max-width: 340px; line-height: 1.5; color: var(--text-secondary);">${hasFilter ? 'Select another school year / semester above, or upload a document in Step 1 to import new grantees for this term.' : 'Upload a document and extract data in Step 1 to see new grantees listed here.'}</span>
                     </div>
                 </td>
             </tr>`;
@@ -976,10 +1060,11 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align: center; padding: 64px 20px; color: #94a3b8; font-weight: 500;">
+                <td colspan="4" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                        <i class="icon-filter" style="font-size: 40px; color: #cbd5e1;"></i>
-                        <span>No records match the selected batch (${filterValue}).</span>
+                        <i class="icon-filter" style="font-size: 38px; color: #cbd5e1;"></i>
+                        <span style="font-size: 14px; font-weight: 700; color: var(--text-primary);">No records match batch "${filterValue}"</span>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Try selecting "All Batches" to see all grantees for this term.</span>
                     </div>
                 </td>
             </tr>`;
@@ -1025,15 +1110,19 @@ function renderTable() {
         input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
             const val = e.target.value.trim();
-            extractedRecords[idx].firstName = val;
-            if (extractedRecords[idx].id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).update({
-                        first_name: val,
-                        name: `${extractedRecords[idx].lastName || ''}, ${val} ${extractedRecords[idx].middleName || ''}`.trim()
-                    }).eq('id', extractedRecords[idx].id);
-                } catch (err) {
-                    console.warn('Error updating first name:', err);
+            if (extractedRecords[idx]) {
+                extractedRecords[idx].firstName = val;
+                const mRec = allMasterlistRecords.find(x => x.id && x.id === extractedRecords[idx].id);
+                if (mRec) mRec.firstName = val;
+                if (extractedRecords[idx].id) {
+                    try {
+                        await window.supabaseClient.from(getTableName()).update({
+                            first_name: val,
+                            name: `${extractedRecords[idx].lastName || ''}, ${val} ${extractedRecords[idx].middleName || ''}`.trim()
+                        }).eq('id', extractedRecords[idx].id);
+                    } catch (err) {
+                        console.warn('Error updating first name:', err);
+                    }
                 }
             }
         });
@@ -1043,15 +1132,19 @@ function renderTable() {
         input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
             const val = e.target.value.trim();
-            extractedRecords[idx].middleName = val;
-            if (extractedRecords[idx].id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).update({
-                        middle_name: val,
-                        name: `${extractedRecords[idx].lastName || ''}, ${extractedRecords[idx].firstName || ''} ${val}`.trim()
-                    }).eq('id', extractedRecords[idx].id);
-                } catch (err) {
-                    console.warn('Error updating middle name:', err);
+            if (extractedRecords[idx]) {
+                extractedRecords[idx].middleName = val;
+                const mRec = allMasterlistRecords.find(x => x.id && x.id === extractedRecords[idx].id);
+                if (mRec) mRec.middleName = val;
+                if (extractedRecords[idx].id) {
+                    try {
+                        await window.supabaseClient.from(getTableName()).update({
+                            middle_name: val,
+                            name: `${extractedRecords[idx].lastName || ''}, ${extractedRecords[idx].firstName || ''} ${val}`.trim()
+                        }).eq('id', extractedRecords[idx].id);
+                    } catch (err) {
+                        console.warn('Error updating middle name:', err);
+                    }
                 }
             }
         });
@@ -1061,15 +1154,19 @@ function renderTable() {
         input.addEventListener('change', async (e) => {
             const idx = e.target.getAttribute('data-index');
             const val = e.target.value.trim();
-            extractedRecords[idx].lastName = val;
-            if (extractedRecords[idx].id) {
-                try {
-                    await window.supabaseClient.from(getTableName()).update({
-                        last_name: val,
-                        name: `${val}, ${extractedRecords[idx].firstName || ''} ${extractedRecords[idx].middleName || ''}`.trim()
-                    }).eq('id', extractedRecords[idx].id);
-                } catch (err) {
-                    console.warn('Error updating last name:', err);
+            if (extractedRecords[idx]) {
+                extractedRecords[idx].lastName = val;
+                const mRec = allMasterlistRecords.find(x => x.id && x.id === extractedRecords[idx].id);
+                if (mRec) mRec.lastName = val;
+                if (extractedRecords[idx].id) {
+                    try {
+                        await window.supabaseClient.from(getTableName()).update({
+                            last_name: val,
+                            name: `${val}, ${extractedRecords[idx].firstName || ''} ${extractedRecords[idx].middleName || ''}`.trim()
+                        }).eq('id', extractedRecords[idx].id);
+                    } catch (err) {
+                        console.warn('Error updating last name:', err);
+                    }
                 }
             }
         });
@@ -2457,15 +2554,46 @@ function activateSATab(activeBtn, activePane) {
 async function fetchExistingMasterlist() {
     try {
         const tableName = getTableName();
-        const { data, error } = await window.supabaseClient
-            .from(tableName)
-            .select('*')
-            .order('created_at', { ascending: false });
+        const [masterRes, f2Res, f3Res] = await Promise.all([
+            window.supabaseClient
+                .from(tableName)
+                .select('*')
+                .order('created_at', { ascending: false }),
+            window.supabaseClient
+                .from('annex_form_2')
+                .select('id, last_name, given_name, middle_initial, academic_year, semester, tes_batch'),
+            window.supabaseClient
+                .from('annex_form_3')
+                .select('id, last_name, given_name, middle_initial, academic_year, semester')
+        ]);
 
-        if (error) {
-            console.warn('Error fetching scholar_masterlist:', error);
+        const data = masterRes.data;
+        if (masterRes.error) {
+            console.warn('Error fetching scholar_masterlist:', masterRes.error);
             return;
         }
+
+        const f2Rows = f2Res.data || [];
+        const f3Rows = f3Res.data || [];
+
+        // Build term lookup maps from Annex Form 2 and Form 3
+        const f2Lookup = new Map();
+        f2Rows.forEach(row => {
+            const k = normalizeName(row.last_name, row.given_name, row.middle_initial);
+            if (k) f2Lookup.set(k, row);
+            const l = String(row.last_name || '').trim().toLowerCase();
+            const f = String(row.given_name || '').trim().toLowerCase();
+            if (l && f) f2Lookup.set(`${l}|${f}`, row);
+        });
+
+        const f3Lookup = new Map();
+        f3Rows.forEach(row => {
+            const k = normalizeName(row.last_name, row.given_name, row.middle_initial);
+            if (k) f3Lookup.set(k, row);
+            const l = String(row.last_name || '').trim().toLowerCase();
+            const f = String(row.given_name || '').trim().toLowerCase();
+            if (l && f) f3Lookup.set(`${l}|${f}`, row);
+        });
 
         if (data && data.length > 0) {
             // Auto-clean any header text rows stored previously in database
@@ -2490,7 +2618,7 @@ async function fetchExistingMasterlist() {
 
             const rowsToHeal = [];
 
-            extractedRecords = validData.map(row => {
+            allMasterlistRecords = validData.map(row => {
                 let fn = row.first_name || '';
                 let mn = row.middle_name || '';
                 let ln = row.last_name || '';
@@ -2509,7 +2637,16 @@ async function fetchExistingMasterlist() {
                     });
                 }
 
-                const assignedBatch = row.batch || getCachedGranteeBatch({
+                const normKey = normalizeName(ln, fn, mn);
+                const nameKey = `${String(ln).trim().toLowerCase()}|${String(fn).trim().toLowerCase()}`;
+                const matchedF2 = f2Lookup.get(normKey) || f2Lookup.get(nameKey);
+                const matchedF3 = f3Lookup.get(normKey) || f3Lookup.get(nameKey);
+                const cachedTerm = getCachedGranteeTerm({ id: row.id, last_name: ln, first_name: fn, middle_name: mn, name: row.name });
+
+                let ay = row.academic_year || (matchedF2 ? matchedF2.academic_year : null) || (matchedF3 ? matchedF3.academic_year : null) || (cachedTerm ? cachedTerm.academicYear : null) || '2024-2025';
+                let sem = row.semester || (matchedF2 ? matchedF2.semester : null) || (matchedF3 ? matchedF3.semester : null) || (cachedTerm ? cachedTerm.semester : null) || '1st Semester';
+
+                const assignedBatch = row.batch || (matchedF2 ? matchedF2.tes_batch : null) || getCachedGranteeBatch({
                     id: row.id,
                     last_name: ln,
                     first_name: fn,
@@ -2525,12 +2662,15 @@ async function fetchExistingMasterlist() {
                     middleName: mn,
                     course: row.course || 'BSIT',
                     batch: assignedBatch,
+                    academicYear: ay,
+                    semester: sem,
                     isDuplicate: false
                 };
             });
 
-            // Cache retrieved batches
-            cacheGranteeBatches(extractedRecords);
+            // Cache retrieved batches and terms
+            cacheGranteeBatches(allMasterlistRecords);
+            cacheGranteeTerms(allMasterlistRecords);
 
             if (rowsToHeal.length > 0) {
                 Promise.all(rowsToHeal.map(r =>
@@ -2544,9 +2684,9 @@ async function fetchExistingMasterlist() {
             }
 
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
-            populateBatchFilter();
-            renderTable();
-            updateClearMasterlistButtonVisibility();
+
+            // Apply term filter to Step 2 table and badges
+            applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
 
             const granteesForVerification = extractedRecords.map(m => ({
                 id: m.id,
@@ -2562,10 +2702,10 @@ async function fetchExistingMasterlist() {
             await loadSchoolStudentsAndVerify(granteesForVerification);
 
         } else {
+            allMasterlistRecords = [];
             extractedRecords = [];
             if (importSummaryCard) importSummaryCard.classList.add('hidden');
-            renderTable();
-            updateClearMasterlistButtonVisibility();
+            applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
             await loadSchoolStudentsAndVerify([]);
         }
     } catch (err) {
@@ -2775,6 +2915,9 @@ export function initMasterlistImport() {
         if (filterSemester && filterSemester.value !== selectedSemester) filterSemester.value = selectedSemester;
         if (headerFilterSemester && headerFilterSemester.value !== selectedSemester) headerFilterSemester.value = selectedSemester;
 
+        updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester);
+        updateStep2TermIndicator(selectedAcademicYear, selectedSemester);
+
         await loadTermData(selectedAcademicYear, selectedSemester);
     };
 
@@ -2791,23 +2934,38 @@ export function initMasterlistImport() {
         headerFilterSemester.addEventListener('change', (e) => handleTermChange(undefined, e.target.value));
     }
     if (btnRefreshTerm) {
-        btnRefreshTerm.addEventListener('click', () => handleTermChange(selectedAcademicYear, selectedSemester));
+        btnRefreshTerm.addEventListener('click', async () => {
+            if (iconRefreshTerm) iconRefreshTerm.classList.add('sync-spin');
+            try {
+                await fetchExistingMasterlist();
+                await loadTermData(selectedAcademicYear, selectedSemester);
+                if (window.showToast) {
+                    window.showToast(`Synchronized database for ${selectedAcademicYear} (${selectedSemester})`, 'check-circle');
+                }
+            } finally {
+                if (iconRefreshTerm) iconRefreshTerm.classList.remove('sync-spin');
+            }
+        });
     }
 
     const populateDistinctAcademicYears = async () => {
         const baseYears = new Set(['2024-2025', '2023-2024', '2022-2023', '2021-2022']);
         try {
             if (window.supabaseClient) {
-                const [resF2, resF3] = await Promise.all([
+                const [resF2, resF3, resSG] = await Promise.all([
                     window.supabaseClient.from('annex_form_2').select('academic_year'),
-                    window.supabaseClient.from('annex_form_3').select('academic_year')
+                    window.supabaseClient.from('annex_form_3').select('academic_year'),
+                    window.supabaseClient.from('student_grantees').select('academic_year')
                 ]);
                 (resF2.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
                 (resF3.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
+                (resSG.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
             }
         } catch (e) {
             console.warn('Could not query distinct academic years in Superadmin:', e);
         }
+
+        (allMasterlistRecords || []).forEach(r => { if (r.academicYear) baseYears.add(r.academicYear.trim()); });
 
         const sortedYears = Array.from(baseYears).sort().reverse();
         const html = sortedYears.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('') +
@@ -2850,14 +3008,6 @@ export function initMasterlistImport() {
                     academicYear: ay,
                     semester: sem
                 });
-
-                if (syncBadge) {
-                    if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
-                        syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> ${ay} ${sem} (${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
-                    } else {
-                        syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> 0 Records for ${ay} ${sem}`;
-                    }
-                }
             } else {
                 verifiedForm2List = [];
                 verifiedForm3List = [];
@@ -2866,9 +3016,21 @@ export function initMasterlistImport() {
                 renderAnnexForm2Table(verifiedForm2List);
                 renderAnnexForm3Table(verifiedForm3List);
                 renderAnnexReviewQueue(needsReviewList);
-                if (syncBadge) {
+            }
+
+            // Synchronize the masterlist table and top badge for this term
+            applyTermFilterToMasterlist(ay, sem);
+
+            if (syncBadge) {
+                const gCount = extractedRecords.length;
+                const f2Count = verifiedForm2List.length;
+                const f3Count = verifiedForm3List.length;
+                if (gCount > 0 || f2Count > 0 || f3Count > 0) {
+                    syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> ${ay} ${sem} (${gCount} Grantees: ${f2Count} Form 2, ${f3Count} Form 3)`;
+                } else {
                     syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> 0 Records for ${ay} ${sem}`;
                 }
+                syncBadge.style.display = 'inline-flex';
             }
         } catch (err) {
             console.error('Error loading term data:', err);
@@ -2955,12 +3117,16 @@ export function initMasterlistImport() {
     if (btnClearMasterlist) {
         btnClearMasterlist.addEventListener('click', async () => {
             if (!extractedRecords || extractedRecords.length === 0) {
-                alert('The masterlist is already empty.');
+                alert('The masterlist is already empty for the selected term.');
                 return;
             }
 
+            const hasSpecificTerm = (selectedAcademicYear && selectedAcademicYear !== 'All') || (selectedSemester && selectedSemester !== 'All');
+            const termLabel = (selectedAcademicYear !== 'All' ? `A.Y. ${selectedAcademicYear}` : 'All School Years') +
+                (selectedSemester !== 'All' ? ` (${selectedSemester})` : '');
+
             const confirmed = confirm(
-                `Are you sure you want to permanently delete ALL ${extractedRecords.length} records from the New Grantees Masterlist?\n\nThis will remove them from the database and cannot be undone.`
+                `Are you sure you want to permanently delete ALL ${extractedRecords.length} records from the New Grantees Masterlist for ${termLabel}?\n\nThis will remove them from the database and cannot be undone.`
             );
             if (!confirmed) return;
 
@@ -2969,11 +3135,15 @@ export function initMasterlistImport() {
             btnClearMasterlist.innerHTML = '<i class="icon-loader" style="font-size: 13px; animation: spin 1s linear infinite; display: inline-block;"></i> Clearing...';
 
             try {
-                const { data, error } = await window.supabaseClient
-                    .from(getTableName())
-                    .delete()
-                    .neq('id', '00000000-0000-0000-0000-000000000000')
-                    .select();
+                const idsToDelete = extractedRecords.map(r => r.id).filter(Boolean);
+                let query = window.supabaseClient.from(getTableName()).delete();
+                if (idsToDelete.length > 0 && hasSpecificTerm) {
+                    query = query.in('id', idsToDelete);
+                } else {
+                    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+                }
+
+                const { data, error } = await query.select();
 
                 if (error) {
                     console.error('Error clearing masterlist:', error);
@@ -2981,11 +3151,19 @@ export function initMasterlistImport() {
                     return;
                 }
 
-                if (data && data.length === 0 && extractedRecords.some(r => r.id)) {
+                if (data && data.length === 0 && idsToDelete.length > 0) {
                     alert(
                         'Notice: Records could not be deleted from Supabase because Row Level Security (RLS) is active without a DELETE policy.\n\n' +
                         'Please run the "scratch/fix_new_grantees_rls.sql" script in your Supabase SQL Editor to grant DELETE permissions.'
                     );
+                }
+
+                // Remove deleted records from in-memory allMasterlistRecords
+                const idSet = new Set(idsToDelete);
+                if (hasSpecificTerm && idsToDelete.length > 0) {
+                    allMasterlistRecords = allMasterlistRecords.filter(r => !idSet.has(r.id));
+                } else {
+                    allMasterlistRecords = [];
                 }
 
                 extractedRecords = [];
@@ -2995,11 +3173,10 @@ export function initMasterlistImport() {
                 if (btnSaveRecords) btnSaveRecords.classList.add('hidden');
                 if (importSummaryCard) importSummaryCard.classList.add('hidden');
 
-                populateBatchFilter();
-                renderTable();
+                applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
 
                 if (typeof window.showToast === 'function') {
-                    window.showToast('All grantees successfully removed from the masterlist.', 'trash-2');
+                    window.showToast(`Grantees removed for ${termLabel}.`, 'trash-2');
                 }
             } catch (err) {
                 console.error('Error in clear masterlist:', err);
@@ -3350,85 +3527,12 @@ export function initMasterlistImport() {
         }
     });
 
-    // Populate distinct academic years from database
-    populateDistinctAcademicYears();
-
-    // Automatically restore verified state from Supabase for selected term on boot
-    AnnexSyncService.loadFromSupabase({
-        academicYear: selectedAcademicYear,
-        semester: selectedSemester,
-        fallbackToLatest: true
-    }).then(dbSync => {
-        if (dbSync && dbSync.fromDb) {
-            verifiedForm2List = dbSync.form2List || [];
-            verifiedForm3List = dbSync.form3List || [];
-            needsReviewList = [];
-
-            // If fallback matched an existing term, sync dropdown selections
-            const firstRow = verifiedForm2List[0] || verifiedForm3List[0];
-            if (firstRow) {
-                if (firstRow.academic_year) {
-                    selectedAcademicYear = firstRow.academic_year;
-                    if (filterAcademicYear) filterAcademicYear.value = selectedAcademicYear;
-                    if (headerFilterAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
-                }
-                if (firstRow.semester) {
-                    selectedSemester = firstRow.semester;
-                    if (filterSemester) filterSemester.value = selectedSemester;
-                    if (headerFilterSemester) headerFilterSemester.value = selectedSemester;
-                }
-            }
-
-            updateAnnexKPIs();
-            renderAnnexForm2Table(verifiedForm2List);
-            renderAnnexForm3Table(verifiedForm3List);
-            renderAnnexReviewQueue(needsReviewList);
-
-            // Database is the ground truth: sync to localStorage so stale cached records are eliminated
-            AnnexSyncService.saveVerifiedData({
-                form2List: verifiedForm2List,
-                form3List: verifiedForm3List,
-                needsReviewList: [],
-                updatedBy: 'Supabase Sync',
-                syncToDb: false,
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester
-            });
-
-            const syncBadge = document.getElementById('sa-sync-status-badge');
-            if (syncBadge) {
-                if (verifiedForm2List.length > 0 || verifiedForm3List.length > 0) {
-                    syncBadge.innerHTML = `<i class="icon-database" style="font-size: 13px;"></i> In Sync with Database (${selectedAcademicYear} ${selectedSemester}: ${verifiedForm2List.length} Form 2, ${verifiedForm3List.length} Form 3)`;
-                } else {
-                    syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Database in Sync (0 Records)`;
-                }
-                syncBadge.style.display = 'inline-flex';
-            }
-        } else {
-            // Local storage fallback only if Supabase could not be contacted / offline
-            const initialSync = AnnexSyncService.getVerifiedData();
-            if (initialSync) {
-                verifiedForm2List = initialSync.form2List || [];
-                verifiedForm3List = initialSync.form3List || [];
-                needsReviewList = initialSync.needsReviewList || [];
-                updateAnnexKPIs();
-                renderAnnexForm2Table(verifiedForm2List);
-                renderAnnexForm3Table(verifiedForm3List);
-                renderAnnexReviewQueue(needsReviewList);
-            }
-        }
+    // Initialize academic years dropdown, then load masterlist and active term data
+    populateDistinctAcademicYears().then(async () => {
+        await fetchExistingMasterlist();
+        await loadTermData(selectedAcademicYear, selectedSemester);
     }).catch(e => {
-        console.warn('Super Admin loadFromSupabase error:', e);
-        const initialSync = AnnexSyncService.getVerifiedData();
-        if (initialSync) {
-            verifiedForm2List = initialSync.form2List || [];
-            verifiedForm3List = initialSync.form3List || [];
-            needsReviewList = initialSync.needsReviewList || [];
-            updateAnnexKPIs();
-            renderAnnexForm2Table(verifiedForm2List);
-            renderAnnexForm3Table(verifiedForm3List);
-            renderAnnexReviewQueue(needsReviewList);
-        }
+        console.warn('Error during initMasterlistImport startup:', e);
     });
 
     // Subscribe to Realtime updates for school_students table (updates Superadmin automatically when Admin uploads list file)
@@ -3445,9 +3549,6 @@ export function initMasterlistImport() {
             console.warn('Realtime subscription error for school_students:', rtErr);
         }
     }
-
-    // Initial fetch of masterlist data
-    fetchExistingMasterlist();
 }
 
 // Auto-run if loaded directly in standalone view

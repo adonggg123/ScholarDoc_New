@@ -32,68 +32,303 @@ export class StudentSyncService {
     }
 
     /**
-     * Intelligent matching between a School Student, Form 2, and a Grantee record.
+     * Computes the Levenshtein edit distance between two strings
+     */
+    static levenshteinDistance(s1, s2) {
+        s1 = String(s1 || '').toLowerCase();
+        s2 = String(s2 || '').toLowerCase();
+        if (s1 === s2) return 0;
+        if (!s1.length) return s2.length;
+        if (!s2.length) return s1.length;
+
+        const prev = new Array(s2.length + 1);
+        const curr = new Array(s2.length + 1);
+        for (let j = 0; j <= s2.length; j++) prev[j] = j;
+
+        for (let i = 1; i <= s1.length; i++) {
+            curr[0] = i;
+            const c1 = s1.charCodeAt(i - 1);
+            for (let j = 1; j <= s2.length; j++) {
+                const cost = c1 === s2.charCodeAt(j - 1) ? 0 : 1;
+                curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+            }
+            for (let j = 0; j <= s2.length; j++) prev[j] = curr[j];
+        }
+        return prev[s2.length];
+    }
+
+    /**
+     * Normalized Levenshtein similarity (0.0 to 1.0)
+     */
+    static levenshteinSimilarity(s1, s2) {
+        s1 = String(s1 || '').trim().toLowerCase();
+        s2 = String(s2 || '').trim().toLowerCase();
+        if (s1 === s2) return 1.0;
+        const maxLen = Math.max(s1.length, s2.length);
+        if (maxLen === 0) return 1.0;
+        return Math.max(0, 1 - (this.levenshteinDistance(s1, s2) / maxLen));
+    }
+
+    /**
+     * Parses full names into structured parts (last, first, mi, tokens).
+     * Handles standard Philippine registrar formats like:
+     * "SURNAME, FIRSTNAME [MIDDLE/SUFFIX]" or "FIRSTNAME [MIDDLE] SURNAME [SUFFIX]".
+     */
+    static parseName(fullName, fallbackLast = '', fallbackFirst = '') {
+        const raw = String(fullName || '').trim();
+        if (!raw) {
+            return {
+                last: (fallbackLast || '').trim().toLowerCase(),
+                first: (fallbackFirst || '').trim().toLowerCase(),
+                mi: '',
+                tokens: this.nameTokens(`${fallbackLast} ${fallbackFirst}`)
+            };
+        }
+
+        const cleanStr = raw.replace(/\bN\/A\b/gi, '').replace(/\s+/g, ' ').replace(/^,\s*|,\s*$/g, '').trim();
+        let last = '';
+        let first = '';
+        let mi = '';
+
+        const suffixes = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI']);
+
+        if (cleanStr.includes(',')) {
+            const parts = cleanStr.split(',');
+            last = parts[0].trim();
+            const rest = parts.slice(1).join(' ').trim().split(/\s+/).filter(Boolean);
+            if (rest.length > 0) {
+                const lastToken = rest[rest.length - 1];
+                if (suffixes.has(lastToken.toUpperCase())) {
+                    const suff = rest.pop();
+                    last = `${last} ${suff}`.trim();
+                }
+                if (rest.length > 1 && (rest[rest.length - 1].length === 1 || (rest[rest.length - 1].length === 2 && rest[rest.length - 1].endsWith('.')))) {
+                    mi = rest.pop().replace(/\.$/, '').toUpperCase();
+                }
+                first = rest.join(' ').trim();
+            }
+        } else {
+            const parts = cleanStr.split(/\s+/).filter(Boolean);
+            if (parts.length === 1) {
+                last = parts[0];
+            } else {
+                let suffix = '';
+                if (suffixes.has(parts[parts.length - 1].toUpperCase())) {
+                    suffix = parts.pop();
+                }
+                last = parts.pop() || '';
+                if (suffix) last = `${last} ${suffix}`.trim();
+                if (parts.length > 1 && (parts[parts.length - 1].length === 1 || (parts[parts.length - 1].length === 2 && parts[parts.length - 1].endsWith('.')))) {
+                    mi = parts.pop().replace(/\.$/, '').toUpperCase();
+                }
+                first = parts.join(' ').trim();
+            }
+        }
+
+        return {
+            last: (fallbackLast || last).toLowerCase().trim(),
+            first: (fallbackFirst || first).toLowerCase().trim(),
+            mi: mi,
+            tokens: this.nameTokens(cleanStr)
+        };
+    }
+
+    /**
+     * Strict and intelligent matching between a School Student, Form 2, and a Grantee record.
+     * Prevents false positives by:
+     * 1. Treating different institutional student IDs as a strict rejection.
+     * 2. Requiring surname similarity >= 0.82 for any name match.
+     * 3. Requiring given name token overlap or similarity >= 0.70.
      */
     static isMatch(student, grantee) {
         if (!student || !grantee) return false;
 
-        // 0. Match by ID or UID if available
-        const sUid = student.uid || student.id;
-        const gUid = grantee.uid || grantee.id;
-        if (sUid && gUid && String(sUid).trim() === String(gUid).trim()) {
+        // 0. Match by primary database ID or UID if identical
+        const sUid = String(student.uid || student.id || '').trim();
+        const gUid = String(grantee.uid || grantee.id || '').trim();
+        if (sUid && gUid && sUid === gUid) {
             return true;
         }
 
-        // 1. Match by Student Number / ID
+        // 1. Institutional Student Number / ID
         const sNo = this.clean(student.student_no || student.student_number || student.studentId || student.id_number || student.idNumber);
         const gNo = this.clean(grantee.student_no || grantee.student_number || grantee.studentId || grantee.student_id || grantee.id_number);
-        if (sNo && gNo && sNo === gNo) {
-            return true;
+
+        const hasSNo = sNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(sNo);
+        const hasGNo = gNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(gNo);
+
+        // If BOTH records provide a valid student ID:
+        // - Matching student ID -> definitive match!
+        // - Conflicting student ID -> STRICT REJECTION! Different student IDs can never match.
+        if (hasSNo && hasGNo) {
+            return sNo === gNo;
         }
 
-        // 2. Match by Email Address if both present
+        // 2. Match by verified Email Address if both present
         const sEmail = (student.email_address || student.email || '').toString().toLowerCase().trim();
         const gEmail = (grantee.email_address || grantee.email || '').toString().toLowerCase().trim();
-        if (sEmail && gEmail && sEmail === gEmail && sEmail !== 'n/a') {
+        if (sEmail && gEmail && sEmail.includes('@') && sEmail === gEmail && sEmail !== 'n/a') {
             return true;
         }
 
-        // 3. Exact or Substring Clean String Match
+        // 3. Exact Clean Full Name Match
         const sFullName = student.full_name || student.fullName || student.name || `${student.given_name || student.first_name || ''} ${student.last_name || ''}`.trim();
         const gFullName = grantee.full_name || grantee.fullName || grantee.name || `${grantee.given_name || grantee.first_name || ''} ${grantee.last_name || ''}`.trim();
 
         const sClean = this.clean(sFullName);
         const gClean = this.clean(gFullName);
-
-        if (sClean && gClean) {
-            if (sClean === gClean || sClean.includes(gClean) || gClean.includes(sClean)) {
-                return true;
-            }
+        if (sClean && gClean && sClean.length >= 5 && sClean === gClean) {
+            return true;
         }
 
-        // 4. Last Name + First Name Token Intersection
-        const sTokens = this.nameTokens(sFullName);
-        const gLast = (grantee.last_name || '').toString().toLowerCase().trim();
-        const gFirst = (grantee.given_name || grantee.first_name || '').toString().toLowerCase().trim();
+        // 4. Strict Surname + Given Name Verification
+        const sName = this.parseName(sFullName, student.last_name, student.given_name || student.first_name);
+        const gName = this.parseName(gFullName, grantee.last_name, grantee.given_name || grantee.first_name);
 
-        if (gLast && gFirst && sTokens.length >= 2) {
-            const hasLast = sTokens.some(t => t.includes(gLast) || gLast.includes(t));
-            const hasFirst = sTokens.some(t => t.includes(gFirst) || gFirst.includes(t));
-            if (hasLast && hasFirst) {
-                return true;
-            }
+        const sLastClean = this.clean(sName.last);
+        const gLastClean = this.clean(gName.last);
+
+        // NON-NEGOTIABLE: Surname similarity must be at least 0.82
+        // (Allows minor OCR typos like CANADA vs CATADA, but completely rejects different surnames)
+        if (!sLastClean || !gLastClean) return false;
+        const lastSim = this.levenshteinSimilarity(sLastClean, gLastClean);
+        const isLastSub = (sLastClean.length >= 4 && gLastClean.length >= 4) && (sLastClean.includes(gLastClean) || gLastClean.includes(sLastClean));
+        if (lastSim < 0.82 && !isLastSub) {
+            return false;
         }
 
-        // 5. Reverse Name Match (e.g. "Jariol, Jude" vs "Jude Jariol")
-        const gTokens = this.nameTokens(gFullName);
-        if (sTokens.length >= 2 && gTokens.length >= 2) {
-            const sharedTokens = sTokens.filter(t => gTokens.includes(t));
-            if (sharedTokens.length >= 2) {
-                return true;
-            }
+        // Check given names
+        const sFirstClean = this.clean(sName.first);
+        const gFirstClean = this.clean(gName.first);
+        const firstSim = this.levenshteinSimilarity(sFirstClean, gFirstClean);
+
+        const sTokens = sName.tokens;
+        const gTokens = gName.tokens;
+        const sharedTokens = sTokens.filter(t => gTokens.includes(t));
+
+        // Check middle initials if both explicitly present
+        if (sName.mi && gName.mi && sName.mi !== gName.mi && lastSim < 0.95) {
+            return false;
+        }
+
+        if (firstSim >= 0.70 || sharedTokens.length >= 1 || (sFirstClean && gFirstClean && (sFirstClean.includes(gFirstClean) || gFirstClean.includes(sFirstClean)))) {
+            return true;
         }
 
         return false;
+    }
+
+    /**
+     * Finds the best matching School Student record for a Form 2 / Grantee record.
+     * Uses student number match as primary, followed by scored name matching.
+     * Enforces 1-to-1 matching using claimedSet.
+     */
+    static findBestStudentMatch(grantee, schoolStudents, claimedSet = null) {
+        if (!grantee || !Array.isArray(schoolStudents) || schoolStudents.length === 0) return null;
+
+        const gNo = this.clean(grantee.student_no || grantee.student_number || grantee.studentId || grantee.student_id);
+        const hasGNo = gNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(gNo);
+
+        // 1. Exact Institutional Student Number Match (Primary)
+        if (hasGNo) {
+            const exact = schoolStudents.find(ss => {
+                if (claimedSet && claimedSet.has(ss.student_no)) return false;
+                const sNo = this.clean(ss.student_no || ss.studentId);
+                return sNo === gNo;
+            });
+            if (exact) {
+                if (claimedSet) claimedSet.add(exact.student_no);
+                return exact;
+            }
+        }
+
+        // 2. Strict Scored Name Matching
+        let bestCandidate = null;
+        let bestScore = 0;
+
+        for (const ss of schoolStudents) {
+            if (claimedSet && claimedSet.has(ss.student_no)) continue;
+
+            const sNo = this.clean(ss.student_no || ss.studentId);
+            const hasSNo = sNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(sNo);
+            if (hasGNo && hasSNo && sNo !== gNo) continue;
+
+            if (this.isMatch(ss, grantee)) {
+                const sName = this.parseName(ss.full_name);
+                const gName = this.parseName(grantee.full_name || `${grantee.last_name || ''}, ${grantee.given_name || ''}`, grantee.last_name, grantee.given_name);
+                const lastSim = this.levenshteinSimilarity(this.clean(sName.last), this.clean(gName.last));
+                const firstSim = this.levenshteinSimilarity(this.clean(sName.first), this.clean(gName.first));
+
+                const score = (lastSim * 60) + (firstSim * 40);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCandidate = ss;
+                }
+            }
+        }
+
+        if (bestCandidate && bestScore >= 75) {
+            if (claimedSet) claimedSet.add(bestCandidate.student_no);
+            return bestCandidate;
+        }
+
+        return null;
+    }
+
+    /**
+     * Finds the best matching existing student_grantees record for a Form 2 / School Student entry.
+     * Enforces 1-to-1 mapping using claimedSet.
+     */
+    static findBestExistingSgMatch(f2, ssMatch, sgList, claimedSet = null) {
+        if (!Array.isArray(sgList) || sgList.length === 0) return null;
+
+        const targetNo = this.clean(f2?.student_number || f2?.student_no || ssMatch?.student_no || ssMatch?.studentId);
+        const hasTargetNo = targetNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(targetNo);
+
+        // 1. Exact Student Number Match
+        if (hasTargetNo) {
+            const match = sgList.find(sg => {
+                const id = String(sg.id || sg.uid || '');
+                if (claimedSet && claimedSet.has(id)) return false;
+                const sgNo = this.clean(sg.student_no || sg.studentId);
+                return sgNo === targetNo;
+            });
+            if (match) {
+                if (claimedSet) claimedSet.add(String(match.id || match.uid || ''));
+                return match;
+            }
+        }
+
+        // 2. Exact DB ID / UID Match
+        const targetId = String(f2?.id || ssMatch?.id || '').trim();
+        if (targetId) {
+            const match = sgList.find(sg => {
+                const id = String(sg.id || sg.uid || '');
+                if (claimedSet && claimedSet.has(id)) return false;
+                return String(sg.id || '').trim() === targetId || String(sg.uid || '').trim() === targetId;
+            });
+            if (match) {
+                if (claimedSet) claimedSet.add(String(match.id || match.uid || ''));
+                return match;
+            }
+        }
+
+        // 3. Strict isMatch
+        for (const sg of sgList) {
+            const id = String(sg.id || sg.uid || '');
+            if (claimedSet && claimedSet.has(id)) continue;
+
+            const sgNo = this.clean(sg.student_no || sg.studentId);
+            const hasSgNo = sgNo.length >= 5 && !['unassigned', 'none', 'null', 'undefined'].includes(sgNo);
+            if (hasTargetNo && hasSgNo && sgNo !== targetNo) continue;
+
+            if (this.isMatch(sg, f2) || (ssMatch && this.isMatch(sg, ssMatch))) {
+                if (claimedSet) claimedSet.add(id);
+                return sg;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -205,16 +440,20 @@ export class StudentSyncService {
 
     /**
      * Maps and standardizes student fields for cross-view compatibility.
+     * Official school student demographic details and full names take priority.
      */
     static normalizeStudentRecord(ss = {}, f2Match = null, gmMatch = null, existing = {}, activeDeadline = null) {
         ss = ss || {};
         existing = existing || {};
         const studentNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || 'N/A';
-        const fullName = ss.full_name || ss.fullName || (f2Match ? (f2Match.given_name ? `${f2Match.given_name} ${f2Match.last_name || ''}`.trim() : f2Match.name) : null) || existing.full_name || existing.fullName || 'Unknown Student';
+        const fullName = ss.full_name || ss.fullName || (f2Match ? (f2Match.given_name ? `${f2Match.last_name || ''}, ${f2Match.given_name} ${f2Match.middle_initial || ''}`.trim() : f2Match.name) : null) || existing.full_name || existing.fullName || 'Unknown Student';
         const program = ss.program_name || ss.course || f2Match?.degree_program || existing.program_name || existing.course || 'BSIT';
         const yearLevel = ss.year_level || ss.year || f2Match?.year_level || existing.year_level || '1';
         const birthdate = ss.date_of_birth || ss.birthdate || f2Match?.birthdate || existing.date_of_birth || 'N/A';
-        const gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
+        
+        let gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
+        if (gender === 'M' || gender === 'Male' || gender === 'male') gender = 'Male';
+        else if (gender === 'F' || gender === 'Female' || gender === 'female') gender = 'Female';
 
         const existingDocs = existing.documents || {};
         const saCandidates = [
@@ -305,9 +544,10 @@ export class StudentSyncService {
         const motherEdu = ss.mother_occupation || existing.mother_occupation || existing.familyDetails?.motherEduStatus || 'N/A';
         const religion = ss.religion || existing.religion || existing.familyDetails?.religion || 'Roman Catholic';
 
-        const lastName = f2Match?.last_name || (ss.full_name ? ss.full_name.split(' ').pop() : '');
-        const firstName = f2Match?.given_name || (ss.full_name ? ss.full_name.split(' ').slice(0, -1).join(' ') : '');
-        const mi = f2Match?.middle_initial || '';
+        const parsedName = this.parseName(fullName, f2Match?.last_name, f2Match?.given_name);
+        const lastName = f2Match?.last_name || parsedName.last || '';
+        const firstName = f2Match?.given_name || parsedName.first || '';
+        const mi = f2Match?.middle_initial || parsedName.mi || '';
 
         const existingFam = existing.familyDetails || {};
         const resolvedScholarYear = existing.scholarYearLevel || existing.yearBecameScholar || existing.year_became_scholar || existingFam.scholarYearLevel || existingFam.yearBecameScholar || null;
@@ -329,8 +569,8 @@ export class StudentSyncService {
         };
 
         return {
-            id: ss.id || f2Match?.id || existing.id || existing.uid || undefined,
-            uid: ss.id || f2Match?.id || existing.uid || undefined,
+            id: existing.id || undefined,
+            uid: existing.uid || existing.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined),
 
             // Identification
             student_no: studentNo,
@@ -534,12 +774,15 @@ export class StudentSyncService {
             // 4. For each Form 2 record, select its student data from school_students
             const toInsert = [];
             const toUpdate = [];
+            const claimedSchoolStudentNos = new Set();
+            const claimedSgIds = new Set();
+
             const result = form2List.map(f2 => {
                 const ssMatch = Array.isArray(schoolStudents)
-                    ? schoolStudents.find(ss => this.isMatch(ss, f2))
+                    ? this.findBestStudentMatch(f2, schoolStudents, claimedSchoolStudentNos)
                     : null;
                 const existingSg = Array.isArray(sgList)
-                    ? sgList.find(sg => this.isMatch(sg, f2) || (ssMatch && this.isMatch(sg, ssMatch)))
+                    ? this.findBestExistingSgMatch(f2, ssMatch, sgList, claimedSgIds)
                     : null;
                 const gmMatch = Array.isArray(newGranteesList)
                     ? newGranteesList.find(gm => this.isMatch(gm, f2) || (ssMatch && this.isMatch(gm, ssMatch)))
@@ -547,7 +790,10 @@ export class StudentSyncService {
                 const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, gmMatch, existingSg || {}, activeDeadline);
 
                 if (!existingSg) {
+                    const newUid = normalized.uid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+                    normalized.uid = newUid;
                     toInsert.push({
+                        uid: newUid,
                         student_no: normalized.student_no,
                         studentId: normalized.student_no,
                         full_name: normalized.full_name,
@@ -618,32 +864,34 @@ export class StudentSyncService {
                 return normalized;
             });
 
-            // 5. Include any student_grantees records that were NOT matched to a Form 2 entry
+            // 5. Include any valid student_grantees records that were NOT in Form 2
             //    (e.g. records created via mobile app login or direct DB insertion)
+            //    Prevent any duplicates by verifying clean student_no and DB IDs.
             if (Array.isArray(sgList) && sgList.length > 0) {
-                const matchedSgIds = new Set();
-                // Collect all IDs/UIDs that were already matched during the Form 2 loop
-                for (const r of result) {
-                    if (r.id) matchedSgIds.add(String(r.id));
-                    if (r.uid) matchedSgIds.add(String(r.uid));
-                }
+                const existingResultNos = new Set(result.map(r => this.clean(r.student_no)).filter(Boolean));
 
                 for (const sg of sgList) {
                     const sgId = String(sg.id || '');
                     const sgUid = String(sg.uid || '');
-                    // Skip if this student_grantees record was already matched to a Form 2 entry
-                    if ((sgId && matchedSgIds.has(sgId)) || (sgUid && matchedSgIds.has(sgUid))) {
+                    const sgNo = this.clean(sg.student_no || sg.studentId);
+
+                    // Skip if already claimed or matched in the Form 2 loop
+                    if ((sgId && claimedSgIds.has(sgId)) || (sgUid && claimedSgIds.has(sgUid))) {
                         continue;
                     }
-                    // Also skip if isMatch detects overlap with any existing result record
+                    if (sgNo && existingResultNos.has(sgNo)) {
+                        continue;
+                    }
+                    // Also skip if isMatch detects match with any existing result record
                     const alreadyIncluded = result.some(r => this.isMatch(r, sg));
                     if (alreadyIncluded) continue;
 
                     const ssMatch = Array.isArray(schoolStudents)
-                        ? schoolStudents.find(ss => this.isMatch(ss, sg))
+                        ? this.findBestStudentMatch(sg, schoolStudents, claimedSchoolStudentNos)
                         : null;
                     const normalized = this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
                     result.push(normalized);
+                    if (sgNo) existingResultNos.add(sgNo);
                 }
                 console.log(`StudentSyncService: Final result includes ${result.length} total students (Form 2 + unmatched student_grantees).`);
             }

@@ -237,166 +237,169 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: context.bgC,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.18),
-              blurRadius: 24,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (ctx) {
+        final bottomPadding = MediaQuery.of(ctx).padding.bottom;
+        return Container(
+          decoration: BoxDecoration(
+            color: context.bgC,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
               ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(20, 16, 20, bottomPadding > 0 ? bottomPadding + 16 : 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F3260), Color(0xFF1E4E8C)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF0F3260).withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Icon(headerIcon, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        docType,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17,
-                          color: context.textPri,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitleText,
-                        style: TextStyle(fontSize: 12, color: context.textSec),
-                      ),
-                    ],
+                    color: Colors.grey.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            Text(
-              'SUBMISSION METHOD',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-                color: context.textSec,
               ),
-            ),
-            const SizedBox(height: 12),
-
-            // Option 1: File Picker (Documents / PDF / Images)
-            _buildMethodCard(
-              title: 'Browse Files / Documents',
-              subtitle: 'Select a PDF document or image file from your device',
-              badgeText: 'Option 1: Files',
-              badgeColor: const Color(0xFF2563EB),
-              icon: LucideIcons.fileUp,
-              iconBg: const Color(0xFF2563EB),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickProofFromFile(docType);
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // Option 2: Gallery Photo
-            _buildMethodCard(
-              title: 'Upload Photo from Gallery',
-              subtitle: 'Choose an existing photo from your gallery',
-              badgeText: 'Option 2: Gallery',
-              badgeColor: const Color(0xFF10B981),
-              icon: LucideIcons.image,
-              iconBg: const Color(0xFF10B981),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickProofFromGallery(docType);
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // Option 3: Camera
-            _buildMethodCard(
-              title: 'Take Photo / Scan',
-              subtitle: 'Use camera to take a photo of your $docType',
-              badgeText: 'Option 3: Camera',
-              badgeColor: const Color(0xFF0F3260),
-              icon: LucideIcons.camera,
-              iconBg: const Color(0xFF0F3260),
-              onTap: () {
-                Navigator.pop(ctx);
-                _captureProofWithCamera(docType);
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Guidance Note
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFBC02D).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.3)),
-              ),
-              child: Row(
+              const SizedBox(height: 20),
+              Row(
                 children: [
-                  const Icon(LucideIcons.info, size: 16, color: Color(0xFFB78103)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      isDeposit
-                          ? 'Ensure the transaction date, deposit amount, and account number are clearly visible.'
-                          : 'Ensure your full name and account number are sharply visible and not blurred.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: context.textPri,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0F3260), Color(0xFF1E4E8C)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F3260).withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Icon(headerIcon, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          docType,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            color: context.textPri,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitleText,
+                          style: TextStyle(fontSize: 12, color: context.textSec),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 22),
+
+              Text(
+                'SUBMISSION METHOD',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: context.textSec,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Option 1: File Picker (Documents / PDF / Images)
+              _buildMethodCard(
+                title: 'Browse Files / Documents',
+                subtitle: 'Select a PDF document or image file from your device',
+                badgeText: 'Option 1',
+                badgeColor: const Color(0xFF2563EB),
+                icon: LucideIcons.fileUp,
+                iconBg: const Color(0xFF2563EB),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickProofFromFile(docType);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Option 2: Gallery Photo
+              _buildMethodCard(
+                title: 'Upload Photo from Gallery',
+                subtitle: 'Choose an existing photo from your gallery',
+                badgeText: 'Option 2',
+                badgeColor: const Color(0xFF10B981),
+                icon: LucideIcons.image,
+                iconBg: const Color(0xFF10B981),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickProofFromGallery(docType);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Option 3: Camera
+              _buildMethodCard(
+                title: 'Take Photo / Scan',
+                subtitle: 'Use camera to take a photo of your $docType',
+                badgeText: 'Option 3',
+                badgeColor: const Color(0xFF0F3260),
+                icon: LucideIcons.camera,
+                iconBg: const Color(0xFF0F3260),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _captureProofWithCamera(docType);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Guidance Note
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBC02D).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFBC02D).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.info, size: 16, color: Color(0xFFB78103)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isDeposit
+                            ? 'Ensure the transaction date, deposit amount, and account number are clearly visible.'
+                            : 'Ensure your full name and account number are sharply visible and not blurred.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: context.textPri,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -413,7 +416,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: context.surfaceC,
           borderRadius: BorderRadius.circular(16),
@@ -436,22 +439,25 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
               ),
               child: Icon(icon, color: iconBg, size: 22),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: context.textPri,
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13.5,
+                            color: context.textPri,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -477,6 +483,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ],
               ),
             ),
+            const SizedBox(width: 6),
             Icon(LucideIcons.chevronRight, color: context.textSec, size: 18),
           ],
         ),
@@ -1289,200 +1296,206 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.72,
-        decoration: BoxDecoration(
-          color: context.bgC,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isDeposit
-                        ? LucideIcons.fileText
-                        : (isAtm ? LucideIcons.creditCard : LucideIcons.eye),
-                    color: AppTheme.primaryColor,
-                    size: 20,
-                  ),
+      builder: (context) {
+        final bottomPadding = MediaQuery.of(context).padding.bottom;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.80,
+          decoration: BoxDecoration(
+            color: context.bgC,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          padding: EdgeInsets.fromLTRB(24, 16, 24, bottomPadding > 0 ? bottomPadding + 10 : 20),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      isDeposit
+                          ? LucideIcons.fileText
+                          : (isAtm ? LucideIcons.creditCard : LucideIcons.eye),
+                      color: AppTheme.primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isBankDoc ? '$docType Review' : 'Document Review',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        Text(
+                          label,
+                          style: TextStyle(color: context.textSec, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: context.surfaceC,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: context.crispBorder),
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        isBankDoc ? '$docType Review' : 'Document Review',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Center(
+                            child: (!isPdf && docBytes != null)
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.memory(
+                                      docBytes,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  )
+                                : (!isPdf && docUrl != null)
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Image.network(
+                                          docUrl,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) => Icon(
+                                            isDeposit ? LucideIcons.fileText : LucideIcons.creditCard,
+                                            size: 56,
+                                            color: AppTheme.primaryColor.withOpacity(0.5),
+                                          ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        fileName.toLowerCase().endsWith('.pdf')
+                                            ? LucideIcons.fileText
+                                            : (isDeposit ? LucideIcons.fileText : LucideIcons.image),
+                                        size: 56,
+                                        color: AppTheme.primaryColor.withOpacity(0.5),
+                                      ),
+                          ),
                         ),
                       ),
-                      Text(
-                        label,
-                        style: TextStyle(color: context.textSec, fontSize: 13),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          fileName,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'File ready for submission',
+                        style: TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 14),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+              if (docUrl != null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse(docUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      } else {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not open document.')),
+                        );
+                      }
+                    },
+                    icon: const Icon(LucideIcons.externalLink, size: 18),
+                    label: const Text(
+                      'Preview Full Document',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: context.surfaceC,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: context.crispBorder),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (!isPdf && docBytes != null)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(
-                          docBytes,
-                          height: 150,
-                          fit: BoxFit.contain,
-                        ),
-                      )
-                    else if (!isPdf && docUrl != null)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          docUrl,
-                          height: 150,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            isDeposit ? LucideIcons.fileText : LucideIcons.creditCard,
-                            size: 56,
-                            color: AppTheme.primaryColor.withOpacity(0.5),
-                          ),
-                        ),
-                      )
-                    else
-                      Icon(
-                        fileName.toLowerCase().endsWith('.pdf')
-                            ? LucideIcons.fileText
-                            : (isDeposit ? LucideIcons.fileText : LucideIcons.image),
-                        size: 56,
-                        color: AppTheme.primaryColor.withOpacity(0.5),
-                      ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        fileName,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              if (isBankDoc) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showDocumentSelectionSheet(docType);
+                    },
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    label: Text(
+                      'Re-upload or Replace $docType',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'File ready for submission',
-                      style: TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (docUrl != null) ...[
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse(docUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    } else {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Could not open document.')),
-                      );
-                    }
-                  },
-                  icon: const Icon(LucideIcons.externalLink, size: 18),
-                  label: const Text(
-                    'Preview Full Document',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.primaryColor,
-                    side: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F3260),
                     ),
                   ),
                 ),
-              ),
-            ],
-            if (isBankDoc) ...[
-              const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showDocumentSelectionSheet(docType);
-                  },
-                  icon: const Icon(LucideIcons.refreshCw, size: 16),
-                  label: Text(
-                    'Re-upload or Replace $docType',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
                   ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF0F3260),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
               ),
             ],
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Done',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
