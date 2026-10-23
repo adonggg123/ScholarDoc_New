@@ -24,21 +24,8 @@
                         style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px;">
                         Administrator Credentials</h3>
                 </div>
-                <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Edit login usernames and update
-                    passwords for administrative accounts.</p>
-            </div>
-
-            <!-- Account Selector Tabs -->
-            <div style="display: flex; gap: 6px; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 12px;"
-                id="admin-account-tabs">
-                <button type="button" id="tab-account-admin" class="account-select-tab active" data-target="admin">
-                    <i class="icon-shield" style="font-size: 14px;"></i>
-                    <span>Admin</span>
-                </button>
-                <button type="button" id="tab-account-superadmin" class="account-select-tab" data-target="superadmin">
-                    <i class="icon-shield-check" style="font-size: 14px;"></i>
-                    <span>Super Admin</span>
-                </button>
+                <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Edit login username, email, and update
+                    password for your Admin account.</p>
             </div>
         </div>
 
@@ -414,28 +401,6 @@
 </div>
 
 <style>
-    .account-select-tab {
-        padding: 8px 16px;
-        border-radius: 10px;
-        border: none;
-        background: transparent;
-        color: var(--text-secondary);
-        font-weight: 700;
-        font-size: 13px;
-        cursor: pointer;
-        font-family: inherit;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        transition: all 0.2s;
-    }
-
-    .account-select-tab.active {
-        background: var(--primary-color);
-        color: white;
-        box-shadow: 0 2px 8px rgba(15, 50, 96, 0.2);
-    }
-
     .btn-primary-action:hover {
         opacity: 0.92;
         transform: translateY(-1px);

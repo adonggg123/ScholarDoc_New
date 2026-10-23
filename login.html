@@ -12,7 +12,7 @@
             window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
         }
     </script>
-    <link rel="stylesheet" href="style.css?v=6">
+    <link rel="stylesheet" href="style.css?v=11">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -30,20 +30,6 @@
                 <div class="shape-2"></div>
 
                 <div class="login-content">
-                    <!-- Brand Header -->
-                    <div class="brand-header" style="display: flex; align-items: center; gap: 1px;">
-                        <img src="favicon.png" alt="ScholarDoc Logo"
-                            style="width: 72px; height: 72px; object-fit: contain;">
-                        <div style="margin-left: -10px;">
-                            <div class="desktop-brand-title">
-                                Scholar<span>Doc</span>
-                            </div>
-                            <div
-                                style="font-size: 11px; font-weight: 700; color: white; letter-spacing: 2px; margin-top: 2px;">
-                                USTP Oroquieta City Campus
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="brand-showcase">
                         <div class="brand-badge">Command Center</div>
@@ -67,8 +53,9 @@
                         <div class="mobile-logo-flex">
                             <img src="app_logo3.png" alt="ScholarDoc Logo" class="mobile-logo-img">
                             <div class="mobile-brand-text-block">
-                                <div class="mobile-brand-title">
-                                    Scholar<span>Doc</span>
+                                <div class="mobile-brand-title"
+                                    style="background: linear-gradient(to right, #0A1931, #F5B025); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
+                                    Scholar<span style="color: inherit; -webkit-text-fill-color: inherit;">Doc</span>
                                 </div>
                                 <div class="mobile-brand-subtitle">
                                     USTP Oroquieta City Campus
@@ -84,8 +71,25 @@
 
                     <!-- Desktop Header (Visible only on Desktop) -->
                     <div class="desktop-form-header">
+                        <!-- Brand Header -->
+                        <div class="brand-header" style="display: flex; align-items: center; gap: 1px; margin-bottom: 24px;">
+                            <img src="app_logo3.png" alt="ScholarDoc Logo"
+                                style="width: 72px; height: 72px; object-fit: contain;">
+                            <div style="margin-left: -10px;">
+                                <div class="desktop-brand-title"
+                                    style="background: linear-gradient(to right, #0A1931, #F5B025); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
+                                    Scholar<span>Doc</span>
+                                </div>
+                                <div
+                                    style="font-size: 11px; font-weight: 700; color: #0A1931; letter-spacing: 2px; margin-top: 2px;">
+                                    USTP Oroquieta City Campus
+                                </div>
+                            </div>
+                        </div>
+
                         <h2 class="form-title">Welcome Back</h2>
-                        <p class="form-subtitle">Please enter your credentials to access the portal. Student login is restricted to verified student grantees.</p>
+                        <p class="form-subtitle">Please enter your credentials to access the portal. Student login is
+                            restricted to verified student grantees.</p>
                     </div>
 
                     <form id="loginForm">
@@ -98,8 +102,7 @@
                                 <i data-lucide="user" class="input-icon desktop-only-icon"></i>
                                 <i data-lucide="hexagon" class="input-icon mobile-only-icon"></i>
                                 <input type="text" id="username" class="form-input"
-                                    placeholder="e.g. 2024-00123 (Grantee) or admin" required
-                                    autocomplete="username">
+                                    placeholder="e.g. 2024-00123 (Grantee) or admin" required autocomplete="username">
                             </div>
                         </div>
 
@@ -185,14 +188,16 @@
                     <i data-lucide="graduation-cap"></i>
                     <div>
                         <strong>Eligible Grantees Only</strong>
-                        <p>Only officially enrolled scholars (TES, UniFAST, and university grant recipients) can sign in to submit documents and verify Landbank accounts.</p>
+                        <p>Only officially enrolled scholars (TES, UniFAST, and university grant recipients) can sign in
+                            to submit documents and verify Landbank accounts.</p>
                     </div>
                 </div>
                 <div class="grantee-bullet">
                     <i data-lucide="file-spreadsheet"></i>
                     <div>
                         <strong>Official Masterlist Sync</strong>
-                        <p>Your student credentials do not match any active record in the verified grantee billing registry for AY 2026-2027.</p>
+                        <p>Your student credentials do not match any active record in the verified grantee billing
+                            registry for AY 2026-2027.</p>
                     </div>
                 </div>
             </div>
@@ -205,11 +210,13 @@
                 </div>
                 <ol class="grantee-steps-list">
                     <li>Double-check your entered Student ID for any typographical error.</li>
-                    <li>If you are a qualified grantee, visit the Scholarship & Student Affairs Unit at USTP Oroquieta Campus (Mobod).</li>
+                    <li>If you are a qualified grantee, visit the Scholarship & Student Affairs Unit at USTP Oroquieta
+                        Campus (Mobod).</li>
                     <li>Or contact the scholarship coordinator via email:</li>
                 </ol>
                 <div class="grantee-email-wrapper">
-                    <button type="button" class="grantee-email-chip" id="granteeCopyEmailBtn" title="Click to copy email address">
+                    <button type="button" class="grantee-email-chip" id="granteeCopyEmailBtn"
+                        title="Click to copy email address">
                         <i data-lucide="mail"></i>
                         <span>scholarships.oroquieta@ustp.edu.ph</span>
                         <i data-lucide="copy" class="copy-icon"></i>

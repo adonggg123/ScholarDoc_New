@@ -7,6 +7,7 @@ import 'notification_service.dart';
 import 'presence_service.dart';
 import 'push_notification_service.dart';
 import 'sms_service.dart';
+import '../config/api_config.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -21,13 +22,169 @@ class AuthService {
     return '${clean.replaceAll(' ', '_')}@scholardoc.com';
   }
 
-  /// Default server URL for backend validation (Android emulator / localhost)
-  static String get serverBaseUrl {
-    if (kIsWeb) return '';
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8080';
+  /// Default server URL dynamically resolved via ApiConfig
+  static String get serverBaseUrl => ApiConfig.baseUrl;
+
+  /// Initiates student login:
+  /// - Admin / SuperAdmin users bypass OTP verification.
+  /// - Student Grantees are validated against the backend scholarship database.
+  /// - On the student's first login, validates that Student ID is used as the initial password
+  ///   and dispatches a 6-digit OTP to their registered mobile number via Semaphore SMS.
+  /// - On subsequent logins, allows direct login without OTP prompt.
+  Future<Map<String, dynamic>> initiateStudentLogin({
+    required String studentId,
+    required String password,
+  }) async {
+    final cleanId = studentId.trim();
+    final cleanLower = cleanId.toLowerCase();
+    final cleanPwd = password.trim();
+
+    // 1. Admins and SuperAdmins bypass student SMS OTP verification
+    final bool isAdmin = cleanLower == 'admin' ||
+        cleanLower == 'superadmin' ||
+        cleanLower.contains('admin@') ||
+        cleanId.contains('@scholardoc.com');
+
+    if (isAdmin) {
+      return {
+        'requiresOtp': false,
+        'isAdmin': true,
+        'studentId': cleanId,
+        'message': 'Admin login',
+      };
     }
-    return 'http://localhost:8080';
+
+    // 2. Call backend /api/auth/student-login
+    try {
+      final uri = Uri.parse('$serverBaseUrl/api/auth/student-login');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'studentId': cleanId,
+          'password': cleanPwd,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else if (res.statusCode == 403) {
+        // Access denied: Not an official grantee in the scholarship database
+        final msg = data['message'] ??
+            'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.';
+        throw Exception(msg);
+      } else if (res.statusCode == 401) {
+        // Initial password mismatch (must use Student ID)
+        final msg = data['error'] ??
+            'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.';
+        throw Exception(msg);
+      } else if (res.statusCode == 429) {
+        // Rate limit reached
+        final msg = data['error'] ?? 'Rate limit exceeded. Please try again shortly.';
+        throw Exception(msg);
+      } else {
+        final msg = data['error'] ?? data['message'] ?? 'Login failed (${res.statusCode})';
+        throw Exception(msg);
+      }
+    } catch (e) {
+      if (e.toString().contains('Access denied') ||
+          e.toString().contains('Invalid initial credentials') ||
+          e.toString().contains('Rate limit') ||
+          e.toString().contains('No valid Philippine mobile number')) {
+        rethrow;
+      }
+      debugPrint('AuthService.initiateStudentLogin notice: $e');
+      rethrow;
+    }
+  }
+
+  /// Verifies the SMS OTP on the backend:
+  /// - Enforces single-use, expiration (5 mins), and max 5 attempts.
+  /// - If backend validation passes, proceeds to complete Supabase Auth session.
+  Future<AuthResponse?> verifyLoginOtp({
+    required String studentId,
+    required String otp,
+    required String password,
+  }) async {
+    final cleanId = studentId.trim();
+    final cleanOtp = otp.trim();
+
+    try {
+      final uri = Uri.parse('$serverBaseUrl/api/auth/otp/verify');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'studentId': cleanId,
+          'otp': cleanOtp,
+          'password': password.trim(),
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200 && data['verified'] == true) {
+        debugPrint('AuthService: Backend OTP verification SUCCESS for $cleanId');
+        // Complete the Supabase Auth login with the verified student credentials
+        return await loginStudent(
+          studentId: cleanId,
+          password: password.trim(),
+        );
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed';
+      throw Exception(errMsg);
+    } catch (e) {
+      debugPrint('AuthService.verifyLoginOtp error: $e');
+      rethrow;
+    }
+  }
+
+  /// Requests a new OTP via Semaphore SMS with rate limit handling (60s cooldown).
+  Future<Map<String, dynamic>> resendLoginOtp({
+    required String studentId,
+  }) async {
+    final cleanId = studentId.trim();
+
+    try {
+      final uri = Uri.parse('$serverBaseUrl/api/auth/otp/resend');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'studentId': cleanId,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'Failed to resend OTP';
+      throw Exception(errMsg);
+    } catch (e) {
+      debugPrint('AuthService.resendLoginOtp error: $e');
+      rethrow;
+    }
+  }
+
+  /// Resets a student's first-login status (convenience helper for testing & coordinators).
+  Future<bool> resetStudentFirstLogin({required String studentId}) async {
+    try {
+      final uri = Uri.parse('$serverBaseUrl/api/auth/otp/reset-first-login');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'studentId': studentId.trim()}),
+      ).timeout(const Duration(seconds: 6));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Sign up student

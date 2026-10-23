@@ -39,23 +39,26 @@ body {
     width: 100vw;
     height: 100vh;
     display: flex;
-    background-color: var(--bg);
+    background-color: var(--primary);
+    background-image:
+        linear-gradient(135deg, rgba(10, 25, 49, 0.94) 0%, rgba(10, 25, 49, 0.75) 50%, rgba(10, 25, 49, 0.88) 100%),
+        url('ustp_imag.jpg');
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    overflow: hidden;
 }
 
 .login-left {
     flex: 5;
-    background-color: var(--primary);
-    background-image:
-        linear-gradient(135deg, rgba(10, 25, 49, 0.95) 0%, rgba(10, 25, 49, 0.75) 100%),
-        url('ustp_imag.jpg');
-    background-size: cover;
-    background-position: center;
+    background: transparent;
     position: relative;
     display: flex;
     flex-direction: column;
     justify-content: center;
     padding: 80px;
     overflow: hidden;
+    z-index: 2;
 }
 
 /* Abstract shapes for modern look */
@@ -90,7 +93,7 @@ body {
 }
 
 .brand-header {
-    margin-bottom: auto;
+    margin-bottom: 24px;
 }
 
 .desktop-brand-title {
@@ -99,7 +102,7 @@ body {
     font-weight: 800;
     letter-spacing: -0.5px;
     line-height: 1;
-    background: linear-gradient(to right, #ffffff, var(--accent));
+    background: linear-gradient(to right, #0A1931, #F5B025);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -174,37 +177,43 @@ body {
 /* Right Side Form */
 .login-right {
     flex: 4;
-    background-color: white;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 40px;
-    box-shadow: -20px 0 40px rgba(0, 0, 0, 0.05);
+    padding: 40px 24px;
+    box-shadow: none;
     z-index: 5;
+    overflow-y: auto;
 }
 
 .login-form-container {
     width: 100%;
-    max-width: 420px;
+    max-width: 440px;
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 40px 36px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .form-title {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--primary);
     letter-spacing: -0.5px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .form-subtitle {
-    font-size: 15px;
+    font-size: 14px;
     color: var(--text-secondary);
     line-height: 1.5;
-    margin-bottom: 48px;
+    margin-bottom: 28px;
 }
 
 .input-group {
-    margin-bottom: 28px;
+    margin-bottom: 22px;
 }
 
 .input-label {
@@ -322,7 +331,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-top: 40px;
+    margin-top: 24px;
     font-size: 12px;
     font-weight: 500;
     color: var(--text-secondary);
@@ -380,7 +389,13 @@ body {
     body {
         height: auto;
         min-height: 100vh;
-        background-color: #F8FAFC;
+        background-color: var(--primary);
+        background-image:
+            linear-gradient(135deg, rgba(10, 25, 49, 0.94) 0%, rgba(10, 25, 49, 0.75) 50%, rgba(10, 25, 49, 0.88) 100%),
+            url('ustp_imag.jpg');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
         padding: 24px 16px;
         display: flex;
         align-items: center;
@@ -394,7 +409,7 @@ body {
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: transparent;
+        background: transparent;
     }
 
     /* Hide desktop left column completely */
@@ -440,8 +455,8 @@ body {
         padding: 44px 32px 36px 32px;
         width: 100%;
         max-width: 440px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-        border: 1px solid #EEF2F6;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         margin: 0 auto;
     }
 
@@ -470,13 +485,17 @@ body {
         font-family: 'Inter', sans-serif;
         font-size: 24px;
         font-weight: 800;
-        color: #0F3260;
+        background: linear-gradient(to right, #0A1931, #F5B025);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
         letter-spacing: -0.5px;
         line-height: 1.1;
     }
 
     .mobile-brand-title span {
-        color: #F5B025;
+        color: inherit;
+        -webkit-text-fill-color: inherit;
     }
 
     .mobile-brand-subtitle {

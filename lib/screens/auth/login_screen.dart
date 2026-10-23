@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../main_layout.dart';
 import '../admin/admin_main_layout.dart';
+import 'otp_verification_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -358,10 +359,63 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
+      final rawStudentId = _studentIdController.text.trim();
+      final rawPassword = _passwordController.text.trim();
+
       try {
+        final cleanLower = rawStudentId.toLowerCase();
+        final bool isAdmin = cleanLower == 'admin' ||
+            cleanLower == 'superadmin' ||
+            cleanLower.contains('admin@') ||
+            rawStudentId.contains('@scholardoc.com');
+
+        // Admin flow: Bypass student SMS OTP verification
+        if (isAdmin) {
+          await _authService.loginStudent(
+            studentId: rawStudentId,
+            password: rawPassword,
+          );
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminMainLayout()),
+            (route) => false,
+          );
+          return;
+        }
+
+        // Student flow: Validate grantee eligibility & determine if first-login SMS OTP is required
+        final initRes = await _authService.initiateStudentLogin(
+          studentId: rawStudentId,
+          password: rawPassword,
+        );
+        if (!mounted) return;
+
+        // If First Login: Navigate to SMS OTP Verification Screen
+        if (initRes['requiresOtp'] == true) {
+          final maskedPhone = (initRes['maskedPhone'] as String?) ?? 'your registered phone';
+          final expiresIn = (initRes['expiresIn'] as int?) ?? 300;
+          final resendCooldown = (initRes['resendCooldown'] as int?) ?? 60;
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                studentId: rawStudentId,
+                password: rawPassword,
+                maskedPhone: maskedPhone,
+                expiresIn: expiresIn,
+                resendCooldown: resendCooldown,
+              ),
+            ),
+          );
+          return;
+        }
+
+        // Returning Student: Standard login flow
         await _authService.loginStudent(
-          studentId: _studentIdController.text.trim(),
-          password: _passwordController.text.trim(),
+          studentId: rawStudentId,
+          password: rawPassword,
         );
         if (!mounted) return;
 
@@ -396,7 +450,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (isGranteeError) {
           _showGranteeAccessDeniedModal(
-            studentId: _studentIdController.text.trim(),
+            studentId: rawStudentId,
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

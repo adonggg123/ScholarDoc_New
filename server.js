@@ -1031,6 +1031,9 @@ async function validateGranteeEligibility(identifier) {
             const rows = await res.json();
             if (Array.isArray(rows) && rows.length > 0) {
                 const grantee = rows[0];
+                const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
+                const normalizedPhone = normalizePhilippineMobile(rawPhone);
+                const isFirst = !isFirstLoginCompleted(cleanId, grantee);
                 return {
                     success: true,
                     isEligible: true,
@@ -1039,7 +1042,11 @@ async function validateGranteeEligibility(identifier) {
                         uid: grantee.uid,
                         student_no: grantee.student_no || grantee.studentId,
                         full_name: grantee.full_name || grantee.fullName,
-                        course: grantee.course || grantee.program_name
+                        course: grantee.course || grantee.program_name,
+                        mobile_number: normalizedPhone || rawPhone,
+                        contactNumber: normalizedPhone || rawPhone,
+                        first_login_completed: !isFirst,
+                        is_first_login: isFirst
                     },
                     message: 'Student is registered as an eligible grantee.'
                 };
@@ -1055,6 +1062,161 @@ async function validateGranteeEligibility(identifier) {
         message: `Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database.`
     };
 }
+
+// ── SMS OTP Authentication State & Rate Limiter ─────────────────────────
+// In-memory active OTP sessions with cryptographic security and expiration
+const activeOtpSessions = new Map();
+
+// Local persistence for students who have successfully completed initial OTP verification
+const completedFirstLoginStudents = new Set();
+const OTP_STATE_FILE = path.join(ROOT, 'scratch', 'otp_auth_state.json');
+
+function loadOtpAuthState() {
+    try {
+        if (fs.existsSync(OTP_STATE_FILE)) {
+            const content = fs.readFileSync(OTP_STATE_FILE, 'utf8');
+            const data = JSON.parse(content || '{}');
+            if (Array.isArray(data.completedFirstLogin)) {
+                data.completedFirstLogin.forEach(id => {
+                    if (id) completedFirstLoginStudents.add(String(id).trim());
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('[OTP Auth State] Notice loading state:', e.message);
+    }
+}
+
+function saveOtpAuthState() {
+    try {
+        const dir = path.dirname(OTP_STATE_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(OTP_STATE_FILE, JSON.stringify({
+            completedFirstLogin: Array.from(completedFirstLoginStudents),
+            updatedAt: new Date().toISOString()
+        }, null, 2), 'utf8');
+    } catch (e) {
+        console.warn('[OTP Auth State] Notice saving state:', e.message);
+    }
+}
+loadOtpAuthState();
+
+/**
+ * Masks a phone number for secure client display (e.g. "0985 •••• 627")
+ */
+function maskPhoneNumber(phone) {
+    if (!phone) return '••••';
+    const clean = String(phone).replace(/\D/g, '');
+    if (clean.length === 11) {
+        return `${clean.substring(0, 4)} •••• ${clean.substring(8)}`;
+    }
+    if (clean.length > 4) {
+        return `${clean.substring(0, 2)} •••• ${clean.substring(clean.length - 2)}`;
+    }
+    return '••••';
+}
+
+/**
+ * Checks whether a student has completed their initial SMS OTP login verification.
+ */
+function isFirstLoginCompleted(studentId, granteeRecord = null) {
+    if (!studentId) return false;
+    const cleanId = String(studentId).trim();
+    const cleanNo = cleanId.replace(/[- ]/g, '');
+
+    if (completedFirstLoginStudents.has(cleanId) || (cleanNo && completedFirstLoginStudents.has(cleanNo))) {
+        return true;
+    }
+
+    if (granteeRecord) {
+        if (granteeRecord.first_login_completed === true || granteeRecord.otp_verified_at != null) {
+            completedFirstLoginStudents.add(cleanId);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Marks a student as having successfully completed their first-login OTP verification.
+ */
+async function markFirstLoginCompleted(studentId, granteeUid, phone) {
+    const cleanId = String(studentId).trim();
+    completedFirstLoginStudents.add(cleanId);
+    saveOtpAuthState();
+
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+    };
+
+    const now = new Date().toISOString();
+
+    // 1. Update student_grantees table if possible
+    let matchQuery = '';
+    if (granteeUid && isUuidString(granteeUid)) {
+        matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
+    } else {
+        matchQuery = buildStudentQueryFilter(cleanId);
+    }
+
+    if (matchQuery) {
+        try {
+            await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({
+                    first_login_completed: true,
+                    otp_verified_at: now
+                })
+            });
+        } catch (_) {}
+    }
+
+    // 2. Insert verified event in sms_logs
+    try {
+        await fetch(`${SUPABASE_REST_URL}/sms_logs`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                student_id: cleanId,
+                grantee_uid: granteeUid || null,
+                recipient_phone: phone || 'unknown',
+                message: '[ScholarDoc] SMS OTP successfully verified. First login completed.',
+                event_type: 'login_otp',
+                status: 'verified',
+                sent_at: now
+            })
+        });
+    } catch (_) {}
+
+    // 3. Insert audit log
+    try {
+        await fetch(`${SUPABASE_REST_URL}/audit_logs`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                action: 'First login SMS OTP verified',
+                userName: cleanId,
+                role: 'Student',
+                studentId: cleanId,
+                timestamp: now
+            })
+        });
+    } catch (_) {}
+}
+
+// Background cleanup: Prune expired OTP sessions every 2 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of activeOtpSessions.entries()) {
+        if (now > session.expiresAt) {
+            activeOtpSessions.delete(id);
+        }
+    }
+}, 120000);
 
 /**
  * Queries Semaphore account balance and details (without exposing API key to client).
@@ -2226,6 +2388,466 @@ const server = http.createServer(async (req, res) => {
                 console.error('[API validate-grantee error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, isEligible: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Student Login with First-Login SMS OTP Authentication ────────
+    if (urlPath === '/api/auth/student-login' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const rawIdentifier = parsed.studentId || parsed.student_no || parsed.identifier || '';
+                const cleanId = String(rawIdentifier).trim();
+                const cleanNo = cleanId.replace(/[- ]/g, '');
+                const rawPassword = String(parsed.password || '').trim();
+
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                    return;
+                }
+
+                // 1. Validate Grantee Eligibility against student_grantees
+                const eligibility = await validateGranteeEligibility(cleanId);
+                if (!eligibility.isEligible) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        isEligible: false,
+                        message: eligibility.message || `Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database.`
+                    }));
+                    return;
+                }
+
+                const grantee = eligibility.grantee;
+                const isFirst = !isFirstLoginCompleted(cleanId, grantee);
+
+                // 2. Returning Student: Already completed first login OTP verification
+                if (!isFirst) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        requiresOtp: false,
+                        isFirstLogin: false,
+                        studentId: cleanId,
+                        message: 'Returning student grantee. Standard login permitted.'
+                    }));
+                    return;
+                }
+
+                // 3. First Login: Student ID must be used as the initial password
+                const matchesInitialId = (rawPassword === cleanId) ||
+                    (cleanNo && rawPassword === cleanNo) ||
+                    (grantee.student_no && rawPassword === grantee.student_no);
+
+                if (!matchesInitialId) {
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        requiresOtp: false,
+                        isFirstLogin: true,
+                        error: 'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.'
+                    }));
+                    return;
+                }
+
+                // 4. Resolve and Validate Registered Philippine Mobile Number
+                const rawPhone = grantee.mobile_number || grantee.contactNumber;
+                const normalizedPhone = normalizePhilippineMobile(rawPhone);
+                if (!normalizedPhone) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        isFirstLogin: true,
+                        error: `No valid Philippine mobile number registered for Student ID "${cleanId}" (${rawPhone || 'none on record'}). Please visit the Scholarship Office to register your contact details.`
+                    }));
+                    return;
+                }
+
+                // 5. Rate Limiting Check on OTP Generation
+                const now = Date.now();
+                const prevSession = activeOtpSessions.get(cleanId);
+
+                if (prevSession) {
+                    if (now < prevSession.resendAvailableAt) {
+                        const waitSecs = Math.ceil((prevSession.resendAvailableAt - now) / 1000);
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: `Please wait ${waitSecs} seconds before requesting a new OTP.`,
+                            cooldownRemaining: waitSecs
+                        }));
+                        return;
+                    }
+                    if (prevSession.resendCount >= 5 && (now - prevSession.resendWindowStart < 3600000)) {
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'Rate limit exceeded: Maximum 5 OTP requests per hour. Please try again later.'
+                        }));
+                        return;
+                    }
+                }
+
+                // 6. Generate Cryptographically Secure 6-digit OTP
+                const otp = String(crypto.randomInt(100000, 1000000));
+                const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+                // 7. Store OTP Session (Expires in 5 minutes, 60s resend cooldown, max 5 attempts)
+                const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
+                    ? prevSession.resendWindowStart
+                    : now;
+                const resendCount = (prevSession && (now - prevSession.resendWindowStart < 3600000))
+                    ? prevSession.resendCount + 1
+                    : 1;
+
+                activeOtpSessions.set(cleanId, {
+                    studentId: cleanId,
+                    granteeUid: grantee.uid,
+                    otpHash: otpHash,
+                    phone: normalizedPhone,
+                    expiresAt: now + (5 * 60 * 1000), // 5 minutes
+                    attempts: 0,
+                    resendAvailableAt: now + (60 * 1000), // 60s cooldown
+                    resendCount: resendCount,
+                    resendWindowStart: resendWindowStart,
+                    createdAt: now
+                });
+
+                console.log(`[SMS OTP] Generated OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (SHA-256 hash stored)`);
+
+                // 8. Dispatch SMS via Semaphore API
+                const smsMessage = `[ScholarDoc] Your one-time login OTP is ${otp}. Valid for 5 minutes. Do not share this code with anyone.`;
+                const smsResult = await sendSemaphoreSms({
+                    numbers: normalizedPhone,
+                    message: smsMessage,
+                    sendername: getSemaphoreSenderName()
+                });
+
+                console.log(`[SMS OTP] Semaphore dispatch result:`, smsResult);
+
+                // 9. Audit Log in sms_logs
+                await recordSmsLog({
+                    studentId: cleanId,
+                    granteeUid: grantee.uid,
+                    recipientPhone: normalizedPhone,
+                    message: `[ScholarDoc] Your one-time login OTP is [PROTECTED]. Valid for 5 minutes.`,
+                    eventType: 'login_otp',
+                    status: smsResult.success ? 'sent' : 'failed',
+                    messageId: smsResult.message_id,
+                    network: smsResult.network,
+                    errorMessage: smsResult.error
+                });
+
+                // 10. Respond to Client
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    requiresOtp: true,
+                    isFirstLogin: true,
+                    studentId: cleanId,
+                    maskedPhone: maskPhoneNumber(normalizedPhone),
+                    expiresIn: 300,
+                    resendCooldown: 60,
+                    message: `A one-time password (OTP) has been sent to your registered mobile number ${maskPhoneNumber(normalizedPhone)}.`
+                }));
+            } catch (err) {
+                console.error('[API student-login error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Verify SMS OTP for Student First Login ───────────────────────
+    if (urlPath === '/api/auth/otp/verify' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const rawIdentifier = parsed.studentId || parsed.student_no || '';
+                const cleanId = String(rawIdentifier).trim();
+                const rawOtp = String(parsed.otp || '').trim();
+
+                if (!cleanId || !rawOtp) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID and OTP code are required.' }));
+                    return;
+                }
+
+                const session = activeOtpSessions.get(cleanId);
+                const now = Date.now();
+
+                // 1. Session exists check
+                if (!session) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'No active OTP session found for this student. Please sign in again to receive a new OTP.'
+                    }));
+                    return;
+                }
+
+                // 2. Expiration check (5 minutes)
+                if (now > session.expiresAt) {
+                    activeOtpSessions.delete(cleanId);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        expired: true,
+                        error: 'The OTP code has expired. Please request a new OTP.'
+                    }));
+                    return;
+                }
+
+                // 3. Max Attempts limit (Brute-force protection: max 5 attempts)
+                if (session.attempts >= 5) {
+                    activeOtpSessions.delete(cleanId);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        invalidated: true,
+                        error: 'Maximum verification attempts exceeded. For security, this OTP has been invalidated. Please request a new one.'
+                    }));
+                    return;
+                }
+
+                // 4. Constant-Time Timing-Safe Hash Verification
+                const candidateHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
+                const candidateBuf = Buffer.from(candidateHash, 'hex');
+                const storedBuf = Buffer.from(session.otpHash, 'hex');
+
+                let isMatch = false;
+                try {
+                    isMatch = (candidateBuf.length === storedBuf.length) && crypto.timingSafeEqual(candidateBuf, storedBuf);
+                } catch (_) {
+                    isMatch = false;
+                }
+
+                if (!isMatch) {
+                    session.attempts++;
+                    const remaining = 5 - session.attempts;
+                    if (remaining <= 0) {
+                        activeOtpSessions.delete(cleanId);
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            invalidated: true,
+                            error: 'Invalid OTP code. Maximum attempts reached. This OTP has been invalidated.'
+                        }));
+                        return;
+                    }
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        remainingAttempts: remaining,
+                        error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.`
+                    }));
+                    return;
+                }
+
+                // 5. SUCCESS: Enforce Single-Use by Immediately Deleting the Active Session
+                activeOtpSessions.delete(cleanId);
+
+                // 6. Mark First Login as Completed (Local Store + Supabase student_grantees + audit_logs + sms_logs)
+                await markFirstLoginCompleted(cleanId, session.granteeUid, session.phone);
+
+                console.log(`[SMS OTP] Verification SUCCESS for student ${cleanId} (${session.phone}). First login completed!`);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    verified: true,
+                    studentId: cleanId,
+                    message: 'SMS OTP verified successfully. First login completed.'
+                }));
+            } catch (err) {
+                console.error('[API otp/verify error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Resend SMS OTP with Rate Limiting ────────────────────────────
+    if (urlPath === '/api/auth/otp/resend' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const rawIdentifier = parsed.studentId || parsed.student_no || '';
+                const cleanId = String(rawIdentifier).trim();
+
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                    return;
+                }
+
+                // 1. Verify eligibility and mobile number
+                const eligibility = await validateGranteeEligibility(cleanId);
+                if (!eligibility.isEligible) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: eligibility.message }));
+                    return;
+                }
+
+                const grantee = eligibility.grantee;
+                const normalizedPhone = normalizePhilippineMobile(grantee.mobile_number || grantee.contactNumber);
+                if (!normalizedPhone) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'No valid Philippine mobile number registered for this student.'
+                    }));
+                    return;
+                }
+
+                // 2. Enforce Rate Limiting
+                const now = Date.now();
+                const prevSession = activeOtpSessions.get(cleanId);
+
+                if (prevSession) {
+                    if (now < prevSession.resendAvailableAt) {
+                        const waitSecs = Math.ceil((prevSession.resendAvailableAt - now) / 1000);
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: `Please wait ${waitSecs} seconds before requesting a new OTP.`,
+                            cooldownRemaining: waitSecs
+                        }));
+                        return;
+                    }
+                    if (prevSession.resendCount >= 5 && (now - prevSession.resendWindowStart < 3600000)) {
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'Rate limit exceeded: Maximum 5 OTP requests per hour. Please try again later.'
+                        }));
+                        return;
+                    }
+                }
+
+                // 3. Generate New 6-digit OTP and SHA-256 Hash
+                const otp = String(crypto.randomInt(100000, 1000000));
+                const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+                const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
+                    ? prevSession.resendWindowStart
+                    : now;
+                const resendCount = (prevSession && (now - prevSession.resendWindowStart < 3600000))
+                    ? prevSession.resendCount + 1
+                    : 1;
+
+                activeOtpSessions.set(cleanId, {
+                    studentId: cleanId,
+                    granteeUid: grantee.uid,
+                    otpHash: otpHash,
+                    phone: normalizedPhone,
+                    expiresAt: now + (5 * 60 * 1000), // 5 minutes
+                    attempts: 0,
+                    resendAvailableAt: now + (60 * 1000), // 60s cooldown
+                    resendCount: resendCount,
+                    resendWindowStart: resendWindowStart,
+                    createdAt: now
+                });
+
+                console.log(`[SMS OTP RESEND] New OTP for student ${cleanId} -> ${normalizedPhone}: ${otp}`);
+
+                // 4. Dispatch SMS via Semaphore
+                const smsMessage = `[ScholarDoc] Your new one-time login OTP is ${otp}. Valid for 5 minutes. Do not share this code with anyone.`;
+                const smsResult = await sendSemaphoreSms({
+                    numbers: normalizedPhone,
+                    message: smsMessage,
+                    sendername: getSemaphoreSenderName()
+                });
+
+                await recordSmsLog({
+                    studentId: cleanId,
+                    granteeUid: grantee.uid,
+                    recipientPhone: normalizedPhone,
+                    message: `[ScholarDoc] Your new one-time login OTP is [PROTECTED]. Valid for 5 minutes.`,
+                    eventType: 'login_otp',
+                    status: smsResult.success ? 'sent' : 'failed',
+                    messageId: smsResult.message_id,
+                    network: smsResult.network,
+                    errorMessage: smsResult.error
+                });
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    studentId: cleanId,
+                    maskedPhone: maskPhoneNumber(normalizedPhone),
+                    resendCooldown: 60,
+                    expiresIn: 300,
+                    message: `A new OTP has been sent to ${maskPhoneNumber(normalizedPhone)}.`
+                }));
+            } catch (err) {
+                console.error('[API otp/resend error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Reset First-Login Status (Testing/Coordinator Admin Helper) ──
+    if (urlPath === '/api/auth/otp/reset-first-login' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const rawIdentifier = parsed.studentId || parsed.student_no || '';
+                const cleanId = String(rawIdentifier).trim();
+
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                    return;
+                }
+
+                completedFirstLoginStudents.delete(cleanId);
+                const cleanNo = cleanId.replace(/[- ]/g, '');
+                if (cleanNo) completedFirstLoginStudents.delete(cleanNo);
+                activeOtpSessions.delete(cleanId);
+                if (cleanNo) activeOtpSessions.delete(cleanNo);
+                saveOtpAuthState();
+
+                try {
+                    const matchQuery = buildStudentQueryFilter(cleanId);
+                    if (matchQuery) {
+                        const headers = {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json'
+                        };
+                        await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+                            method: 'PATCH',
+                            headers,
+                            body: JSON.stringify({ first_login_completed: false, otp_verified_at: null })
+                        });
+                    }
+                } catch (_) {}
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    studentId: cleanId,
+                    message: `First login reset successfully for ${cleanId}. Next login will require SMS OTP.`
+                }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
             }
         });
         return;
@@ -3710,6 +4332,10 @@ module.exports = {
     isYearMatching,
     isSemesterMatching,
     validateGranteeEligibility,
+    isFirstLoginCompleted,
+    markFirstLoginCompleted,
+    activeOtpSessions,
+    completedFirstLoginStudents,
     sendSingleGranteeEmail,
     sendSingleGranteeSms,
     pollNewGranteesAndMessage,
@@ -3718,4 +4344,5 @@ module.exports = {
     startGranteeEmailWatcher,
     server
 };
+
 

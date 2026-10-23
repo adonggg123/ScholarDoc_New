@@ -546,28 +546,6 @@ async function saveNotificationSettings(key, value) {
 }
 
 function setupListeners() {
-    // Tab switching for Super Admin / Admin accounts
-    const tabSuper = document.getElementById('tab-account-superadmin');
-    const tabAdmin = document.getElementById('tab-account-admin');
-
-    if (tabSuper) {
-        tabSuper.addEventListener('click', () => {
-            activeTarget = 'superadmin';
-            tabSuper.classList.add('active');
-            if (tabAdmin) tabAdmin.classList.remove('active');
-            updateActiveAccountView();
-        });
-    }
-
-    if (tabAdmin) {
-        tabAdmin.addEventListener('click', () => {
-            activeTarget = 'admin';
-            tabAdmin.classList.add('active');
-            if (tabSuper) tabSuper.classList.remove('active');
-            updateActiveAccountView();
-        });
-    }
-
     // Notification settings checkboxes
     const setEmailCb = document.getElementById('set-email');
     if (setEmailCb) {
