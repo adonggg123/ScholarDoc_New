@@ -20,7 +20,7 @@
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: var(--bg);
+    background-color: #0A1931;
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     height: 100vh;
@@ -39,9 +39,9 @@ body {
     width: 100vw;
     height: 100vh;
     display: flex;
-    background-color: var(--primary);
+    background-color: #0A1931;
     background-image:
-        linear-gradient(135deg, rgba(10, 25, 49, 0.94) 0%, rgba(10, 25, 49, 0.75) 50%, rgba(10, 25, 49, 0.88) 100%),
+        linear-gradient(135deg, rgba(10, 25, 49, 0.96) 0%, rgba(10, 25, 49, 0.91) 50%, rgba(10, 25, 49, 0.96) 100%),
         url('ustp_imag.jpg');
     background-size: cover;
     background-position: center;
@@ -61,28 +61,7 @@ body {
     z-index: 2;
 }
 
-/* Abstract shapes for modern look */
-.shape-1 {
-    position: absolute;
-    top: -100px;
-    right: -100px;
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, rgba(255, 193, 7, 0.15) 0%, rgba(255, 193, 7, 0) 70%);
-    border-radius: 50%;
-    z-index: 1;
-}
 
-.shape-2 {
-    position: absolute;
-    bottom: -150px;
-    left: -50px;
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, rgba(21, 45, 84, 0.8) 0%, rgba(10, 25, 49, 0) 70%);
-    border-radius: 50%;
-    z-index: 1;
-}
 
 .login-content {
     position: relative;
@@ -389,9 +368,9 @@ body {
     body {
         height: auto;
         min-height: 100vh;
-        background-color: var(--primary);
+        background-color: #0A1931;
         background-image:
-            linear-gradient(135deg, rgba(10, 25, 49, 0.94) 0%, rgba(10, 25, 49, 0.75) 50%, rgba(10, 25, 49, 0.88) 100%),
+            linear-gradient(135deg, rgba(10, 25, 49, 0.96) 0%, rgba(10, 25, 49, 0.91) 50%, rgba(10, 25, 49, 0.96) 100%),
             url('ustp_imag.jpg');
         background-size: cover;
         background-position: center;
@@ -502,7 +481,7 @@ body {
         font-family: 'Inter', sans-serif;
         font-size: 10px;
         font-weight: 700;
-        color: #0F3260;
+        color: #0A1931;
         letter-spacing: 1px;
         text-transform: uppercase;
         margin-top: 3px;
