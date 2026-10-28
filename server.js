@@ -2103,7 +2103,7 @@ try {
 
 const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || 'eoueeoikuorzymkq').replace(/\s+/g, '');
-const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholardoc.app/download';
+const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
 
 function getGmailTransporter() {
     if (!nodemailer) return null;
