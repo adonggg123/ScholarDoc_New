@@ -603,11 +603,17 @@
                     Student Records</h3>
                 <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Official institutional student records from the School Registrar database (managed & uploaded by School Admin).</p>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="text-align: right;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="text-align: right; margin-right: 4px;">
                     <span id="school-students-count" style="font-size: 20px; font-weight: 800; color: #1E88E5;">0</span>
                     <div style="font-size: 10px; color: var(--text-secondary); font-weight: 600;">School Records</div>
                 </div>
+                <button id="btn-export-school-csv" class="btn" title="Export School Student Records as CSV"
+                    onclick="if(window.exportSchoolStudentsCSV) window.exportSchoolStudentsCSV();"
+                    style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: #ffffff; border: none; padding: 7px 15px; border-radius: 10px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; box-shadow: 0 2px 8px rgba(30, 136, 229, 0.25); transition: all 0.2s ease;">
+                    <i class="icon-download" style="font-size: 13px;"></i>
+                    <span id="text-export-school-csv">Export CSV</span>
+                </button>
                 <button id="btn-toggle-school-expand" class="icon-btn" title="Toggle Height"
                     style="background: rgba(30,136,229,0.08); color: #1E88E5; border-radius: 10px; padding: 6px 12px; border: 1px solid rgba(30,136,229,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; transition: all 0.2s ease;">
                     <i id="icon-school-expand" class="icon-minimize-2" style="font-size: 13px;"></i>

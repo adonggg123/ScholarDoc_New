@@ -59,6 +59,8 @@ let btnDownloadSchoolTemplate = null;
 let btnToggleSchoolExpand = null;
 let iconSchoolExpand = null;
 let textSchoolExpand = null;
+let btnExportSchoolCsv = null;
+let textExportSchoolCsv = null;
 let schoolDropzone = null;
 let schoolFileInput = null;
 let schoolUploadPrompt = null;
@@ -1519,8 +1521,10 @@ function renderSchoolStudentsTable(students) {
             const uid = e.target.dataset.uid;
             if (e.target.checked) selectedSchoolStudentIds.add(uid);
             else selectedSchoolStudentIds.delete(uid);
+            updateSchoolExportButtonText();
         });
     });
+    updateSchoolExportButtonText();
 }
 
 // Search filter for School Students Table
@@ -1545,6 +1549,155 @@ function filterSchoolStudents() {
     });
     renderSchoolStudentsTable(filtered);
 }
+
+// ── Export School Student Records as CSV ────────────────────────
+function updateSchoolExportButtonText() {
+    const btnText = document.getElementById('text-export-school-csv');
+    if (!btnText) return;
+    if (selectedSchoolStudentIds && selectedSchoolStudentIds.size > 0) {
+        btnText.textContent = `Export Selected (${selectedSchoolStudentIds.size})`;
+    } else {
+        btnText.textContent = 'Export CSV';
+    }
+}
+
+function getSchoolStudentsForExport() {
+    if (selectedSchoolStudentIds && selectedSchoolStudentIds.size > 0) {
+        const selected = schoolStudents.filter(s => {
+            const uid = s.uid || s.studentNo || s.studentId || s.student_no || s.id;
+            return selectedSchoolStudentIds.has(uid);
+        });
+        if (selected.length > 0) return selected;
+    }
+
+    const searchInput = document.getElementById('search-school-students');
+    const q = (searchInput?.value || '').toLowerCase().trim();
+    if (q) {
+        return schoolStudents.filter(s => {
+            const family = s.familyDetails || {};
+            const studentNo = (s.studentNo || s.studentId || s.student_no || '').toLowerCase();
+            const name = (s.fullName || s.name || '').toLowerCase();
+            const prog = (s.programName || s.course || '').toLowerCase();
+            const email = (s.emailAddress || s.email || '').toLowerCase();
+            const father = (s.fatherFullName || family.fatherFullName || '').toLowerCase();
+            const mother = (s.motherFullName || family.motherFullName || '').toLowerCase();
+            const religion = (s.religion || family.religion || '').toLowerCase();
+            const dob = (s.dateOfBirth || s.birthdate || '').toLowerCase();
+            return studentNo.includes(q) || name.includes(q) || prog.includes(q) || email.includes(q) || father.includes(q) || mother.includes(q) || religion.includes(q) || dob.includes(q);
+        });
+    }
+
+    return schoolStudents;
+}
+
+function exportSchoolStudentsCSV() {
+    const listToExport = getSchoolStudentsForExport();
+
+    if (!listToExport || listToExport.length === 0) {
+        if (typeof window.showToast === 'function') {
+            window.showToast('No school student records found to export.', 'alert-triangle');
+        } else {
+            alert('No school student records found to export.');
+        }
+        return;
+    }
+
+    const headers = [
+        'Student No.',
+        'Full Name',
+        'Scholarship',
+        'Program Name',
+        'Year Level',
+        'Date of Birth',
+        'Age',
+        'Gender',
+        'Civil Status',
+        'Religion',
+        'Mobile Number',
+        'Email Address',
+        'Father’s Full Name',
+        'Father’s Occupation',
+        'Mother’s Full Name',
+        'Mother’s Occupation',
+        'Status'
+    ];
+
+    const rows = listToExport.map(s => {
+        const family = s.familyDetails || {};
+        const studentNo = s.studentNo || s.studentId || s.student_no || '';
+        let fullName = s.fullName || s.name || '';
+        if (!fullName) {
+            fullName = [s.last_name, s.first_name, s.middle_name].filter(Boolean).join(', ');
+        }
+        const scholarship = s.scholarship || s.scholarshipName || 'TES';
+        const programName = s.programName || s.course || s.program || '';
+        const yearLevel = s.yearLevel || s.year || '';
+        const rawDob = s.dateOfBirth || s.birthdate || s.dob || '';
+        const dob = rawDob ? (parseAndFormatDate(rawDob) || rawDob) : '';
+        let age = s.age;
+        if (!age || age === 'N/A' || isNaN(age)) {
+            age = calculateAge(dob || rawDob);
+        }
+        if (age === 'N/A' || isNaN(age)) age = '';
+        const gender = (s.gender || s.sex || '').trim();
+        const civilStatus = (s.civilStatus || s.civil_status || family.civilStatus || '').trim() || 'Single';
+        const religion = (s.religion || family.religion || '').trim();
+        const mobileNumber = (s.mobileNumber || s.mobile_number || s.phone || '').trim();
+        const emailAddress = (s.emailAddress || s.email_address || s.email || '').trim();
+        const fatherFullName = (s.fatherFullName || s.father_full_name || family.fatherFullName || family.fatherName || '').trim();
+        const fatherOccupation = (s.fatherOccupation || s.father_occupation || family.fatherOccupation || family.fatherEduStatus || '').trim();
+        const motherFullName = (s.motherFullName || s.mother_full_name || family.motherFullName || family.motherName || '').trim();
+        const motherOccupation = (s.motherOccupation || s.mother_occupation || family.motherOccupation || family.motherEduStatus || '').trim();
+        const status = s.status || 'Enrolled';
+
+        const rowValues = [
+            studentNo,
+            fullName,
+            scholarship,
+            programName,
+            yearLevel,
+            dob,
+            age,
+            gender,
+            civilStatus,
+            religion,
+            mobileNumber,
+            emailAddress,
+            fatherFullName,
+            fatherOccupation,
+            motherFullName,
+            motherOccupation,
+            status
+        ];
+
+        return rowValues.map(val => {
+            const str = (val === null || val === undefined) ? '' : String(val);
+            return `"${str.replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
+        }).join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.map(h => `"${h}"`).join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    const isSelected = selectedSchoolStudentIds && selectedSchoolStudentIds.size > 0;
+    const filename = isSelected
+        ? `School_Student_Records_Selected_${listToExport.length}_${today}.csv`
+        : `School_Student_Records_${today}.csv`;
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (typeof window.showToast === 'function') {
+        window.showToast(`Exported ${listToExport.length} School Student Records to CSV!`, 'download');
+    }
+}
+window.exportSchoolStudentsCSV = exportSchoolStudentsCSV;
 
 // Download School Student Records Excel Template
 function downloadSchoolStudentTemplate() {
@@ -2781,6 +2934,8 @@ export function initMasterlistImport() {
     btnToggleSchoolExpand = document.getElementById('btn-toggle-school-expand');
     iconSchoolExpand = document.getElementById('icon-school-expand');
     textSchoolExpand = document.getElementById('text-school-expand');
+    btnExportSchoolCsv = document.getElementById('btn-export-school-csv');
+    textExportSchoolCsv = document.getElementById('text-export-school-csv');
     schoolDropzone = document.getElementById('school-file-dropzone');
     schoolFileInput = document.getElementById('school-file-input');
     schoolUploadPrompt = document.getElementById('school-upload-prompt');
@@ -2795,6 +2950,12 @@ export function initMasterlistImport() {
     if (btnDownloadSchoolTemplate) {
         btnDownloadSchoolTemplate.addEventListener('click', () => {
             downloadSchoolStudentTemplate();
+        });
+    }
+
+    if (btnExportSchoolCsv) {
+        btnExportSchoolCsv.addEventListener('click', () => {
+            exportSchoolStudentsCSV();
         });
     }
 
@@ -2828,6 +2989,7 @@ export function initMasterlistImport() {
                 if (isChecked && uid) selectedSchoolStudentIds.add(uid);
                 else if (uid) selectedSchoolStudentIds.delete(uid);
             });
+            updateSchoolExportButtonText();
         });
     }
 
