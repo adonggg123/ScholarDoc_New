@@ -63,6 +63,11 @@ function findFilePath(urlPath) {
         if (fs.existsSync(loginAdmin)) return loginAdmin;
     }
 
+    if (urlPath === '/otp' || urlPath === '/otp.html') {
+        const rootOtp = path.join(ROOT, 'otp.html');
+        if (fs.existsSync(rootOtp)) return rootOtp;
+    }
+
     // 2. Direct path resolution
     const directPath = path.join(ROOT, urlPath);
     if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
@@ -1144,6 +1149,8 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
 async function markFirstLoginCompleted(studentId, granteeUid, phone) {
     const cleanId = String(studentId).trim();
     completedFirstLoginStudents.add(cleanId);
+    const cleanNo = cleanId.replace(/[- ]/g, '');
+    if (cleanNo) completedFirstLoginStudents.add(cleanNo);
     saveOtpAuthState();
 
     const headers = {
@@ -2850,6 +2857,66 @@ const server = http.createServer(async (req, res) => {
                 res.end(JSON.stringify({ success: false, error: err.message }));
             }
         });
+        return;
+    }
+
+    // ── API: Check OTP Verification Status (Route Guard / Client Status) ──
+    if (urlPath === '/api/auth/otp/status' && (req.method === 'GET' || req.method === 'POST')) {
+        const handleStatus = async (rawIdentifier) => {
+            const cleanId = String(rawIdentifier || '').trim();
+            if (!cleanId) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                return;
+            }
+
+            const eligibility = await validateGranteeEligibility(cleanId);
+            if (!eligibility.isEligible) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    isEligible: false,
+                    firstLoginCompleted: false,
+                    requiresOtp: false,
+                    message: eligibility.message
+                }));
+                return;
+            }
+
+            const grantee = eligibility.grantee;
+            const completed = isFirstLoginCompleted(cleanId, grantee);
+            const activeSession = activeOtpSessions.get(cleanId);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                isEligible: true,
+                firstLoginCompleted: completed,
+                requiresOtp: !completed,
+                hasActiveSession: !!activeSession,
+                studentId: cleanId,
+                maskedPhone: maskPhoneNumber(grantee.mobile_number || grantee.contactNumber)
+            }));
+        };
+
+        if (req.method === 'GET') {
+            const parsedUrl = new URL(req.url, 'http://localhost');
+            const idParam = parsedUrl.searchParams.get('studentId') || parsedUrl.searchParams.get('student_no') || parsedUrl.searchParams.get('id') || '';
+            await handleStatus(idParam);
+        } else {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const parsed = JSON.parse(body || '{}');
+                    const idParam = parsed.studentId || parsed.student_no || parsed.identifier || '';
+                    await handleStatus(idParam);
+                } catch (e) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
+                }
+            });
+        }
         return;
     }
 

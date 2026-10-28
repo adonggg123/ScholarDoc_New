@@ -54,50 +54,135 @@ class AuthService {
       };
     }
 
-    // 2. Call backend /api/auth/student-login
-    try {
-      final uri = Uri.parse('$serverBaseUrl/api/auth/student-login');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'studentId': cleanId,
-          'password': cleanPwd,
-        }),
-      ).timeout(const Duration(seconds: 10));
+    // 2. Call backend /api/auth/student-login with responsive timeout across candidate URLs
+    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    dynamic lastConnectionError;
 
-      final data = jsonDecode(res.body);
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/student-login');
+        final res = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'studentId': cleanId,
+            'password': cleanPwd,
+          }),
+        ).timeout(const Duration(milliseconds: 2500));
 
-      if (res.statusCode == 200) {
-        return Map<String, dynamic>.from(data);
-      } else if (res.statusCode == 403) {
-        // Access denied: Not an official grantee in the scholarship database
-        final msg = data['message'] ??
-            'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.';
-        throw Exception(msg);
-      } else if (res.statusCode == 401) {
-        // Initial password mismatch (must use Student ID)
-        final msg = data['error'] ??
-            'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.';
-        throw Exception(msg);
-      } else if (res.statusCode == 429) {
-        // Rate limit reached
-        final msg = data['error'] ?? 'Rate limit exceeded. Please try again shortly.';
-        throw Exception(msg);
-      } else {
-        final msg = data['error'] ?? data['message'] ?? 'Login failed (${res.statusCode})';
-        throw Exception(msg);
+        // Confirmed working candidate
+        if (candidate.isNotEmpty) {
+          ApiConfig.setWorkingBaseUrl(candidate);
+        }
+
+        final data = jsonDecode(res.body);
+
+        if (res.statusCode == 200) {
+          return Map<String, dynamic>.from(data);
+        } else if (res.statusCode == 403) {
+          final msg = data['message'] ??
+              'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.';
+          throw Exception(msg);
+        } else if (res.statusCode == 401) {
+          final msg = data['error'] ??
+              'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.';
+          throw Exception(msg);
+        } else if (res.statusCode == 429) {
+          final msg = data['error'] ?? 'Rate limit exceeded. Please try again shortly.';
+          throw Exception(msg);
+        } else {
+          final msg = data['error'] ?? data['message'] ?? 'Login failed (${res.statusCode})';
+          throw Exception(msg);
+        }
+      } catch (e) {
+        if (e.toString().contains('Access denied') ||
+            e.toString().contains('Invalid initial credentials') ||
+            e.toString().contains('Rate limit') ||
+            e.toString().contains('No valid Philippine mobile number')) {
+          rethrow;
+        }
+        lastConnectionError = e;
       }
-    } catch (e) {
-      if (e.toString().contains('Access denied') ||
-          e.toString().contains('Invalid initial credentials') ||
-          e.toString().contains('Rate limit') ||
-          e.toString().contains('No valid Philippine mobile number')) {
-        rethrow;
-      }
-      debugPrint('AuthService.initiateStudentLogin notice: $e');
-      rethrow;
     }
+
+    debugPrint('AuthService.initiateStudentLogin notice (falling back to direct Supabase): $lastConnectionError');
+
+    // 3. Fallback: Direct Supabase verification when backend server is offline or unreachable
+    final cleanNo = cleanId.replaceAll('-', '').replaceAll(' ', '');
+    final filterParts = <String>{
+      'student_no.eq.$cleanId',
+      'studentId.eq.$cleanId',
+    };
+    if (cleanNo.isNotEmpty && cleanNo != cleanId) {
+      filterParts.add('student_no.eq.$cleanNo');
+      filterParts.add('studentId.eq.$cleanNo');
+    }
+    if (cleanId.contains('@')) {
+      filterParts.add('email_address.eq.$cleanId');
+      filterParts.add('email.eq.$cleanId');
+    }
+
+    final query = await _supabase
+        .from('student_grantees')
+        .select()
+        .or(filterParts.join(','));
+
+    if (query.isEmpty) {
+      throw Exception(
+        'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.',
+      );
+    }
+
+    final grantee = query.first;
+    // Strict First-Login Check: Only consider completed if explicitly verified via first_login_completed or otp_verified_at
+    final isFirstCompleted = grantee['first_login_completed'] == true ||
+        grantee['otp_verified_at'] != null;
+
+    if (isFirstCompleted) {
+      debugPrint('AuthService: Returning student verified directly via Supabase for $cleanId');
+      return {
+        'success': true,
+        'requiresOtp': false,
+        'isFirstLogin': false,
+        'studentId': cleanId,
+        'message': 'Returning student grantee. Standard login permitted (direct database fallback).',
+      };
+    }
+
+    // First Login check: Initial password must match Student ID
+    final studentNo = (grantee['student_no'] ?? grantee['studentId'] ?? '').toString().trim();
+    final matchesInitialId = cleanPwd == cleanId ||
+        (cleanNo.isNotEmpty && cleanPwd == cleanNo) ||
+        (studentNo.isNotEmpty && cleanPwd == studentNo);
+
+    if (!matchesInitialId) {
+      throw Exception(
+        'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.',
+      );
+    }
+
+    // Resolve masked phone for UI
+    final rawPhone = (grantee['mobile_number'] ?? grantee['contactNumber'] ?? '').toString();
+    String maskedPhone = 'your registered phone';
+    final cleanDigits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanDigits.length == 11) {
+      maskedPhone = '${cleanDigits.substring(0, 4)} •••• ${cleanDigits.substring(8)}';
+    } else if (cleanDigits.length > 4) {
+      maskedPhone = '${cleanDigits.substring(0, 2)} •••• ${cleanDigits.substring(cleanDigits.length - 2)}';
+    }
+
+    debugPrint('AuthService: First-login credentials matched via Supabase for $cleanId -> requiresOtp: true');
+    return {
+      'success': true,
+      'requiresOtp': true,
+      'isFirstLogin': true,
+      'studentId': cleanId,
+      'maskedPhone': maskedPhone,
+      'expiresIn': 300,
+      'resendCooldown': 60,
+      'message': 'A one-time password (OTP) is required for first-time login verification.',
+    };
   }
 
   /// Verifies the SMS OTP on the backend:
@@ -110,36 +195,53 @@ class AuthService {
   }) async {
     final cleanId = studentId.trim();
     final cleanOtp = otp.trim();
+    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    dynamic lastErr;
 
-    try {
-      final uri = Uri.parse('$serverBaseUrl/api/auth/otp/verify');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'studentId': cleanId,
-          'otp': cleanOtp,
-          'password': password.trim(),
-        }),
-      ).timeout(const Duration(seconds: 10));
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/otp/verify');
+        final res = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'studentId': cleanId,
+            'otp': cleanOtp,
+            'password': password.trim(),
+          }),
+        ).timeout(const Duration(seconds: 4));
 
-      final data = jsonDecode(res.body);
+        if (candidate.isNotEmpty) {
+          ApiConfig.setWorkingBaseUrl(candidate);
+        }
 
-      if (res.statusCode == 200 && data['verified'] == true) {
-        debugPrint('AuthService: Backend OTP verification SUCCESS for $cleanId');
-        // Complete the Supabase Auth login with the verified student credentials
-        return await loginStudent(
-          studentId: cleanId,
-          password: password.trim(),
-        );
+        final data = jsonDecode(res.body);
+
+        if (res.statusCode == 200 && data['verified'] == true) {
+          debugPrint('AuthService: Backend OTP verification SUCCESS for $cleanId');
+          // Complete the Supabase Auth login with the verified student credentials
+          return await loginStudent(
+            studentId: cleanId,
+            password: password.trim(),
+          );
+        }
+
+        final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed';
+        throw Exception(errMsg);
+      } catch (e) {
+        if (e.toString().contains('Invalid OTP code') ||
+            e.toString().contains('expired') ||
+            e.toString().contains('Maximum') ||
+            e.toString().contains('remaining')) {
+          rethrow;
+        }
+        lastErr = e;
       }
-
-      final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed';
-      throw Exception(errMsg);
-    } catch (e) {
-      debugPrint('AuthService.verifyLoginOtp error: $e');
-      rethrow;
     }
+
+    debugPrint('AuthService.verifyLoginOtp error: $lastErr');
+    throw Exception(lastErr?.toString() ?? 'OTP verification failed. Please check your connection.');
   }
 
   /// Requests a new OTP via Semaphore SMS with rate limit handling (60s cooldown).
@@ -147,29 +249,45 @@ class AuthService {
     required String studentId,
   }) async {
     final cleanId = studentId.trim();
+    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    dynamic lastErr;
 
-    try {
-      final uri = Uri.parse('$serverBaseUrl/api/auth/otp/resend');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'studentId': cleanId,
-        }),
-      ).timeout(const Duration(seconds: 10));
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/otp/resend');
+        final res = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'studentId': cleanId,
+          }),
+        ).timeout(const Duration(seconds: 4));
 
-      final data = jsonDecode(res.body);
+        if (candidate.isNotEmpty) {
+          ApiConfig.setWorkingBaseUrl(candidate);
+        }
 
-      if (res.statusCode == 200) {
-        return Map<String, dynamic>.from(data);
+        final data = jsonDecode(res.body);
+
+        if (res.statusCode == 200) {
+          return Map<String, dynamic>.from(data);
+        }
+
+        final errMsg = data['error'] ?? data['message'] ?? 'Failed to resend OTP';
+        throw Exception(errMsg);
+      } catch (e) {
+        if (e.toString().contains('wait') ||
+            e.toString().contains('Rate limit') ||
+            e.toString().contains('Access denied')) {
+          rethrow;
+        }
+        lastErr = e;
       }
-
-      final errMsg = data['error'] ?? data['message'] ?? 'Failed to resend OTP';
-      throw Exception(errMsg);
-    } catch (e) {
-      debugPrint('AuthService.resendLoginOtp error: $e');
-      rethrow;
     }
+
+    debugPrint('AuthService.resendLoginOtp error: $lastErr');
+    throw Exception(lastErr?.toString() ?? 'Failed to resend OTP. Please check your connection.');
   }
 
   /// Resets a student's first-login status (convenience helper for testing & coordinators).
@@ -184,6 +302,15 @@ class AuthService {
       return res.statusCode == 200;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Signs out of Supabase Auth
+  Future<void> signOut() async {
+    try {
+      await _supabase.auth.signOut();
+    } catch (e) {
+      debugPrint('AuthService.signOut notice: $e');
     }
   }
 
@@ -447,6 +574,35 @@ class AuthService {
               trimmedId)
           .toString()
           .trim();
+
+      // STRICT SECURITY GATE: Enforce OTP verification on student first login
+      final bool firstLoginDone = firstRecord['first_login_completed'] == true || firstRecord['otp_verified_at'] != null;
+      if (!firstLoginDone) {
+        bool isBackendVerified = false;
+        final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+        for (final candidate in candidates) {
+          if (candidate.isEmpty && !kIsWeb) continue;
+          try {
+            final uri = Uri.parse('$candidate/api/auth/otp/status?studentId=${Uri.encodeComponent(trimmedId)}');
+            final statusRes = await http.get(uri).timeout(const Duration(milliseconds: 1800));
+            if (statusRes.statusCode == 200) {
+              final data = jsonDecode(statusRes.body);
+              if (data['firstLoginCompleted'] == true) {
+                isBackendVerified = true;
+                if (candidate.isNotEmpty) ApiConfig.setWorkingBaseUrl(candidate);
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!isBackendVerified) {
+          throw Exception(
+            'First-login SMS OTP verification required. Please verify the 6-digit code sent to your registered mobile number.',
+          );
+        }
+      }
+
       final primaryEmail = _getAuthEmail(primaryStudentNo);
 
       final candidateEmails = <String>{};

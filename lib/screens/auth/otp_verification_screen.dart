@@ -28,8 +28,10 @@ class OtpVerificationScreen extends StatefulWidget {
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final AuthService _authService = AuthService();
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    6,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   bool _isVerifying = false;
@@ -98,14 +100,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final otp = _currentOtp.trim();
     if (otp.length != 6) {
       setState(() {
-        _errorMessage = 'Please enter all 6 digits of the OTP sent to your phone.';
+        _errorMessage =
+            'Please enter all 6 digits of the OTP sent to your phone.';
       });
       return;
     }
 
     if (_expireRemaining <= 0) {
       setState(() {
-        _errorMessage = 'This OTP has expired. Please tap "Resend Code" to get a new OTP.';
+        _errorMessage =
+            'This OTP has expired. Please tap "Resend Code" to get a new OTP.';
       });
       return;
     }
@@ -129,7 +133,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         SnackBar(
           content: Row(
             children: [
-              const Icon(LucideIcons.checkCircle2, color: Colors.white, size: 20),
+              const Icon(
+                LucideIcons.checkCircle2,
+                color: Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -145,7 +153,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           ),
           backgroundColor: const Color(0xFF16A34A),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       );
@@ -164,7 +174,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           .replaceAll('Exception: ', '')
           .trim();
       setState(() {
-        _errorMessage = raw.isNotEmpty ? raw : 'OTP verification failed. Please try again.';
+        _errorMessage = raw.isNotEmpty
+            ? raw
+            : 'OTP verification failed. Please try again.';
       });
     } finally {
       if (mounted) setState(() => _isVerifying = false);
@@ -180,7 +192,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
 
     try {
-      final res = await _authService.resendLoginOtp(studentId: widget.studentId);
+      final res = await _authService.resendLoginOtp(
+        studentId: widget.studentId,
+      );
       if (!mounted) return;
 
       // Clear current digits
@@ -214,15 +228,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           ),
           backgroundColor: const Color(0xFF0F3260),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      final raw = e
-          .toString()
-          .replaceAll('Exception: ', '')
-          .trim();
+      final raw = e.toString().replaceAll('Exception: ', '').trim();
       setState(() => _errorMessage = raw);
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -338,7 +351,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   // Eyebrow badge
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF9C3),
                         borderRadius: BorderRadius.circular(20),
@@ -347,7 +363,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.keyRound, size: 12, color: Color(0xFF854D0E)),
+                          const Icon(
+                            LucideIcons.keyRound,
+                            size: 12,
+                            color: Color(0xFF854D0E),
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             'FIRST LOGIN 2FA VERIFICATION',
@@ -392,7 +412,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   // Masked Phone Number Pill
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(24),
@@ -433,7 +456,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           focusNode: FocusNode(),
                           onKey: (event) {
                             if (event is RawKeyDownEvent &&
-                                event.logicalKey == LogicalKeyboardKey.backspace &&
+                                event.logicalKey ==
+                                    LogicalKeyboardKey.backspace &&
                                 _controllers[index].text.isEmpty &&
                                 index > 0) {
                               _focusNodes[index - 1].requestFocus();
@@ -460,15 +484,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               contentPadding: EdgeInsets.zero,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFCBD5E1),
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                  width: 1.5,
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFFFBC02D), width: 2.2),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFFBC02D),
+                                  width: 2.2,
+                                ),
                               ),
                             ),
                             onChanged: (val) => _onDigitChanged(index, val),
@@ -482,7 +514,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   // Error Banner
                   if (_errorMessage != null) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF2F2),
                         borderRadius: BorderRadius.circular(10),
@@ -490,7 +525,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(LucideIcons.alertCircle, color: Color(0xFFDC2626), size: 16),
+                          const Icon(
+                            LucideIcons.alertCircle,
+                            color: Color(0xFFDC2626),
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -515,7 +554,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       Icon(
                         LucideIcons.clock,
                         size: 14,
-                        color: isExpired ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                        color: isExpired
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF64748B),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -525,7 +566,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: isExpired ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                          color: isExpired
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF64748B),
                         ),
                       ),
                     ],
@@ -572,7 +615,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(LucideIcons.shieldCheck, size: 18, color: Color(0xFF0F3260)),
+                                const Icon(
+                                  LucideIcons.shieldCheck,
+                                  size: 18,
+                                  color: Color(0xFF0F3260),
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'VERIFY & SIGN IN',
@@ -618,9 +665,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 ? const SizedBox(
                                     height: 14,
                                     width: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : const Icon(LucideIcons.refreshCw, size: 14, color: Color(0xFF0F3260)),
+                                : const Icon(
+                                    LucideIcons.refreshCw,
+                                    size: 14,
+                                    color: Color(0xFF0F3260),
+                                  ),
                             label: Text(
                               'Resend Code via SMS',
                               style: GoogleFonts.inter(
@@ -639,7 +692,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       onPressed: () => Navigator.pop(context),
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFF94A3B8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                       ),
                       child: Text(
                         'Use different Student ID',
@@ -657,7 +713,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(LucideIcons.lock, size: 12, color: Color(0xFF94A3B8)),
+                      const Icon(
+                        LucideIcons.lock,
+                        size: 12,
+                        color: Color(0xFF94A3B8),
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Secured by Semaphore SMS Gateway',

@@ -546,6 +546,47 @@ if (loginForm) {
                     throw new Error(`Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
                 }
 
+                // --- FIRST-LOGIN SECURITY VERIFICATION: SMS OTP GATE ---
+                // Validate student credentials and check if first-login OTP is required
+                const otpRes = await fetch('/api/auth/student-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        studentId: cleanId,
+                        password: password
+                    })
+                });
+                const otpData = await otpRes.json();
+
+                if (!otpRes.ok) {
+                    if (otpRes.status === 403) {
+                        throw new Error(`Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
+                    }
+                    if (otpRes.status === 401) {
+                        throw new Error(otpData.error || 'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.');
+                    }
+                    if (otpRes.status === 429) {
+                        throw new Error(otpData.error || 'Too many OTP requests. Please wait before trying again.');
+                    }
+                    throw new Error(otpData.error || otpData.message || 'Login failed. Please check your credentials.');
+                }
+
+                // If First Login: DO NOT ALLOW ACCESS TO SYSTEM. Redirect to OTP verification page!
+                if (otpData.requiresOtp === true) {
+                    try {
+                        sessionStorage.setItem('scholardoc_pending_otp_student', JSON.stringify({
+                            studentId: cleanId,
+                            password: password,
+                            maskedPhone: otpData.maskedPhone,
+                            expiresIn: otpData.expiresIn || 300,
+                            resendCooldown: otpData.resendCooldown || 60
+                        }));
+                    } catch (_) {}
+                    window.location.href = `/otp.html?student_id=${encodeURIComponent(cleanId)}&phone=${encodeURIComponent(otpData.maskedPhone || '')}`;
+                    return;
+                }
+
+                // Returning Student: Proceed with existing authentication flow
                 // Legitimate student grantee verified! Gather candidate credentials
                 const primaryNo = (granteeRecord.student_no || granteeRecord.studentId || cleanId).trim();
                 const primaryEmail = getStudentEmail(primaryNo);

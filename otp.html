@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScholarDoc — Security Verification</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <meta name="description"
+        content="ScholarDoc Two-Factor Security Verification. Enter the 6-digit SMS OTP sent to your registered mobile number.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --primary-navy: #0A1931;
+            --primary-navy-light: #152A4A;
+            --accent-gold: #F5B025;
+            --accent-gold-hover: #E09E19;
+            --accent-gold-soft: #FFFBEB;
+            --surface-bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #0F172A;
+            --text-muted: #64748B;
+            --text-subtle: #94A3B8;
+            --border-subtle: #E2E8F0;
+            --border-focus: #F5B025;
+            --danger: #EF4444;
+            --danger-soft: #FEF2F2;
+            --danger-border: #FECACA;
+            --success: #10B981;
+            --success-soft: #ECFDF5;
+            --success-border: #A7F3D0;
+            --radius-card: 20px;
+            --radius-btn: 12px;
+            --radius-input: 12px;
+            --shadow-card: 0 20px 45px -10px rgba(10, 25, 49, 0.12), 0 10px 20px -5px rgba(10, 25, 49, 0.06);
+            --shadow-btn: 0 10px 24px -6px rgba(10, 25, 49, 0.25);
+            --shadow-focus: 0 0 0 4px rgba(245, 176, 37, 0.22);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 50%, #F8FAFC 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+            color: var(--text-main);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background accents */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 380px;
+            background: radial-gradient(ellipse at center, rgba(10, 25, 49, 0.08) 0%, rgba(245, 176, 37, 0.05) 45%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .otp-container {
+            width: 100%;
+            max-width: 480px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Main Card */
+        .otp-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-card);
+            padding: 40px 36px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+        }
+
+        /* Top decorative accent line */
+        .otp-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-navy) 0%, var(--accent-gold) 100%);
+        }
+
+        /* Brand Header */
+        .brand-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+            object-fit: contain;
+        }
+
+        .brand-text-block {
+            text-align: left;
+        }
+
+        .brand-title {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #0A1931 0%, #1E3A8A 60%, #F5B025 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+        }
+
+        .brand-subtitle {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--primary-navy);
+            letter-spacing: 1.5px;
+            margin-top: 2px;
+        }
+
+        /* Security Hero Icon Badge */
+        .hero-badge-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 18px;
+            position: relative;
+        }
+
+        .hero-badge {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(10, 25, 49, 0.05) 0%, rgba(245, 176, 37, 0.12) 100%);
+            border: 2px solid rgba(245, 176, 37, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-navy);
+            box-shadow: 0 10px 25px -4px rgba(245, 176, 37, 0.25);
+            position: relative;
+        }
+
+        .hero-badge i {
+            width: 34px;
+            height: 34px;
+            stroke-width: 2.2;
+        }
+
+        .hero-badge-pulse {
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-gold);
+            opacity: 0.4;
+            animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.95);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.15);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1.15);
+                opacity: 0;
+            }
+        }
+
+        /* Eyebrow Chip */
+        .eyebrow-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #F1F5F9;
+            border: 1px solid var(--border-subtle);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--primary-navy);
+            margin-bottom: 12px;
+        }
+
+        .eyebrow-chip i {
+            width: 12px;
+            height: 12px;
+            color: var(--accent-gold);
+        }
+
+        /* Titles */
+        .otp-title {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            color: var(--primary-navy);
+            margin-bottom: 8px;
+        }
+
+        .otp-desc {
+            font-size: 13.5px;
+            color: var(--text-muted);
+            line-height: 1.55;
+            margin-bottom: 22px;
+            padding: 0 8px;
+        }
+
+        .masked-phone-chip {
+            font-weight: 700;
+            color: var(--primary-navy);
+            background: #F1F5F9;
+            padding: 2px 8px;
+            border-radius: 6px;
+            display: inline-block;
+            font-family: monospace;
+            letter-spacing: 0.5px;
+        }
+
+        /* Error & Info Alerts */
+        .alert-banner {
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: left;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 20px;
+            transition: all 0.25s ease;
+        }
+
+        .alert-banner.hidden {
+            display: none;
+        }
+
+        .alert-banner.error {
+            background: var(--danger-soft);
+            border: 1px solid var(--danger-border);
+            color: #B91C1C;
+        }
+
+        .alert-banner.error i {
+            color: var(--danger);
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .alert-banner.success {
+            background: var(--success-soft);
+            border: 1px solid var(--success-border);
+            color: #065F46;
+        }
+
+        .alert-banner.success i {
+            color: var(--success);
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* 6-Digit OTP Inputs */
+        .otp-inputs-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .otp-digit-input {
+            width: 100%;
+            height: 58px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--primary-navy);
+            background: var(--surface-bg);
+            border: 2px solid var(--border-subtle);
+            border-radius: var(--radius-input);
+            outline: none;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Outfit', 'Inter', monospace;
+            -moz-appearance: textfield;
+        }
+
+        .otp-digit-input::-webkit-outer-spin-button,
+        .otp-digit-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .otp-digit-input:focus {
+            background: #FFFFFF;
+            border-color: var(--accent-gold);
+            box-shadow: var(--shadow-focus);
+            transform: translateY(-2px);
+        }
+
+        .otp-digit-input.filled {
+            background: #FFFFFF;
+            border-color: #CBD5E1;
+        }
+
+        .otp-digit-input.error {
+            border-color: var(--danger);
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+
+        /* Shake animation on verification error */
+        .shake-animation {
+            animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(3px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        /* Expiration Countdown Bar */
+        .timer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .timer-bar.expired {
+            color: var(--danger);
+        }
+
+        .timer-bar i {
+            width: 15px;
+            height: 15px;
+        }
+
+        .timer-value {
+            font-family: monospace;
+            font-weight: 700;
+            color: var(--primary-navy);
+        }
+
+        .timer-bar.expired .timer-value {
+            color: var(--danger);
+        }
+
+        /* Action Buttons */
+        .btn-verify {
+            width: 100%;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary-navy) 0%, #152A4A 100%);
+            color: #FFFFFF;
+            border: none;
+            border-radius: var(--radius-btn);
+            font-size: 14.5px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: var(--shadow-btn);
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-verify:hover:not(:disabled) {
+            background: linear-gradient(135deg, #071224 0%, var(--primary-navy) 100%);
+            transform: translateY(-1.5px);
+            box-shadow: 0 14px 28px -6px rgba(10, 25, 49, 0.35);
+        }
+
+        .btn-verify:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-verify:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-verify i {
+            width: 18px;
+            height: 18px;
+            color: var(--accent-gold);
+            transition: transform 0.2s ease;
+        }
+
+        .btn-verify:hover:not(:disabled) i {
+            transform: translateX(3px);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2.5px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #FFFFFF;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Resend & Secondary Section */
+        .resend-section {
+            margin-top: 22px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .resend-row {
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-resend {
+            background: none;
+            border: none;
+            color: var(--primary-navy);
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            transition: color 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-resend:hover:not(:disabled) {
+            color: var(--accent-gold);
+        }
+
+        .btn-resend:disabled {
+            color: var(--text-subtle);
+            text-decoration: none;
+            cursor: not-allowed;
+        }
+
+        .btn-back-login {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-back-login:hover {
+            color: var(--primary-navy);
+            background: var(--surface-bg);
+        }
+
+        .btn-back-login i {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Help Info Footer Card */
+        .help-card {
+            margin-top: 20px;
+            background: rgba(255, 251, 235, 0.7);
+            border: 1px solid #FDE68A;
+            border-radius: 12px;
+            padding: 12px 14px;
+            text-align: left;
+            display: flex;
+            gap: 10px;
+            font-size: 12px;
+            color: #92400E;
+            line-height: 1.45;
+        }
+
+        .help-card i {
+            width: 16px;
+            height: 16px;
+            color: #B45309;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* Mobile Viewport Adjustments */
+        @media (max-width: 480px) {
+            .otp-card {
+                padding: 30px 20px;
+                border-radius: 16px;
+            }
+
+            .otp-inputs-grid {
+                gap: 6px;
+            }
+
+            .otp-digit-input {
+                height: 50px;
+                font-size: 20px;
+                border-radius: 8px;
+            }
+
+            .otp-title {
+                font-size: 20px;
+            }
+
+            .otp-desc {
+                font-size: 12.5px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="otp-container" role="main">
+        <div class="otp-card" id="otpCard">
+            <!-- Brand Header -->
+            <div class="brand-header">
+                <img src="app_logo3.png" alt="ScholarDoc Logo" class="brand-logo">
+                <div class="brand-text-block">
+                    <h2 class="brand-title">ScholarDoc</h2>
+                    <p class="brand-subtitle">USTP OROQUIETA CAMPUS</p>
+                </div>
+            </div>
+
+            <!-- Hero Badge Icon -->
+            <div class="hero-badge-wrapper">
+                <div class="hero-badge">
+                    <div class="hero-badge-pulse"></div>
+                    <i data-lucide="shield-check"></i>
+                </div>
+            </div>
+
+            <!-- Eyebrow Badge -->
+            <div>
+                <span class="eyebrow-chip">
+                    <i data-lucide="lock"></i> FIRST-TIME LOGIN VERIFICATION
+                </span>
+            </div>
+
+            <!-- Title & Subtitle -->
+            <h1 class="otp-title">SMS Security Verification</h1>
+            <p class="otp-desc">
+                For your account security, a 6-digit one-time password (OTP) has been dispatched to your registered mobile number:
+                <br>
+                <span class="masked-phone-chip" id="maskedPhoneDisplay">Loading phone...</span>
+            </p>
+
+            <!-- Error Banner -->
+            <div class="alert-banner error hidden" id="errorBanner" role="alert">
+                <i data-lucide="alert-circle"></i>
+                <div id="errorMessage">Invalid verification code. Please try again.</div>
+            </div>
+
+            <!-- Success Banner -->
+            <div class="alert-banner success hidden" id="successBanner" role="status">
+                <i data-lucide="check-circle-2"></i>
+                <div id="successMessage">OTP verified successfully! Signing you into the Student Portal...</div>
+            </div>
+
+            <!-- 6-Digit OTP Input Form -->
+            <form id="otpForm" autocomplete="off" onsubmit="return false;">
+                <div class="otp-inputs-grid" id="otpInputsGrid">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit0" data-index="0" aria-label="First digit" autofocus required>
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit1" data-index="1" aria-label="Second digit" required>
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit2" data-index="2" aria-label="Third digit" required>
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit3" data-index="3" aria-label="Fourth digit" required>
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit4" data-index="4" aria-label="Fifth digit" required>
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit-input" id="otpDigit5" data-index="5" aria-label="Sixth digit" required>
+                </div>
+
+                <!-- Expiration Countdown -->
+                <div class="timer-bar" id="timerBar">
+                    <i data-lucide="clock"></i>
+                    <span>Code expires in <span class="timer-value" id="expireTimer">05:00</span></span>
+                </div>
+
+                <!-- Verify Button -->
+                <button type="button" class="btn-verify" id="verifyBtn">
+                    <span id="verifyBtnText">VERIFY & SIGN IN</span>
+                    <i data-lucide="arrow-right" id="verifyBtnIcon"></i>
+                    <div class="spinner hidden" id="verifySpinner"></div>
+                </button>
+            </form>
+
+            <!-- Resend & Back Section -->
+            <div class="resend-section">
+                <div class="resend-row">
+                    <span>Didn't receive the SMS code?</span>
+                    <button type="button" class="btn-resend" id="resendBtn" disabled>
+                        Resend OTP (<span id="resendTimer">60</span>s)
+                    </button>
+                </div>
+
+                <a href="/login.html" class="btn-back-login" id="backToLoginLink">
+                    <i data-lucide="arrow-left"></i> Change Student ID / Back to Login
+                </a>
+            </div>
+
+            <!-- Help Contact Box -->
+            <div class="help-card">
+                <i data-lucide="info"></i>
+                <div>
+                    <strong>Lost access to this mobile number?</strong>
+                    <br>
+                    Please visit the Scholarship & Student Affairs Unit at USTP Oroquieta Campus (Mobod) to update your registered contact information.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        // ── Supabase Configuration ──
+        const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
+        const STUDENT_STORAGE_KEY = 'scholardoc_student_auth_token';
+
+        const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                storageKey: STUDENT_STORAGE_KEY,
+                autoRefreshToken: true,
+                persistSession: true
+            }
+        }) : null;
+
+        // Initialize Lucide icons
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+
+        // ── Retrieve State from URL Params or Session Storage ──
+        const urlParams = new URLSearchParams(window.location.search);
+        let studentId = urlParams.get('student_id') || urlParams.get('studentId') || '';
+        let maskedPhone = urlParams.get('phone') || urlParams.get('masked_phone') || '';
+        let initialCooldown = parseInt(urlParams.get('cooldown') || '60', 10);
+        let initialExpiresIn = parseInt(urlParams.get('expires_in') || '300', 10);
+
+        // Fallback to sessionStorage
+        try {
+            const stored = sessionStorage.getItem('scholardoc_pending_otp_student');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (!studentId && parsed.studentId) studentId = parsed.studentId;
+                if (!maskedPhone && parsed.maskedPhone) maskedPhone = parsed.maskedPhone;
+                if (parsed.resendCooldown) initialCooldown = parsed.resendCooldown;
+                if (parsed.expiresIn) initialExpiresIn = parsed.expiresIn;
+            }
+        } catch (_) {}
+
+        // If no student ID was provided, kick back to login
+        if (!studentId) {
+            alert('No pending student login session found. Please enter your Student ID on the login page.');
+            window.location.href = '/login.html';
+        }
+
+        // DOM elements
+        const maskedPhoneDisplay = document.getElementById('maskedPhoneDisplay');
+        const errorBanner = document.getElementById('errorBanner');
+        const errorMessage = document.getElementById('errorMessage');
+        const successBanner = document.getElementById('successBanner');
+        const successMessage = document.getElementById('successMessage');
+        const expireTimer = document.getElementById('expireTimer');
+        const timerBar = document.getElementById('timerBar');
+        const resendBtn = document.getElementById('resendBtn');
+        const resendTimer = document.getElementById('resendTimer');
+        const verifyBtn = document.getElementById('verifyBtn');
+        const verifyBtnText = document.getElementById('verifyBtnText');
+        const verifyBtnIcon = document.getElementById('verifyBtnIcon');
+        const verifySpinner = document.getElementById('verifySpinner');
+        const otpCard = document.getElementById('otpCard');
+        const backToLoginLink = document.getElementById('backToLoginLink');
+
+        const inputs = Array.from(document.querySelectorAll('.otp-digit-input'));
+
+        if (maskedPhoneDisplay) {
+            maskedPhoneDisplay.textContent = maskedPhone || 'registered phone number';
+        }
+
+        // Clear pending session if user explicitly clicks back to login
+        if (backToLoginLink) {
+            backToLoginLink.addEventListener('click', () => {
+                try { sessionStorage.removeItem('scholardoc_pending_otp_student'); } catch (_) {}
+            });
+        }
+
+        // ── OTP Inputs Auto-Advancement, Backspace & Paste Handler ──
+        inputs.forEach((input, index) => {
+            // Auto focus next input on entry
+            input.addEventListener('input', (e) => {
+                const val = input.value.replace(/\D/g, '');
+                input.value = val ? val[0] : '';
+
+                if (val) {
+                    input.classList.add('filled');
+                    if (index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                        inputs[index + 1].select();
+                    } else {
+                        // Check if all 6 digits filled; if so, trigger verification
+                        const fullCode = getEnteredOtp();
+                        if (fullCode.length === 6) {
+                            handleVerifyOtp();
+                        }
+                    }
+                } else {
+                    input.classList.remove('filled');
+                }
+            });
+
+            // Backspace auto-retreat
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace') {
+                    if (!input.value && index > 0) {
+                        inputs[index - 1].focus();
+                        inputs[index - 1].value = '';
+                        inputs[index - 1].classList.remove('filled');
+                    } else {
+                        input.value = '';
+                        input.classList.remove('filled');
+                    }
+                } else if (e.key === 'ArrowLeft' && index > 0) {
+                    inputs[index - 1].focus();
+                } else if (e.key === 'ArrowRight' && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleVerifyOtp();
+                }
+            });
+
+            // Paste 6-digit code support
+            input.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const pasteData = (e.clipboardData || window.clipboardData).getData('text').trim();
+                const digits = pasteData.replace(/\D/g, '').substring(0, 6);
+                if (digits.length > 0) {
+                    digits.split('').forEach((d, i) => {
+                        if (inputs[i]) {
+                            inputs[i].value = d;
+                            inputs[i].classList.add('filled');
+                        }
+                    });
+                    const targetFocus = Math.min(digits.length, inputs.length - 1);
+                    inputs[targetFocus].focus();
+                    if (digits.length === 6) {
+                        handleVerifyOtp();
+                    }
+                }
+            });
+        });
+
+        function getEnteredOtp() {
+            return inputs.map(i => i.value.trim()).join('');
+        }
+
+        function clearOtpInputs() {
+            inputs.forEach(i => {
+                i.value = '';
+                i.classList.remove('filled');
+                i.classList.remove('error');
+            });
+            inputs[0].focus();
+        }
+
+        function showError(msg) {
+            errorMessage.textContent = msg || 'Invalid OTP code.';
+            errorBanner.classList.remove('hidden');
+            successBanner.classList.add('hidden');
+            inputs.forEach(i => i.classList.add('error'));
+
+            // Trigger card shake animation
+            otpCard.classList.remove('shake-animation');
+            void otpCard.offsetWidth; // trigger reflow
+            otpCard.classList.add('shake-animation');
+        }
+
+        function clearError() {
+            errorBanner.classList.add('hidden');
+            inputs.forEach(i => i.classList.remove('error'));
+        }
+
+        function showSuccess(msg) {
+            successMessage.textContent = msg;
+            successBanner.classList.remove('hidden');
+            errorBanner.classList.add('hidden');
+        }
+
+        function setSubmitting(loading) {
+            verifyBtn.disabled = loading;
+            if (loading) {
+                verifyBtnText.classList.add('hidden');
+                verifyBtnIcon.classList.add('hidden');
+                verifySpinner.classList.remove('hidden');
+            } else {
+                verifyBtnText.classList.remove('hidden');
+                verifyBtnIcon.classList.remove('hidden');
+                verifySpinner.classList.add('hidden');
+            }
+        }
+
+        // ── Expiration Countdown (5 min) ──
+        let expiresRemaining = initialExpiresIn;
+        let expireInterval = null;
+
+        function updateExpireDisplay() {
+            if (expiresRemaining <= 0) {
+                expireTimer.textContent = '00:00';
+                timerBar.classList.add('expired');
+                showError('Your OTP code has expired. Please click "Resend OTP" to receive a new code.');
+                verifyBtn.disabled = true;
+                clearInterval(expireInterval);
+                return;
+            }
+            const mins = Math.floor(expiresRemaining / 60);
+            const secs = expiresRemaining % 60;
+            expireTimer.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            expiresRemaining--;
+        }
+
+        expireInterval = setInterval(updateExpireDisplay, 1000);
+        updateExpireDisplay();
+
+        // ── Resend Cooldown Countdown (60s) ──
+        let cooldownRemaining = initialCooldown;
+        let cooldownInterval = null;
+
+        function updateCooldownDisplay() {
+            if (cooldownRemaining <= 0) {
+                resendBtn.disabled = false;
+                resendBtn.innerHTML = '<i data-lucide="refresh-cw" style="width:14px;height:14px;margin-right:4px;"></i> Resend OTP';
+                if (window.lucide) lucide.createIcons();
+                clearInterval(cooldownInterval);
+                return;
+            }
+            resendBtn.disabled = true;
+            resendBtn.textContent = `Resend OTP (${cooldownRemaining}s)`;
+            cooldownRemaining--;
+        }
+
+        cooldownInterval = setInterval(updateCooldownDisplay, 1000);
+        updateCooldownDisplay();
+
+        // ── Resend OTP Handler ──
+        resendBtn.addEventListener('click', async () => {
+            if (resendBtn.disabled) return;
+            clearError();
+            resendBtn.disabled = true;
+            resendBtn.textContent = 'Sending...';
+
+            try {
+                const res = await fetch('/api/auth/otp/resend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: studentId })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    if (res.status === 429) {
+                        showError(data.error || 'Please wait before requesting another code.');
+                        if (data.cooldownRemaining) {
+                            cooldownRemaining = data.cooldownRemaining;
+                            clearInterval(cooldownInterval);
+                            cooldownInterval = setInterval(updateCooldownDisplay, 1000);
+                            updateCooldownDisplay();
+                        }
+                        return;
+                    }
+                    throw new Error(data.error || data.message || 'Failed to resend OTP.');
+                }
+
+                // Reset timers
+                expiresRemaining = data.expiresIn || 300;
+                timerBar.classList.remove('expired');
+                clearInterval(expireInterval);
+                expireInterval = setInterval(updateExpireDisplay, 1000);
+                updateExpireDisplay();
+
+                cooldownRemaining = data.resendCooldown || 60;
+                clearInterval(cooldownInterval);
+                cooldownInterval = setInterval(updateCooldownDisplay, 1000);
+                updateCooldownDisplay();
+
+                if (data.maskedPhone && maskedPhoneDisplay) {
+                    maskedPhoneDisplay.textContent = data.maskedPhone;
+                }
+
+                clearOtpInputs();
+                showSuccess('A new 6-digit OTP code has been dispatched to your mobile number.');
+                setTimeout(() => {
+                    successBanner.classList.add('hidden');
+                }, 4000);
+
+            } catch (err) {
+                showError(err.message || 'Error resending OTP code.');
+                resendBtn.disabled = false;
+                resendBtn.textContent = 'Resend OTP';
+            }
+        });
+
+        // ── Verify OTP Handler ──
+        async function handleVerifyOtp() {
+            clearError();
+            const otpCode = getEnteredOtp();
+
+            if (otpCode.length < 6) {
+                showError('Please enter the complete 6-digit code sent via SMS.');
+                return;
+            }
+
+            setSubmitting(true);
+
+            try {
+                // 1. Backend Verification
+                const res = await fetch('/api/auth/otp/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        studentId: studentId,
+                        otp: otpCode
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    if (data.remainingAttempts !== undefined) {
+                        showError(`Invalid OTP code. You have ${data.remainingAttempts} attempt(s) remaining.`);
+                    } else if (data.invalidated) {
+                        showError('Maximum attempts reached. This OTP has been invalidated. Please click "Resend OTP" to request a new code.');
+                    } else if (data.expired) {
+                        showError('This OTP code has expired. Please click "Resend OTP" for a new code.');
+                    } else {
+                        showError(data.error || 'Verification failed. Please check the code.');
+                    }
+                    inputs.forEach(i => i.value = '');
+                    inputs[0].focus();
+                    setSubmitting(false);
+                    return;
+                }
+
+                // 2. OTP Verification Confirmed!
+                showSuccess('OTP Verified Successfully! Signing into Student Portal...');
+
+                // 3. Authenticate Student into Supabase Auth
+                let pendingPassword = studentId;
+                try {
+                    const stored = sessionStorage.getItem('scholardoc_pending_otp_student');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (parsed.password) pendingPassword = parsed.password;
+                    }
+                } catch (_) {}
+
+                let authResponse = null;
+                const cleanId = studentId.trim();
+                const studentEmail = `${cleanId.replace(/[- ]/g, '_')}@scholardoc.com`;
+
+                // Candidate passwords
+                const candidatePasswords = [
+                    pendingPassword,
+                    cleanId,
+                    cleanId.replace(/[- ]/g, ''),
+                    cleanId.padLeft ? cleanId.padLeft(6, '0') : cleanId.padStart(6, '0')
+                ].filter(p => p && p.length >= 6);
+
+                if (supabaseClient) {
+                    for (const pwd of candidatePasswords) {
+                        try {
+                            const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+                                email: studentEmail,
+                                password: pwd
+                            });
+                            if (!signInErr && signInData && signInData.user) {
+                                authResponse = signInData;
+                                break;
+                            }
+                        } catch (_) {}
+                    }
+
+                    // Auto-provision if not yet registered in Supabase Auth
+                    if (!authResponse || !authResponse.user) {
+                        try {
+                            const fallbackPwd = pendingPassword.length >= 6 ? pendingPassword : pendingPassword.padStart(6, '0');
+                            const { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
+                                email: studentEmail,
+                                password: fallbackPwd
+                            });
+                            if (!signUpErr && signUpData && signUpData.user) {
+                                authResponse = signUpData;
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                // Persist session & identifiers
+                try {
+                    sessionStorage.setItem('scholardoc_student_id', cleanId);
+                    localStorage.setItem('scholardoc_student_id', cleanId);
+                    sessionStorage.removeItem('scholardoc_pending_otp_student');
+                } catch (_) {}
+
+                // 4. Redirect to Student Portal Dashboard
+                setTimeout(() => {
+                    window.location.href = '/student_web/dashboard.html';
+                }, 1000);
+
+            } catch (err) {
+                console.error('[OTP Verify Error]', err);
+                showError(err.message || 'An unexpected error occurred during verification.');
+                setSubmitting(false);
+            }
+        }
+
+        verifyBtn.addEventListener('click', handleVerifyOtp);
+
+        // Auto-focus first input box
+        inputs[0].focus();
+    </script>
+</body>
+
+</html>

@@ -131,6 +131,30 @@ async function runTests() {
         assert.strictEqual(dataSubsequent.isFirstLogin, false, 'Expected isFirstLogin: false');
         console.log('   ✓ Returning student preserves standard login flow without OTP prompt\n');
 
+        // TEST 9: Check Status Endpoint
+        console.log('9. Testing /api/auth/otp/status route guard endpoint...');
+        const resStatus = await fetch(`${baseUrl}/api/auth/otp/status?studentId=${studentId}`);
+        const dataStatus = await resStatus.json();
+        assert.strictEqual(resStatus.status, 200);
+        assert.strictEqual(dataStatus.firstLoginCompleted, true, 'Expected firstLoginCompleted: true');
+        assert.strictEqual(dataStatus.requiresOtp, false, 'Expected requiresOtp: false');
+        console.log('   ✓ Status endpoint confirms firstLoginCompleted: true\n');
+
+        // TEST 10: Reset First-Login Status and verify OTP requirement returns
+        console.log('10. Testing /api/auth/otp/reset-first-login endpoint...');
+        const resReset = await fetch(`${baseUrl}/api/auth/otp/reset-first-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId: studentId })
+        });
+        assert.strictEqual(resReset.status, 200);
+
+        const resStatusAfterReset = await fetch(`${baseUrl}/api/auth/otp/status?studentId=${studentId}`);
+        const dataStatusAfterReset = await resStatusAfterReset.json();
+        assert.strictEqual(dataStatusAfterReset.firstLoginCompleted, false, 'Expected firstLoginCompleted: false after reset');
+        assert.strictEqual(dataStatusAfterReset.requiresOtp, true, 'Expected requiresOtp: true after reset');
+        console.log('   ✓ Reset successfully restored first-login OTP requirement\n');
+
         console.log('========================================================');
         console.log('🎉 ALL BACKEND SMS OTP TESTS PASSED SUCCESSFULLY!');
         console.log('========================================================\n');

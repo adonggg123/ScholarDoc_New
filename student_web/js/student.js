@@ -382,6 +382,35 @@ async function loadProfileData() {
     }
 
     if (studentRecord) {
+        // --- FIRST-LOGIN SECURITY GATE: Verify SMS OTP completion ---
+        // Under no circumstances allow access to the system until the OTP is successfully verified!
+        const cleanStudentId = String(studentRecord.student_no || studentRecord.studentId || storedStudentId || '').trim();
+        let isOtpCompleted = studentRecord.first_login_completed === true || studentRecord.otp_verified_at != null;
+
+        if (!isOtpCompleted && cleanStudentId) {
+            try {
+                const statusRes = await fetch(`/api/auth/otp/status?studentId=${encodeURIComponent(cleanStudentId)}`);
+                if (statusRes.ok) {
+                    const statusData = await statusRes.json();
+                    if (statusData.firstLoginCompleted) {
+                        isOtpCompleted = true;
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (!isOtpCompleted) {
+            console.warn('Unauthorized access blocked: Student has not completed first-login SMS OTP verification.');
+            try {
+                await window.supabaseClient.auth.signOut();
+                localStorage.removeItem(STUDENT_STORAGE_KEY);
+                sessionStorage.removeItem(STUDENT_STORAGE_KEY);
+            } catch (_) {}
+            alert('Security Verification Required: You must complete the SMS OTP verification sent to your registered mobile number before accessing the portal.');
+            window.location.href = '/login.html';
+            return;
+        }
+
         currentStudentProfile = studentRecord;
         window.currentStudentProfile = currentStudentProfile;
         window.currentStudentUid = uid || studentRecord.uid;

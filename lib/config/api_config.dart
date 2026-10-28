@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 /// Centralized API and Backend configuration for ScholarDoc.
-/// Automatically handles routing between local development and production Vercel deployment.
+/// Automatically handles routing between local development and production deployment.
 class ApiConfig {
   ApiConfig._();
 
@@ -13,30 +13,56 @@ class ApiConfig {
   /// Optional override passed via compiler flag: --dart-define=API_URL=...
   static const String _envUrl = String.fromEnvironment('API_URL', defaultValue: '');
 
-  /// Resolves the active backend base URL:
-  /// - Web: '' (relative paths)
-  /// - Custom compiler flag: uses provided URL
+  static String? _workingBaseUrl;
+
+  /// Returns candidate URLs in priority order for the current platform:
   /// - Release APK on physical devices: uses [defaultProductionUrl]
-  /// - Android Debug emulator: http://10.0.2.2:8080
-  /// - Other debug targets: http://localhost:8080
-  static String get baseUrl {
-    if (kIsWeb) return '';
+  /// - Android debug (Physical device via adb reverse): http://127.0.0.1:8080
+  /// - Android debug (Emulator): http://10.0.2.2:8080
+  /// - Android debug (Host Wi-Fi LAN): http://192.168.8.124:8080
+  /// - Web: '' (relative paths)
+  /// - Desktop / iOS Simulator: http://localhost:8080
+  static List<String> get candidateUrls {
+    if (kIsWeb) return [''];
 
     if (_envUrl.trim().isNotEmpty) {
       final trimmed = _envUrl.trim();
-      return trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+      return [trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed];
     }
 
     if (kReleaseMode) {
-      return defaultProductionUrl;
+      return [defaultProductionUrl];
     }
 
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
-        return 'http://10.0.2.2:8080';
+        return [
+          'http://127.0.0.1:8080',     // Physical device via adb reverse tcp:8080 tcp:8080
+          'http://10.0.2.2:8080',      // Android Emulator loopback
+          'http://192.168.8.124:8080', // Host PC Wi-Fi LAN IP
+          'http://localhost:8080',
+        ];
       }
     } catch (_) {}
 
-    return 'http://localhost:8080';
+    return [
+      'http://localhost:8080',
+      'http://127.0.0.1:8080',
+      'http://192.168.8.124:8080',
+    ];
+  }
+
+  /// Resolves the active backend base URL.
+  static String get baseUrl {
+    if (_workingBaseUrl != null) return _workingBaseUrl!;
+    final list = candidateUrls;
+    return list.isNotEmpty ? list.first : 'http://localhost:8080';
+  }
+
+  /// Caches a confirmed responsive URL so subsequent calls connect instantly without probing.
+  static void setWorkingBaseUrl(String url) {
+    final trimmed = url.trim();
+    _workingBaseUrl = trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
   }
 }
+

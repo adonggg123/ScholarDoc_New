@@ -56,10 +56,22 @@ class _SplashScreenState extends State<SplashScreen>
             return;
           }
 
-          // Student user: sync token and proceed to MainLayout
+          // Student user: check if first-login OTP verification has been completed
           try {
             final profile = await authService.getStudentProfile(session.user.id);
             final studentId = profile?['studentId'] ?? profile?['student_no'];
+            final isCompleted = profile?['first_login_completed'] == true || profile?['otp_verified_at'] != null;
+
+            if (!isCompleted) {
+              debugPrint('SplashScreen: Student has not completed first-login OTP. Redirecting to login.');
+              await authService.signOut();
+              if (!mounted) return;
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+              return;
+            }
+
             await PushNotificationService().syncToken(
               session.user.id,
               studentId: studentId?.toString(),
