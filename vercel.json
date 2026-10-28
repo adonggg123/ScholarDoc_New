@@ -1,11 +1,4 @@
 {
-  "redirects": [
-    {
-      "source": "/download",
-      "destination": "https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     { "source": "/", "destination": "/student_web/landing.html" },
     { "source": "/landing", "destination": "/student_web/landing.html" },

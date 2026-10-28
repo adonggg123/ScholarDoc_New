@@ -2103,7 +2103,8 @@ try {
 
 const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || 'eoueeoikuorzymkq').replace(/\s+/g, '');
-const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
+const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-new.vercel.app';
+const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
 
 function getGmailTransporter() {
     if (!nodemailer) return null;
@@ -2260,7 +2261,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
         scholarshipName,
         academicTerm,
         saNumber,
-        downloadUrl: APP_DOWNLOAD_URL
+        downloadUrl: GRANTEE_EMAIL_DOWNLOAD_URL
     });
 
     const headers = {
@@ -2276,7 +2277,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
             from: `"ScholarDoc Scholarship Office" <${GMAIL_USER}>`,
             to: targetEmail,
             subject: `[ScholarDoc] Official Notice: You are confirmed as a ${scholarshipName} Grantee - ${fullName}`,
-            text: `Dear ${fullName},\n\nCongratulations! You have been confirmed as an official scholarship grantee for ${scholarshipName}.\n\nStudent ID: ${studentNumber}\nCourse: ${course}\n\nPlease download the ScholarDoc mobile app to upload your documents and track your scholarship:\n${APP_DOWNLOAD_URL}\n\nScholarDoc Scholarship Office`,
+            text: `Dear ${fullName},\n\nCongratulations! You have been confirmed as an official scholarship grantee for ${scholarshipName}.\n\nStudent ID: ${studentNumber}\nCourse: ${course}\n\nPlease download the ScholarDoc mobile app to upload your documents and track your scholarship:\n${GRANTEE_EMAIL_DOWNLOAD_URL}\n\nScholarDoc Scholarship Office`,
             html
         });
         console.log(`[Gmail SMTP] Email successfully sent to ${targetEmail}! Message ID: ${info.messageId}`);
