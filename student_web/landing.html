@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -321,13 +321,12 @@
         .nav-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
             text-decoration: none;
         }
 
         .nav-brand-logo {
-            width: 44px;
-            height: 44px;
+            width: 65px;
+            height: 65px;
             border-radius: var(--r-sm);
             object-fit: contain;
             transition: transform 0.3s var(--ease-spring);
@@ -343,15 +342,16 @@
         }
 
         .nav-brand-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 20px;
-            font-weight: 900;
+            font-family: 'Poppins', sans-serif;
+            font-size: 21px;
+            font-weight: 800;
             line-height: 1.1;
-            letter-spacing: -0.4px;
-            background: linear-gradient(135deg, #091f3f 0%, #14376e 50%, #d99300 100%);
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #0A1931 0%, #0F3260 10%, #F59E0B 80%, #FFC107 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            display: inline-block;
         }
 
         .nav-brand-sub {
@@ -519,8 +519,17 @@
         }
 
         @keyframes pulseDot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.85); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(0.85);
+            }
         }
 
         .hero-title {
@@ -644,9 +653,17 @@
             border-radius: 50%;
         }
 
-        .mockup-dot.red { background: #ff5f56; }
-        .mockup-dot.yellow { background: #ffbd2e; }
-        .mockup-dot.green { background: #27c93f; }
+        .mockup-dot.red {
+            background: #ff5f56;
+        }
+
+        .mockup-dot.yellow {
+            background: #ffbd2e;
+        }
+
+        .mockup-dot.green {
+            background: #27c93f;
+        }
 
         .mockup-title {
             font-size: 11px;
@@ -725,8 +742,15 @@
         }
 
         @keyframes floatSlow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-8px);
+            }
         }
 
         .float-card-icon {
@@ -914,8 +938,13 @@
         }
 
         @keyframes marqueeSlide {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(calc(-340px * 4)); }
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(calc(-340px * 4));
+            }
         }
 
         /* ════════════════════════════════════════════════════════
@@ -1605,9 +1634,9 @@
         }
 
         .footer-brand-wrap .brand-name {
-            font-family: 'Outfit', sans-serif;
+            font-family: 'Poppins', sans-serif;
             font-size: 20px;
-            font-weight: 900;
+            font-weight: 800;
             color: var(--white);
         }
 
@@ -1736,12 +1765,29 @@
             transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
         }
 
-        .reveal-stagger.visible>*:nth-child(1) { transition-delay: 0.06s; }
-        .reveal-stagger.visible>*:nth-child(2) { transition-delay: 0.12s; }
-        .reveal-stagger.visible>*:nth-child(3) { transition-delay: 0.18s; }
-        .reveal-stagger.visible>*:nth-child(4) { transition-delay: 0.24s; }
-        .reveal-stagger.visible>*:nth-child(5) { transition-delay: 0.30s; }
-        .reveal-stagger.visible>*:nth-child(6) { transition-delay: 0.36s; }
+        .reveal-stagger.visible>*:nth-child(1) {
+            transition-delay: 0.06s;
+        }
+
+        .reveal-stagger.visible>*:nth-child(2) {
+            transition-delay: 0.12s;
+        }
+
+        .reveal-stagger.visible>*:nth-child(3) {
+            transition-delay: 0.18s;
+        }
+
+        .reveal-stagger.visible>*:nth-child(4) {
+            transition-delay: 0.24s;
+        }
+
+        .reveal-stagger.visible>*:nth-child(5) {
+            transition-delay: 0.30s;
+        }
+
+        .reveal-stagger.visible>*:nth-child(6) {
+            transition-delay: 0.36s;
+        }
 
         .reveal-stagger.visible>* {
             opacity: 1;
@@ -1749,18 +1795,39 @@
         }
 
         @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(24px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-16px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @keyframes fadeInRight {
-            from { opacity: 0; transform: translateX(30px); }
-            to { opacity: 1; transform: translateX(0); }
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
 
         .spin {
@@ -1769,8 +1836,13 @@
         }
 
         @keyframes spinRotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* ════════════════════════════════════════════════════════
@@ -2035,7 +2107,8 @@
 
                     <div class="hero-actions">
                         <a href="/login.html" class="btn btn-gold">
-                            <i data-lucide="log-in"></i> Sign In to Portal <i data-lucide="arrow-right" class="arrow-icon"></i>
+                            <i data-lucide="log-in"></i> Sign In to Portal <i data-lucide="arrow-right"
+                                class="arrow-icon"></i>
                         </a>
                         <a href="#workflow" class="btn btn-ghost-white">
                             <i data-lucide="route"></i> How It Works
@@ -2084,7 +2157,9 @@
                                 </div>
                                 <div class="float-card-info">
                                     <h5>Landbank SA Verified</h5>
-                                    <p><i data-lucide="check-circle-2" style="width: 12px; height: 12px; color: var(--emerald-400);"></i> 10-Digit Validated</p>
+                                    <p><i data-lucide="check-circle-2"
+                                            style="width: 12px; height: 12px; color: var(--emerald-400);"></i> 10-Digit
+                                        Validated</p>
                                 </div>
                             </div>
 
@@ -2095,7 +2170,9 @@
                                 </div>
                                 <div class="float-card-info">
                                     <h5>AI OCR Review Match</h5>
-                                    <p><i data-lucide="sparkles" style="width: 12px; height: 12px; color: var(--gold-300);"></i> 99.4% Confidence Score</p>
+                                    <p><i data-lucide="sparkles"
+                                            style="width: 12px; height: 12px; color: var(--gold-300);"></i> 99.4%
+                                        Confidence Score</p>
                                 </div>
                             </div>
                         </div>
@@ -2183,7 +2260,8 @@
                         <img src="assets/ustp_imag.jpg" alt="USTP Oroquieta City Campus Building">
                         <div class="about-img-caption">
                             <h4>USTP Oroquieta City Campus</h4>
-                            <p><i data-lucide="map-pin" style="width: 14px; height: 14px;"></i> Mobod, Oroquieta City, Misamis Occidental</p>
+                            <p><i data-lucide="map-pin" style="width: 14px; height: 14px;"></i> Mobod, Oroquieta City,
+                                Misamis Occidental</p>
                         </div>
                     </div>
                 </div>
@@ -2216,7 +2294,8 @@
                             </div>
                             <div class="highlight-text">
                                 <h4>Data Privacy & Bank-Grade Security</h4>
-                                <p>Strictly compliant with Republic Act 10173 (Data Privacy Act of 2012) with encrypted SA storage.</p>
+                                <p>Strictly compliant with Republic Act 10173 (Data Privacy Act of 2012) with encrypted
+                                    SA storage.</p>
                             </div>
                         </div>
 
@@ -2226,7 +2305,8 @@
                             </div>
                             <div class="highlight-text">
                                 <h4>Unified Multi-Platform Access</h4>
-                                <p>Seamlessly available on mobile smartphones, tablets, and university administrative workstations.</p>
+                                <p>Seamlessly available on mobile smartphones, tablets, and university administrative
+                                    workstations.</p>
                             </div>
                         </div>
                     </div>
@@ -2246,7 +2326,8 @@
                 </span>
                 <h2 class="section-title">Built for Modern Campus Administration</h2>
                 <p class="section-desc">
-                    Every feature is precision-engineered to make scholarship billing, document capture, and student verification effortless.
+                    Every feature is precision-engineered to make scholarship billing, document capture, and student
+                    verification effortless.
                 </p>
             </div>
 
@@ -2258,7 +2339,8 @@
                         <i data-lucide="camera"></i>
                     </div>
                     <h3>Instant ID Capture</h3>
-                    <p>Photograph front and back of student ID cards and draw digital specimen signatures directly in the browser.</p>
+                    <p>Photograph front and back of student ID cards and draw digital specimen signatures directly in
+                        the browser.</p>
                 </div>
 
                 <!-- Feature 2 -->
@@ -2268,7 +2350,8 @@
                         <i data-lucide="scan-line"></i>
                     </div>
                     <h3>AI OCR Extraction</h3>
-                    <p>Automatically extract Savings Account (SA) numbers, student names, and ID numbers with 99.4% verified accuracy.</p>
+                    <p>Automatically extract Savings Account (SA) numbers, student names, and ID numbers with 99.4%
+                        verified accuracy.</p>
                 </div>
 
                 <!-- Feature 3 -->
@@ -2278,7 +2361,8 @@
                         <i data-lucide="bell-ring"></i>
                     </div>
                     <h3>Real-Time Alerts</h3>
-                    <p>Receive immediate status updates, verification badges, and correction notices without visiting the office.</p>
+                    <p>Receive immediate status updates, verification badges, and correction notices without visiting
+                        the office.</p>
                 </div>
 
                 <!-- Feature 4 -->
@@ -2288,7 +2372,8 @@
                         <i data-lucide="landmark"></i>
                     </div>
                     <h3>Encrypted SA Tracking</h3>
-                    <p>Safely store, format, and audit Landbank Savings Account details for accurate fund distribution and payout runs.</p>
+                    <p>Safely store, format, and audit Landbank Savings Account details for accurate fund distribution
+                        and payout runs.</p>
                 </div>
 
                 <!-- Feature 5 -->
@@ -2298,7 +2383,8 @@
                         <i data-lucide="users"></i>
                     </div>
                     <h3>Scholar Directory</h3>
-                    <p>Easily browse and organize active scholars across college programs, academic year levels, and grant categories.</p>
+                    <p>Easily browse and organize active scholars across college programs, academic year levels, and
+                        grant categories.</p>
                 </div>
 
                 <!-- Feature 6 -->
@@ -2308,7 +2394,8 @@
                         <i data-lucide="file-text"></i>
                     </div>
                     <h3>PDF Audit Reports</h3>
-                    <p>Generate one-click official Annex 5 TES billing sheets, compliance exports, and institutional audit trails.</p>
+                    <p>Generate one-click official Annex 5 TES billing sheets, compliance exports, and institutional
+                        audit trails.</p>
                 </div>
             </div>
         </div>
@@ -2343,7 +2430,8 @@
                     <div class="workflow-step-badge">2</div>
                     <span class="step-duration-pill">~2 MINUTES</span>
                     <h4>Capture Documents</h4>
-                    <p>Upload clear front and back photos of your Student ID and draw your official specimen signature.</p>
+                    <p>Upload clear front and back photos of your Student ID and draw your official specimen signature.
+                    </p>
                 </div>
 
                 <!-- Step 3 -->
@@ -2351,7 +2439,8 @@
                     <div class="workflow-step-badge">3</div>
                     <span class="step-duration-pill">INSTANT AI</span>
                     <h4>AI OCR Review</h4>
-                    <p>The system cross-checks text on your documents against registered university masterlist records.</p>
+                    <p>The system cross-checks text on your documents against registered university masterlist records.
+                    </p>
                 </div>
 
                 <!-- Step 4 -->
@@ -2359,7 +2448,8 @@
                     <div class="workflow-step-badge">4</div>
                     <span class="step-duration-pill">REAL-TIME</span>
                     <h4>Approval & Payout</h4>
-                    <p>Receive your digital verified badge and track scholarship billing disbursement schedules in real time.</p>
+                    <p>Receive your digital verified badge and track scholarship billing disbursement schedules in real
+                        time.</p>
                 </div>
             </div>
         </div>
@@ -2391,7 +2481,8 @@
                         <span class="portal-pill-badge">STUDENT & GRANTEE ACCESS</span>
                         <h3>Student Portal</h3>
                         <p class="portal-desc">
-                            Designed for enrolled USTP scholars to submit required documents, validate Landbank SA numbers, and track grant statuses.
+                            Designed for enrolled USTP scholars to submit required documents, validate Landbank SA
+                            numbers, and track grant statuses.
                         </p>
                         <ul class="portal-check-list">
                             <li><i data-lucide="check-circle-2"></i> Submit Front & Back Student ID</li>
@@ -2415,7 +2506,8 @@
                         <span class="portal-pill-badge">ADMIN & EVALUATOR ACCESS</span>
                         <h3>Admin & Staff Portal</h3>
                         <p class="portal-desc">
-                            Equipped for scholarship coordinators, evaluators, and auditors to verify documents and generate official billing reports.
+                            Equipped for scholarship coordinators, evaluators, and auditors to verify documents and
+                            generate official billing reports.
                         </p>
                         <ul class="portal-check-list">
                             <li><i data-lucide="check-circle-2"></i> Side-by-Side Document & OCR Verification</li>
@@ -2444,7 +2536,8 @@
                     </span>
                     <h2 class="section-title">Need Assistance With Your Scholarship?</h2>
                     <p class="section-desc">
-                        Have questions about ID submission, Landbank SA validation, or TES billing status? Our scholarship coordination office is ready to assist.
+                        Have questions about ID submission, Landbank SA validation, or TES billing status? Our
+                        scholarship coordination office is ready to assist.
                     </p>
 
                     <div class="contact-info-block">
@@ -2454,7 +2547,8 @@
                             </div>
                             <div class="contact-item-text">
                                 <h4>Campus Location</h4>
-                                <p>Scholarship & Student Affairs Unit, USTP Oroquieta City Campus, Mobod, Oroquieta City</p>
+                                <p>Scholarship & Student Affairs Unit, USTP Oroquieta City Campus, Mobod, Oroquieta City
+                                </p>
                             </div>
                         </div>
 
@@ -2485,7 +2579,8 @@
                         </div>
                         <div class="faq-helper-text">
                             <h5>Lost Student ID or Wrong Account Number?</h5>
-                            <p>Contact the scholarship unit directly or submit an inquiry right here for rapid assistance.</p>
+                            <p>Contact the scholarship unit directly or submit an inquiry right here for rapid
+                                assistance.</p>
                         </div>
                     </div>
                 </div>
@@ -2494,17 +2589,20 @@
                 <div class="contact-right-col">
                     <div class="inquiry-card">
                         <h3>Send an Inquiry</h3>
-                        <p class="inquiry-card-subtitle">Fill in your information and our scholarship coordinator will get back to you promptly.</p>
+                        <p class="inquiry-card-subtitle">Fill in your information and our scholarship coordinator will
+                            get back to you promptly.</p>
 
                         <form id="inquiryForm" onsubmit="handleInquirySubmit(event)">
                             <div class="form-row">
                                 <label class="form-label" for="fullName">Full Name</label>
-                                <input type="text" id="fullName" class="form-input-field" placeholder="e.g. Juan Dela Cruz" required>
+                                <input type="text" id="fullName" class="form-input-field"
+                                    placeholder="e.g. Juan Dela Cruz" required>
                             </div>
 
                             <div class="form-row">
                                 <label class="form-label" for="emailAddr">USTP Email Address</label>
-                                <input type="email" id="emailAddr" class="form-input-field" placeholder="e.g. student@ustp.edu.ph" required>
+                                <input type="email" id="emailAddr" class="form-input-field"
+                                    placeholder="e.g. student@ustp.edu.ph" required>
                             </div>
 
                             <div class="form-row">
@@ -2519,7 +2617,8 @@
 
                             <div class="form-row">
                                 <label class="form-label" for="messageText">Message / Description</label>
-                                <textarea id="messageText" class="form-input-field" placeholder="Describe your inquiry or concern in detail..." required></textarea>
+                                <textarea id="messageText" class="form-input-field"
+                                    placeholder="Describe your inquiry or concern in detail..." required></textarea>
                             </div>
 
                             <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
@@ -2544,7 +2643,8 @@
                         <span class="brand-name">ScholarDoc</span>
                     </div>
                     <p class="footer-bio">
-                        Digital Scholarship Verification & Billing Management System designed specifically for the University of Science and Technology of Southern Philippines (USTP) Oroquieta City Campus.
+                        Digital Scholarship Verification & Billing Management System designed specifically for the
+                        University of Science and Technology of Southern Philippines (USTP) Oroquieta City Campus.
                     </p>
                 </div>
 
