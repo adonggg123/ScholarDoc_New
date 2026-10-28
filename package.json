@@ -2,7 +2,6 @@
   "name": "scholardoc",
   "version": "1.0.0",
   "description": "ScholarDoc - Digital Scholarship Verification & Billing Management System",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

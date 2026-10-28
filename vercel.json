@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{student_web,admin_web,superadmin_web,assets,scratch}/**",
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/", "destination": "/student_web/landing.html" },

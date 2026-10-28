@@ -4388,7 +4388,15 @@ if (require.main === module) {
     });
 }
 
-module.exports = {
+function vercelHandler(req, res) {
+    return new Promise((resolve) => {
+        res.on('finish', resolve);
+        res.on('close', resolve);
+        server.emit('request', req, res);
+    });
+}
+
+Object.assign(vercelHandler, {
     verifyNameMatch,
     parseStickerText,
     verifyBirthdateMatch,
@@ -4410,6 +4418,8 @@ module.exports = {
     startGranteeMessagingWatcher,
     startGranteeEmailWatcher,
     server
-};
+});
+
+module.exports = vercelHandler;
 
 
