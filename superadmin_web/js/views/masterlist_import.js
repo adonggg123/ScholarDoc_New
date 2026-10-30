@@ -96,6 +96,7 @@ let saTabPane2 = null;
 let saTabPane3 = null;
 let saTabPaneRev = null;
 
+let btnExportAnnexExcel = null;
 let btnExportF2 = null;
 let btnExportF3 = null;
 let saSearchF2 = null;
@@ -3055,6 +3056,7 @@ export function initMasterlistImport() {
     saTabPane3 = document.getElementById('sa-tab-pane-form3');
     saTabPaneRev = document.getElementById('sa-tab-pane-review');
 
+    btnExportAnnexExcel = document.getElementById('sa-btn-export-annex-excel');
     btnExportF2 = document.getElementById('sa-btn-export-form2-top');
     btnExportF3 = document.getElementById('sa-btn-export-form3-top');
     saSearchF2 = document.getElementById('sa-search-form2');
@@ -3374,89 +3376,106 @@ export function initMasterlistImport() {
         }, 200);
     }
 
-    // Annex Auto-Fill Excel Exports
-    if (btnExportF2) {
-        btnExportF2.addEventListener('click', async () => {
-            try {
-                btnExportF2.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
-                const resp = await fetch('/assets/Annex 5-TES New Form 2.xlsx');
-                if (!resp.ok) throw new Error('Could not load Annex 5 Form 2 template');
-                const blob = await resp.blob();
-
-                const studentsToFill = verifiedForm2List.map(item => {
-                    const grantee = item.grantee || {};
-                    const matched = item.matchedStudent || {};
-                    return {
-                        ...grantee,
-                        ...matched,
-                        studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
-                        saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
-                        fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
-                        lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
-                        firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
-                        middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
-                        batch: grantee.batch || matched.batch || '1',
-                        gender: matched.gender || grantee.gender || 'M',
-                        birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
-                        course: matched.course || grantee.course || grantee.program || '',
-                        year: matched.year || grantee.year || '1',
-                        email: matched.email || matched.authEmail || grantee.email || '',
-                        contactNumber: matched.contactNumber || matched.phone || grantee.contactNumber || grantee.phone || ''
-                    };
-                });
-                const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
-                const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
-                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${selectedAcademicYear}_${semClean}_${Date.now()}.xlsx`);
-            } catch (err) {
-                console.error('Form 2 export error:', err);
-                alert('Failed to generate Form 2: ' + err.message);
-            } finally {
-                btnExportF2.innerHTML = '<i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Auto-Fill Form 2 (.xlsx)';
+    // Consolidated Annex 5 Excel Export (Forms 1, 2, and 3 in one workbook)
+    async function exportConsolidatedAnnex5Excel(triggerBtn) {
+        const origHtml = triggerBtn ? triggerBtn.innerHTML : '';
+        try {
+            if (triggerBtn) {
+                triggerBtn.disabled = true;
+                triggerBtn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Exporting...';
             }
-        });
+
+            let resp = await fetch('/assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            if (!resp.ok) {
+                resp = await fetch('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            }
+            if (!resp.ok) {
+                throw new Error('Could not load 0_Annex_5_TES_New_Billing_Form.xlsx template');
+            }
+            const templateBlob = await resp.blob();
+
+            const mapAnnexItemBase = (item) => {
+                const grantee = item.grantee || {};
+                const student = item.matchedStudent || {};
+                const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+                let name = VerificationService.normalizeName(rawNameStr);
+                if (!name.lastName && !name.firstName) {
+                    const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+                    const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+                    const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+                    name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+                } else if (!name.mi) {
+                    const m = (student.mi || grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+                    if (m) name.mi = m.charAt(0).toUpperCase();
+                }
+
+                return {
+                    studentId: student.studentId || student.student_no || student.studentNo || student.student_id || grantee.student_id || grantee.studentNo || 'N/A',
+                    saNumber: student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || 'N/A',
+                    lastName: name.lastName || 'N/A',
+                    firstName: name.firstName || 'N/A',
+                    mi: name.mi || '',
+                    gender: (student.gender || grantee.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+                    birthdate: student.birthdate || student.birthday || grantee.birthdate || grantee.birthday || '01/01/2000',
+                    degree: student.program_name || student.programName || student.course || grantee.course || grantee.program_name || grantee.program || 'BSIT',
+                    year: String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1',
+                    email: student.email || student.authEmail || grantee.email || 'N/A',
+                    phone: student.contactNumber || student.phone || grantee.contactNumber || grantee.phone || 'N/A',
+                    batch: grantee.batch || student.batch || '1',
+                    tesAmount: student.tesAmount ?? student.tes_amount ?? grantee.tes_amount ?? 10000,
+                    pwdAmount: student.pwdAmount ?? student.pwd_amount ?? grantee.pwd_amount ?? 0
+                };
+            };
+
+            const form2Students = verifiedForm2List.map(item => mapAnnexItemBase(item));
+
+            const form3Students = verifiedForm3List.map(item => {
+                const base = mapAnnexItemBase(item);
+                const reason = item.specialStatusReason || item.matchedStudent?.status || 'Not enrolled';
+                const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
+                return {
+                    ...base,
+                    status: reason,
+                    remarks
+                };
+            });
+
+            const result = await BillingService.fillAnnex5ConsolidatedWorkbook(templateBlob, {
+                form2Students,
+                form3Students,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
+            });
+
+            const ayClean = String(selectedAcademicYear || 'All_AY').replace(/[^a-zA-Z0-9-]/g, '_');
+            const semClean = String(selectedSemester || 'All_Sem').replace(/[^a-zA-Z0-9]/g, '_');
+            downloadBlob(result.blob, `Annex_5_TES_New_Billing_Form_${ayClean}_${semClean}.xlsx`);
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    `Exported Annex 5 Excel workbook (Form 2: ${result.form2Count}, Form 3: ${result.form3Count}).`,
+                    'check-circle-2'
+                );
+            }
+        } catch (err) {
+            console.error('Annex 5 Excel export error:', err);
+            alert('Failed to export Annex 5 Excel workbook: ' + err.message);
+        } finally {
+            if (triggerBtn) {
+                triggerBtn.disabled = false;
+                triggerBtn.innerHTML = origHtml;
+            }
+        }
     }
 
+    if (btnExportAnnexExcel) {
+        btnExportAnnexExcel.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportAnnexExcel));
+    }
+    if (btnExportF2) {
+        btnExportF2.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportF2));
+    }
     if (btnExportF3) {
-        btnExportF3.addEventListener('click', async () => {
-            try {
-                btnExportF3.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
-                const resp = await fetch('/assets/Annex 5-TES New Form 3.xlsx');
-                if (!resp.ok) throw new Error('Could not load Annex 5 Form 3 template');
-                const blob = await resp.blob();
-
-                const studentsToFill = verifiedForm3List.map(item => {
-                    const grantee = item.grantee || {};
-                    const matched = item.matchedStudent || {};
-                    const specialReason = item.specialStatusReason || matched.status || 'Not enrolled';
-                    return {
-                        ...grantee,
-                        ...matched,
-                        studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
-                        saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
-                        fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
-                        lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
-                        firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
-                        middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
-                        batch: grantee.batch || matched.batch || '1',
-                        gender: matched.gender || grantee.gender || 'M',
-                        birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
-                        course: matched.course || grantee.course || grantee.program || '',
-                        year: matched.year || grantee.year || '1',
-                        status: specialReason,
-                        remarks: item.remarks || (specialReason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${specialReason}`)
-                    };
-                });
-
-                const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
-                const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
-                downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${selectedAcademicYear}_${semClean}_${Date.now()}.xlsx`);
-            } catch (err) {
-                console.error('Form 3 export error:', err);
-                alert('Failed to generate Form 3: ' + err.message);
-            } finally {
-                btnExportF3.innerHTML = '<i class="icon-file-text" style="font-size: 15px;"></i> Auto-Fill Form 3 (.xlsx)';
-            }
-        });
+        btnExportF3.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportF3));
     }
 
     // Annex Search Inputs

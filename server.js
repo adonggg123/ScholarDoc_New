@@ -136,7 +136,7 @@ const OCR_SPACE_KEYS = [
     'K87878892488957',
 ];
 
-function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientation = true } = {}) {
+function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientation = true, isPdf = false, timeoutMs = 8000 } = {}) {
     return new Promise((resolve) => {
         if (!base64Image) return resolve('');
 
@@ -146,13 +146,15 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                 return resolve('');
             }
             const apiKey = OCR_SPACE_KEYS[keyIndex++];
+            const dataUriPrefix = isPdf ? 'data:application/pdf;base64,' : 'data:image/jpeg;base64,';
             const postData = 'apikey=' + encodeURIComponent(apiKey) +
                 '&language=eng' +
                 '&isOverlayRequired=false' +
                 '&OCREngine=' + encodeURIComponent(engine) +
                 '&scale=' + (scale ? 'true' : 'false') +
                 '&detectOrientation=' + (detectOrientation ? 'true' : 'false') +
-                '&base64Image=' + encodeURIComponent('data:image/jpeg;base64,' + base64Image);
+                (isPdf ? '&filetype=PDF' : '') +
+                '&base64Image=' + encodeURIComponent(dataUriPrefix + base64Image);
 
             const req = https.request({
                 hostname: 'api.ocr.space',
@@ -173,7 +175,11 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                             console.warn('[OCR.space API Error]', json.ErrorMessage);
                             return tryNextKey();
                         }
-                        const text = json.ParsedResults?.[0]?.ParsedText || '';
+                        const parsedList = Array.isArray(json.ParsedResults) ? json.ParsedResults : [];
+                        const text = parsedList
+                            .map(r => (r && r.ParsedText ? String(r.ParsedText).trim() : ''))
+                            .filter(Boolean)
+                            .join('\n');
                         resolve(text.trim());
                     } catch (_) {
                         tryNextKey();
@@ -186,7 +192,7 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                 tryNextKey();
             });
 
-            req.setTimeout(8000, () => {
+            req.setTimeout(timeoutMs, () => {
                 req.destroy();
                 tryNextKey();
             });
@@ -3229,6 +3235,59 @@ const server = http.createServer(async (req, res) => {
                     message: atmRes.message
                 };
                 setInCache(documentAiEndpointCache, cacheKey, responseData);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(responseData));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Certificate of Registration (COR) PDF OCR Fallback ───────────
+    if (urlPath === '/api/document-ai/scan-cor' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const base64Pdf = parsed.pdf || parsed.file || '';
+
+                if (!base64Pdf) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'No PDF provided' }));
+                    return;
+                }
+
+                const cacheKey = getSha256(`cor:${base64Pdf}`);
+                const cachedRes = getFromCache(documentAiEndpointCache, cacheKey);
+                if (cachedRes) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ...cachedRes, cached: true }));
+                    return;
+                }
+
+                let text = await callOcrSpace(base64Pdf, { engine: '2', isPdf: true, timeoutMs: 20000 });
+                let engine = 'ScholarDoc Server PDF OCR (Engine 2)';
+                if (!text || text.replace(/[^A-Za-z0-9]/g, '').length < 40) {
+                    const textE1 = await callOcrSpace(base64Pdf, { engine: '1', isPdf: true, timeoutMs: 20000 });
+                    if (textE1 && textE1.length > (text ? text.length : 0)) {
+                        text = textE1;
+                        engine = 'ScholarDoc Server PDF OCR (Engine 1)';
+                    }
+                }
+
+                const responseData = {
+                    success: true,
+                    rawText: text || '',
+                    text: text || '',
+                    engine
+                };
+                if (text && text.trim().length > 0) {
+                    setInCache(documentAiEndpointCache, cacheKey, responseData);
+                }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(responseData));

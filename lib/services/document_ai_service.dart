@@ -1193,6 +1193,14 @@ class DocumentAIScannerService {
     return null;
   }
 
+  /// Public entry point for academic year extraction from arbitrary document text
+  /// (e.g. Certificate of Registration). Delegates to the same robust parser used for ID stickers.
+  static String? extractAcademicYear(String text) => _extractAcademicYear(text);
+
+  /// Public entry point for semester extraction from arbitrary document text
+  /// (e.g. Certificate of Registration). Delegates to the same robust parser used for ID stickers.
+  static String? extractSemester(String text) => _extractSemester(text);
+
   /// Robust regex extraction for ANY Academic Year (e.g. 2026-2027, 2024-2025, 2025-26, etc.)
   static String? _extractAcademicYear(String text) {
     if (text.isEmpty) return null;

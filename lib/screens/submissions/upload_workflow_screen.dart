@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'id_capture_screen.dart';
 import '../../services/academic_term_service.dart';
 import '../../services/document_ai_service.dart';
+import '../../services/cor_validation_service.dart';
 import 'document_crop_screen.dart';
 
 class UploadWorkflowScreen extends StatefulWidget {
@@ -78,9 +79,31 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   bool? _stickerValidated;
   bool? _stickerOverriddenForAdmin;
 
+  // Certificate of Registration (COR) State — PDF only, uploaded after the School ID scan
+  String? _corUrl;
+  String? _corFileName;
+  String? _corFeedback;
+  bool? _corValidated;
+  bool? _corNameMatches;
+  bool? _corYearMatches;
+  bool? _corSemesterMatches;
+  String? _corExtractedName;
+  String? _corAcademicYear;
+  String? _corSemester;
+  String? _corEngine;
+
+  bool get _idScanCompleted =>
+      _submissionPdfUrl != null &&
+      _frontNameMatches != false &&
+      _stickerValidated != false &&
+      _backBirthdateMatches != false;
+
   @override
   void initState() {
     super.initState();
+    AcademicTermService.syncFromSupabase().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadSA();
   }
 
@@ -225,6 +248,346 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
     }
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Certificate of Registration (COR) — PDF upload + validation
+  // ──────────────────────────────────────────────────────────────────────────
+
+  Future<void> _handleCorUpload() async {
+    if (!_idScanCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please complete the School ID scan first. Your COR is uploaded after your ID is captured.'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to select file: $e'), backgroundColor: AppTheme.error),
+      );
+      return;
+    }
+    if (picked == null || picked.files.isEmpty) return;
+
+    final file = picked.files.first;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && !kIsWeb && file.path != null) {
+      try {
+        bytes = await File(file.path!).readAsBytes();
+      } catch (e) {
+        debugPrint('Error reading COR from path: $e');
+      }
+    }
+    if (!mounted) return;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not read file data. Please try another file.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    final String fileName = file.name.isNotEmpty
+        ? file.name
+        : 'COR_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+    // PDF-only enforcement: extension AND file signature must both be PDF
+    if (!fileName.toLowerCase().endsWith('.pdf') || !CorValidationService.isPdfBytes(bytes)) {
+      _showCorSimpleErrorDialog(
+        title: 'PDF Files Only',
+        message: 'Only PDF files are accepted for the Certificate of Registration. Please select your COR in PDF format.',
+      );
+      return;
+    }
+    if (bytes.lengthInBytes > CorValidationService.maxFileSizeBytes) {
+      _showCorSimpleErrorDialog(
+        title: 'File Too Large',
+        message: 'Your COR PDF must be 10 MB or smaller. Please upload a smaller copy.',
+      );
+      return;
+    }
+
+    // Validation progress dialog
+    StateSetter? dialogSetState;
+    String progressSubtitle = 'Reading PDF text...';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          dialogSetState = setDialogState;
+          return Center(
+            child: Card(
+              elevation: 8,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Color(0xFF0F3260)),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Validating your COR...',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      progressSubtitle,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    CorScanResult? corResult;
+    String? validationError;
+    try {
+      String expectedName = _studentFullName.trim();
+      if (expectedName.isEmpty) {
+        final uid = _authService.currentUser?.id;
+        if (uid != null) {
+          final profile = await _authService.getStudentProfile(uid);
+          expectedName = (profile?['fullName'] ?? profile?['full_name'] ?? '').toString().trim();
+        }
+        if (expectedName.isEmpty) {
+          final meta = _authService.currentUser?.userMetadata;
+          expectedName = (meta?['fullName'] ?? meta?['full_name'] ?? '').toString().trim();
+        }
+        if (expectedName.isNotEmpty && mounted) {
+          setState(() => _studentFullName = expectedName);
+        }
+      }
+
+      corResult = await CorValidationService.validateCorPdf(
+        bytes,
+        expectedName: expectedName,
+        onProgress: (status) => dialogSetState?.call(() => progressSubtitle = status),
+      );
+    } catch (e) {
+      validationError = e.toString();
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop(); // Dismiss progress dialog
+    }
+    if (!mounted) return;
+
+    if (corResult == null) {
+      _showCorSimpleErrorDialog(
+        title: 'COR Validation Error',
+        message: 'Something went wrong while validating your COR. Please try again.\n\n${validationError ?? ''}',
+      );
+      return;
+    }
+    if (!corResult.isValid) {
+      _showCorValidationErrorDialog(corResult);
+      return;
+    }
+
+    // Valid → upload to storage
+    final validResult = corResult;
+    setState(() {
+      _isUploading = true;
+      _corFeedback = null;
+    });
+    try {
+      final uid = _authService.currentUser?.id;
+      if (uid == null) throw Exception('User not authenticated');
+
+      final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final downloadUrl = await _storageService.uploadFile(
+        path: 'submissions/$uid/COR_${DateTime.now().millisecondsSinceEpoch}_$safeName',
+        bytes: bytes,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+        _corUrl = downloadUrl;
+        _corFileName = fileName;
+        _corFeedback = '✅ COR Verified & Ready';
+        _corValidated = true;
+        _corNameMatches = validResult.nameMatches;
+        _corYearMatches = validResult.yearMatches;
+        _corSemesterMatches = validResult.semesterMatches;
+        _corExtractedName = validResult.detectedName;
+        _corAcademicYear = validResult.detectedAcademicYear;
+        _corSemester = validResult.detectedSemester;
+        _corEngine = validResult.engineUsed;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(LucideIcons.checkCircle2, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Expanded(child: Text('COR verified and uploaded successfully!')),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploading = false;
+        _corFeedback = 'Error: ${e.toString()}';
+      });
+    }
+  }
+
+  void _showCorSimpleErrorDialog({required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.alertCircle, color: Color(0xFFEF4444), size: 24),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 13, height: 1.4)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCorValidationErrorDialog(CorScanResult result) {
+    final term = result.targetTerm;
+    final title = result.isReadable ? 'COR Verification Failed' : 'Unreadable COR';
+
+    Widget row(String label, bool ok, String detail) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 104,
+              child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+            Expanded(
+              child: Text(
+                '${ok ? '✅' : '❌'} $detail',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: ok ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.shieldAlert, color: Color(0xFFEF4444), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(result.message, style: const TextStyle(fontSize: 13, height: 1.45)),
+              if (result.isReadable) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      row('Name:', result.nameMatches, result.nameMatches ? 'Matched' : 'Mismatch'),
+                      row(
+                        'Academic Year:',
+                        result.yearMatches,
+                        result.yearMatches
+                            ? term.academicYear
+                            : '${result.detectedAcademicYear ?? 'Not found'} (need ${term.academicYear})',
+                      ),
+                      row(
+                        'Semester:',
+                        result.semesterMatches,
+                        result.semesterMatches
+                            ? term.semester
+                            : '${result.detectedSemester ?? 'Not found'} (need ${term.semester})',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _handleCorUpload();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F3260),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Choose Another PDF', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showDocumentSelectionSheet(String docType) {
     final bool isDeposit = docType == 'Deposit Slip';
@@ -1283,14 +1646,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   }
 
   void _showReviewSheet(String label, String fileName) {
-    final bool isAtm = label.contains('ATM') || fileName == _atmCardFileName;
-    final bool isDeposit = label.contains('Deposit') || fileName == _depositSlipFileName;
+    final bool isCor = label.contains('Certificate of Registration');
+    final bool isAtm = !isCor && (label.contains('ATM') || fileName == _atmCardFileName);
+    final bool isDeposit = !isCor && (label.contains('Deposit') || fileName == _depositSlipFileName);
     final bool isBankDoc = isAtm || isDeposit;
     final String docType = isDeposit ? 'Deposit Slip' : (isAtm ? 'ATM Proof' : 'Document');
 
     final Uint8List? docBytes = isDeposit ? _depositSlipBytes : (isAtm ? _atmProofBytes : null);
-    final String? docUrl = isDeposit ? _depositSlipUrl : (isAtm ? _atmCardUrl : _submissionPdfUrl);
-    final bool isPdf = fileName.toLowerCase().endsWith('.pdf') || (isDeposit ? _depositSlipIsPdf : (isAtm ? _atmProofIsPdf : true));
+    final String? docUrl = isCor
+        ? _corUrl
+        : (isDeposit ? _depositSlipUrl : (isAtm ? _atmCardUrl : _submissionPdfUrl));
+    final bool isPdf = isCor || fileName.toLowerCase().endsWith('.pdf') || (isDeposit ? _depositSlipIsPdf : (isAtm ? _atmProofIsPdf : true));
 
     showModalBottomSheet(
       context: context,
@@ -1325,9 +1691,11 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      isDeposit
-                          ? LucideIcons.fileText
-                          : (isAtm ? LucideIcons.creditCard : LucideIcons.eye),
+                      isCor
+                          ? LucideIcons.graduationCap
+                          : (isDeposit
+                              ? LucideIcons.fileText
+                              : (isAtm ? LucideIcons.creditCard : LucideIcons.eye)),
                       color: AppTheme.primaryColor,
                       size: 20,
                     ),
@@ -1338,7 +1706,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isBankDoc ? '$docType Review' : 'Document Review',
+                          isCor ? 'COR Review' : (isBankDoc ? '$docType Review' : 'Document Review'),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
@@ -1465,6 +1833,27 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                     label: Text(
                       'Re-upload or Replace $docType',
                       style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F3260),
+                    ),
+                  ),
+                ),
+              ],
+              if (isCor) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _handleCorUpload();
+                    },
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    label: const Text(
+                      'Re-upload or Replace COR',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF0F3260),
@@ -1826,6 +2215,26 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         );
         return;
       }
+      if (_corUrl == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload your Certificate of Registration (COR) in PDF format before continuing.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_corValidated != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your COR does not match your registered name or the current academic year and semester. Please upload the correct COR.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (_atmCardUrl == null && _depositSlipUrl == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1897,6 +2306,29 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           if (_idBackUrl != null) {
             documents['idBackUrl'] = _idBackUrl;
             documents['id_back_url'] = _idBackUrl;
+          }
+          // COR data is stored only inside the documents JSON (no new table columns required)
+          if (_corUrl != null) {
+            documents['corUrl'] = _corUrl;
+            documents['cor_url'] = _corUrl;
+            documents['corFileName'] = _corFileName;
+            documents['cor_file_name'] = _corFileName;
+            documents['corValidated'] = _corValidated;
+            documents['cor_validated'] = _corValidated;
+            documents['corNameMatches'] = _corNameMatches;
+            documents['cor_name_matches'] = _corNameMatches;
+            documents['corYearMatches'] = _corYearMatches;
+            documents['cor_year_matches'] = _corYearMatches;
+            documents['corSemesterMatches'] = _corSemesterMatches;
+            documents['cor_semester_matches'] = _corSemesterMatches;
+            documents['corAcademicYear'] = _corAcademicYear;
+            documents['cor_academic_year'] = _corAcademicYear;
+            documents['corSemester'] = _corSemester;
+            documents['cor_semester'] = _corSemester;
+            documents['corExtractedName'] = _corExtractedName;
+            documents['cor_extracted_name'] = _corExtractedName;
+            documents['corValidationEngine'] = _corEngine;
+            documents['corValidatedAt'] = DateTime.now().toUtc().toIso8601String();
           }
           String effectiveSa = _saController.text.trim();
           if (effectiveSa.isEmpty || effectiveSa.toUpperCase() == 'N/A') {
@@ -2080,6 +2512,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             _depositSlipFileName = null;
             _depositSlipBytes = null;
             _depositSlipIsPdf = false;
+            _corUrl = null;
+            _corFileName = null;
+            _corFeedback = null;
+            _corValidated = null;
+            _corNameMatches = null;
+            _corYearMatches = null;
+            _corSemesterMatches = null;
+            _corExtractedName = null;
+            _corAcademicYear = null;
+            _corSemester = null;
+            _corEngine = null;
           });
         }
       } catch (e) {
@@ -2114,6 +2557,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         const SizedBox(height: 20),
         _bulletPoint('Camera Capture: Front and Back of Student ID'),
         _bulletPoint('Digital Signature: Draw signature directly in the app'),
+        _bulletPoint('Certificate of Registration (COR) for the current semester (PDF file only)'),
         _bulletPoint('ATM Card Proof (Scan or photo of your Landbank ATM Card)'),
         _bulletPoint('Deposit Slip Proof (Scan or photo of Bank Deposit Slip / Receipt)'),
         const SizedBox(height: 28),
@@ -2344,6 +2788,48 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
                 ],
               ),
             ),
+
+          // Certificate of Registration (COR) — PDF only, unlocked after the School ID scan
+          Opacity(
+            opacity: _idScanCompleted ? 1.0 : 0.55,
+            child: _buildUploadCard(
+              'Certificate of Registration (COR)',
+              LucideIcons.graduationCap,
+              onTap: () => _handleCorUpload(),
+              feedback: _corFeedback,
+              subtitle: _idScanCompleted
+                  ? 'Upload your COR for ${AcademicTermService.currentTerm.displayString} (PDF only, max 10 MB)'
+                  : 'Complete the School ID scan first to unlock this step',
+              fileName: _corFileName,
+            ),
+          ),
+          if (_corFileName != null && _corValidated == true)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.badgeCheck, size: 15, color: Color(0xFF059669)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'COR Verified: Name, AY ${_corAcademicYear ?? AcademicTermService.currentTerm.academicYear} & ${_corSemester ?? AcademicTermService.currentTerm.semester} matched',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           _buildUploadCard(
             'ATM Proof',
             LucideIcons.creditCard,
@@ -2618,6 +3104,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           _buildReviewItem(_pdfFileName!, 'ID Submission Document'),
           const SizedBox(height: 12),
         ],
+        if (_corFileName != null) ...[
+          _buildReviewItem(_corFileName!, 'Certificate of Registration (PDF)'),
+          const SizedBox(height: 12),
+        ],
         if (_atmCardFileName != null) ...[
           _buildReviewItem(_atmCardFileName!, 'ATM Card Proof'),
           const SizedBox(height: 12),
@@ -2626,7 +3116,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
           _buildReviewItem(_depositSlipFileName!, 'Deposit Slip Proof'),
           const SizedBox(height: 12),
         ],
-        if (_pdfFileName == null && _atmCardFileName == null && _depositSlipFileName == null)
+        if (_pdfFileName == null && _corFileName == null && _atmCardFileName == null && _depositSlipFileName == null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Text(
