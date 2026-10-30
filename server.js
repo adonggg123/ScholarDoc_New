@@ -994,6 +994,20 @@ function buildStudentQueryFilter(targetId) {
     }
 }
 
+// Short-TTL (30s) in-memory cache for grantee records to eliminate redundant Supabase round-trips during OTP login/resend
+const granteeEligibilityCache = new Map();
+const GRANTEE_CACHE_TTL_MS = 30000;
+const OTP_EXPIRY_SECONDS = 600;          // 10 minutes validity to prevent timeout on delayed carrier towers
+const OTP_RESEND_COOLDOWN_SECONDS = 30;  // 30 seconds resend cooldown
+
+function invalidateGranteeCache(identifier) {
+    if (!identifier) return;
+    const cleanId = String(identifier).trim();
+    const cleanNo = cleanId.replace(/[- ]/g, '');
+    granteeEligibilityCache.delete(cleanId);
+    if (cleanNo) granteeEligibilityCache.delete(cleanNo);
+}
+
 /**
  * Validates whether a student identifier exists in the Supabase student_grantees table.
  * Students not in student_grantees are strictly denied access.
@@ -1009,6 +1023,31 @@ async function validateGranteeEligibility(identifier) {
 
     const cleanId = String(identifier).trim();
     const cleanNo = cleanId.replace(/[- ]/g, '');
+
+    const cached = granteeEligibilityCache.get(cleanId) || (cleanNo ? granteeEligibilityCache.get(cleanNo) : null);
+    if (cached && (Date.now() - cached.ts < GRANTEE_CACHE_TTL_MS)) {
+        const grantee = cached.rawGrantee;
+        const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
+        const normalizedPhone = normalizePhilippineMobile(rawPhone);
+        const isFirst = !isFirstLoginCompleted(cleanId, grantee);
+        return {
+            success: true,
+            isEligible: true,
+            grantee: {
+                id: grantee.id,
+                uid: grantee.uid,
+                student_no: grantee.student_no || grantee.studentId,
+                full_name: grantee.full_name || grantee.fullName,
+                course: grantee.course || grantee.program_name,
+                mobile_number: normalizedPhone || rawPhone,
+                contactNumber: normalizedPhone || rawPhone,
+                first_login_completed: !isFirst,
+                is_first_login: isFirst
+            },
+            message: 'Student is registered as an eligible grantee.'
+        };
+    }
+
     const headers = {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -1042,6 +1081,9 @@ async function validateGranteeEligibility(identifier) {
             const rows = await res.json();
             if (Array.isArray(rows) && rows.length > 0) {
                 const grantee = rows[0];
+                const cacheEntry = { rawGrantee: grantee, ts: Date.now() };
+                granteeEligibilityCache.set(cleanId, cacheEntry);
+                if (cleanNo) granteeEligibilityCache.set(cleanNo, cacheEntry);
                 const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
                 const normalizedPhone = normalizePhilippineMobile(rawPhone);
                 const isFirst = !isFirstLoginCompleted(cleanId, grantee);
@@ -1157,6 +1199,7 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
     completedFirstLoginStudents.add(cleanId);
     const cleanNo = cleanId.replace(/[- ]/g, '');
     if (cleanNo) completedFirstLoginStudents.add(cleanNo);
+    invalidateGranteeCache(cleanId);
     saveOtpAuthState();
 
     const headers = {
@@ -1167,7 +1210,7 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
 
     const now = new Date().toISOString();
 
-    // 1. Update student_grantees table if possible
+    // 1. Update student_grantees table immediately so returning-student flag is live
     let matchQuery = '';
     if (granteeUid && isUuidString(granteeUid)) {
         matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
@@ -1188,9 +1231,9 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
         } catch (_) {}
     }
 
-    // 2. Insert verified event in sms_logs
-    try {
-        await fetch(`${SUPABASE_REST_URL}/sms_logs`, {
+    // 2 & 3. Record verified sms_logs and audit_logs asynchronously in background
+    Promise.allSettled([
+        fetch(`${SUPABASE_REST_URL}/sms_logs`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -1202,12 +1245,8 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
                 status: 'verified',
                 sent_at: now
             })
-        });
-    } catch (_) {}
-
-    // 3. Insert audit log
-    try {
-        await fetch(`${SUPABASE_REST_URL}/audit_logs`, {
+        }),
+        fetch(`${SUPABASE_REST_URL}/audit_logs`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -1217,8 +1256,8 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
                 studentId: cleanId,
                 timestamp: now
             })
-        });
-    } catch (_) {}
+        })
+    ]).catch(() => {});
 }
 
 // Background cleanup: Prune expired OTP sessions every 2 minutes
@@ -1328,7 +1367,7 @@ async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, ev
 /**
  * Sends SMS via Semaphore v4 API
  */
-async function sendSemaphoreSms({ numbers, message, sendername = null }) {
+async function sendSemaphoreSms({ numbers, message, sendername = null, isPriority = false, otpCode = null }) {
     const apiKey = getSemaphoreApiKey();
     if (!apiKey) {
         console.warn('[Semaphore SMS] Cannot send SMS: SEMAPHORE_API_KEY is not configured in .env');
@@ -1358,19 +1397,47 @@ async function sendSemaphoreSms({ numbers, message, sendername = null }) {
     }
 
     const effectiveSender = (sendername || getSemaphoreSenderName() || '').trim().slice(0, 11);
+    const hasOtpCode = otpCode != null && String(otpCode).trim() !== '';
+    const cleanOtpCode = hasOtpCode ? String(otpCode).trim() : null;
+
+    // For Semaphore's dedicated /api/v4/otp pipe, ensure {otp} placeholder is present
+    let otpTemplateMsg = safeMessage;
+    let resolvedPlainMsg = safeMessage;
+    if (hasOtpCode) {
+        if (safeMessage.includes('{otp}')) {
+            otpTemplateMsg = safeMessage;
+            resolvedPlainMsg = safeMessage.replace(/\{otp\}/g, cleanOtpCode);
+        } else if (safeMessage.includes(cleanOtpCode)) {
+            otpTemplateMsg = safeMessage.replace(cleanOtpCode, '{otp}');
+            resolvedPlainMsg = safeMessage;
+        } else {
+            otpTemplateMsg = `${safeMessage} {otp}`;
+            resolvedPlainMsg = `${safeMessage} ${cleanOtpCode}`;
+        }
+    }
 
     const payload = {
         apikey: apiKey,
         number: validNumbers.join(','),
-        message: safeMessage
+        message: hasOtpCode ? otpTemplateMsg : safeMessage
     };
+    if (hasOtpCode) {
+        payload.code = cleanOtpCode;
+    }
     if (effectiveSender) {
         payload.sendername = effectiveSender;
     }
 
     try {
-        console.log(`[Semaphore SMS] Sending to ${validNumbers.length} recipient(s): ${validNumbers.join(', ')}`);
-        let res = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+        // Dedicated /api/v4/otp A2P carrier route for OTP authentication codes (fastest telco-whitelisted delivery in PH)
+        const primaryEndpoint = hasOtpCode
+            ? `${SEMAPHORE_API_URL}/otp`
+            : (isPriority ? `${SEMAPHORE_API_URL}/priority` : `${SEMAPHORE_API_URL}/messages`);
+        const routeLabel = hasOtpCode ? 'DEDICATED-OTP' : (isPriority ? 'PRIORITY' : 'standard');
+        const dispatchStart = Date.now();
+        console.log(`[Semaphore SMS] Sending (${routeLabel}) to ${validNumbers.length} recipient(s): ${validNumbers.join(', ')}`);
+
+        let res = await fetch(primaryEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1378,11 +1445,11 @@ async function sendSemaphoreSms({ numbers, message, sendername = null }) {
 
         let data = await res.json().catch(() => ({}));
 
-        // If custom sendername failed (e.g. sendername not yet approved), auto-retry without sendername
+        // If custom sendername failed, auto-retry on the same endpoint without sendername
         if (!res.ok && payload.sendername) {
-            console.warn(`[Semaphore SMS] Dispatch failed with sendername "${payload.sendername}", retrying with default sender...`);
+            console.warn(`[Semaphore SMS] Dispatch failed with sendername "${payload.sendername}", retrying without custom sendername...`);
             delete payload.sendername;
-            const retryRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+            const retryRes = await fetch(primaryEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -1392,6 +1459,39 @@ async function sendSemaphoreSms({ numbers, message, sendername = null }) {
                 data = await retryRes.json().catch(() => ({}));
             }
         }
+
+        // If dedicated /otp endpoint failed, fall back to /priority with interpolated code
+        if (!res.ok && hasOtpCode) {
+            console.warn('[Semaphore SMS] Dedicated /otp dispatch failed, falling back to /priority endpoint...');
+            delete payload.code;
+            payload.message = resolvedPlainMsg;
+            const prioRes = await fetch(`${SEMAPHORE_API_URL}/priority`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (prioRes.ok) {
+                res = prioRes;
+                data = await prioRes.json().catch(() => ({}));
+            }
+        }
+
+        // Final fallback to standard /messages endpoint
+        if (!res.ok && (isPriority || hasOtpCode)) {
+            console.warn('[Semaphore SMS] Priority/OTP dispatch failed, falling back to standard /messages endpoint...');
+            delete payload.code;
+            payload.message = resolvedPlainMsg;
+            const fallbackRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (fallbackRes.ok) {
+                res = fallbackRes;
+                data = await fallbackRes.json().catch(() => ({}));
+            }
+        }
+        console.log(`[Semaphore SMS] Carrier gateway handshake completed in ${Date.now() - dispatchStart}ms`);
 
         if (!res.ok) {
             const errMsg = Array.isArray(data)
@@ -2374,6 +2474,13 @@ const server = http.createServer(async (req, res) => {
         urlPath = decodeURIComponent(urlPath);
     } catch (_) {}
 
+    // ── API: Ultra-fast Health Ping for Mobile Parallel URL Resolution ────
+    if (urlPath === '/api/ping') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+        return;
+    }
+
     // ── API: Validate Grantee Eligibility for Student Login ───────────────
     if (urlPath === '/api/auth/validate-grantee' && req.method === 'POST') {
         let body = '';
@@ -2482,22 +2589,46 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 5. Rate Limiting Check on OTP Generation
+                // 5. Rate Limiting & Active Session Re-Entry Check
                 const now = Date.now();
                 const prevSession = activeOtpSessions.get(cleanId);
 
                 if (prevSession) {
-                    if (now < prevSession.resendAvailableAt) {
-                        const waitSecs = Math.ceil((prevSession.resendAvailableAt - now) / 1000);
-                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                    // If an OTP was already sent within the cooldown window and is still valid,
+                    // let the student proceed directly to the OTP entry screen without sending a duplicate SMS!
+                    if (now < prevSession.resendAvailableAt && now < prevSession.expiresAt) {
+                        const waitSecs = Math.max(1, Math.ceil((prevSession.resendAvailableAt - now) / 1000));
+                        const remExpire = Math.max(30, Math.ceil((prevSession.expiresAt - now) / 1000));
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
-                            success: false,
-                            error: `Please wait ${waitSecs} seconds before requesting a new OTP.`,
-                            cooldownRemaining: waitSecs
+                            success: true,
+                            requiresOtp: true,
+                            isFirstLogin: true,
+                            studentId: cleanId,
+                            maskedPhone: maskPhoneNumber(normalizedPhone),
+                            expiresIn: remExpire,
+                            resendCooldown: waitSecs,
+                            message: `An active OTP was recently sent to ${maskPhoneNumber(normalizedPhone)}. Please enter it once received.`
                         }));
                         return;
                     }
                     if (prevSession.resendCount >= 5 && (now - prevSession.resendWindowStart < 3600000)) {
+                        // Even if hourly SMS send limit reached, if current session hasn't expired, allow entering the existing code
+                        if (now < prevSession.expiresAt) {
+                            const remExpire = Math.max(30, Math.ceil((prevSession.expiresAt - now) / 1000));
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({
+                                success: true,
+                                requiresOtp: true,
+                                isFirstLogin: true,
+                                studentId: cleanId,
+                                maskedPhone: maskPhoneNumber(normalizedPhone),
+                                expiresIn: remExpire,
+                                resendCooldown: 60,
+                                message: `Please enter the OTP sent to ${maskPhoneNumber(normalizedPhone)}.`
+                            }));
+                            return;
+                        }
                         res.writeHead(429, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: false,
@@ -2507,11 +2638,21 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
+                if (!getSemaphoreApiKey()) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
+                    }));
+                    return;
+                }
+
                 // 6. Generate Cryptographically Secure 6-digit OTP
                 const otp = String(crypto.randomInt(100000, 1000000));
                 const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+                const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
 
-                // 7. Store OTP Session (Expires in 5 minutes, 60s resend cooldown, max 5 attempts)
+                // 7. Store OTP Session (10-min expiry, 30s resend cooldown, rolling validHashes grace window for delayed carrier SMS)
                 const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
                     ? prevSession.resendWindowStart
                     : now;
@@ -2519,45 +2660,28 @@ const server = http.createServer(async (req, res) => {
                     ? prevSession.resendCount + 1
                     : 1;
 
+                const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
+                    ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
+                    : [];
+                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 3);
+
                 activeOtpSessions.set(cleanId, {
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
+                    validHashes: validHashes,
                     phone: normalizedPhone,
-                    expiresAt: now + (5 * 60 * 1000), // 5 minutes
-                    attempts: 0,
-                    resendAvailableAt: now + (60 * 1000), // 60s cooldown
+                    expiresAt: newExpiresAt,
+                    attempts: prevSession ? Math.min(prevSession.attempts || 0, 2) : 0,
+                    resendAvailableAt: now + (OTP_RESEND_COOLDOWN_SECONDS * 1000),
                     resendCount: resendCount,
                     resendWindowStart: resendWindowStart,
                     createdAt: now
                 });
 
-                console.log(`[SMS OTP] Generated OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (SHA-256 hash stored)`);
+                console.log(`[SMS OTP] Generated OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (SHA-256 hash stored, valid 10m)`);
 
-                // 8. Dispatch SMS via Semaphore API
-                const smsMessage = `[ScholarDoc] Your one-time login OTP is ${otp}. Valid for 5 minutes. Do not share this code with anyone.`;
-                const smsResult = await sendSemaphoreSms({
-                    numbers: normalizedPhone,
-                    message: smsMessage,
-                    sendername: getSemaphoreSenderName()
-                });
-
-                console.log(`[SMS OTP] Semaphore dispatch result:`, smsResult);
-
-                // 9. Audit Log in sms_logs
-                await recordSmsLog({
-                    studentId: cleanId,
-                    granteeUid: grantee.uid,
-                    recipientPhone: normalizedPhone,
-                    message: `[ScholarDoc] Your one-time login OTP is [PROTECTED]. Valid for 5 minutes.`,
-                    eventType: 'login_otp',
-                    status: smsResult.success ? 'sent' : 'failed',
-                    messageId: smsResult.message_id,
-                    network: smsResult.network,
-                    errorMessage: smsResult.error
-                });
-
-                // 10. Respond to Client
+                // 8. Respond IMMEDIATELY to Client (<100ms UI transition!) while dispatching SMS in parallel
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
@@ -2565,10 +2689,33 @@ const server = http.createServer(async (req, res) => {
                     isFirstLogin: true,
                     studentId: cleanId,
                     maskedPhone: maskPhoneNumber(normalizedPhone),
-                    expiresIn: 300,
-                    resendCooldown: 60,
+                    expiresIn: OTP_EXPIRY_SECONDS,
+                    resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
                     message: `A one-time password (OTP) has been sent to your registered mobile number ${maskPhoneNumber(normalizedPhone)}.`
                 }));
+
+                // 9. Dispatch SMS immediately via Semaphore's dedicated /api/v4/otp A2P carrier route
+                const otpSmsTemplate = 'Your ScholarDoc verification code is {otp}. Valid for 10 minutes. Do not share this code.';
+                sendSemaphoreSms({
+                    numbers: normalizedPhone,
+                    message: otpSmsTemplate,
+                    sendername: getSemaphoreSenderName(),
+                    isPriority: true,
+                    otpCode: otp
+                }).then((smsResult) => {
+                    console.log(`[SMS OTP] Semaphore dispatch result for ${cleanId}:`, smsResult.status, smsResult.message_id || smsResult.error || '');
+                    return recordSmsLog({
+                        studentId: cleanId,
+                        granteeUid: grantee.uid,
+                        recipientPhone: normalizedPhone,
+                        message: 'Your ScholarDoc verification code is [PROTECTED]. Valid for 10 minutes.',
+                        eventType: 'login_otp',
+                        status: smsResult.success ? 'sent' : 'failed',
+                        messageId: smsResult.message_id,
+                        network: smsResult.network,
+                        errorMessage: smsResult.error
+                    });
+                }).catch(e => console.error('[SMS OTP Async Dispatch Error]', e.message));
             } catch (err) {
                 console.error('[API student-login error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -2632,16 +2779,21 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 4. Constant-Time Timing-Safe Hash Verification
+                // 4. Constant-Time Timing-Safe Hash Verification (supports rolling unexpired codes from delayed carrier delivery)
                 const candidateHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
                 const candidateBuf = Buffer.from(candidateHash, 'hex');
-                const storedBuf = Buffer.from(session.otpHash, 'hex');
+                const hashPool = Array.isArray(session.validHashes) && session.validHashes.length > 0
+                    ? session.validHashes.filter(item => item && item.expiresAt > now)
+                    : [{ hash: session.otpHash, expiresAt: session.expiresAt }];
 
                 let isMatch = false;
-                try {
-                    isMatch = (candidateBuf.length === storedBuf.length) && crypto.timingSafeEqual(candidateBuf, storedBuf);
-                } catch (_) {
-                    isMatch = false;
+                for (const entry of hashPool) {
+                    try {
+                        const storedBuf = Buffer.from(entry.hash, 'hex');
+                        if (candidateBuf.length === storedBuf.length && crypto.timingSafeEqual(candidateBuf, storedBuf)) {
+                            isMatch = true;
+                        }
+                    } catch (_) {}
                 }
 
                 if (!isMatch) {
@@ -2750,9 +2902,19 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                // 3. Generate New 6-digit OTP and SHA-256 Hash
+                if (!getSemaphoreApiKey()) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
+                    }));
+                    return;
+                }
+
+                // 3. Generate New 6-digit OTP and SHA-256 Hash (preserving unexpired in-flight hashes in rolling grace pool)
                 const otp = String(crypto.randomInt(100000, 1000000));
                 const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+                const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
 
                 const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
                     ? prevSession.resendWindowStart
@@ -2761,50 +2923,61 @@ const server = http.createServer(async (req, res) => {
                     ? prevSession.resendCount + 1
                     : 1;
 
+                const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
+                    ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
+                    : (prevSession && prevSession.otpHash && prevSession.expiresAt > now
+                        ? [{ hash: prevSession.otpHash, expiresAt: prevSession.expiresAt }]
+                        : []);
+                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 3);
+
                 activeOtpSessions.set(cleanId, {
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
+                    validHashes: validHashes,
                     phone: normalizedPhone,
-                    expiresAt: now + (5 * 60 * 1000), // 5 minutes
+                    expiresAt: newExpiresAt,
                     attempts: 0,
-                    resendAvailableAt: now + (60 * 1000), // 60s cooldown
+                    resendAvailableAt: now + (OTP_RESEND_COOLDOWN_SECONDS * 1000),
                     resendCount: resendCount,
                     resendWindowStart: resendWindowStart,
                     createdAt: now
                 });
 
-                console.log(`[SMS OTP RESEND] New OTP for student ${cleanId} -> ${normalizedPhone}: ${otp}`);
+                console.log(`[SMS OTP RESEND] New OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (valid 10m, active pool: ${validHashes.length})`);
 
-                // 4. Dispatch SMS via Semaphore
-                const smsMessage = `[ScholarDoc] Your new one-time login OTP is ${otp}. Valid for 5 minutes. Do not share this code with anyone.`;
-                const smsResult = await sendSemaphoreSms({
-                    numbers: normalizedPhone,
-                    message: smsMessage,
-                    sendername: getSemaphoreSenderName()
-                });
-
-                await recordSmsLog({
-                    studentId: cleanId,
-                    granteeUid: grantee.uid,
-                    recipientPhone: normalizedPhone,
-                    message: `[ScholarDoc] Your new one-time login OTP is [PROTECTED]. Valid for 5 minutes.`,
-                    eventType: 'login_otp',
-                    status: smsResult.success ? 'sent' : 'failed',
-                    messageId: smsResult.message_id,
-                    network: smsResult.network,
-                    errorMessage: smsResult.error
-                });
-
+                // 4. Respond IMMEDIATELY to Client (<100ms) while dispatching via dedicated /api/v4/otp route
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     studentId: cleanId,
                     maskedPhone: maskPhoneNumber(normalizedPhone),
-                    resendCooldown: 60,
-                    expiresIn: 300,
+                    resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
+                    expiresIn: OTP_EXPIRY_SECONDS,
                     message: `A new OTP has been sent to ${maskPhoneNumber(normalizedPhone)}.`
                 }));
+
+                const otpSmsTemplate = 'Your ScholarDoc verification code is {otp}. Valid for 10 minutes. Do not share this code.';
+                sendSemaphoreSms({
+                    numbers: normalizedPhone,
+                    message: otpSmsTemplate,
+                    sendername: getSemaphoreSenderName(),
+                    isPriority: true,
+                    otpCode: otp
+                }).then((smsResult) => {
+                    console.log(`[SMS OTP RESEND] Semaphore dispatch result for ${cleanId}:`, smsResult.status, smsResult.message_id || smsResult.error || '');
+                    return recordSmsLog({
+                        studentId: cleanId,
+                        granteeUid: grantee.uid,
+                        recipientPhone: normalizedPhone,
+                        message: 'Your ScholarDoc verification code is [PROTECTED]. Valid for 10 minutes.',
+                        eventType: 'login_otp',
+                        status: smsResult.success ? 'sent' : 'failed',
+                        messageId: smsResult.message_id,
+                        network: smsResult.network,
+                        errorMessage: smsResult.error
+                    });
+                }).catch(e => console.error('[SMS OTP Resend Async Dispatch Error]', e.message));
             } catch (err) {
                 console.error('[API otp/resend error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -2835,6 +3008,7 @@ const server = http.createServer(async (req, res) => {
                 if (cleanNo) completedFirstLoginStudents.delete(cleanNo);
                 activeOtpSessions.delete(cleanId);
                 if (cleanNo) activeOtpSessions.delete(cleanNo);
+                invalidateGranteeCache(cleanId);
                 saveOtpAuthState();
 
                 try {
@@ -4441,6 +4615,20 @@ if (require.main === module) {
         console.log(` Admin Portal:        http://localhost:${PORT}/admin_web/admin.html`);
         console.log(` Super Admin Portal:  http://localhost:${PORT}/superadmin_web/superadmin.html`);
         console.log('=======================================================\n');
+
+        // Automatically establish and refresh adb reverse for connected Android physical devices
+        function maintainAdbReverse() {
+            try {
+                const { exec } = require('child_process');
+                exec(`adb reverse tcp:${PORT} tcp:${PORT}`, (err) => {
+                    if (!err) {
+                        console.log(`[Mobile ADB] Port ${PORT} reversed to connected Android devices.`);
+                    }
+                });
+            } catch (_) {}
+        }
+        maintainAdbReverse();
+        setInterval(maintainAdbReverse, 25000);
 
         // Start background watcher daemons
         startNotificationSmsWatcher();

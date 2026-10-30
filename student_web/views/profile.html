@@ -1,49 +1,93 @@
-<!-- ScholarDoc Student Web — Profile View -->
-<!-- Mirrors profile_screen.dart -->
+<!-- ScholarDoc Student Web — Profile Management View -->
+<!-- Mirrors lib/screens/profile/profile_screen.dart -->
 
-<!-- Profile Hero Header -->
-<div class="card view-page-header" style="margin-bottom: 24px; position: relative; overflow: hidden; border-radius: var(--radius-2xl);">
+<!-- Executive Profile Hero Header -->
+<div class="card view-page-header" style="margin-bottom: 18px; position: relative; overflow: hidden; border-radius: var(--radius-2xl);">
     <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: var(--gradient-accent);"></div>
-    <div style="padding: 40px 28px 36px; text-align: center; position: relative; z-index: 2;">
-        
+    <div style="padding: 32px 28px 30px; text-align: center; position: relative; z-index: 2;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); font-size: 10.5px; font-weight: 800; letter-spacing: 0.8px; color: white;">
+                <i data-lucide="shield-check" style="width: 13px; height: 13px; color: var(--gold);"></i>
+                SCHOLAR PROFILE
+            </span>
+            <button type="button" id="refresh-profile-btn" title="Sync latest profile record" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); color: white; font-size: 11.5px; font-weight: 700;">
+                <i data-lucide="refresh-cw" style="width: 13px; height: 13px; color: var(--gold);"></i>
+                Sync
+            </button>
+        </div>
+
         <!-- Avatar with Camera Trigger -->
         <div style="position: relative; display: inline-block; cursor: pointer;" id="avatar-upload-trigger" title="Click to upload profile photo">
             <div style="width: 104px; height: 104px; border-radius: 50%; border: 3.5px solid var(--gold); overflow: hidden; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);" id="profile-avatar-lg">
                 <i data-lucide="user" style="color: white; width: 48px; height: 48px;"></i>
             </div>
-            <div style="position: absolute; bottom: 2px; right: 2px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid var(--white);">
+            <div style="position: absolute; bottom: 2px; right: 2px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid var(--primary);">
                 <i data-lucide="camera" style="width: 16px; height: 16px; color: var(--primary);" id="camera-icon"></i>
             </div>
             <input type="file" id="avatar-file-input" accept="image/*" style="display: none;">
         </div>
 
-        <div style="margin-top: 18px; font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 900; color: white; letter-spacing: -0.4px;" id="profile-fullname">Student Name</div>
-        <div style="margin-top: 4px; font-size: 13.5px; color: rgba(255,255,255,0.8); font-weight: 500;" id="profile-course-year">Course • Year</div>
-        
-        <div style="margin-top: 14px;">
-            <span class="badge" style="background: rgba(251,192,45,0.22); border: 1.5px solid rgba(251,192,45,0.4); color: var(--gold); font-size: 11px; padding: 6px 16px; backdrop-filter: blur(8px);" id="profile-scholarship-badge">
-                Scholar
+        <div style="margin-top: 16px; font-family: 'Outfit', sans-serif; font-size: 23px; font-weight: 900; color: white; letter-spacing: -0.4px;" id="profile-fullname">Student Scholar</div>
+        <div style="margin-top: 4px; font-size: 13.5px; color: rgba(255,255,255,0.82); font-weight: 500;" id="profile-course-year">Degree Program • Year Level</div>
+
+        <div style="margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;">
+            <button type="button" id="copy-student-id-btn" title="Copy Student ID" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.24); color: white; font-size: 11.5px; font-weight: 700;">
+                <i data-lucide="badge-check" style="width: 13px; height: 13px; color: var(--gold);"></i>
+                <span id="profile-id-pill">ID: —</span>
+                <i data-lucide="copy" style="width: 11px; height: 11px; opacity: 0.75;"></i>
+            </button>
+            <span class="badge" style="background: rgba(251,192,45,0.22); border: 1.5px solid rgba(251,192,45,0.45); color: var(--gold); font-size: 11px; padding: 6px 14px; backdrop-filter: blur(8px);" id="profile-scholarship-badge">
+                TES
+            </span>
+            <span class="badge" style="background: rgba(56,189,248,0.18); border: 1.5px solid rgba(56,189,248,0.45); color: #7DD3FC; font-size: 11px; padding: 6px 14px;" id="profile-status-badge">
+                Active Scholar
             </span>
         </div>
     </div>
 </div>
 
-<!-- Personal Information Collapsible Section -->
+<!-- Quick Overview Strip -->
+<div class="card mb-md" style="border-radius: var(--radius-xl);">
+    <div class="card-body" style="padding: 14px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
+        <div style="border-right: 1px solid var(--border); padding-right: 8px;">
+            <div style="font-size: 10px; font-weight: 800; letter-spacing: 0.6px; color: var(--text-tertiary);">GRANT</div>
+            <div style="font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-primary); margin-top: 2px;" id="summary-grant">TES</div>
+        </div>
+        <div style="border-right: 1px solid var(--border); padding-right: 8px;">
+            <div style="font-size: 10px; font-weight: 800; letter-spacing: 0.6px; color: var(--text-tertiary);">YEAR &amp; BLOCK</div>
+            <div style="font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-primary); margin-top: 2px;" id="summary-year-section">—</div>
+        </div>
+        <div>
+            <div style="font-size: 10px; font-weight: 800; letter-spacing: 0.6px; color: var(--text-tertiary);">DISBURSEMENT</div>
+            <div style="font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800; color: var(--text-primary); margin-top: 2px;" id="summary-disbursement">SA Not Set</div>
+        </div>
+    </div>
+</div>
+
+<!-- SECTION GROUP 1: IDENTITY & CONTACT -->
+<div class="section-header" style="margin-top: 22px;">
+    <i data-lucide="shield-check" style="width: 14px; height: 14px; color: var(--primary);"></i>
+    IDENTITY &amp; CONTACT DETAILS
+</div>
+
 <div class="collapsible open mb-md" id="section-personal">
     <div class="collapsible-header" onclick="toggleSection('personal')">
         <div class="collapsible-icon"><i data-lucide="user"></i></div>
         <div class="collapsible-info">
             <h3>Personal Information</h3>
-            <p id="personal-subtitle">View and update your personal contact details</p>
+            <p id="personal-subtitle">Manage your full name, contact &amp; class section</p>
         </div>
+        <button type="button" onclick="event.stopPropagation(); focusSection('personal', 'input-fullname')" style="padding: 5px 10px; border-radius: 8px; background: var(--primary-surface); color: var(--primary); font-size: 11px; font-weight: 800; margin-right: 8px;">
+            Edit
+        </button>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
     <div class="collapsible-body">
         <div class="form-group mb-md">
-            <label class="form-label">Full Name</label>
+            <label class="form-label">Full Name *</label>
             <div class="form-control-icon">
                 <i data-lucide="user"></i>
-                <input type="text" class="form-control" id="input-fullname" placeholder="Enter your full name">
+                <input type="text" class="form-control" id="input-fullname" placeholder="LAST NAME, FIRST NAME M.I.">
             </div>
         </div>
 
@@ -52,7 +96,11 @@
                 <label class="form-label">Gender</label>
                 <div class="form-control-icon">
                     <i data-lucide="user-check"></i>
-                    <input type="text" class="form-control form-readonly" id="input-gender" readonly value="Not Specified">
+                    <select class="form-control" id="input-gender">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
                 </div>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
@@ -64,105 +112,165 @@
             </div>
         </div>
 
-        <div class="grid-2">
+        <div class="form-group mb-md">
+            <label class="form-label">Email Address</label>
+            <div class="form-control-icon">
+                <i data-lucide="mail"></i>
+                <input type="email" class="form-control" id="input-email" placeholder="e.g. scholar@ustp.edu.ph">
+            </div>
+        </div>
+
+        <div class="grid-2 mb-md">
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Contact Number</label>
+                <label class="form-label">Mobile Number (SMS Alerts)</label>
                 <div class="form-control-icon">
                     <i data-lucide="phone"></i>
                     <input type="tel" class="form-control" id="input-contact" placeholder="e.g. 09123456789">
                 </div>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Section</label>
+                <label class="form-label">Class Section / Block</label>
                 <div class="form-control-icon">
                     <i data-lucide="layers"></i>
-                    <input type="text" class="form-control" id="input-section" placeholder="e.g. 3A">
+                    <input type="text" class="form-control" id="input-section" placeholder="e.g. BSIT-3A">
                 </div>
             </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+            <button type="button" class="btn btn-primary-solid btn-block" id="save-personal-btn">
+                <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                <span id="save-personal-text">Save Personal Information</span>
+            </button>
         </div>
     </div>
 </div>
 
-<!-- Academic & Scholarship Program Collapsible Section -->
-<div class="collapsible mb-md" id="section-academic">
+<!-- SECTION GROUP 2: ACADEMIC & SCHOLARSHIP RECORD -->
+<div class="section-header" style="margin-top: 22px;">
+    <i data-lucide="graduation-cap" style="width: 14px; height: 14px; color: var(--primary);"></i>
+    ACADEMIC &amp; SCHOLARSHIP RECORD
+</div>
+
+<div class="collapsible open mb-md" id="section-academic">
     <div class="collapsible-header" onclick="toggleSection('academic')">
         <div class="collapsible-icon"><i data-lucide="graduation-cap"></i></div>
         <div class="collapsible-info">
-            <h3>Academic & Scholarship Details</h3>
-            <p id="academic-subtitle">Scholarship program and institutional record</p>
+            <h3>Academic Management</h3>
+            <p id="academic-subtitle">Scholarship program, degree course &amp; grant history</p>
         </div>
+        <button type="button" onclick="event.stopPropagation(); focusSection('academic', 'input-course')" style="padding: 5px 10px; border-radius: 8px; background: var(--primary-surface); color: var(--primary); font-size: 11px; font-weight: 800; margin-right: 8px;">
+            Manage
+        </button>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
     <div class="collapsible-body">
-        <div class="form-group mb-md">
-            <label class="form-label">Scholarship Program</label>
-            <div class="form-control-icon">
-                <i data-lucide="award"></i>
-                <input type="text" class="form-control form-readonly" id="input-scholarship" readonly>
-            </div>
-        </div>
-
         <div class="grid-2 mb-md">
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Student ID Number</label>
+                <label class="form-label">Student ID Number (Verified)</label>
                 <div class="form-control-icon">
                     <i data-lucide="id-card"></i>
                     <input type="text" class="form-control form-readonly" id="input-studentid" readonly>
                 </div>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Email Address</label>
+                <label class="form-label">Scholarship Program</label>
                 <div class="form-control-icon">
-                    <i data-lucide="mail"></i>
-                    <input type="text" class="form-control form-readonly" id="input-email" readonly>
+                    <i data-lucide="award"></i>
+                    <select class="form-control" id="input-scholarship">
+                        <option value="TES">TES</option>
+                    </select>
                 </div>
             </div>
         </div>
 
-        <div class="grid-2">
+        <div class="grid-2 mb-md">
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Year Became Scholar</label>
+                <label class="form-label">Degree Program / Course *</label>
+                <div class="form-control-icon">
+                    <i data-lucide="graduation-cap"></i>
+                    <input type="text" class="form-control" id="input-course" placeholder="e.g. BS in Information Technology">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Current Year Level *</label>
+                <div class="form-control-icon">
+                    <i data-lucide="calendar"></i>
+                    <input type="text" class="form-control" id="input-year" placeholder="e.g. 3rd Year">
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2 mb-md">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Year Became a Scholar</label>
                 <div class="form-control-icon">
                     <i data-lucide="calendar-check"></i>
-                    <input type="text" class="form-control" id="input-scholar-year" placeholder="e.g. 1st Year, 2nd Year, 2024">
+                    <input type="text" class="form-control" id="input-scholar-year" placeholder="e.g. 2023, 2024, or 1st Year">
                 </div>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Disbursements Received</label>
+                <label class="form-label">Payouts Received to Date</label>
                 <div class="form-control-icon">
                     <i data-lucide="wallet"></i>
-                    <input type="number" min="0" class="form-control" id="input-payouts" placeholder="e.g. 0">
+                    <input type="number" min="0" class="form-control" id="input-payouts" placeholder="0">
                 </div>
             </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+            <button type="button" class="btn btn-primary-solid btn-block" id="save-academic-btn">
+                <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                <span id="save-academic-text">Save Academic Changes</span>
+            </button>
         </div>
     </div>
 </div>
 
-<!-- Banking Details Collapsible Section -->
-<div class="collapsible mb-md" id="section-banking">
+<!-- SECTION GROUP 3: FINANCIAL & DISBURSEMENT -->
+<div class="section-header" style="margin-top: 22px;">
+    <i data-lucide="landmark" style="width: 14px; height: 14px; color: var(--primary);"></i>
+    FINANCIAL &amp; DISBURSEMENT
+</div>
+
+<div class="collapsible open mb-md" id="section-banking">
     <div class="collapsible-header" onclick="toggleSection('banking')">
         <div class="collapsible-icon"><i data-lucide="landmark"></i></div>
         <div class="collapsible-info">
-            <h3>Banking & Disbursement Details</h3>
-            <p>Registered bank account information</p>
+            <h3>Banking &amp; Disbursement Details</h3>
+            <p id="banking-subtitle">Registered Landbank Savings Account (SA) information</p>
         </div>
+        <button type="button" onclick="event.stopPropagation(); focusSection('banking', 'input-sa')" style="padding: 5px 10px; border-radius: 8px; background: var(--primary-surface); color: var(--primary); font-size: 11px; font-weight: 800; margin-right: 8px;">
+            Update
+        </button>
         <div class="collapsible-chevron"><i data-lucide="chevron-down"></i></div>
     </div>
     <div class="collapsible-body">
         <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 16px;">
-            Your Savings Account (SA) number is used by the university finance office for direct disbursement of scholarship grants.
+            Your Savings Account (SA) number is used by the university scholarship &amp; finance office for direct disbursement of scholarship grants.
         </p>
-        <div class="form-group" style="margin-bottom: 0;">
+        <div class="form-group mb-md">
             <label class="form-label">SAVINGS ACCOUNT (SA) NUMBER</label>
             <div class="form-control-icon">
                 <i data-lucide="credit-card"></i>
                 <input type="text" class="form-control" id="input-sa" placeholder="e.g. 1234-5678-9012" style="font-size: 15px; font-weight: 700; letter-spacing: 0.5px;">
             </div>
         </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+            <button type="button" class="btn btn-primary-solid btn-block" id="save-banking-btn">
+                <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                <span id="save-banking-text">Update Banking Details</span>
+            </button>
+        </div>
     </div>
 </div>
 
-<!-- App Preferences Collapsible Section -->
+<!-- SECTION GROUP 4: PREFERENCES & ACCOUNT -->
+<div class="section-header" style="margin-top: 22px;">
+    <i data-lucide="settings" style="width: 14px; height: 14px; color: var(--primary);"></i>
+    PREFERENCES, SECURITY &amp; SESSION
+</div>
+
 <div class="collapsible mb-md" id="section-preferences">
     <div class="collapsible-header" onclick="toggleSection('preferences')">
         <div class="collapsible-icon"><i data-lucide="settings"></i></div>
@@ -188,10 +296,10 @@
     </div>
 </div>
 
-<!-- Save Profile Changes Button -->
-<div style="margin-top: 24px; margin-bottom: 20px;">
+<!-- Master Save All Profile Changes Button -->
+<div style="margin-top: 20px; margin-bottom: 18px;">
     <button class="btn btn-primary-solid btn-block btn-lg" id="save-profile-btn">
-        <span id="save-btn-text">Save Profile Changes</span>
+        <span id="save-btn-text">Save All Profile Changes</span>
         <div class="spinner hidden" id="save-spinner" style="width: 20px; height: 20px; border-width: 2.5px;"></div>
     </button>
 </div>
@@ -203,8 +311,8 @@
             <i data-lucide="activity" style="width: 20px; height: 20px; color: var(--primary);"></i>
         </div>
         <div style="flex: 1;">
-            <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14.5px; color: var(--text-primary);">Activity & Submission Log</div>
-            <div style="font-size: 12.5px; color: var(--text-secondary);">View receipts, uploads, and timestamp records</div>
+            <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 14.5px; color: var(--text-primary);">Activity &amp; Submission Log</div>
+            <div style="font-size: 12.5px; color: var(--text-secondary);">View receipts, uploads, and profile audit records</div>
         </div>
         <i data-lucide="chevron-right" style="width: 18px; height: 18px; color: var(--text-tertiary);"></i>
     </div>

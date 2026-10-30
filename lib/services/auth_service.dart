@@ -54,8 +54,8 @@ class AuthService {
       };
     }
 
-    // 2. Call backend /api/auth/student-login with responsive timeout across candidate URLs
-    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    // 2. Resolve fastest reachable backend URL in parallel (~10-30ms) then call /api/auth/student-login
+    final candidates = await ApiConfig.resolveFastCandidates();
     dynamic lastConnectionError;
 
     for (final candidate in candidates) {
@@ -69,7 +69,7 @@ class AuthService {
             'studentId': cleanId,
             'password': cleanPwd,
           }),
-        ).timeout(const Duration(milliseconds: 2500));
+        ).timeout(const Duration(seconds: 6));
 
         // Confirmed working candidate
         if (candidate.isNotEmpty) {
@@ -99,9 +99,11 @@ class AuthService {
         if (e.toString().contains('Access denied') ||
             e.toString().contains('Invalid initial credentials') ||
             e.toString().contains('Rate limit') ||
+            e.toString().contains('SMS gateway') ||
             e.toString().contains('No valid Philippine mobile number')) {
           rethrow;
         }
+        ApiConfig.clearWorkingBaseUrl();
         lastConnectionError = e;
       }
     }
@@ -172,17 +174,10 @@ class AuthService {
       maskedPhone = '${cleanDigits.substring(0, 2)} •••• ${cleanDigits.substring(cleanDigits.length - 2)}';
     }
 
-    debugPrint('AuthService: First-login credentials matched via Supabase for $cleanId -> requiresOtp: true');
-    return {
-      'success': true,
-      'requiresOtp': true,
-      'isFirstLogin': true,
-      'studentId': cleanId,
-      'maskedPhone': maskedPhone,
-      'expiresIn': 300,
-      'resendCooldown': 60,
-      'message': 'A one-time password (OTP) is required for first-time login verification.',
-    };
+    debugPrint('AuthService: First-login requires SMS OTP for $cleanId ($maskedPhone), but backend SMS server was unreachable: $lastConnectionError');
+    throw Exception(
+      'Unable to reach the SMS verification server to send your OTP code to $maskedPhone. Please ensure the ScholarDoc server is running and your phone is connected.',
+    );
   }
 
   /// Verifies the SMS OTP on the backend:
@@ -195,7 +190,7 @@ class AuthService {
   }) async {
     final cleanId = studentId.trim();
     final cleanOtp = otp.trim();
-    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    final candidates = await ApiConfig.resolveFastCandidates();
     dynamic lastErr;
 
     for (final candidate in candidates) {
@@ -210,7 +205,7 @@ class AuthService {
             'otp': cleanOtp,
             'password': password.trim(),
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 6));
 
         if (candidate.isNotEmpty) {
           ApiConfig.setWorkingBaseUrl(candidate);
@@ -231,16 +226,25 @@ class AuthService {
         throw Exception(errMsg);
       } catch (e) {
         if (e.toString().contains('Invalid OTP code') ||
+            e.toString().contains('No active OTP session') ||
             e.toString().contains('expired') ||
             e.toString().contains('Maximum') ||
             e.toString().contains('remaining')) {
           rethrow;
         }
+        ApiConfig.clearWorkingBaseUrl();
         lastErr = e;
       }
     }
 
     debugPrint('AuthService.verifyLoginOtp error: $lastErr');
+    final errStr = lastErr?.toString() ?? '';
+    if (errStr.contains('SocketException') ||
+        errStr.contains('Connection refused') ||
+        errStr.contains('ClientException') ||
+        errStr.contains('TimeoutException')) {
+      throw Exception('Unable to reach the verification server. Please check your network connection.');
+    }
     throw Exception(lastErr?.toString() ?? 'OTP verification failed. Please check your connection.');
   }
 
@@ -249,7 +253,7 @@ class AuthService {
     required String studentId,
   }) async {
     final cleanId = studentId.trim();
-    final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+    final candidates = await ApiConfig.resolveFastCandidates();
     dynamic lastErr;
 
     for (final candidate in candidates) {
@@ -262,7 +266,7 @@ class AuthService {
           body: jsonEncode({
             'studentId': cleanId,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 6));
 
         if (candidate.isNotEmpty) {
           ApiConfig.setWorkingBaseUrl(candidate);
@@ -279,14 +283,23 @@ class AuthService {
       } catch (e) {
         if (e.toString().contains('wait') ||
             e.toString().contains('Rate limit') ||
+            e.toString().contains('SMS gateway') ||
             e.toString().contains('Access denied')) {
           rethrow;
         }
+        ApiConfig.clearWorkingBaseUrl();
         lastErr = e;
       }
     }
 
     debugPrint('AuthService.resendLoginOtp error: $lastErr');
+    final errStr = lastErr?.toString() ?? '';
+    if (errStr.contains('SocketException') ||
+        errStr.contains('Connection refused') ||
+        errStr.contains('ClientException') ||
+        errStr.contains('TimeoutException')) {
+      throw Exception('Unable to reach the verification server. Please check your network connection.');
+    }
     throw Exception(lastErr?.toString() ?? 'Failed to resend OTP. Please check your connection.');
   }
 
@@ -499,7 +512,7 @@ class AuthService {
           validateUrl,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'identifier': trimmedId}),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 8));
 
         if (res.statusCode == 200 || res.statusCode == 403) {
           final data = jsonDecode(res.body);
@@ -1133,105 +1146,346 @@ class AuthService {
     await _supabase.auth.signOut();
   }
 
+  String _pickNonEmpty(List<dynamic> candidates, [String fallback = '']) {
+    for (final c in candidates) {
+      if (c != null) {
+        final s = c.toString().trim();
+        if (s.isNotEmpty && s.toLowerCase() != 'null') {
+          return s;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  String _pickValidEmail(List<dynamic> candidates) {
+    for (final c in candidates) {
+      if (c != null) {
+        final s = c.toString().trim();
+        if (s.isNotEmpty &&
+            s.toLowerCase() != 'null' &&
+            s.contains('@') &&
+            !s.toLowerCase().endsWith('@scholardoc.com')) {
+          return s;
+        }
+      }
+    }
+    return _pickNonEmpty(candidates);
+  }
+
+  String _pickValidSa(List<dynamic> candidates) {
+    for (final c in candidates) {
+      if (c != null) {
+        final s = c.toString().trim();
+        if (s.isNotEmpty &&
+            s.toLowerCase() != 'null' &&
+            s.toUpperCase() != 'N/A') {
+          return s;
+        }
+      }
+    }
+    return '';
+  }
+
+  /// Converts MM/DD/YYYY, M/D/YYYY, or ISO timestamps to YYYY-MM-DD for Postgres DATE columns.
+  /// Returns null when empty or unparseable so Postgres never throws 22007 date syntax errors.
+  String? _normalizeIsoDate(dynamic rawDate) {
+    if (rawDate == null) return null;
+    final str = rawDate.toString().trim();
+    if (str.isEmpty || str.toLowerCase() == 'null' || str.toUpperCase() == 'N/A') {
+      return null;
+    }
+    final isoMatch = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(str);
+    if (isoMatch != null) {
+      final y = int.tryParse(isoMatch.group(1)!);
+      final m = int.tryParse(isoMatch.group(2)!);
+      final d = int.tryParse(isoMatch.group(3)!);
+      if (y != null && m != null && d != null && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+      }
+    }
+    if (str.contains('/')) {
+      final parts = str.split('/');
+      if (parts.length == 3) {
+        final p0 = int.tryParse(parts[0].trim());
+        final p1 = int.tryParse(parts[1].trim());
+        final p2 = int.tryParse(parts[2].trim());
+        if (p0 != null && p1 != null && p2 != null) {
+          // Support MM/DD/YYYY and YYYY/MM/DD
+          if (parts[0].trim().length == 4 && p1 >= 1 && p1 <= 12 && p2 >= 1 && p2 <= 31) {
+            return '${p0.toString().padLeft(4, '0')}-${p1.toString().padLeft(2, '0')}-${p2.toString().padLeft(2, '0')}';
+          }
+          if (p2 >= 1900 && p0 >= 1 && p0 <= 12 && p1 >= 1 && p1 <= 31) {
+            return '${p2.toString().padLeft(4, '0')}-${p0.toString().padLeft(2, '0')}-${p1.toString().padLeft(2, '0')}';
+          }
+        }
+      }
+    }
+    final parsed = DateTime.tryParse(str);
+    if (parsed != null) {
+      return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+    }
+    return null;
+  }
+
+  // Exact top-level columns verified on live Supabase student_grantees table
+  static const Set<String> _validGranteeColumns = {
+    'id',
+    'uid',
+    'student_no',
+    'full_name',
+    'program_name',
+    'year_level',
+    'date_of_birth',
+    'age',
+    'gender',
+    'civil_status',
+    'religion',
+    'mobile_number',
+    'email_address',
+    'father_full_name',
+    'father_occupation',
+    'mother_full_name',
+    'mother_occupation',
+    'status',
+    'scholarship_name',
+    'role',
+    'created_at',
+    'updated_at',
+    'studentId',
+    'fullName',
+    'course',
+    'year',
+    'birthdate',
+    'email',
+    'contactNumber',
+    'createdAt',
+    'updatedAt',
+    'saNumber',
+    'sa_number',
+    'submissionPdfUrl',
+    'submission_pdf_url',
+    'submissionPdfName',
+    'submission_pdf_name',
+    'documents',
+    'idFrontUrl',
+    'id_front_url',
+    'idBackUrl',
+    'id_back_url',
+    'atmCardUrl',
+    'atm_card_url',
+    'atmCardFileName',
+    'pdfVerified',
+    'academicYear',
+    'academic_year',
+    'semester',
+    'stickerValidated',
+    'sticker_validated',
+    'submittedAt',
+    'submitted_at',
+    'requiresResubmission',
+    'adminRemarks',
+    'admin_remarks',
+    'familyDetails',
+    'idValidationStatus',
+    'id_validation_status',
+    'saVerificationStatus',
+    'sa_verification_status',
+    'profilePictureUrl',
+    'profile_picture_url',
+    'email_sent_at',
+    'emailSentAt',
+    'email_status',
+    'emailStatus',
+    'email_sent_to',
+    'emailSentTo',
+    'email_error',
+    'sms_sent_at',
+    'smsSentAt',
+    'sms_status',
+    'smsStatus',
+    'sms_sent_to',
+    'smsSentTo',
+    'sms_error',
+    'sms_message_id',
+    'smsMessageId',
+  };
+
   // Normalize student dictionary to support both snake_case and camelCase
   Map<String, dynamic> _normalizeStudentData(Map<String, dynamic> raw) {
     final data = Map<String, dynamic>.from(raw);
+    final fam = (data['familyDetails'] is Map) ? (data['familyDetails'] as Map) : {};
+    final docs = (data['documents'] is Map) ? (data['documents'] as Map) : {};
 
     // Normalize scholarship
-    final scholarship =
-        data['scholarshipName'] ?? data['scholarship_name'] ?? 'TES';
+    final rawScholarship = _pickNonEmpty([
+      data['scholarship_name'],
+      data['scholarshipName'],
+      fam['scholarshipName'],
+      fam['scholarship_name'],
+    ]);
+    final scholarship = rawScholarship.isNotEmpty ? rawScholarship : 'TES';
     data['scholarshipName'] = scholarship;
     data['scholarship_name'] = scholarship;
 
     // Normalize academic program & course
-    final course = data['course'] ?? data['program_name'] ?? '';
+    final course = _pickNonEmpty([data['course'], data['program_name'], fam['course']]);
     data['course'] = course;
     data['program_name'] = course;
 
     // Normalize year level
-    final year = data['year'] ?? data['year_level'] ?? '';
+    final year = _pickNonEmpty([data['year'], data['year_level'], fam['year']]);
     data['year'] = year;
     data['year_level'] = year;
 
     // Normalize student ID
-    final studentId = data['studentId'] ?? data['student_no'] ?? '';
+    final studentId = _pickNonEmpty([data['studentId'], data['student_no']]);
     data['studentId'] = studentId;
     data['student_no'] = studentId;
 
     // Normalize full name
-    final fullName = data['fullName'] ?? data['full_name'] ?? '';
+    final fullName = _pickNonEmpty([data['fullName'], data['full_name']]);
     data['fullName'] = fullName;
     data['full_name'] = fullName;
 
-    // Normalize contact and email
-    final email = data['email'] ?? data['email_address'] ?? '';
+    // Normalize contact and email (handles empty strings "" without wiping valid sibling column)
+    final email = _pickValidEmail([data['email'], data['email_address'], fam['email']]);
     data['email'] = email;
     data['email_address'] = email;
 
-    final contact = data['contactNumber'] ?? data['mobile_number'] ?? '';
+    final contact = _pickNonEmpty([
+      data['contactNumber'],
+      data['mobile_number'],
+      fam['contactNumber'],
+      fam['mobile_number'],
+    ]);
     data['contactNumber'] = contact;
     data['mobile_number'] = contact;
 
-    final fam = (data['familyDetails'] is Map) ? (data['familyDetails'] as Map) : {};
+    // Normalize birthdate & gender
+    final birthdate = _pickNonEmpty([
+      data['birthdate'],
+      data['date_of_birth'],
+      fam['birthdate'],
+    ]);
+    if (birthdate.isNotEmpty) {
+      data['birthdate'] = birthdate;
+      data['date_of_birth'] = _normalizeIsoDate(birthdate) ?? birthdate;
+    }
+
+    final gender = _pickNonEmpty([data['gender'], fam['gender']]);
+    if (gender.isNotEmpty) {
+      data['gender'] = gender;
+    }
+
+    // Normalize profile picture URL across both columns
+    final profilePic = _pickNonEmpty([
+      data['profilePictureUrl'],
+      data['profile_picture_url'],
+    ]);
+    if (profilePic.isNotEmpty) {
+      data['profilePictureUrl'] = profilePic;
+      data['profile_picture_url'] = profilePic;
+    }
+
+    // Normalize SA Number (prioritize direct student_grantees columns, then familyDetails/documents)
+    final resolvedSa = _pickValidSa([
+      data['saNumber'],
+      data['sa_number'],
+      fam['saNumber'],
+      docs['saNumber'],
+      docs['sa_number'],
+      docs['atmExtractedSaNumber'],
+    ]);
+    if (resolvedSa.isNotEmpty) {
+      data['saNumber'] = resolvedSa;
+      data['sa_number'] = resolvedSa;
+    }
 
     // Normalize section
-    final sectionVal = (data['section'] ?? fam['section'] ?? fam['section_name'] ?? '').toString();
+    final sectionVal = _pickNonEmpty([
+      data['section'],
+      fam['section'],
+      fam['section_name'],
+    ]);
     data['section'] = sectionVal;
 
     // Normalize Year became a scholar
-    final scholarYear =
-        data['scholarYearLevel'] ??
-        data['year_became_scholar'] ??
-        data['yearBecameScholar'] ??
-        fam['scholarYearLevel'] ??
-        fam['year_became_scholar'] ??
-        fam['yearBecameScholar'] ??
-        '';
+    final scholarYear = _pickNonEmpty([
+      data['scholarYearLevel'],
+      data['year_became_scholar'],
+      data['yearBecameScholar'],
+      fam['scholarYearLevel'],
+      fam['year_became_scholar'],
+      fam['yearBecameScholar'],
+    ]);
     data['scholarYearLevel'] = scholarYear;
     data['year_became_scholar'] = scholarYear;
     data['yearBecameScholar'] = scholarYear;
 
     // Normalize Payouts received without forcing dummy 0
-    final rawPayouts = data['payoutsReceived'] ??
-        data['payouts_received'] ??
-        fam['payoutsReceived'] ??
-        fam['payouts_received'];
+    dynamic rawPayouts;
+    for (final candidate in [
+      data['payoutsReceived'],
+      data['payouts_received'],
+      fam['payoutsReceived'],
+      fam['payouts_received'],
+    ]) {
+      if (candidate != null &&
+          candidate.toString().trim().isNotEmpty &&
+          candidate.toString().trim().toLowerCase() != 'null') {
+        rawPayouts = candidate;
+        break;
+      }
+    }
     data['payoutsReceived'] = rawPayouts;
     data['payouts_received'] = rawPayouts?.toString();
 
-    // Merge user metadata if available
+    // Merge user metadata ONLY as a fallback for fields still blank in the database
     final userMeta = _supabase.auth.currentUser?.userMetadata;
     if (userMeta != null) {
-      if ((data['section'] == null || data['section'].toString().isEmpty) && userMeta['section'] != null) {
-        data['section'] = userMeta['section'].toString();
+      if (data['section'].toString().isEmpty && userMeta['section'] != null) {
+        data['section'] = userMeta['section'].toString().trim();
       }
-      if ((data['scholarYearLevel'] == null ||
-              data['scholarYearLevel'].toString().isEmpty) &&
-          userMeta['yearBecameScholar'] != null) {
-        final val = userMeta['yearBecameScholar'].toString();
-        data['scholarYearLevel'] = val;
-        data['year_became_scholar'] = val;
-        data['yearBecameScholar'] = val;
+      if (data['scholarYearLevel'].toString().isEmpty) {
+        final metaScholarYr = _pickNonEmpty([
+          userMeta['scholarYearLevel'],
+          userMeta['yearBecameScholar'],
+          userMeta['year_became_scholar'],
+        ]);
+        if (metaScholarYr.isNotEmpty) {
+          data['scholarYearLevel'] = metaScholarYr;
+          data['year_became_scholar'] = metaScholarYr;
+          data['yearBecameScholar'] = metaScholarYr;
+        }
       }
-      if (userMeta['payoutsReceived'] != null &&
-          data['payoutsReceived'] == null) {
-        data['payoutsReceived'] = userMeta['payoutsReceived'];
-        data['payouts_received'] = userMeta['payoutsReceived'].toString();
+      if (data['payoutsReceived'] == null && userMeta['payoutsReceived'] != null) {
+        final pStr = userMeta['payoutsReceived'].toString().trim();
+        if (pStr.isNotEmpty) {
+          data['payoutsReceived'] = userMeta['payoutsReceived'];
+          data['payouts_received'] = pStr;
+        }
       }
-      if (userMeta['scholarshipName'] != null) {
-        data['scholarshipName'] = userMeta['scholarshipName'];
-        data['scholarship_name'] = userMeta['scholarshipName'];
+      if (rawScholarship.isEmpty) {
+        final metaSch = _pickNonEmpty([
+          userMeta['scholarship_name'],
+          userMeta['scholarshipName'],
+        ]);
+        if (metaSch.isNotEmpty) {
+          data['scholarshipName'] = metaSch;
+          data['scholarship_name'] = metaSch;
+        }
       }
     }
 
     return data;
   }
 
-  // Enrich student profile from school_students if name or course contains placeholder data
+  // Enrich student profile from school_students ONLY for fields that are blank or placeholders
   Future<Map<String, dynamic>> _enrichStudentDataFromSchool(Map<String, dynamic> data) async {
-    final currentName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
-    final currentCourse = (data['course'] ?? data['program_name'] ?? '').toString().trim();
-    final sId = (data['studentId'] ?? data['student_no'] ?? '').toString().trim();
+    final currentName = _pickNonEmpty([data['fullName'], data['full_name']]);
+    final currentCourse = _pickNonEmpty([data['course'], data['program_name']]);
+    final sId = _pickNonEmpty([data['studentId'], data['student_no']]);
     final isNamePlaceholder = currentName.isEmpty ||
         currentName == sId ||
         RegExp(r'^\d+$').hasMatch(currentName);
@@ -1249,8 +1503,8 @@ class AuthService {
           final suffix = cleanId.substring(cleanId.length - 6);
           orConditions.add('student_no.like.%$suffix');
         }
-        final email = (data['email'] ?? data['email_address'] ?? '').toString().trim();
-        if (email.isNotEmpty && !email.endsWith('@scholardoc.com')) {
+        final email = _pickValidEmail([data['email'], data['email_address']]);
+        if (email.isNotEmpty) {
           orConditions.add('email_address.eq.$email');
         }
 
@@ -1262,60 +1516,83 @@ class AuthService {
               .limit(1);
           if (schoolRes.isNotEmpty) {
             final schoolStudent = schoolRes.first;
-            final enrichedName = (schoolStudent['full_name'] != null && schoolStudent['full_name'].toString().trim().isNotEmpty)
-                ? schoolStudent['full_name'].toString().trim()
-                : currentName;
-            final enrichedCourse = (schoolStudent['program_name'] != null && schoolStudent['program_name'].toString().trim().isNotEmpty)
-                ? schoolStudent['program_name'].toString().trim()
-                : currentCourse;
-            final enrichedYear = schoolStudent['year_level'] ?? data['year_level'];
-            final enrichedBirthdate = schoolStudent['date_of_birth'] ?? data['birthdate'];
-            final enrichedGender = schoolStudent['gender'] ?? data['gender'];
-            final enrichedMobile = schoolStudent['mobile_number'] ?? data['contactNumber'];
-            final enrichedEmail = (schoolStudent['email_address'] != null && schoolStudent['email_address'].toString().contains('@'))
-                ? schoolStudent['email_address'].toString().trim()
-                : data['email'];
+            final dbPatch = <String, dynamic>{};
 
-            data['fullName'] = enrichedName;
-            data['full_name'] = enrichedName;
-            data['course'] = enrichedCourse;
-            data['program_name'] = enrichedCourse;
-            if (enrichedYear != null) {
-              data['year'] = enrichedYear.toString();
-              data['year_level'] = enrichedYear.toString();
-            }
-            if (enrichedBirthdate != null) {
-              data['birthdate'] = enrichedBirthdate.toString();
-              data['date_of_birth'] = enrichedBirthdate.toString();
-            }
-            if (enrichedGender != null) data['gender'] = enrichedGender;
-            if (enrichedMobile != null) {
-              data['contactNumber'] = enrichedMobile.toString();
-              data['mobile_number'] = enrichedMobile.toString();
-            }
-            if (enrichedEmail != null) {
-              data['email'] = enrichedEmail;
-              data['email_address'] = enrichedEmail;
+            if (isNamePlaceholder) {
+              final schoolName = _pickNonEmpty([schoolStudent['full_name']]);
+              if (schoolName.isNotEmpty) {
+                data['fullName'] = schoolName;
+                data['full_name'] = schoolName;
+                dbPatch['full_name'] = schoolName;
+                dbPatch['fullName'] = schoolName;
+              }
             }
 
-            // Sync back to student_grantees asynchronously
+            if (isCoursePlaceholder) {
+              final schoolCourse = _pickNonEmpty([schoolStudent['program_name']]);
+              if (schoolCourse.isNotEmpty) {
+                data['course'] = schoolCourse;
+                data['program_name'] = schoolCourse;
+                dbPatch['program_name'] = schoolCourse;
+                dbPatch['course'] = schoolCourse;
+              }
+            }
+
+            // Fill secondary fields ONLY when missing on student_grantees so user edits are never overwritten
+            final existingYear = _pickNonEmpty([data['year'], data['year_level']]);
+            final schoolYear = _pickNonEmpty([schoolStudent['year_level']]);
+            if (existingYear.isEmpty && schoolYear.isNotEmpty) {
+              data['year'] = schoolYear;
+              data['year_level'] = schoolYear;
+              dbPatch['year_level'] = schoolYear;
+              dbPatch['year'] = schoolYear;
+            }
+
+            final existingBirthdate = _pickNonEmpty([data['birthdate'], data['date_of_birth']]);
+            final schoolDob = _pickNonEmpty([schoolStudent['date_of_birth']]);
+            if (existingBirthdate.isEmpty && schoolDob.isNotEmpty) {
+              final isoDob = _normalizeIsoDate(schoolDob);
+              data['birthdate'] = schoolDob;
+              if (isoDob != null) {
+                data['date_of_birth'] = isoDob;
+                dbPatch['date_of_birth'] = isoDob;
+              }
+              dbPatch['birthdate'] = schoolDob;
+            }
+
+            final existingGender = _pickNonEmpty([data['gender']]);
+            final schoolGender = _pickNonEmpty([schoolStudent['gender']]);
+            if (existingGender.isEmpty && schoolGender.isNotEmpty) {
+              data['gender'] = schoolGender;
+              dbPatch['gender'] = schoolGender;
+            }
+
+            final existingMobile = _pickNonEmpty([data['contactNumber'], data['mobile_number']]);
+            final schoolMobile = _pickNonEmpty([schoolStudent['mobile_number']]);
+            if (existingMobile.isEmpty && schoolMobile.isNotEmpty) {
+              data['contactNumber'] = schoolMobile;
+              data['mobile_number'] = schoolMobile;
+              dbPatch['mobile_number'] = schoolMobile;
+              dbPatch['contactNumber'] = schoolMobile;
+            }
+
+            final existingEmail = _pickValidEmail([data['email'], data['email_address']]);
+            final schoolEmail = _pickValidEmail([schoolStudent['email_address']]);
+            if (existingEmail.isEmpty && schoolEmail.isNotEmpty) {
+              data['email'] = schoolEmail;
+              data['email_address'] = schoolEmail;
+              dbPatch['email_address'] = schoolEmail;
+              dbPatch['email'] = schoolEmail;
+            }
+
+            // Sync newly enriched fields back to student_grantees asynchronously
             final recordId = data['id'];
-            if (recordId != null) {
-              _supabase.from('student_grantees').update({
-                'full_name': enrichedName,
-                'fullName': enrichedName,
-                'program_name': enrichedCourse,
-                'course': enrichedCourse,
-                if (enrichedYear != null) 'year_level': enrichedYear.toString(),
-                if (enrichedYear != null) 'year': enrichedYear.toString(),
-                if (enrichedBirthdate != null) 'date_of_birth': enrichedBirthdate.toString(),
-                if (enrichedBirthdate != null) 'birthdate': enrichedBirthdate.toString(),
-                'gender': ?enrichedGender,
-                if (enrichedMobile != null) 'mobile_number': enrichedMobile.toString(),
-                if (enrichedMobile != null) 'contactNumber': enrichedMobile.toString(),
-                'email_address': ?enrichedEmail,
-                'email': ?enrichedEmail,
-              }).eq('id', recordId).catchError((_) {});
+            if (recordId != null && dbPatch.isNotEmpty) {
+              _supabase
+                  .from('student_grantees')
+                  .update(dbPatch)
+                  .eq('id', recordId)
+                  .catchError((_) {});
             }
           }
         }
@@ -1502,87 +1779,172 @@ class AuthService {
     }
   }
 
-  // Update student profile data
+  // Update student profile data safely against the exact student_grantees & school_students schema
   Future<void> updateStudentProfile(
     String uid,
     Map<String, dynamic> updates,
   ) async {
     final dbPayload = Map<String, dynamic>.from(updates);
 
-    // Synchronize aliases so both styles are included
-    if (dbPayload.containsKey('fullName')) {
-      dbPayload['full_name'] = dbPayload['fullName'];
-    } else if (dbPayload.containsKey('full_name')) {
-      dbPayload['fullName'] = dbPayload['full_name'];
+    // Locate the student's existing row first (by uid, or fallback by Auth studentId/email)
+    Map<String, dynamic>? existingRow;
+    try {
+      final byUid = await _supabase
+          .from('student_grantees')
+          .select('id, uid, student_no, studentId, full_name, fullName, email_address, email, saNumber, sa_number, submissionPdfUrl, familyDetails, documents')
+          .eq('uid', uid);
+      if (byUid.isNotEmpty) {
+        final list = List<Map<String, dynamic>>.from(byUid);
+        list.sort((a, b) {
+          final aHas = (a['documents'] is Map && (a['documents'] as Map).isNotEmpty) ||
+              (a['saNumber'] != null && a['saNumber'] != 'N/A');
+          final bHas = (b['documents'] is Map && (b['documents'] as Map).isNotEmpty) ||
+              (b['saNumber'] != null && b['saNumber'] != 'N/A');
+          if (aHas && !bHas) return -1;
+          if (!aHas && bHas) return 1;
+          return 0;
+        });
+        existingRow = list.first;
+      } else {
+        final user = _supabase.auth.currentUser;
+        if (user != null) {
+          final authEmail = (user.email ?? '').trim();
+          final sId = authEmail.contains('@')
+              ? authEmail.split('@').first.replaceAll('_', ' ').trim()
+              : '';
+          final metaSid = _pickNonEmpty([
+            user.userMetadata?['studentId'],
+            user.userMetadata?['student_no'],
+          ]);
+          final lookupParts = <String>{};
+          if (sId.isNotEmpty) {
+            lookupParts.add('student_no.eq.$sId');
+            lookupParts.add('studentId.eq.$sId');
+          }
+          if (metaSid.isNotEmpty) {
+            lookupParts.add('student_no.eq.$metaSid');
+            lookupParts.add('studentId.eq.$metaSid');
+          }
+          if (authEmail.isNotEmpty && !authEmail.endsWith('@scholardoc.com')) {
+            lookupParts.add('email_address.eq.$authEmail');
+            lookupParts.add('email.eq.$authEmail');
+          }
+          if (lookupParts.isNotEmpty) {
+            final fallbackRows = await _supabase
+                .from('student_grantees')
+                .select('id, uid, student_no, studentId, full_name, fullName, email_address, email, saNumber, sa_number, submissionPdfUrl, familyDetails, documents')
+                .or(lookupParts.join(','))
+                .limit(1);
+            if (fallbackRows.isNotEmpty) {
+              existingRow = Map<String, dynamic>.from(fallbackRows.first);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('AuthService: Existing profile lookup notice: $e');
     }
 
-    if (dbPayload.containsKey('contactNumber')) {
-      dbPayload['mobile_number'] = dbPayload['contactNumber'];
-    } else if (dbPayload.containsKey('mobile_number')) {
-      dbPayload['contactNumber'] = dbPayload['mobile_number'];
+    // Synchronize dual snake_case & camelCase column aliases
+    if (dbPayload.containsKey('fullName') || dbPayload.containsKey('full_name')) {
+      final v = (dbPayload['fullName'] ?? dbPayload['full_name'] ?? '').toString().trim();
+      dbPayload['fullName'] = v;
+      dbPayload['full_name'] = v;
     }
 
-    if (dbPayload.containsKey('birthdate')) {
-      dbPayload['date_of_birth'] = dbPayload['birthdate'];
-    } else if (dbPayload.containsKey('date_of_birth')) {
-      dbPayload['birthdate'] = dbPayload['date_of_birth'];
+    if (dbPayload.containsKey('contactNumber') || dbPayload.containsKey('mobile_number')) {
+      final v = (dbPayload['contactNumber'] ?? dbPayload['mobile_number'] ?? '').toString().trim();
+      dbPayload['contactNumber'] = v;
+      dbPayload['mobile_number'] = v;
     }
 
-    if (dbPayload.containsKey('saNumber')) {
-      dbPayload['sa_number'] = dbPayload['saNumber'];
-    } else if (dbPayload.containsKey('sa_number')) {
-      dbPayload['saNumber'] = dbPayload['sa_number'];
+    if (dbPayload.containsKey('email') || dbPayload.containsKey('email_address')) {
+      final v = (dbPayload['email'] ?? dbPayload['email_address'] ?? '').toString().trim();
+      dbPayload['email'] = v;
+      dbPayload['email_address'] = v;
     }
 
-    if (dbPayload.containsKey('course')) {
-      dbPayload['program_name'] = dbPayload['course'];
-    } else if (dbPayload.containsKey('program_name')) {
-      dbPayload['course'] = dbPayload['program_name'];
+    if (dbPayload.containsKey('birthdate') || dbPayload.containsKey('date_of_birth')) {
+      final rawDob = (dbPayload['birthdate'] ?? dbPayload['date_of_birth'] ?? '').toString().trim();
+      if (rawDob.isEmpty) {
+        dbPayload['birthdate'] = '';
+        dbPayload['date_of_birth'] = null;
+      } else {
+        final isoDob = _normalizeIsoDate(rawDob);
+        dbPayload['birthdate'] = rawDob;
+        if (isoDob != null) {
+          dbPayload['date_of_birth'] = isoDob;
+          final parsedDob = DateTime.tryParse(isoDob);
+          if (parsedDob != null) {
+            final now = DateTime.now();
+            int age = now.year - parsedDob.year;
+            if (now.month < parsedDob.month ||
+                (now.month == parsedDob.month && now.day < parsedDob.day)) {
+              age--;
+            }
+            if (age >= 10 && age <= 100) {
+              dbPayload['age'] = age;
+            }
+          }
+        } else {
+          // Do not send unparseable date string to Postgres DATE column
+          dbPayload.remove('date_of_birth');
+        }
+      }
     }
 
-    if (dbPayload.containsKey('year')) {
-      dbPayload['year_level'] = dbPayload['year'];
-    } else if (dbPayload.containsKey('year_level')) {
-      dbPayload['year'] = dbPayload['year_level'];
+    if (dbPayload.containsKey('saNumber') || dbPayload.containsKey('sa_number')) {
+      final v = (dbPayload['saNumber'] ?? dbPayload['sa_number'] ?? '').toString().trim();
+      dbPayload['saNumber'] = v;
+      dbPayload['sa_number'] = v;
     }
 
-    if (dbPayload.containsKey('scholarshipName')) {
-      dbPayload['scholarship_name'] = dbPayload['scholarshipName'];
-    } else if (dbPayload.containsKey('scholarship_name')) {
-      dbPayload['scholarshipName'] = dbPayload['scholarship_name'];
+    if (dbPayload.containsKey('course') || dbPayload.containsKey('program_name')) {
+      final v = (dbPayload['course'] ?? dbPayload['program_name'] ?? '').toString().trim();
+      dbPayload['course'] = v;
+      dbPayload['program_name'] = v;
     }
 
-    if (dbPayload.containsKey('scholarYearLevel')) {
-      dbPayload['year_became_scholar'] = dbPayload['scholarYearLevel'];
-      dbPayload['yearBecameScholar'] = dbPayload['scholarYearLevel'];
-    } else if (dbPayload.containsKey('year_became_scholar')) {
-      dbPayload['scholarYearLevel'] = dbPayload['year_became_scholar'];
-      dbPayload['yearBecameScholar'] = dbPayload['year_became_scholar'];
+    if (dbPayload.containsKey('year') || dbPayload.containsKey('year_level')) {
+      final v = (dbPayload['year'] ?? dbPayload['year_level'] ?? '').toString().trim();
+      dbPayload['year'] = v;
+      dbPayload['year_level'] = v;
     }
 
-    if (dbPayload.containsKey('payoutsReceived')) {
-      dbPayload['payouts_received'] = dbPayload['payoutsReceived'].toString();
+    if (dbPayload.containsKey('scholarshipName') || dbPayload.containsKey('scholarship_name')) {
+      final v = (dbPayload['scholarshipName'] ?? dbPayload['scholarship_name'] ?? '').toString().trim();
+      if (v.isNotEmpty) {
+        dbPayload['scholarship_name'] = v;
+      }
+      // Note: 'scholarshipName' is NOT a column on student_grantees; _validGranteeColumns filters it out safely
     }
 
-    // Ensure scholarYearLevel and payoutsReceived are also embedded in familyDetails JSON so they persist reliably
+    if (dbPayload.containsKey('profilePictureUrl') || dbPayload.containsKey('profile_picture_url')) {
+      final v = (dbPayload['profilePictureUrl'] ?? dbPayload['profile_picture_url'])?.toString().trim();
+      dbPayload['profilePictureUrl'] = v;
+      dbPayload['profile_picture_url'] = v;
+    }
+
+    if (dbPayload.containsKey('civilStatus') && !dbPayload.containsKey('civil_status')) {
+      dbPayload['civil_status'] = dbPayload['civilStatus'];
+    }
+
+    // Merge extra academic, section, and disbursement fields into familyDetails JSONB
     Map<String, dynamic> famDetails = {};
     if (dbPayload['familyDetails'] is Map) {
       famDetails = Map<String, dynamic>.from(dbPayload['familyDetails'] as Map);
-    } else {
-      try {
-        final existingRes = await _supabase
-            .from('student_grantees')
-            .select('familyDetails')
-            .eq('uid', uid)
-            .maybeSingle();
-        if (existingRes != null && existingRes['familyDetails'] is Map) {
-          famDetails = Map<String, dynamic>.from(existingRes['familyDetails'] as Map);
-        }
-      } catch (_) {}
+    } else if (existingRow != null && existingRow['familyDetails'] is Map) {
+      famDetails = Map<String, dynamic>.from(existingRow['familyDetails'] as Map);
     }
 
-    if (updates.containsKey('scholarYearLevel') || updates.containsKey('yearBecameScholar')) {
-      final sYear = (updates['scholarYearLevel'] ?? updates['yearBecameScholar'])?.toString();
+    if (updates.containsKey('scholarYearLevel') ||
+        updates.containsKey('yearBecameScholar') ||
+        updates.containsKey('year_became_scholar')) {
+      final sYear = (updates['scholarYearLevel'] ??
+              updates['yearBecameScholar'] ??
+              updates['year_became_scholar'])
+          ?.toString()
+          .trim();
       if (sYear != null && sYear.isNotEmpty) {
         famDetails['scholarYearLevel'] = sYear;
         famDetails['yearBecameScholar'] = sYear;
@@ -1593,11 +1955,14 @@ class AuthService {
         famDetails.remove('year_became_scholar');
       }
     }
+
     if (updates.containsKey('payoutsReceived') || updates.containsKey('payouts_received')) {
       final pVal = updates['payoutsReceived'] ?? updates['payouts_received'];
-      if (pVal != null && pVal.toString().isNotEmpty) {
-        famDetails['payoutsReceived'] = pVal;
-        famDetails['payouts_received'] = pVal.toString();
+      final pStr = pVal?.toString().trim() ?? '';
+      if (pStr.isNotEmpty) {
+        final pInt = int.tryParse(pStr);
+        famDetails['payoutsReceived'] = pInt ?? pVal;
+        famDetails['payouts_received'] = pStr;
       } else {
         famDetails.remove('payoutsReceived');
         famDetails.remove('payouts_received');
@@ -1613,26 +1978,36 @@ class AuthService {
       }
     }
 
+    if (dbPayload.containsKey('saNumber')) {
+      final saVal = dbPayload['saNumber']?.toString().trim() ?? '';
+      if (saVal.isNotEmpty && saVal.toUpperCase() != 'N/A') {
+        famDetails['saNumber'] = saVal;
+      } else if (saVal.isEmpty) {
+        famDetails.remove('saNumber');
+      }
+    }
+
     dbPayload['familyDetails'] = famDetails;
 
-    // Ensure documents JSON object is properly populated with banking and verification attachments
+    // Merge documents JSONB so SA number and verification attachments remain synchronized
     Map<String, dynamic> docsPayload = {};
     if (dbPayload['documents'] is Map) {
       docsPayload = Map<String, dynamic>.from(dbPayload['documents'] as Map);
-    } else {
-      try {
-        final existingDocsRes = await _supabase
-            .from('student_grantees')
-            .select('documents')
-            .eq('uid', uid)
-            .maybeSingle();
-        if (existingDocsRes != null && existingDocsRes['documents'] is Map) {
-          docsPayload = Map<String, dynamic>.from(existingDocsRes['documents'] as Map);
-        }
-      } catch (_) {}
+    } else if (existingRow != null && existingRow['documents'] is Map) {
+      docsPayload = Map<String, dynamic>.from(existingRow['documents'] as Map);
     }
 
-    // Preserve ATM Card Proof in documents
+    if (dbPayload.containsKey('saNumber')) {
+      final saVal = dbPayload['saNumber']?.toString().trim() ?? '';
+      if (saVal.isNotEmpty) {
+        docsPayload['saNumber'] = saVal;
+        docsPayload['sa_number'] = saVal;
+      } else {
+        docsPayload.remove('saNumber');
+        docsPayload.remove('sa_number');
+      }
+    }
+
     if (dbPayload.containsKey('atmCardUrl') || dbPayload.containsKey('atm_card_url')) {
       final aUrl = dbPayload['atmCardUrl'] ?? dbPayload['atm_card_url'];
       if (aUrl != null) {
@@ -1647,8 +2022,6 @@ class AuthService {
         docsPayload['atm_card_file_name'] = aName;
       }
     }
-
-    // Preserve Deposit Slip Proof in documents
     if (dbPayload.containsKey('depositSlipUrl') || dbPayload.containsKey('deposit_slip_url')) {
       final dUrl = dbPayload['depositSlipUrl'] ?? dbPayload['deposit_slip_url'];
       if (dUrl != null) {
@@ -1663,7 +2036,6 @@ class AuthService {
         docsPayload['deposit_slip_file_name'] = dName;
       }
     }
-
     if (dbPayload.containsKey('atmProofType') || dbPayload.containsKey('atm_proof_type')) {
       final pType = dbPayload['atmProofType'] ?? dbPayload['atm_proof_type'];
       if (pType != null) {
@@ -1674,123 +2046,166 @@ class AuthService {
 
     dbPayload['documents'] = docsPayload;
 
-    // Remove keys that are not individual table columns on student_grantees so PostgREST update will succeed
-    dbPayload.remove('section');
-    dbPayload.remove('depositSlipUrl');
-    dbPayload.remove('deposit_slip_url');
-    dbPayload.remove('depositSlipFileName');
-    dbPayload.remove('deposit_slip_file_name');
-    dbPayload.remove('atmProofType');
-    dbPayload.remove('atm_proof_type');
-    dbPayload.remove('requires_resubmission');
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    dbPayload['updated_at'] = nowIso;
+    dbPayload['updatedAt'] = nowIso;
 
-    // Always persist to Supabase Auth user metadata as an instant fail-safe
+    // Strictly whitelist valid columns on student_grantees so PostgREST NEVER fails with PGRST204
+    final cleanDbPayload = <String, dynamic>{};
+    for (final entry in dbPayload.entries) {
+      if (_validGranteeColumns.contains(entry.key) && entry.key != 'id') {
+        cleanDbPayload[entry.key] = entry.value;
+      }
+    }
+
+    // Persist to Supabase Auth user metadata as an instant session fail-safe
     try {
       await _supabase.auth.updateUser(UserAttributes(data: updates));
     } catch (e) {
       debugPrint('AuthService: Failed to update user metadata: $e');
     }
 
-    // Determine student identifiers to update all companion tables and records
-    String? studentNo;
-    String? studentEmail;
-    try {
-      final currentRes = await _supabase
-          .from('student_grantees')
-          .select('student_no, studentId, email_address, email')
-          .eq('uid', uid)
-          .maybeSingle();
-      if (currentRes != null) {
-        studentNo = (currentRes['student_no'] ?? currentRes['studentId'])?.toString().trim();
-        studentEmail = (currentRes['email_address'] ?? currentRes['email'])?.toString().trim();
-      }
-    } catch (_) {}
+    final existingId = existingRow?['id'];
+    final studentNo = _pickNonEmpty([
+      existingRow?['student_no'],
+      existingRow?['studentId'],
+      updates['student_no'],
+      updates['studentId'],
+    ]);
+    final studentEmail = _pickValidEmail([
+      existingRow?['email_address'],
+      existingRow?['email'],
+    ]);
 
-    // 1. Update student_grantees by UID
+    // 1. Update primary student_grantees record by id (if resolved) and by uid
+    bool primaryUpdated = false;
+    if (existingId != null) {
+      final payloadWithUid = Map<String, dynamic>.from(cleanDbPayload);
+      payloadWithUid['uid'] = uid;
+      await _supabase
+          .from('student_grantees')
+          .update(payloadWithUid)
+          .eq('id', existingId);
+      primaryUpdated = true;
+    }
+
     try {
-      await _supabase.from('student_grantees').update(dbPayload).eq('uid', uid);
+      await _supabase
+          .from('student_grantees')
+          .update(cleanDbPayload)
+          .eq('uid', uid);
+      primaryUpdated = true;
     } catch (e) {
-      debugPrint('AuthService: Retrying student_grantees update with safe fields: $e');
-      final safePayload = <String, dynamic>{};
-      const safeFields = [
-        'full_name', 'fullName', 'mobile_number', 'contactNumber', 'program_name', 'course',
-        'year_level', 'year', 'birthdate', 'gender', 'scholarship_name', 'status',
-        'saNumber', 'sa_number', 'submissionPdfUrl', 'submission_pdf_url', 'submissionPdfName',
-        'submission_pdf_name', 'atmCardUrl', 'atm_card_url', 'atmCardFileName', 'idFrontUrl',
-        'id_front_url', 'idBackUrl', 'id_back_url', 'documents', 'familyDetails', 'submittedAt',
-        'submitted_at', 'requiresResubmission', 'adminRemarks', 'admin_remarks', 'pdfVerified',
-        'academicYear', 'academic_year', 'semester', 'stickerValidated', 'sticker_validated',
-        'idValidationStatus', 'id_validation_status', 'saVerificationStatus', 'sa_verification_status'
-      ];
-      for (final key in safeFields) {
-        if (dbPayload.containsKey(key)) safePayload[key] = dbPayload[key];
-      }
-      try {
-        await _supabase.from('student_grantees').update(safePayload).eq('uid', uid);
-      } catch (_) {}
+      if (!primaryUpdated) rethrow;
+      debugPrint('AuthService: Secondary uid sync notice: $e');
     }
 
     // 2. Synchronize by student_no across student_grantees and school_students
-    if (studentNo != null && studentNo.isNotEmpty && studentNo != 'N/A') {
+    if (studentNo.isNotEmpty && studentNo.toUpperCase() != 'N/A') {
       try {
-        await _supabase.from('student_grantees').update(dbPayload).or('student_no.eq.$studentNo,studentId.eq.$studentNo');
-      } catch (_) {}
+        await _supabase
+            .from('student_grantees')
+            .update(cleanDbPayload)
+            .or('student_no.eq.$studentNo,studentId.eq.$studentNo');
+      } catch (e) {
+        debugPrint('AuthService: student_no sync notice: $e');
+      }
 
       try {
         final schoolPayload = <String, dynamic>{};
-        if (dbPayload.containsKey('full_name')) schoolPayload['full_name'] = dbPayload['full_name'];
-        if (dbPayload.containsKey('mobile_number')) schoolPayload['mobile_number'] = dbPayload['mobile_number'];
-        if (dbPayload.containsKey('date_of_birth')) schoolPayload['date_of_birth'] = dbPayload['date_of_birth'];
-        if (dbPayload.containsKey('gender')) schoolPayload['gender'] = dbPayload['gender'];
-        if (dbPayload.containsKey('program_name')) schoolPayload['program_name'] = dbPayload['program_name'];
-        if (dbPayload.containsKey('year_level')) schoolPayload['year_level'] = dbPayload['year_level'];
-        if (schoolPayload.isNotEmpty) {
-          await _supabase.from('school_students').update(schoolPayload).eq('student_no', studentNo);
+        if (cleanDbPayload.containsKey('full_name')) {
+          schoolPayload['full_name'] = cleanDbPayload['full_name'];
         }
-      } catch (_) {}
+        if (cleanDbPayload.containsKey('mobile_number')) {
+          schoolPayload['mobile_number'] = cleanDbPayload['mobile_number'];
+        }
+        if (cleanDbPayload.containsKey('email_address')) {
+          schoolPayload['email_address'] = cleanDbPayload['email_address'];
+        }
+        if (cleanDbPayload.containsKey('date_of_birth')) {
+          schoolPayload['date_of_birth'] = cleanDbPayload['date_of_birth'];
+        }
+        if (cleanDbPayload.containsKey('age')) {
+          schoolPayload['age'] = cleanDbPayload['age'];
+        }
+        if (cleanDbPayload.containsKey('gender')) {
+          schoolPayload['gender'] = cleanDbPayload['gender'];
+        }
+        if (cleanDbPayload.containsKey('civil_status')) {
+          schoolPayload['civil_status'] = cleanDbPayload['civil_status'];
+        }
+        if (cleanDbPayload.containsKey('religion')) {
+          schoolPayload['religion'] = cleanDbPayload['religion'];
+        }
+        if (cleanDbPayload.containsKey('program_name')) {
+          schoolPayload['program_name'] = cleanDbPayload['program_name'];
+        }
+        if (cleanDbPayload.containsKey('year_level')) {
+          schoolPayload['year_level'] = cleanDbPayload['year_level'];
+        }
+        if (schoolPayload.isNotEmpty) {
+          schoolPayload['updated_at'] = nowIso;
+          await _supabase
+              .from('school_students')
+              .update(schoolPayload)
+              .eq('student_no', studentNo);
+        }
+      } catch (e) {
+        debugPrint('AuthService: school_students sync notice: $e');
+      }
     }
 
-    // 3. Synchronize by email across student_grantees
-    if (studentEmail != null && studentEmail.isNotEmpty && !studentEmail.endsWith('@scholardoc.com')) {
+    // 3. Synchronize by email across student_grantees if applicable
+    if (studentEmail.isNotEmpty) {
       try {
-        await _supabase.from('student_grantees').update(dbPayload).or('email_address.eq.$studentEmail,email.eq.$studentEmail');
+        await _supabase
+            .from('student_grantees')
+            .update(cleanDbPayload)
+            .or('email_address.eq.$studentEmail,email.eq.$studentEmail');
       } catch (_) {}
     }
 
-    final studentDisplayName = (dbPayload['fullName'] ?? dbPayload['full_name'] ?? 'Student').toString();
+    final studentDisplayName = _pickNonEmpty([
+      cleanDbPayload['fullName'],
+      cleanDbPayload['full_name'],
+      existingRow?['fullName'],
+      existingRow?['full_name'],
+    ], 'Student');
 
-    // 5. Notify Super Admin system and student directly via real-time notification
+    // 4. Notify Super Admin system and student directly via real-time notification
     try {
-      await _supabase.from('notifications').insert([{
-        'studentId': 'superadmin',
-        'title': 'Student Profile Updated',
-        'message': '$studentDisplayName updated their personal information.',
-        'type': 'info',
-        'isRead': false,
-        'timestamp': DateTime.now().toIso8601String()
-      }]);
+      await _supabase.from('notifications').insert([
+        {
+          'studentId': 'superadmin',
+          'title': 'Student Profile Updated',
+          'message': '$studentDisplayName updated their profile information.',
+          'type': 'info',
+          'isRead': false,
+          'timestamp': DateTime.now().toIso8601String(),
+        }
+      ]);
     } catch (_) {}
 
     try {
       await _notificationService.sendNotification(
         studentId: uid,
         title: 'Profile Updated',
-        message: 'Your personal information has been updated successfully.',
+        message: 'Your profile changes have been saved successfully.',
         type: 'success',
       );
     } catch (_) {}
 
-    // 6. Automatically clear any existing missing requirements notice for this student
+    // 5. Automatically clear any existing missing requirements notice for this student
     try {
       await _notificationService.clearMissingRequirementsNotifications(uid);
     } catch (_) {}
 
     // 6. Log Activity in System Audit Log
     await _auditService.logActivity(
-      action: 'Updated personal information',
+      action: 'Updated profile information',
       userName: studentDisplayName,
       role: 'Student',
-      studentId: studentNo,
+      studentId: studentNo.isNotEmpty ? studentNo : null,
     );
   }
 

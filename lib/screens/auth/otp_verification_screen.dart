@@ -168,11 +168,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      final raw = e
+      var raw = e
           .toString()
           .replaceAll(RegExp(r'\[.*\]'), '')
           .replaceAll('Exception: ', '')
           .trim();
+      if (raw.contains('SocketException') ||
+          raw.contains('Connection refused') ||
+          raw.contains('ClientException') ||
+          raw.contains('TimeoutException')) {
+        raw = 'Unable to reach the verification server. Please check your connection and try again.';
+      }
       setState(() {
         _errorMessage = raw.isNotEmpty
             ? raw
@@ -235,7 +241,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      final raw = e.toString().replaceAll('Exception: ', '').trim();
+      var raw = e.toString().replaceAll('Exception: ', '').trim();
+      if (raw.contains('SocketException') ||
+          raw.contains('Connection refused') ||
+          raw.contains('ClientException') ||
+          raw.contains('TimeoutException')) {
+        raw = 'Unable to reach the verification server. Please check your connection and try again.';
+      }
       setState(() => _errorMessage = raw);
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -244,8 +256,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _onDigitChanged(int index, String value) {
     if (value.length > 1) {
-      // User pasted multiple characters (e.g. 6-digit code)
       final digits = value.replaceAll(RegExp(r'\D'), '');
+      if (digits.isEmpty) {
+        _controllers[index].clear();
+        return;
+      }
+
+      // Case 1: User typed a single replacement digit into an already-filled box (length == 2)
+      if (digits.length == 2) {
+        final newDigit = digits.substring(digits.length - 1);
+        _controllers[index].value = TextEditingValue(
+          text: newDigit,
+          selection: const TextSelection.collapsed(offset: 1),
+        );
+        if (index < 5) {
+          _focusNodes[index + 1].requestFocus();
+        } else {
+          _focusNodes[index].unfocus();
+          if (_currentOtp.length == 6) {
+            _handleVerify();
+          }
+        }
+        return;
+      }
+
+      // Case 2: User pasted or tapped 1-tap SMS OTP Autofill (e.g. 6-digit code)
       for (int i = 0; i < 6 && i < digits.length; i++) {
         _controllers[i].text = digits[i];
       }
@@ -468,7 +503,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             focusNode: _focusNodes[index],
                             keyboardType: TextInputType.number,
                             textAlign: TextAlign.center,
-                            maxLength: 1,
+                            autofillHints: index == 0
+                                ? const [AutofillHints.oneTimeCode]
+                                : null,
                             style: GoogleFonts.inter(
                               fontSize: 22,
                               fontWeight: FontWeight.w800,

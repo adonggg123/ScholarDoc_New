@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 /// Centralized API and Backend configuration for ScholarDoc.
 /// Automatically handles routing between local development and production deployment.
@@ -18,8 +20,8 @@ class ApiConfig {
   /// Returns candidate URLs in priority order for the current platform:
   /// - Release APK on physical devices: uses [defaultProductionUrl]
   /// - Android debug (Physical device via adb reverse): http://127.0.0.1:8080
-  /// - Android debug (Emulator): http://10.0.2.2:8080
   /// - Android debug (Host Wi-Fi LAN): http://192.168.8.124:8080
+  /// - Android debug (Emulator): http://10.0.2.2:8080
   /// - Web: '' (relative paths)
   /// - Desktop / iOS Simulator: http://localhost:8080
   static List<String> get candidateUrls {
@@ -38,9 +40,8 @@ class ApiConfig {
       if (defaultTargetPlatform == TargetPlatform.android) {
         return [
           'http://127.0.0.1:8080',     // Physical device via adb reverse tcp:8080 tcp:8080
+          'http://192.168.8.124:8080', // Host PC Wi-Fi LAN IP (works over Wi-Fi / LAN)
           'http://10.0.2.2:8080',      // Android Emulator loopback
-          'http://192.168.8.124:8080', // Host PC Wi-Fi LAN IP
-          'http://localhost:8080',
         ];
       }
     } catch (_) {}
@@ -64,5 +65,53 @@ class ApiConfig {
     final trimmed = url.trim();
     _workingBaseUrl = trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
   }
-}
 
+  /// Clears a stale cached URL (e.g., if device switched between USB and Wi-Fi).
+  static void clearWorkingBaseUrl() {
+    _workingBaseUrl = null;
+  }
+
+  /// Races all candidate URLs IN PARALLEL against `/api/ping` so the fastest reachable
+  /// route (USB adb reverse, Wi-Fi LAN, or Emulator) wins in ~10-30ms without sequential timeouts.
+  static Future<List<String>> resolveFastCandidates() async {
+    if (kIsWeb) return [''];
+    final all = candidateUrls;
+    if (all.length <= 1) return all;
+
+    if (_workingBaseUrl != null && _workingBaseUrl!.isNotEmpty) {
+      return <String>{_workingBaseUrl!, ...all}.toList();
+    }
+
+    final completer = Completer<String?>();
+    int remaining = all.length;
+
+    for (final candidate in all) {
+      if (candidate.isEmpty) {
+        remaining--;
+        if (remaining == 0 && !completer.isCompleted) completer.complete(null);
+        continue;
+      }
+      http
+          .get(Uri.parse('$candidate/api/ping'))
+          .timeout(const Duration(milliseconds: 1500))
+          .then((res) {
+        if (res.statusCode == 200 && !completer.isCompleted) {
+          setWorkingBaseUrl(candidate);
+          completer.complete(candidate);
+        } else {
+          remaining--;
+          if (remaining == 0 && !completer.isCompleted) completer.complete(null);
+        }
+      }).catchError((_) {
+        remaining--;
+        if (remaining == 0 && !completer.isCompleted) completer.complete(null);
+      });
+    }
+
+    final winner = await completer.future;
+    if (winner != null) {
+      return <String>{winner, ...all}.toList();
+    }
+    return all;
+  }
+}
