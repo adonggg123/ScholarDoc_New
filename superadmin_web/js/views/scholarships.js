@@ -132,12 +132,6 @@ async function loadPrograms() {
         
         allScholarships = data || [];
         
-        // If empty, initialize defaults like Flutter does
-        if (allScholarships.length === 0) {
-            await initializeDefaults();
-            return;
-        }
-        
         updateMetrics();
         filterAndRenderCards();
     } catch (e) {
@@ -166,8 +160,6 @@ async function initializeDefaults() {
         const defaults = [
             { name: 'TES', description: 'Tertiary Education Subsidy for qualified higher education students', isActive: true, requiredDocuments: ['SA Number', 'ID Front & Back + Signatures (PDF)'] },
             { name: 'TDP', description: 'Tulong Dunong Program financial assistance for deserving students', isActive: true, requiredDocuments: ['SA Number', 'ID Front & Back + Signatures (PDF)'] },
-            { name: 'DBP', description: 'DBP Rise Scholarship Program institutional partner support', isActive: true, requiredDocuments: ['SA Number', 'ID Front & Back + Signatures (PDF)'] },
-            { name: 'SANTEH', description: 'SANTEH Aquaculture S&T Foundation grant for fisheries & agri', isActive: true, requiredDocuments: ['SA Number', 'ID Front & Back + Signatures (PDF)'] },
             { name: 'STUFAP', description: 'Student Financial Assistance Program for state university scholars', isActive: true, requiredDocuments: ['SA Number', 'ID Front & Back + Signatures (PDF)'] }
         ];
         const { error } = await supabase.from('scholarships').insert(defaults);
@@ -529,8 +521,11 @@ window.deleteProgram = async function(id) {
     if (!confirm(`Are you sure you want to delete ${progName} scholarship program? This action cannot be undone.`)) return;
 
     try {
-        const { error } = await supabase.from('scholarships').delete().eq('id', id);
+        const { data: deletedRows, error } = await supabase.from('scholarships').delete().eq('id', id).select();
         if (error) throw error;
+        if (!deletedRows || deletedRows.length === 0) {
+            throw new Error('Program could not be deleted (check database RLS DELETE permissions for authenticated users).');
+        }
         
         if (window.showToast) {
             window.showToast(`${progName} program deleted successfully`, 'trash-2');

@@ -1,5 +1,21 @@
+const fs = require('fs');
+const path = require('path');
 const https = require('https');
-require('dotenv').config();
+
+// Load .env manually without requiring dotenv package
+const envPath = path.resolve(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx > 0) {
+      const k = trimmed.slice(0, idx).trim();
+      const v = trimmed.slice(idx + 1).trim();
+      if (!process.env[k]) process.env[k] = v;
+    }
+  }
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ywavesulvkqwpsejprxp.supabase.co';
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
@@ -31,7 +47,7 @@ const tablesToClear = [
 
 function deleteTableData(table) {
   return new Promise((resolve) => {
-    const url = new URL(`${SUPABASE_URL}/rest/v1/${table}?id=gte.0`);
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${table}?id=not.is.null`);
     const req = https.request(url, {
       method: 'DELETE',
       headers: {
