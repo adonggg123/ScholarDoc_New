@@ -29,17 +29,18 @@ class AuthService {
   /// - Admin / SuperAdmin users bypass OTP verification.
   /// - Student Grantees are validated against the backend scholarship database.
   /// - On the student's first login, validates that Student ID is used as the initial password
-  ///   and dispatches a 6-digit OTP to their registered mobile number via Semaphore SMS.
+  ///   and dispatches a 6-digit OTP via the preferred channel (SMS or Email).
   /// - On subsequent logins, allows direct login without OTP prompt.
   Future<Map<String, dynamic>> initiateStudentLogin({
     required String studentId,
     required String password,
+    String? preferredChannel,
   }) async {
     final cleanId = studentId.trim();
     final cleanLower = cleanId.toLowerCase();
     final cleanPwd = password.trim();
 
-    // 1. Admins and SuperAdmins bypass student SMS OTP verification
+    // 1. Admins and SuperAdmins bypass student OTP verification
     final bool isAdmin = cleanLower == 'admin' ||
         cleanLower == 'superadmin' ||
         cleanLower.contains('admin@') ||
@@ -60,51 +61,62 @@ class AuthService {
 
     for (final candidate in candidates) {
       if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
       try {
         final uri = Uri.parse('$candidate/api/auth/student-login');
-        final res = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'studentId': cleanId,
-            'password': cleanPwd,
-          }),
-        ).timeout(const Duration(seconds: 6));
-
-        // Confirmed working candidate
-        if (candidate.isNotEmpty) {
-          ApiConfig.setWorkingBaseUrl(candidate);
+        final payload = <String, dynamic>{
+          'studentId': cleanId,
+          'password': cleanPwd,
+        };
+        if (preferredChannel != null && preferredChannel.trim().isNotEmpty) {
+          payload['channel'] = preferredChannel.trim().toLowerCase();
         }
-
-        final data = jsonDecode(res.body);
-
-        if (res.statusCode == 200) {
-          return Map<String, dynamic>.from(data);
-        } else if (res.statusCode == 403) {
-          final msg = data['message'] ??
-              'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.';
-          throw Exception(msg);
-        } else if (res.statusCode == 401) {
-          final msg = data['error'] ??
-              'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.';
-          throw Exception(msg);
-        } else if (res.statusCode == 429) {
-          final msg = data['error'] ?? 'Rate limit exceeded. Please try again shortly.';
-          throw Exception(msg);
-        } else {
-          final msg = data['error'] ?? data['message'] ?? 'Login failed (${res.statusCode})';
-          throw Exception(msg);
-        }
-      } catch (e) {
-        if (e.toString().contains('Access denied') ||
-            e.toString().contains('Invalid initial credentials') ||
-            e.toString().contains('Rate limit') ||
-            e.toString().contains('SMS gateway') ||
-            e.toString().contains('No valid Philippine mobile number')) {
-          rethrow;
-        }
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 6));
+      } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
-        lastConnectionError = e;
+        lastConnectionError = connErr;
+        continue;
+      }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastConnectionError = parseErr;
+        continue;
+      }
+
+      // Confirmed working backend candidate
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200) {
+        return data;
+      } else if (res.statusCode == 403) {
+        final msg = data['message'] ??
+            'Access denied. Student ID "$cleanId" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.';
+        throw Exception(msg);
+      } else if (res.statusCode == 401) {
+        final msg = data['error'] ??
+            'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.';
+        throw Exception(msg);
+      } else if (res.statusCode == 429) {
+        final msg = data['error'] ?? 'Rate limit exceeded. Please try again shortly.';
+        throw Exception(msg);
+      } else {
+        final msg = data['error'] ?? data['message'] ?? 'Login failed (${res.statusCode})';
+        throw Exception(msg);
       }
     }
 
@@ -166,7 +178,7 @@ class AuthService {
 
     // Resolve masked phone for UI
     final rawPhone = (grantee['mobile_number'] ?? grantee['contactNumber'] ?? '').toString();
-    String maskedPhone = 'your registered phone';
+    String maskedPhone = 'your registered contact';
     final cleanDigits = rawPhone.replaceAll(RegExp(r'\D'), '');
     if (cleanDigits.length == 11) {
       maskedPhone = '${cleanDigits.substring(0, 4)} •••• ${cleanDigits.substring(8)}';
@@ -174,15 +186,15 @@ class AuthService {
       maskedPhone = '${cleanDigits.substring(0, 2)} •••• ${cleanDigits.substring(cleanDigits.length - 2)}';
     }
 
-    debugPrint('AuthService: First-login requires SMS OTP for $cleanId ($maskedPhone), but backend SMS server was unreachable: $lastConnectionError');
+    debugPrint('AuthService: First-login requires OTP for $cleanId ($maskedPhone), but backend OTP server was unreachable: $lastConnectionError');
     throw Exception(
-      'Unable to reach the SMS verification server to send your OTP code to $maskedPhone. Please ensure the ScholarDoc server is running and your phone is connected.',
+      'Unable to reach the verification server to send your OTP code ($maskedPhone). Please ensure the ScholarDoc server is running and your device is connected.',
     );
   }
 
-  /// Verifies the SMS OTP on the backend:
-  /// - Enforces single-use, expiration (5 mins), and max 5 attempts.
-  /// - If backend validation passes, proceeds to complete Supabase Auth session.
+  /// Verifies the OTP (SMS or Email) on the backend:
+  /// - Enforces single-use, expiration, and max 5 attempts.
+  /// - If backend validation passes, completes the Supabase Auth session immediately.
   Future<AuthResponse?> verifyLoginOtp({
     required String studentId,
     required String otp,
@@ -195,46 +207,54 @@ class AuthService {
 
     for (final candidate in candidates) {
       if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
       try {
         final uri = Uri.parse('$candidate/api/auth/otp/verify');
-        final res = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'studentId': cleanId,
-            'otp': cleanOtp,
-            'password': password.trim(),
-          }),
-        ).timeout(const Duration(seconds: 6));
-
-        if (candidate.isNotEmpty) {
-          ApiConfig.setWorkingBaseUrl(candidate);
-        }
-
-        final data = jsonDecode(res.body);
-
-        if (res.statusCode == 200 && data['verified'] == true) {
-          debugPrint('AuthService: Backend OTP verification SUCCESS for $cleanId');
-          // Complete the Supabase Auth login with the verified student credentials
-          return await loginStudent(
-            studentId: cleanId,
-            password: password.trim(),
-          );
-        }
-
-        final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed';
-        throw Exception(errMsg);
-      } catch (e) {
-        if (e.toString().contains('Invalid OTP code') ||
-            e.toString().contains('No active OTP session') ||
-            e.toString().contains('expired') ||
-            e.toString().contains('Maximum') ||
-            e.toString().contains('remaining')) {
-          rethrow;
-        }
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'studentId': cleanId,
+                'otp': cleanOtp,
+                'password': password.trim(),
+              }),
+            )
+            .timeout(const Duration(seconds: 6));
+      } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
-        lastErr = e;
+        lastErr = connErr;
+        continue;
       }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200 && data['verified'] == true) {
+        debugPrint('AuthService: Backend OTP verification SUCCESS for $cleanId');
+        // Complete the Supabase Auth login without repeating redundant HTTP prechecks
+        return await loginStudent(
+          studentId: cleanId,
+          password: password.trim(),
+          otpJustVerified: true,
+        );
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed';
+      throw Exception(errMsg);
     }
 
     debugPrint('AuthService.verifyLoginOtp error: $lastErr');
@@ -248,9 +268,11 @@ class AuthService {
     throw Exception(lastErr?.toString() ?? 'OTP verification failed. Please check your connection.');
   }
 
-  /// Requests a new OTP via Semaphore SMS with rate limit handling (60s cooldown).
+  /// Requests or switches an OTP via the selected delivery channel ('sms' or 'email')
+  /// with per-channel rate limit handling.
   Future<Map<String, dynamic>> resendLoginOtp({
     required String studentId,
+    String? channel,
   }) async {
     final cleanId = studentId.trim();
     final candidates = await ApiConfig.resolveFastCandidates();
@@ -258,38 +280,50 @@ class AuthService {
 
     for (final candidate in candidates) {
       if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
       try {
         final uri = Uri.parse('$candidate/api/auth/otp/resend');
-        final res = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'studentId': cleanId,
-          }),
-        ).timeout(const Duration(seconds: 6));
-
-        if (candidate.isNotEmpty) {
-          ApiConfig.setWorkingBaseUrl(candidate);
+        final payload = <String, dynamic>{
+          'studentId': cleanId,
+        };
+        if (channel != null && channel.trim().isNotEmpty) {
+          payload['channel'] = channel.trim().toLowerCase();
         }
-
-        final data = jsonDecode(res.body);
-
-        if (res.statusCode == 200) {
-          return Map<String, dynamic>.from(data);
-        }
-
-        final errMsg = data['error'] ?? data['message'] ?? 'Failed to resend OTP';
-        throw Exception(errMsg);
-      } catch (e) {
-        if (e.toString().contains('wait') ||
-            e.toString().contains('Rate limit') ||
-            e.toString().contains('SMS gateway') ||
-            e.toString().contains('Access denied')) {
-          rethrow;
-        }
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 6));
+      } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
-        lastErr = e;
+        lastErr = connErr;
+        continue;
       }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200) {
+        return data;
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'Failed to send OTP';
+      throw Exception(errMsg);
     }
 
     debugPrint('AuthService.resendLoginOtp error: $lastErr');
@@ -300,7 +334,35 @@ class AuthService {
         errStr.contains('TimeoutException')) {
       throw Exception('Unable to reach the verification server. Please check your network connection.');
     }
-    throw Exception(lastErr?.toString() ?? 'Failed to resend OTP. Please check your connection.');
+    throw Exception(lastErr?.toString() ?? 'Failed to send OTP. Please check your connection.');
+  }
+
+  /// Queries live OTP delivery telemetry & available contact channels (SMS / Email) for a student.
+  Future<Map<String, dynamic>?> getOtpDeliveryStatus({
+    required String studentId,
+  }) async {
+    final cleanId = studentId.trim();
+    if (cleanId.isEmpty) return null;
+    final candidates = await ApiConfig.resolveFastCandidates();
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse(
+          '$candidate/api/auth/otp/delivery-status?studentId=${Uri.encodeComponent(cleanId)}',
+        );
+        final res = await http.get(uri).timeout(const Duration(milliseconds: 2500));
+        if (res.statusCode == 200) {
+          if (candidate.isNotEmpty) {
+            ApiConfig.setWorkingBaseUrl(candidate);
+          }
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map<String, dynamic>) return decoded;
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Resets a student's first-login status (convenience helper for testing & coordinators).
@@ -444,6 +506,7 @@ class AuthService {
   Future<AuthResponse?> loginStudent({
     required String studentId,
     required String password,
+    bool otpJustVerified = false,
   }) async {
     final String trimmedId = studentId.trim();
     final String trimmedPassword = password.trim();
@@ -505,29 +568,31 @@ class AuthService {
 
     // --- Mandatory Pre-check for Students: Must exist in student_grantees table ---
     if (!isAdmin) {
-      // 1a. Secure Backend Validation against student_grantees table
-      try {
-        final validateUrl = Uri.parse('$serverBaseUrl/api/auth/validate-grantee');
-        final res = await http.post(
-          validateUrl,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'identifier': trimmedId}),
-        ).timeout(const Duration(seconds: 8));
+      // 1a. Secure Backend Validation against student_grantees table (skipped when OTP was just verified on backend)
+      if (!otpJustVerified) {
+        try {
+          final validateUrl = Uri.parse('$serverBaseUrl/api/auth/validate-grantee');
+          final res = await http.post(
+            validateUrl,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'identifier': trimmedId}),
+          ).timeout(const Duration(seconds: 4));
 
-        if (res.statusCode == 200 || res.statusCode == 403) {
-          final data = jsonDecode(res.body);
-          if (data is Map && data['isEligible'] == false) {
-            final errorMsg = data['message'] ??
-                'Access denied. Student ID "$trimmedId" is not registered as an eligible grantee in the scholarship database.';
-            debugPrint('AuthService: Backend eligibility check REJECTED: $errorMsg');
-            throw Exception(errorMsg);
+          if (res.statusCode == 200 || res.statusCode == 403) {
+            final data = jsonDecode(res.body);
+            if (data is Map && data['isEligible'] == false) {
+              final errorMsg = data['message'] ??
+                  'Access denied. Student ID "$trimmedId" is not registered as an eligible grantee in the scholarship database.';
+              debugPrint('AuthService: Backend eligibility check REJECTED: $errorMsg');
+              throw Exception(errorMsg);
+            }
           }
+        } catch (backendErr) {
+          if (backendErr.toString().contains('Access denied')) {
+            rethrow;
+          }
+          debugPrint('AuthService: Backend verification notice (fallback to direct query): $backendErr');
         }
-      } catch (backendErr) {
-        if (backendErr.toString().contains('Access denied')) {
-          rethrow;
-        }
-        debugPrint('AuthService: Backend verification notice (fallback to direct query): $backendErr');
       }
 
       // 1b. Direct Supabase query strictly on student_grantees table (NO school_students fallback)
@@ -589,10 +654,12 @@ class AuthService {
           .trim();
 
       // STRICT SECURITY GATE: Enforce OTP verification on student first login
-      final bool firstLoginDone = firstRecord['first_login_completed'] == true || firstRecord['otp_verified_at'] != null;
+      final bool firstLoginDone = otpJustVerified ||
+          firstRecord['first_login_completed'] == true ||
+          firstRecord['otp_verified_at'] != null;
       if (!firstLoginDone) {
         bool isBackendVerified = false;
-        final candidates = <String>{serverBaseUrl, ...ApiConfig.candidateUrls}.toList();
+        final candidates = await ApiConfig.resolveFastCandidates();
         for (final candidate in candidates) {
           if (candidate.isEmpty && !kIsWeb) continue;
           try {
@@ -611,7 +678,7 @@ class AuthService {
 
         if (!isBackendVerified) {
           throw Exception(
-            'First-login SMS OTP verification required. Please verify the 6-digit code sent to your registered mobile number.',
+            'First-login OTP verification required. Please verify the 6-digit code sent via your selected channel.',
           );
         }
       }

@@ -21,6 +21,14 @@ void main() {
     String studentId = '2023304850',
     String password = '2023304850',
     String maskedPhone = '0985 •••• 627',
+    String? maskedEmail,
+    String initialChannel = 'sms',
+    bool smsAvailable = true,
+    bool emailAvailable = true,
+    String initialDeliveryStatus = 'sent',
+    String? initialDeliveryMessage,
+    String? initialDeliveryError,
+    Map<String, int>? initialChannelCooldowns,
     int expiresIn = 300,
     int resendCooldown = 60,
   }) {
@@ -29,6 +37,14 @@ void main() {
         studentId: studentId,
         password: password,
         maskedPhone: maskedPhone,
+        maskedEmail: maskedEmail,
+        initialChannel: initialChannel,
+        smsAvailable: smsAvailable,
+        emailAvailable: emailAvailable,
+        initialDeliveryStatus: initialDeliveryStatus,
+        initialDeliveryMessage: initialDeliveryMessage,
+        initialDeliveryError: initialDeliveryError,
+        initialChannelCooldowns: initialChannelCooldowns,
         expiresIn: expiresIn,
         resendCooldown: resendCooldown,
       ),
@@ -43,6 +59,14 @@ void main() {
     expect(find.text('SMS OTP Verification'), findsOneWidget);
     expect(find.text('FIRST LOGIN 2FA VERIFICATION'), findsOneWidget);
     expect(find.text('0985 •••• 627'), findsOneWidget);
+
+    // Dual-channel selector options (SMS | Email)
+    expect(find.byKey(const Key('otp_channel_sms')), findsOneWidget);
+    expect(find.byKey(const Key('otp_channel_email')), findsOneWidget);
+    expect(
+      find.byKey(const Key('otp_delivery_status_banner')),
+      findsOneWidget,
+    );
 
     // 6 input digit text fields
     expect(find.byType(TextFormField), findsNWidgets(6));
@@ -89,5 +113,97 @@ void main() {
 
     // Resend button should now be active
     expect(find.text('Resend Code via SMS'), findsOneWidget);
+  });
+
+  testWidgets('Email delivery mode renders Email OTP UI, status, and validation',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      createOtpTestWidget(
+        initialChannel: 'email',
+        maskedEmail: 'ja••••05@gmail.com',
+        resendCooldown: 0,
+      ),
+    );
+
+    expect(find.text('Email OTP Verification'), findsOneWidget);
+    expect(find.text('ja••••05@gmail.com'), findsOneWidget);
+    expect(
+      find.textContaining('Email OTP Sent'),
+      findsOneWidget,
+    );
+    expect(find.text('Resend Code via Email'), findsOneWidget);
+    expect(
+      find.text('Secured by ScholarDoc SMTP Security Gateway'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('VERIFY & SIGN IN'));
+    await tester.pump();
+
+    expect(
+      find.text('Please enter all 6 digits of the OTP sent to your email.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'Switching channels updates per-channel cooldowns and blocks unlinked channels cleanly',
+      (WidgetTester tester) async {
+    // 1. Test unlinked Email channel validation
+    await tester.pumpWidget(
+      createOtpTestWidget(
+        emailAvailable: false,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('otp_channel_email')));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'No valid email address is registered on your account. Please verify via SMS.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('SMS OTP Verification'), findsOneWidget);
+
+    // 2. Test switching between active SMS & Email sessions with independent cooldowns
+    await tester.pumpWidget(
+      createOtpTestWidget(
+        maskedEmail: 'sc••••23@ustp.edu.ph',
+        initialChannel: 'sms',
+        initialChannelCooldowns: {'sms': 28, 'email': 14},
+      ),
+    );
+
+    expect(find.textContaining('Resend in 28s'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('otp_channel_email')));
+    await tester.pump();
+
+    expect(find.text('Email OTP Verification'), findsOneWidget);
+    expect(find.text('sc••••23@ustp.edu.ph'), findsOneWidget);
+    expect(find.textContaining('Resend in 14s'), findsOneWidget);
+  });
+
+  testWidgets('Failed delivery status shows recovery feedback and alternate switch CTA',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      createOtpTestWidget(
+        initialChannel: 'sms',
+        maskedEmail: 'ja••••05@gmail.com',
+        initialDeliveryStatus: 'failed',
+      ),
+    );
+
+    expect(
+      find.text('SMS delivery delayed or failed'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('otp_switch_alternate_action')),
+      findsOneWidget,
+    );
+    expect(find.text('Try Email'), findsOneWidget);
   });
 }

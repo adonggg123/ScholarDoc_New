@@ -39,9 +39,10 @@ class ApiConfig {
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
         return [
-          'http://127.0.0.1:8080',     // Physical device via adb reverse tcp:8080 tcp:8080
-          'http://192.168.8.124:8080', // Host PC Wi-Fi LAN IP (works over Wi-Fi / LAN)
-          'http://10.0.2.2:8080',      // Android Emulator loopback
+          'http://127.0.0.1:8080',       // Physical device via adb reverse tcp:8080 tcp:8080
+          'http://192.168.254.104:8080', // Active Host PC Wi-Fi LAN IP
+          'http://192.168.8.124:8080',   // Alternate Host Wi-Fi LAN IP
+          'http://10.0.2.2:8080',        // Android Emulator loopback
         ];
       }
     } catch (_) {}
@@ -49,6 +50,7 @@ class ApiConfig {
     return [
       'http://localhost:8080',
       'http://127.0.0.1:8080',
+      'http://192.168.254.104:8080',
       'http://192.168.8.124:8080',
     ];
   }
@@ -93,7 +95,7 @@ class ApiConfig {
       }
       http
           .get(Uri.parse('$candidate/api/ping'))
-          .timeout(const Duration(milliseconds: 1500))
+          .timeout(const Duration(milliseconds: 900))
           .then((res) {
         if (res.statusCode == 200 && !completer.isCompleted) {
           setWorkingBaseUrl(candidate);

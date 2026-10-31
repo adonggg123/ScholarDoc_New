@@ -10,6 +10,14 @@ class OtpVerificationScreen extends StatefulWidget {
   final String studentId;
   final String password;
   final String maskedPhone;
+  final String? maskedEmail;
+  final String initialChannel;
+  final bool smsAvailable;
+  final bool emailAvailable;
+  final String initialDeliveryStatus;
+  final String? initialDeliveryMessage;
+  final String? initialDeliveryError;
+  final Map<String, int>? initialChannelCooldowns;
   final int expiresIn;
   final int resendCooldown;
 
@@ -18,6 +26,14 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.studentId,
     required this.password,
     required this.maskedPhone,
+    this.maskedEmail,
+    this.initialChannel = 'sms',
+    this.smsAvailable = true,
+    this.emailAvailable = true,
+    this.initialDeliveryStatus = 'sent',
+    this.initialDeliveryMessage,
+    this.initialDeliveryError,
+    this.initialChannelCooldowns,
     this.expiresIn = 300,
     this.resendCooldown = 60,
   });
@@ -33,21 +49,116 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final List<FocusNode> _keyListenerNodes = List.generate(
+    6,
+    (_) => FocusNode(),
+  );
 
   bool _isVerifying = false;
   bool _isResending = false;
   String? _errorMessage;
+
+  late String _selectedChannel;
+  late String _maskedPhone;
+  String? _maskedEmail;
+  late bool _smsAvailable;
+  late bool _emailAvailable;
+
+  late String _deliveryStatus; // 'sending' | 'sent' | 'failed'
+  String? _deliveryMessage;
+  String? _deliveryError;
+  int? _deliveryLatencyMs;
+
   late int _expireRemaining;
-  late int _cooldownRemaining;
+  late int _smsCooldown;
+  late int _emailCooldown;
+  int _telemetryPollCount = 0;
+
   Timer? _expireTimer;
   Timer? _cooldownTimer;
+  Timer? _telemetryTimer;
+
+  bool get _isEmail => _selectedChannel == 'email';
+
+  int get _activeCooldown => _isEmail ? _emailCooldown : _smsCooldown;
+
+  String get _activeTargetDisplay {
+    if (_isEmail) {
+      return (_maskedEmail != null && _maskedEmail!.trim().isNotEmpty)
+          ? _maskedEmail!
+          : 'your registered email';
+    }
+    return _maskedPhone.trim().isNotEmpty
+        ? _maskedPhone
+        : 'your registered phone';
+  }
 
   @override
   void initState() {
     super.initState();
+    _selectedChannel = widget.initialChannel.trim().toLowerCase() == 'email'
+        ? 'email'
+        : 'sms';
+    _maskedPhone = widget.maskedPhone;
+    _maskedEmail = widget.maskedEmail;
+    _smsAvailable = widget.smsAvailable;
+    _emailAvailable = widget.emailAvailable;
+    _deliveryStatus = widget.initialDeliveryStatus;
+    _deliveryMessage = widget.initialDeliveryMessage;
+    _deliveryError = widget.initialDeliveryError;
     _expireRemaining = widget.expiresIn;
-    _cooldownRemaining = widget.resendCooldown;
+
+    if (widget.initialChannelCooldowns != null) {
+      _smsCooldown = widget.initialChannelCooldowns!['sms'] ?? 0;
+      _emailCooldown = widget.initialChannelCooldowns!['email'] ?? 0;
+    } else if (_isEmail) {
+      _emailCooldown = widget.resendCooldown;
+      _smsCooldown = 0;
+    } else {
+      _smsCooldown = widget.resendCooldown;
+      _emailCooldown = 0;
+    }
+
     _startTimers();
+
+    if (_deliveryStatus == 'sending') {
+      _scheduleTelemetryPoll();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OtpVerificationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialChannel != widget.initialChannel ||
+        oldWidget.emailAvailable != widget.emailAvailable ||
+        oldWidget.smsAvailable != widget.smsAvailable ||
+        oldWidget.maskedEmail != widget.maskedEmail ||
+        oldWidget.maskedPhone != widget.maskedPhone ||
+        oldWidget.initialChannelCooldowns != widget.initialChannelCooldowns ||
+        oldWidget.initialDeliveryStatus != widget.initialDeliveryStatus) {
+      _selectedChannel = widget.initialChannel.trim().toLowerCase() == 'email'
+          ? 'email'
+          : 'sms';
+      _maskedPhone = widget.maskedPhone;
+      _maskedEmail = widget.maskedEmail;
+      _smsAvailable = widget.smsAvailable;
+      _emailAvailable = widget.emailAvailable;
+      _deliveryStatus = widget.initialDeliveryStatus;
+      _deliveryMessage = widget.initialDeliveryMessage;
+      _deliveryError = widget.initialDeliveryError;
+      _errorMessage = null;
+      if (widget.initialChannelCooldowns != null) {
+        _smsCooldown = widget.initialChannelCooldowns!['sms'] ?? 0;
+        _emailCooldown = widget.initialChannelCooldowns!['email'] ?? 0;
+      } else if (_isEmail) {
+        _emailCooldown = widget.resendCooldown;
+        _smsCooldown = 0;
+      } else {
+        _smsCooldown = widget.resendCooldown;
+        _emailCooldown = 0;
+      }
+      _startTimers();
+    }
   }
 
   void _startTimers() {
@@ -63,11 +174,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
     });
 
-    if (_cooldownRemaining > 0) {
+    if (_smsCooldown > 0 || _emailCooldown > 0) {
       _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) return;
-        if (_cooldownRemaining > 0) {
-          setState(() => _cooldownRemaining--);
+        if (_smsCooldown > 0 || _emailCooldown > 0) {
+          setState(() {
+            if (_smsCooldown > 0) _smsCooldown--;
+            if (_emailCooldown > 0) _emailCooldown--;
+          });
         } else {
           timer.cancel();
         }
@@ -75,15 +189,68 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
+  void _scheduleTelemetryPoll() {
+    _telemetryTimer?.cancel();
+    if (_telemetryPollCount >= 5) return;
+    _telemetryTimer = Timer(const Duration(milliseconds: 1400), () async {
+      if (!mounted) return;
+      _telemetryPollCount++;
+      final status = await _authService.getOtpDeliveryStatus(
+        studentId: widget.studentId,
+      );
+      if (!mounted || status == null) return;
+
+      final liveStatus = (status['deliveryStatus'] as String?) ?? _deliveryStatus;
+      final avail = status['availableChannels'];
+      final cooldowns = status['channelCooldowns'];
+
+      setState(() {
+        _deliveryStatus = liveStatus;
+        if (status['deliveryMessage'] is String) {
+          _deliveryMessage = status['deliveryMessage'] as String;
+        }
+        _deliveryError = status['deliveryError'] as String?;
+        if (status['deliveryLatencyMs'] is num) {
+          _deliveryLatencyMs = (status['deliveryLatencyMs'] as num).toInt();
+        }
+        if (status['maskedPhone'] is String &&
+            (status['maskedPhone'] as String).isNotEmpty) {
+          _maskedPhone = status['maskedPhone'] as String;
+        }
+        if (status['maskedEmail'] is String &&
+            (status['maskedEmail'] as String).isNotEmpty) {
+          _maskedEmail = status['maskedEmail'] as String;
+        }
+        if (avail is Map) {
+          if (avail['sms'] is bool) _smsAvailable = avail['sms'] as bool;
+          if (avail['email'] is bool) _emailAvailable = avail['email'] as bool;
+        }
+        if (cooldowns is Map) {
+          _smsCooldown = (cooldowns['sms'] as num?)?.toInt() ?? _smsCooldown;
+          _emailCooldown =
+              (cooldowns['email'] as num?)?.toInt() ?? _emailCooldown;
+        }
+      });
+
+      if (liveStatus == 'sending') {
+        _scheduleTelemetryPoll();
+      }
+    });
+  }
+
   @override
   void dispose() {
     _expireTimer?.cancel();
     _cooldownTimer?.cancel();
-    for (var c in _controllers) {
+    _telemetryTimer?.cancel();
+    for (final c in _controllers) {
       c.dispose();
     }
-    for (var f in _focusNodes) {
+    for (final f in _focusNodes) {
       f.dispose();
+    }
+    for (final k in _keyListenerNodes) {
+      k.dispose();
     }
     super.dispose();
   }
@@ -96,12 +263,200 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _selectDeliveryChannel(String targetChannel) async {
+    if (_isResending || _isVerifying) return;
+    final normalized = targetChannel.toLowerCase() == 'email' ? 'email' : 'sms';
+
+    if (normalized == 'email' && !_emailAvailable) {
+      setState(() {
+        _errorMessage =
+            'No valid email address is registered on your account. Please verify via SMS.';
+      });
+      return;
+    }
+    if (normalized == 'sms' && !_smsAvailable) {
+      setState(() {
+        _errorMessage =
+            'No valid Philippine mobile number is registered on your account. Please verify via Email.';
+      });
+      return;
+    }
+
+    if (normalized == _selectedChannel) {
+      // Allow 1-tap retry if current channel failed or cooldown is ready
+      if (_deliveryStatus == 'failed' && _activeCooldown <= 0) {
+        await _dispatchOtp(channel: normalized, isChannelSwitch: false);
+      }
+      return;
+    }
+
+    final targetCooldown = normalized == 'email' ? _emailCooldown : _smsCooldown;
+    setState(() {
+      _selectedChannel = normalized;
+      _errorMessage = null;
+    });
+
+    // If the newly selected channel is not in cooldown, immediately send the OTP via that channel!
+    if (targetCooldown <= 0) {
+      await _dispatchOtp(channel: normalized, isChannelSwitch: true);
+    } else {
+      setState(() {
+        _deliveryStatus = 'sent';
+        _deliveryError = null;
+        _deliveryMessage = normalized == 'email'
+            ? 'Code already sent via Email • Check your inbox'
+            : 'Code already sent via SMS • Check your messages';
+      });
+    }
+  }
+
+  Future<void> _handleResend() async {
+    if (_activeCooldown > 0 || _isResending) return;
+    await _dispatchOtp(channel: _selectedChannel, isChannelSwitch: false);
+  }
+
+  Future<void> _dispatchOtp({
+    required String channel,
+    required bool isChannelSwitch,
+  }) async {
+    setState(() {
+      _isResending = true;
+      _errorMessage = null;
+      _deliveryStatus = 'sending';
+      _deliveryError = null;
+      _deliveryMessage = channel == 'email'
+          ? 'Sending 6-digit code via Email...'
+          : 'Sending 6-digit code via Semaphore SMS...';
+    });
+
+    try {
+      final res = await _authService.resendLoginOtp(
+        studentId: widget.studentId,
+        channel: channel,
+      );
+      if (!mounted) return;
+
+      for (final c in _controllers) {
+        c.clear();
+      }
+      _focusNodes[0].requestFocus();
+
+      final newCooldown = (res['resendCooldown'] as num?)?.toInt() ?? 30;
+      final newExpire = (res['expiresIn'] as num?)?.toInt() ?? 600;
+      final respStatus = (res['deliveryStatus'] as String?) ?? 'sent';
+      final avail = res['availableChannels'];
+      final cooldowns = res['channelCooldowns'];
+
+      setState(() {
+        _selectedChannel = (res['channel'] as String?) ?? channel;
+        _expireRemaining = newExpire;
+        if (cooldowns is Map) {
+          _smsCooldown = (cooldowns['sms'] as num?)?.toInt() ?? _smsCooldown;
+          _emailCooldown =
+              (cooldowns['email'] as num?)?.toInt() ?? _emailCooldown;
+        } else if (_selectedChannel == 'email') {
+          _emailCooldown = newCooldown;
+        } else {
+          _smsCooldown = newCooldown;
+        }
+
+        if (res['maskedPhone'] is String &&
+            (res['maskedPhone'] as String).isNotEmpty) {
+          _maskedPhone = res['maskedPhone'] as String;
+        }
+        if (res['maskedEmail'] is String &&
+            (res['maskedEmail'] as String).isNotEmpty) {
+          _maskedEmail = res['maskedEmail'] as String;
+        }
+        if (avail is Map) {
+          if (avail['sms'] is bool) _smsAvailable = avail['sms'] as bool;
+          if (avail['email'] is bool) _emailAvailable = avail['email'] as bool;
+        }
+
+        _deliveryStatus = respStatus;
+        _deliveryError = res['deliveryError'] as String?;
+        _deliveryLatencyMs = (res['deliveryLatencyMs'] as num?)?.toInt();
+        _deliveryMessage = (res['deliveryMessage'] as String?) ??
+            (channel == 'email'
+                ? 'OTP sent via Email • Check your inbox'
+                : 'OTP sent via Semaphore SMS');
+      });
+
+      _startTimers();
+
+      if (respStatus == 'sending') {
+        _telemetryPollCount = 0;
+        _scheduleTelemetryPoll();
+      }
+
+      final snackText = channel == 'email'
+          ? (isChannelSwitch
+              ? 'Switched to Email — OTP sent to $_activeTargetDisplay.'
+              : 'A new OTP has been sent via Email.')
+          : (isChannelSwitch
+              ? 'Switched to SMS — OTP sent to $_activeTargetDisplay.'
+              : 'A new OTP has been sent via Semaphore SMS.');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                channel == 'email' ? LucideIcons.mail : LucideIcons.send,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  snackText,
+                  style: GoogleFonts.inter(fontSize: 13, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F3260),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      var raw = e.toString().replaceAll('Exception: ', '').trim();
+      if (raw.contains('SocketException') ||
+          raw.contains('Connection refused') ||
+          raw.contains('ClientException') ||
+          raw.contains('TimeoutException')) {
+        raw =
+            'Unable to reach the verification server. Please check your connection and try again.';
+      }
+      final isCooldownNotice =
+          raw.toLowerCase().contains('please wait') ||
+          raw.toLowerCase().contains('rate limit');
+
+      setState(() {
+        _errorMessage = raw;
+        if (!isCooldownNotice) {
+          _deliveryStatus = 'failed';
+          _deliveryError = raw;
+        } else {
+          _deliveryStatus = 'sent';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
+  }
+
   Future<void> _handleVerify() async {
     final otp = _currentOtp.trim();
     if (otp.length != 6) {
       setState(() {
-        _errorMessage =
-            'Please enter all 6 digits of the OTP sent to your phone.';
+        _errorMessage = _isEmail
+            ? 'Please enter all 6 digits of the OTP sent to your email.'
+            : 'Please enter all 6 digits of the OTP sent to your phone.';
       });
       return;
     }
@@ -128,7 +483,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       if (!mounted) return;
 
-      // Show success SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -160,7 +514,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         ),
       );
 
-      // Navigate to Main Portal
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainLayout()),
@@ -177,7 +530,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           raw.contains('Connection refused') ||
           raw.contains('ClientException') ||
           raw.contains('TimeoutException')) {
-        raw = 'Unable to reach the verification server. Please check your connection and try again.';
+        raw =
+            'Unable to reach the verification server. Please check your connection and try again.';
       }
       setState(() {
         _errorMessage = raw.isNotEmpty
@@ -189,71 +543,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  Future<void> _handleResend() async {
-    if (_cooldownRemaining > 0 || _isResending) return;
-
-    setState(() {
-      _isResending = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final res = await _authService.resendLoginOtp(
-        studentId: widget.studentId,
-      );
-      if (!mounted) return;
-
-      // Clear current digits
-      for (var c in _controllers) {
-        c.clear();
-      }
-      _focusNodes[0].requestFocus();
-
-      final newCooldown = (res['resendCooldown'] as int?) ?? 60;
-      final newExpire = (res['expiresIn'] as int?) ?? 300;
-
-      setState(() {
-        _cooldownRemaining = newCooldown;
-        _expireRemaining = newExpire;
-      });
-      _startTimers();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(LucideIcons.send, color: Colors.white, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'A new OTP has been sent via Semaphore SMS.',
-                  style: GoogleFonts.inter(fontSize: 13, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF0F3260),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      var raw = e.toString().replaceAll('Exception: ', '').trim();
-      if (raw.contains('SocketException') ||
-          raw.contains('Connection refused') ||
-          raw.contains('ClientException') ||
-          raw.contains('TimeoutException')) {
-        raw = 'Unable to reach the verification server. Please check your connection and try again.';
-      }
-      setState(() => _errorMessage = raw);
-    } finally {
-      if (mounted) setState(() => _isResending = false);
-    }
-  }
-
   void _onDigitChanged(int index, String value) {
     if (value.length > 1) {
       final digits = value.replaceAll(RegExp(r'\D'), '');
@@ -262,7 +551,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
-      // Case 1: User typed a single replacement digit into an already-filled box (length == 2)
       if (digits.length == 2) {
         final newDigit = digits.substring(digits.length - 1);
         _controllers[index].value = TextEditingValue(
@@ -280,7 +568,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
-      // Case 2: User pasted or tapped 1-tap SMS OTP Autofill (e.g. 6-digit code)
       for (int i = 0; i < 6 && i < digits.length; i++) {
         _controllers[i].text = digits[i];
       }
@@ -298,12 +585,209 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         _focusNodes[index + 1].requestFocus();
       } else {
         _focusNodes[index].unfocus();
-        // Auto-submit when all 6 digits are typed
         if (_currentOtp.length == 6) {
           _handleVerify();
         }
       }
     }
+  }
+
+  Widget _buildChannelOption({
+    required String channel,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool isAvailable,
+  }) {
+    final bool isSelected = _selectedChannel == channel;
+
+    return Expanded(
+      child: GestureDetector(
+        key: Key('otp_channel_$channel'),
+        onTap: () => _selectDeliveryChannel(channel),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF0F3260)
+                  : Colors.transparent,
+              width: isSelected ? 1.4 : 1.0,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF0F3260).withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: !isAvailable
+                    ? const Color(0xFF94A3B8)
+                    : (isSelected
+                        ? const Color(0xFF0F3260)
+                        : const Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight:
+                            isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: !isAvailable
+                            ? const Color(0xFF94A3B8)
+                            : (isSelected
+                                ? const Color(0xFF0F3260)
+                                : const Color(0xFF475569)),
+                      ),
+                    ),
+                    Text(
+                      isAvailable ? subtitle : 'Not linked',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: isSelected
+                            ? const Color(0xFF1E4C87)
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 4),
+                const Icon(
+                  LucideIcons.checkCircle2,
+                  size: 13,
+                  color: Color(0xFF16A34A),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeliveryStatusBanner() {
+    final bool isSending = _deliveryStatus == 'sending' || _isResending;
+    final bool isFailed = !isSending && _deliveryStatus == 'failed';
+
+    final Color bgColor = isSending
+        ? const Color(0xFFEFF6FF)
+        : (isFailed ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4));
+    final Color borderColor = isSending
+        ? const Color(0xFFBFDBFE)
+        : (isFailed ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0));
+    final Color accentColor = isSending
+        ? const Color(0xFF1D4ED8)
+        : (isFailed ? const Color(0xFFB45309) : const Color(0xFF15803D));
+
+    final String alternateChannel = _isEmail ? 'sms' : 'email';
+    final bool canSwitchAlternate =
+        _isEmail ? _smsAvailable : _emailAvailable;
+
+    String statusLabel;
+    if (isSending) {
+      statusLabel = (_deliveryMessage != null && _deliveryMessage!.isNotEmpty)
+          ? _deliveryMessage!
+          : (_isEmail ? 'Sending OTP via Email...' : 'Sending OTP via SMS...');
+    } else if (isFailed) {
+      statusLabel = (_deliveryError != null && _deliveryError!.isNotEmpty)
+          ? _deliveryError!
+          : (_isEmail
+              ? 'Email delivery delayed or failed'
+              : 'SMS delivery delayed or failed');
+    } else {
+      final speedTag = (_deliveryLatencyMs != null && _deliveryLatencyMs! > 0)
+          ? ' (${(_deliveryLatencyMs! / 1000).toStringAsFixed(1)}s)'
+          : '';
+      statusLabel = (_deliveryMessage != null && _deliveryMessage!.isNotEmpty)
+          ? '$_deliveryMessage$speedTag'
+          : (_isEmail
+              ? 'Email OTP Sent$speedTag • Check your inbox'
+              : 'SMS OTP Sent$speedTag • Ready to verify');
+    }
+
+    return Container(
+      key: const Key('otp_delivery_status_banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          if (isSending)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: accentColor,
+              ),
+            )
+          else
+            Icon(
+              isFailed ? LucideIcons.alertCircle : LucideIcons.checkCircle2,
+              size: 15,
+              color: accentColor,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              statusLabel,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: accentColor,
+              ),
+            ),
+          ),
+          if (isFailed && canSwitchAlternate)
+            InkWell(
+              key: const Key('otp_switch_alternate_action'),
+              onTap: () => _selectDeliveryChannel(alternateChannel),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  _isEmail ? 'Try SMS' : 'Try Email',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F3260),
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -333,21 +817,21 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F3260).withOpacity(0.08),
+                    color: const Color(0xFF0F3260).withValues(alpha: 0.08),
                     blurRadius: 28,
                     offset: const Offset(0, 10),
                   ),
                 ],
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 36),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -355,8 +839,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   // Hero Shield Icon with USTP Gold & Navy ring
                   Center(
                     child: Container(
-                      width: 76,
-                      height: 76,
+                      width: 50,
+                      height: 50,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFF0F3260), Color(0xFF1E4C87)],
@@ -366,29 +850,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0F3260).withOpacity(0.25),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                            color:
+                                const Color(0xFF0F3260).withValues(alpha: 0.22),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
                           ),
                         ],
                       ),
                       child: const Center(
                         child: Icon(
                           LucideIcons.shieldCheck,
-                          size: 38,
+                          size: 25,
                           color: Color(0xFFFBC02D),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
 
                   // Eyebrow badge
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 5,
+                        horizontal: 10,
+                        vertical: 3.5,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF9C3),
@@ -400,7 +885,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         children: [
                           const Icon(
                             LucideIcons.keyRound,
-                            size: 12,
+                            size: 11.5,
                             color: Color(0xFF854D0E),
                           ),
                           const SizedBox(width: 6),
@@ -409,7 +894,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
-                              letterSpacing: 1.1,
+                              letterSpacing: 1.05,
                               color: const Color(0xFF854D0E),
                             ),
                           ),
@@ -417,68 +902,109 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 6),
 
-                  // Title
+                  // Channel-Aware Title
                   Text(
-                    'SMS OTP Verification',
+                    _isEmail
+                        ? 'Email OTP Verification'
+                        : 'SMS OTP Verification',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w800,
                       color: const Color(0xFF0F172A),
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
 
-                  // Subtitle
+                  // Channel-Aware Subtitle
                   Text(
-                    'To protect your scholarship portal, enter the 6-digit one-time password sent to your registered mobile number:',
+                    _isEmail
+                        ? 'Enter the 6-digit one-time password sent to your registered email address:'
+                        : 'Enter the 6-digit one-time password sent to your registered mobile number:',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
-                      fontSize: 13.5,
+                      fontSize: 12.5,
                       color: const Color(0xFF64748B),
-                      height: 1.5,
+                      height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
-                  // Masked Phone Number Pill
+                  // Preferred Delivery Method Selector (SMS | Email)
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildChannelOption(
+                          channel: 'sms',
+                          icon: LucideIcons.phone,
+                          title: 'SMS',
+                          subtitle: 'Mobile Text',
+                          isAvailable: _smsAvailable,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildChannelOption(
+                          channel: 'email',
+                          icon: LucideIcons.mail,
+                          title: 'Email',
+                          subtitle: 'Fast Inbox',
+                          isAvailable: _emailAvailable,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Masked Destination Pill
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                        horizontal: 14,
+                        vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            LucideIcons.phone,
-                            size: 14,
-                            color: Color(0xFF0F3260),
+                          Icon(
+                            _isEmail ? LucideIcons.mail : LucideIcons.phone,
+                            size: 13.5,
+                            color: const Color(0xFF0F3260),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            widget.maskedPhone,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF0F3260),
-                              letterSpacing: 1.0,
+                          Flexible(
+                            child: Text(
+                              _activeTargetDisplay,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F3260),
+                                letterSpacing: _isEmail ? 0.2 : 0.8,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 8),
+
+                  // Live Delivery Status Feedback Banner
+                  _buildDeliveryStatusBanner(),
+                  const SizedBox(height: 12),
 
                   // 6 Digit OTP Input Boxes
                   Row(
@@ -486,11 +1012,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     children: List.generate(6, (index) {
                       return SizedBox(
                         width: 44,
-                        height: 54,
-                        child: RawKeyboardListener(
-                          focusNode: FocusNode(),
-                          onKey: (event) {
-                            if (event is RawKeyDownEvent &&
+                        height: 48,
+                        child: KeyboardListener(
+                          focusNode: _keyListenerNodes[index],
+                          onKeyEvent: (event) {
+                            if (event is KeyDownEvent &&
                                 event.logicalKey ==
                                     LogicalKeyboardKey.backspace &&
                                 _controllers[index].text.isEmpty &&
@@ -507,7 +1033,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 ? const [AutofillHints.oneTimeCode]
                                 : null,
                             style: GoogleFonts.inter(
-                              fontSize: 22,
+                              fontSize: 21,
                               fontWeight: FontWeight.w800,
                               color: const Color(0xFF0F3260),
                             ),
@@ -546,14 +1072,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       );
                     }),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
 
                   // Error Banner
                   if (_errorMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
+                        horizontal: 12,
+                        vertical: 9,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF2F2),
@@ -565,7 +1091,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           const Icon(
                             LucideIcons.alertCircle,
                             color: Color(0xFFDC2626),
-                            size: 16,
+                            size: 15,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -581,7 +1107,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                   ],
 
                   // Expiration Status Indicator
@@ -590,7 +1116,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     children: [
                       Icon(
                         LucideIcons.clock,
-                        size: 14,
+                        size: 13.5,
                         color: isExpired
                             ? const Color(0xFFDC2626)
                             : const Color(0xFF64748B),
@@ -610,11 +1136,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 10),
 
                   // Primary: Verify Button
                   Container(
-                    height: 52,
+                    height: 48,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       gradient: const LinearGradient(
@@ -624,9 +1150,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFBC02D).withOpacity(0.3),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
+                          color: const Color(0xFFFBC02D).withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -642,8 +1168,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                       child: _isVerifying
                           ? const SizedBox(
-                              height: 22,
-                              width: 22,
+                              height: 21,
+                              width: 21,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                                 color: Color(0xFF0F3260),
@@ -671,29 +1197,64 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
-                  // Resend Option with Rate Limiting
+                  // Resend Option with Per-Channel Rate Limiting & Quick Switch Hint
                   Center(
-                    child: _cooldownRemaining > 0
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
+                    child: _activeCooldown > 0
+                        ? Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 4,
                             children: [
                               Text(
-                                "Didn't receive SMS? ",
+                                _isEmail
+                                    ? "Didn't receive Email?"
+                                    : "Didn't receive SMS?",
                                 style: GoogleFonts.inter(
-                                  fontSize: 12.5,
+                                  fontSize: 12,
                                   color: const Color(0xFF64748B),
                                 ),
                               ),
                               Text(
-                                'Resend in ${_cooldownRemaining}s',
+                                'Resend in ${_activeCooldown}s',
                                 style: GoogleFonts.inter(
-                                  fontSize: 12.5,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   color: const Color(0xFF0F3260),
                                 ),
                               ),
+                              if ((_isEmail &&
+                                      _smsAvailable &&
+                                      _smsCooldown <= 0) ||
+                                  (!_isEmail &&
+                                      _emailAvailable &&
+                                      _emailCooldown <= 0)) ...[
+                                Text(
+                                  'or',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  key: const Key('otp_instant_channel_switch'),
+                                  onTap: () => _selectDeliveryChannel(
+                                    _isEmail ? 'sms' : 'email',
+                                  ),
+                                  child: Text(
+                                    _isEmail
+                                        ? 'Send via SMS now'
+                                        : 'Send via Email now',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1D4ED8),
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           )
                         : TextButton.icon(
@@ -712,7 +1273,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     color: Color(0xFF0F3260),
                                   ),
                             label: Text(
-                              'Resend Code via SMS',
+                              _isEmail
+                                  ? 'Resend Code via Email'
+                                  : 'Resend Code via SMS',
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -721,7 +1284,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             ),
                           ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
 
                   // Back to Login Button
                   Center(
@@ -731,7 +1294,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         foregroundColor: const Color(0xFF94A3B8),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
-                          vertical: 8,
+                          vertical: 6,
                         ),
                       ),
                       child: Text(
@@ -744,7 +1307,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 8),
 
                   // Footnote
                   Row(
@@ -756,12 +1319,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         color: Color(0xFF94A3B8),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Secured by Semaphore SMS Gateway',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: const Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w500,
+                      Flexible(
+                        child: Text(
+                          _isEmail
+                              ? 'Secured by ScholarDoc SMTP Security Gateway'
+                              : 'Secured by Semaphore SMS Gateway',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: const Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],

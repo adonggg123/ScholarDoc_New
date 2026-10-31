@@ -391,11 +391,31 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
 
-        // If First Login: Navigate to SMS OTP Verification Screen
+        // If First Login: Navigate to Multi-Channel (Email / SMS) OTP Verification Screen
         if (initRes['requiresOtp'] == true) {
           final maskedPhone = (initRes['maskedPhone'] as String?) ?? 'your registered phone';
-          final expiresIn = (initRes['expiresIn'] as int?) ?? 300;
-          final resendCooldown = (initRes['resendCooldown'] as int?) ?? 60;
+          final maskedEmail = initRes['maskedEmail'] as String?;
+          final initialChannel = (initRes['channel'] as String?) ?? 'sms';
+          final availRaw = initRes['availableChannels'];
+          final availMap = availRaw is Map ? availRaw : const {};
+          final smsAvailable = availMap['sms'] is bool ? (availMap['sms'] as bool) : true;
+          final emailAvailable = availMap['email'] is bool
+              ? (availMap['email'] as bool)
+              : (maskedEmail != null && maskedEmail.trim().isNotEmpty);
+          final deliveryStatus = (initRes['deliveryStatus'] as String?) ?? 'sent';
+          final deliveryMessage = (initRes['deliveryMessage'] as String?) ??
+              (initRes['message'] as String?);
+          final deliveryError = initRes['deliveryError'] as String?;
+          final cooldownsRaw = initRes['channelCooldowns'];
+          Map<String, int>? channelCooldowns;
+          if (cooldownsRaw is Map) {
+            channelCooldowns = {
+              'sms': (cooldownsRaw['sms'] as num?)?.toInt() ?? 0,
+              'email': (cooldownsRaw['email'] as num?)?.toInt() ?? 0,
+            };
+          }
+          final expiresIn = (initRes['expiresIn'] as num?)?.toInt() ?? 600;
+          final resendCooldown = (initRes['resendCooldown'] as num?)?.toInt() ?? 30;
 
           Navigator.push(
             context,
@@ -404,6 +424,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 studentId: rawStudentId,
                 password: rawPassword,
                 maskedPhone: maskedPhone,
+                maskedEmail: maskedEmail,
+                initialChannel: initialChannel,
+                smsAvailable: smsAvailable,
+                emailAvailable: emailAvailable,
+                initialDeliveryStatus: deliveryStatus,
+                initialDeliveryMessage: deliveryMessage,
+                initialDeliveryError: deliveryError,
+                initialChannelCooldowns: channelCooldowns,
                 expiresIn: expiresIn,
                 resendCooldown: resendCooldown,
               ),

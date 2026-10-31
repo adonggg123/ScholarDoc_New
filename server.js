@@ -1014,8 +1014,77 @@ function invalidateGranteeCache(identifier) {
 }
 
 /**
+ * Checks whether an email address is a real deliverable student email (rejecting synthetic @scholardoc.com auth emails).
+ */
+function isValidOtpEmail(email) {
+    if (!email) return false;
+    const clean = String(email).trim();
+    if (!clean || clean.toLowerCase() === 'null' || clean.toUpperCase() === 'N/A') return false;
+    if (clean.toLowerCase().endsWith('@scholardoc.com')) return false;
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean);
+}
+
+/**
+ * Masks an email address for secure client display (e.g. "ja••••05@gmail.com")
+ */
+function maskEmailAddress(email) {
+    if (!isValidOtpEmail(email)) return null;
+    const clean = String(email).trim();
+    const atIdx = clean.indexOf('@');
+    if (atIdx <= 0) return null;
+    const local = clean.slice(0, atIdx);
+    const domain = clean.slice(atIdx + 1);
+    if (local.length <= 2) {
+        return `${local[0] || '*'}•••@${domain}`;
+    }
+    if (local.length <= 5) {
+        return `${local.slice(0, 2)}•••@${domain}`;
+    }
+    return `${local.slice(0, 2)}••••${local.slice(-2)}@${domain}`;
+}
+
+/**
+ * Extracts validated SMS and Email OTP delivery targets from a grantee record.
+ */
+function resolveGranteeOtpContacts(grantee) {
+    if (!grantee) {
+        return {
+            phone: null,
+            email: null,
+            hasSms: false,
+            hasEmail: false,
+            maskedPhone: null,
+            maskedEmail: null
+        };
+    }
+    const fam = (grantee.familyDetails && typeof grantee.familyDetails === 'object')
+        ? grantee.familyDetails
+        : {};
+    const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number || fam.contactNumber || fam.mobile_number;
+    const normalizedPhone = normalizePhilippineMobile(rawPhone);
+
+    const emailCandidates = [grantee.email, grantee.email_address, fam.email];
+    let validEmail = null;
+    for (const cand of emailCandidates) {
+        if (isValidOtpEmail(cand)) {
+            validEmail = String(cand).trim();
+            break;
+        }
+    }
+
+    return {
+        phone: normalizedPhone || null,
+        email: validEmail,
+        hasSms: Boolean(normalizedPhone),
+        hasEmail: Boolean(validEmail),
+        maskedPhone: normalizedPhone ? maskPhoneNumber(normalizedPhone) : null,
+        maskedEmail: validEmail ? maskEmailAddress(validEmail) : null
+    };
+}
+
+/**
  * Validates whether a student identifier exists in the Supabase student_grantees table.
- * Students not in student_grantees are strictly denied access.
+ * Also enriches missing phone/email from school_students (cached) so both SMS & Email OTP channels are available.
  */
 async function validateGranteeEligibility(identifier) {
     if (!identifier) {
@@ -1029,11 +1098,9 @@ async function validateGranteeEligibility(identifier) {
     const cleanId = String(identifier).trim();
     const cleanNo = cleanId.replace(/[- ]/g, '');
 
-    const cached = granteeEligibilityCache.get(cleanId) || (cleanNo ? granteeEligibilityCache.get(cleanNo) : null);
-    if (cached && (Date.now() - cached.ts < GRANTEE_CACHE_TTL_MS)) {
-        const grantee = cached.rawGrantee;
+    function formatEligibleResponse(grantee) {
+        const contacts = resolveGranteeOtpContacts(grantee);
         const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
-        const normalizedPhone = normalizePhilippineMobile(rawPhone);
         const isFirst = !isFirstLoginCompleted(cleanId, grantee);
         return {
             success: true,
@@ -1044,13 +1111,22 @@ async function validateGranteeEligibility(identifier) {
                 student_no: grantee.student_no || grantee.studentId,
                 full_name: grantee.full_name || grantee.fullName,
                 course: grantee.course || grantee.program_name,
-                mobile_number: normalizedPhone || rawPhone,
-                contactNumber: normalizedPhone || rawPhone,
+                scholarship_name: grantee.scholarship_name || grantee.scholarshipName || 'CHED TES',
+                mobile_number: contacts.phone || rawPhone,
+                contactNumber: contacts.phone || rawPhone,
+                email_address: contacts.email || grantee.email_address || grantee.email || '',
+                email: contacts.email || grantee.email || grantee.email_address || '',
+                familyDetails: grantee.familyDetails || null,
                 first_login_completed: !isFirst,
                 is_first_login: isFirst
             },
             message: 'Student is registered as an eligible grantee.'
         };
+    }
+
+    const cached = granteeEligibilityCache.get(cleanId) || (cleanNo ? granteeEligibilityCache.get(cleanNo) : null);
+    if (cached && (Date.now() - cached.ts < GRANTEE_CACHE_TTL_MS)) {
+        return formatEligibleResponse(cached.rawGrantee);
     }
 
     const headers = {
@@ -1081,33 +1157,42 @@ async function validateGranteeEligibility(identifier) {
 
     try {
         const url = `${SUPABASE_REST_URL}/student_grantees?or=(${filterTerms.join(',')})&limit=1`;
-        const res = await fetch(url, { headers });
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(6000) });
         if (res.ok) {
             const rows = await res.json();
             if (Array.isArray(rows) && rows.length > 0) {
                 const grantee = rows[0];
+                const contacts = resolveGranteeOtpContacts(grantee);
+
+                // Enrich missing email or phone from school_students so dual-channel OTP works seamlessly
+                if (!contacts.hasEmail || !contacts.hasSms) {
+                    const stuNo = String(grantee.student_no || grantee.studentId || cleanId).trim();
+                    if (stuNo) {
+                        try {
+                            const schoolUrl = `${SUPABASE_REST_URL}/school_students?student_no=eq.${encodeURIComponent(stuNo)}&select=mobile_number,email_address&limit=1`;
+                            const schoolRes = await fetch(schoolUrl, { headers, signal: AbortSignal.timeout(3000) });
+                            if (schoolRes.ok) {
+                                const sRows = await schoolRes.json();
+                                if (Array.isArray(sRows) && sRows.length > 0) {
+                                    const sRow = sRows[0];
+                                    if (!contacts.hasEmail && isValidOtpEmail(sRow.email_address)) {
+                                        grantee.email_address = sRow.email_address.trim();
+                                        grantee.email = sRow.email_address.trim();
+                                    }
+                                    if (!contacts.hasSms && normalizePhilippineMobile(sRow.mobile_number)) {
+                                        grantee.mobile_number = normalizePhilippineMobile(sRow.mobile_number);
+                                        grantee.contactNumber = grantee.mobile_number;
+                                    }
+                                }
+                            }
+                        } catch (_) { }
+                    }
+                }
+
                 const cacheEntry = { rawGrantee: grantee, ts: Date.now() };
                 granteeEligibilityCache.set(cleanId, cacheEntry);
                 if (cleanNo) granteeEligibilityCache.set(cleanNo, cacheEntry);
-                const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
-                const normalizedPhone = normalizePhilippineMobile(rawPhone);
-                const isFirst = !isFirstLoginCompleted(cleanId, grantee);
-                return {
-                    success: true,
-                    isEligible: true,
-                    grantee: {
-                        id: grantee.id,
-                        uid: grantee.uid,
-                        student_no: grantee.student_no || grantee.studentId,
-                        full_name: grantee.full_name || grantee.fullName,
-                        course: grantee.course || grantee.program_name,
-                        mobile_number: normalizedPhone || rawPhone,
-                        contactNumber: normalizedPhone || rawPhone,
-                        first_login_completed: !isFirst,
-                        is_first_login: isFirst
-                    },
-                    message: 'Student is registered as an eligible grantee.'
-                };
+                return formatEligibleResponse(grantee);
             }
         }
     } catch (e) {
@@ -1121,7 +1206,7 @@ async function validateGranteeEligibility(identifier) {
     };
 }
 
-// ── SMS OTP Authentication State & Rate Limiter ─────────────────────────
+// ── Multi-Channel (SMS & Email) OTP Authentication State & Rate Limiter ──
 // In-memory active OTP sessions with cryptographic security and expiration
 const activeOtpSessions = new Map();
 
@@ -1175,7 +1260,7 @@ function maskPhoneNumber(phone) {
 }
 
 /**
- * Checks whether a student has completed their initial SMS OTP login verification.
+ * Checks whether a student has completed their initial OTP login verification.
  */
 function isFirstLoginCompleted(studentId, granteeRecord = null) {
     if (!studentId) return false;
@@ -1199,7 +1284,7 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
 /**
  * Marks a student as having successfully completed their first-login OTP verification.
  */
-async function markFirstLoginCompleted(studentId, granteeUid, phone) {
+async function markFirstLoginCompleted(studentId, granteeUid, destination, verifiedChannel = 'sms') {
     const cleanId = String(studentId).trim();
     completedFirstLoginStudents.add(cleanId);
     const cleanNo = cleanId.replace(/[- ]/g, '');
@@ -1214,6 +1299,7 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
     };
 
     const now = new Date().toISOString();
+    const channelLabel = verifiedChannel === 'email' ? 'Email' : 'SMS';
 
     // 1. Update student_grantees table immediately so returning-student flag is live
     let matchQuery = '';
@@ -1236,33 +1322,38 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
         } catch (_) { }
     }
 
-    // 2 & 3. Record verified sms_logs and audit_logs asynchronously in background
-    Promise.allSettled([
-        fetch(`${SUPABASE_REST_URL}/sms_logs`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                student_id: cleanId,
-                grantee_uid: granteeUid || null,
-                recipient_phone: phone || 'unknown',
-                message: '[ScholarDoc] SMS OTP successfully verified. First login completed.',
-                event_type: 'login_otp',
-                status: 'verified',
-                sent_at: now
-            })
-        }),
+    // 2 & 3. Record verified logs and audit_logs asynchronously in background
+    const logTasks = [
         fetch(`${SUPABASE_REST_URL}/audit_logs`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
-                action: 'First login SMS OTP verified',
+                action: `First login ${channelLabel} OTP verified`,
                 userName: cleanId,
                 role: 'Student',
                 studentId: cleanId,
                 timestamp: now
             })
         })
-    ]).catch(() => { });
+    ];
+    if (verifiedChannel === 'sms') {
+        logTasks.push(
+            fetch(`${SUPABASE_REST_URL}/sms_logs`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    student_id: cleanId,
+                    grantee_uid: granteeUid || null,
+                    recipient_phone: destination || 'unknown',
+                    message: '[ScholarDoc] SMS OTP successfully verified. First login completed.',
+                    event_type: 'login_otp',
+                    status: 'verified',
+                    sent_at: now
+                })
+            })
+        );
+    }
+    Promise.allSettled(logTasks).catch(() => { });
 }
 
 // Background cleanup: Prune expired OTP sessions every 2 minutes
@@ -1273,7 +1364,7 @@ setInterval(() => {
             activeOtpSessions.delete(id);
         }
     }
-}, 120000);
+}, 120000).unref();
 
 /**
  * Queries Semaphore account balance and details (without exposing API key to client).
@@ -1369,8 +1460,11 @@ async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, ev
     }
 }
 
+// Cache if custom sendername is unapproved on Semaphore so OTP calls never waste 1.5-3s retrying
+let semaphoreCustomSenderRejected = false;
+
 /**
- * Sends SMS via Semaphore v4 API
+ * Sends SMS via Semaphore v4 API with zero-waste sendername caching & fast failover
  */
 async function sendSemaphoreSms({ numbers, message, sendername = null, isPriority = false, otpCode = null }) {
     const apiKey = getSemaphoreApiKey();
@@ -1401,11 +1495,11 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
         };
     }
 
-    const effectiveSender = (sendername || getSemaphoreSenderName() || '').trim().slice(0, 11);
+    const rawSender = semaphoreCustomSenderRejected ? '' : (sendername || getSemaphoreSenderName() || '').trim().slice(0, 11);
+    const effectiveSender = (rawSender && rawSender.toUpperCase() !== 'SEMAPHORE') ? rawSender : '';
     const hasOtpCode = otpCode != null && String(otpCode).trim() !== '';
     const cleanOtpCode = hasOtpCode ? String(otpCode).trim() : null;
 
-    // For Semaphore's dedicated /api/v4/otp pipe, ensure {otp} placeholder is present
     let otpTemplateMsg = safeMessage;
     let resolvedPlainMsg = safeMessage;
     if (hasOtpCode) {
@@ -1434,7 +1528,6 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
     }
 
     try {
-        // Dedicated /api/v4/otp A2P carrier route for OTP authentication codes (fastest telco-whitelisted delivery in PH)
         const primaryEndpoint = hasOtpCode
             ? `${SEMAPHORE_API_URL}/otp`
             : (isPriority ? `${SEMAPHORE_API_URL}/priority` : `${SEMAPHORE_API_URL}/messages`);
@@ -1445,19 +1538,22 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
         let res = await fetch(primaryEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(8000)
         });
 
         let data = await res.json().catch(() => ({}));
 
-        // If custom sendername failed, auto-retry on the same endpoint without sendername
+        // If custom sendername failed, remember rejection for future instant dispatches & retry immediately without sendername
         if (!res.ok && payload.sendername) {
-            console.warn(`[Semaphore SMS] Dispatch failed with sendername "${payload.sendername}", retrying without custom sendername...`);
+            semaphoreCustomSenderRejected = true;
+            console.warn(`[Semaphore SMS] Custom sendername "${payload.sendername}" rejected; caching default sender & retrying immediately...`);
             delete payload.sendername;
             const retryRes = await fetch(primaryEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(8000)
             });
             if (retryRes.ok) {
                 res = retryRes;
@@ -1473,7 +1569,8 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             const prioRes = await fetch(`${SEMAPHORE_API_URL}/priority`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(8000)
             });
             if (prioRes.ok) {
                 res = prioRes;
@@ -1489,14 +1586,16 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             const fallbackRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(8000)
             });
             if (fallbackRes.ok) {
                 res = fallbackRes;
                 data = await fallbackRes.json().catch(() => ({}));
             }
         }
-        console.log(`[Semaphore SMS] Carrier gateway handshake completed in ${Date.now() - dispatchStart}ms`);
+        const latencyMs = Date.now() - dispatchStart;
+        console.log(`[Semaphore SMS] Carrier gateway handshake completed in ${latencyMs}ms`);
 
         if (!res.ok) {
             const errMsg = Array.isArray(data)
@@ -1506,16 +1605,17 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             return {
                 success: false,
                 status: 'failed',
+                latencyMs,
                 error: errMsg,
                 details: data
             };
         }
 
-        console.log('[Semaphore SMS] Sent successfully:', data);
         const first = Array.isArray(data) ? data[0] : data;
         return {
             success: true,
             status: first?.status || 'sent',
+            latencyMs,
             message_id: first?.message_id ? String(first.message_id) : null,
             recipient: first?.recipient || validNumbers.join(','),
             network: first?.network || null,
@@ -2218,18 +2318,208 @@ const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-ne
 const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://scholar-doc-new.vercel.app/download';
 const DIRECT_APK_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk';
 
-function getGmailTransporter() {
-    if (!nodemailer) return null;
-    return nodemailer.createTransport({
+let sharedGmailTransporter = null;
+let gmailPreferredPort = 465;
+
+function getGmailTransporter({ pooled = true, port = gmailPreferredPort } = {}) {
+    if (!nodemailer || !GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
+    if (pooled && sharedGmailTransporter) {
+        return sharedGmailTransporter;
+    }
+    const usePort = port === 587 ? 587 : 465;
+    const transport = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
+        port: usePort,
+        secure: usePort === 465,
+        family: 4,
+        pool: pooled,
+        maxConnections: 3,
+        maxMessages: 100,
+        connectionTimeout: 6000,
+        greetingTimeout: 5000,
+        socketTimeout: 10000,
         auth: {
             user: GMAIL_USER,
             pass: GMAIL_APP_PASSWORD
         },
         tls: { rejectUnauthorized: false }
     });
+    if (pooled) {
+        transport.on('error', (err) => {
+            console.warn('[Gmail SMTP Pool] Connection notice, resetting pool:', err.message);
+            sharedGmailTransporter = null;
+        });
+        sharedGmailTransporter = transport;
+    }
+    return transport;
+}
+
+/**
+ * Pre-warms the Gmail SMTP TLS connection pool over IPv4 on server startup so Email OTPs send in ~300-600ms.
+ */
+async function warmUpOtpTransports() {
+    for (const candidatePort of [465, 587]) {
+        sharedGmailTransporter = null;
+        gmailPreferredPort = candidatePort;
+        const transporter = getGmailTransporter({ pooled: true, port: candidatePort });
+        if (!transporter) return;
+        const t0 = Date.now();
+        try {
+            await transporter.verify();
+            console.log(`[Gmail SMTP Pool] Pre-warmed & authenticated IPv4 TLS pool (port ${candidatePort}) ready in ${Date.now() - t0}ms (${GMAIL_USER})`);
+            return;
+        } catch (err) {
+            console.warn(`[Gmail SMTP Pool] Port ${candidatePort} pre-warm notice:`, err.message);
+            try { transporter.close(); } catch (_) { }
+            sharedGmailTransporter = null;
+        }
+    }
+    gmailPreferredPort = 465;
+}
+
+function generateOtpEmailHtml({ fullName, studentId, otpCode, expiresMinutes = 10 }) {
+    const safeName = String(fullName || 'Scholar').trim();
+    const safeId = String(studentId || '').trim();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScholarDoc Security Verification Code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:520px;margin:24px auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 6px 20px rgba(15,50,96,0.08);">
+    <div style="background:linear-gradient(135deg,#0F3260 0%,#1E3A8A 100%);padding:26px 28px;text-align:center;border-bottom:3px solid #FBC02D;">
+      <div style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(251,192,45,0.2);border:1px solid rgba(251,192,45,0.5);color:#FBC02D;font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;margin-bottom:8px;">
+        First-Login 2FA Verification
+      </div>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.3px;">ScholarDoc Security Code</h1>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 12px 0;font-size:15px;font-weight:700;color:#0f172a;">Hello ${safeName},</p>
+      <p style="margin:0 0 22px 0;font-size:14px;line-height:1.55;color:#475569;">
+        Use the 6-digit One-Time Password (OTP) below to verify your ScholarDoc login${safeId ? ` for Student ID <strong>${safeId}</strong>` : ''}:
+      </p>
+      <div style="background:#f8fafc;border:2px dashed #0F3260;border-radius:14px;padding:20px 16px;text-align:center;margin-bottom:22px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Verification Code</div>
+        <div style="font-size:34px;font-weight:900;letter-spacing:8px;color:#0F3260;font-family:'Courier New',Courier,monospace;">${otpCode}</div>
+      </div>
+      <p style="margin:0 0 12px 0;font-size:13px;color:#475569;line-height:1.5;">
+        ⏱️ This code expires in <strong>${expiresMinutes} minutes</strong> and can only be used once.
+      </p>
+      <p style="margin:0;font-size:12.5px;color:#94a3b8;line-height:1.5;">
+        🔒 Never share this code with anyone. If you did not initiate this sign-in, you can safely ignore this email.
+      </p>
+    </div>
+    <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;text-align:center;font-size:11.5px;color:#94a3b8;">
+      ScholarDoc • University Scholarship &amp; Financial Assistance Office
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Dispatches a high-priority 6-digit OTP email over the pre-warmed Gmail SMTP pool.
+ */
+async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode, expiresMinutes = 10 }) {
+    if (!isValidOtpEmail(toEmail)) {
+        return {
+            success: false,
+            status: 'failed',
+            error: 'No valid email address provided for Email OTP delivery.'
+        };
+    }
+
+    const transporter = getGmailTransporter({ pooled: true });
+    if (!transporter) {
+        return {
+            success: false,
+            status: 'failed',
+            unconfigured: true,
+            error: 'Email SMTP gateway is not configured on the server.'
+        };
+    }
+
+    const targetEmail = String(toEmail).trim();
+    const safeName = String(fullName || 'Student Scholar').trim();
+    const cleanOtp = String(otpCode).trim();
+    const startTs = Date.now();
+
+    const html = generateOtpEmailHtml({
+        fullName: safeName,
+        studentId,
+        otpCode: cleanOtp,
+        expiresMinutes
+    });
+
+    const mailOptions = {
+        from: `"ScholarDoc Security" <${GMAIL_USER}>`,
+        to: targetEmail,
+        subject: `[ScholarDoc] ${cleanOtp} is your verification code`,
+        priority: 'high',
+        headers: {
+            'X-Priority': '1 (Highest)',
+            'X-MSMail-Priority': 'High',
+            'Importance': 'High'
+        },
+        text: `ScholarDoc Security Verification\n\nHello ${safeName},\n\nYour 6-digit verification code is: ${cleanOtp}\n\nThis code is valid for ${expiresMinutes} minutes and can only be used once. Do not share this code with anyone.\n\nScholarDoc Scholarship Office`,
+        html
+    };
+
+    try {
+        let info;
+        try {
+            info = await transporter.sendMail(mailOptions);
+        } catch (firstErr) {
+            // If pooled connection went stale, reset pool and retry once on a fresh connection
+            console.warn('[Email OTP] Pooled socket retry notice:', firstErr.message);
+            sharedGmailTransporter = null;
+            gmailPreferredPort = gmailPreferredPort === 465 ? 587 : 465;
+            const freshTransporter = getGmailTransporter({ pooled: true, port: gmailPreferredPort });
+            if (!freshTransporter) throw firstErr;
+            info = await freshTransporter.sendMail(mailOptions);
+        }
+
+        const latencyMs = Date.now() - startTs;
+        console.log(`[Email OTP] Delivered to ${targetEmail} in ${latencyMs}ms (MessageId: ${info.messageId})`);
+
+        // Non-blocking audit log
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        fetch(`${SUPABASE_REST_URL}/grantee_email_logs`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                student_id: String(studentId || ''),
+                grantee_uid: granteeUid || null,
+                recipient_email: targetEmail,
+                scholarship_name: 'LOGIN_OTP',
+                status: 'sent',
+                sent_at: new Date().toISOString()
+            })
+        }).catch(() => { });
+
+        return {
+            success: true,
+            status: 'sent',
+            latencyMs,
+            recipient: targetEmail,
+            message_id: info.messageId || null
+        };
+    } catch (err) {
+        const latencyMs = Date.now() - startTs;
+        console.error(`[Email OTP] Failed sending to ${targetEmail} (${latencyMs}ms):`, err.message);
+        return {
+            success: false,
+            status: 'failed',
+            latencyMs,
+            error: err.message || 'Email SMTP delivery failed.'
+        };
+    }
 }
 
 function generateGranteeEmailHtml(grantee) {
@@ -2521,7 +2811,108 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ── API: Student Login with First-Login SMS OTP Authentication ────────
+    // ── Helper: Dispatch OTP Over Selected Channel (SMS or Email) & Track Live Status ──
+    function dispatchOtpViaChannel({ session, channel, otp, grantee }) {
+        const cleanId = session.studentId;
+        session.channel = channel;
+        session.deliveryStatus = 'sending';
+        session.deliveryError = null;
+        session.lastDispatchAt = Date.now();
+        session.deliveryMessage = channel === 'email'
+            ? `Sending verification code to ${session.maskedEmail || 'your email'}...`
+            : `Sending verification code to ${session.maskedPhone || 'your mobile number'}...`;
+
+        if (channel === 'email') {
+            return sendOtpEmail({
+                toEmail: session.email,
+                fullName: grantee?.full_name || grantee?.fullName || 'Student Scholar',
+                studentId: cleanId,
+                granteeUid: session.granteeUid,
+                otpCode: otp,
+                expiresMinutes: Math.round(OTP_EXPIRY_SECONDS / 60)
+            }).then((emailRes) => {
+                session.deliveryLatencyMs = emailRes.latencyMs || (Date.now() - session.lastDispatchAt);
+                if (emailRes.success) {
+                    session.deliveryStatus = 'sent';
+                    session.deliveryError = null;
+                    session.messageId = emailRes.message_id || null;
+                    session.deliveryMessage = `OTP sent via Email to ${session.maskedEmail}`;
+                } else {
+                    session.deliveryStatus = 'failed';
+                    session.deliveryError = emailRes.error || 'Failed to send Email OTP.';
+                    session.deliveryMessage = `Email delivery failed: ${session.deliveryError}`;
+                }
+                return emailRes;
+            }).catch((err) => {
+                session.deliveryStatus = 'failed';
+                session.deliveryError = err.message || 'Unexpected Email dispatch error.';
+                session.deliveryMessage = `Email delivery failed: ${session.deliveryError}`;
+                return { success: false, status: 'failed', error: session.deliveryError };
+            });
+        }
+
+        // Default: Semaphore SMS (/api/v4/otp dedicated carrier route)
+        const otpSmsTemplate = 'Your ScholarDoc OTP is {otp}. Valid for 10 mins. Do not share this code.';
+        return sendSemaphoreSms({
+            numbers: session.phone,
+            message: otpSmsTemplate,
+            sendername: getSemaphoreSenderName(),
+            isPriority: true,
+            otpCode: otp
+        }).then((smsRes) => {
+            session.deliveryLatencyMs = smsRes.latencyMs || (Date.now() - session.lastDispatchAt);
+            if (smsRes.success) {
+                session.deliveryStatus = 'sent';
+                session.deliveryError = null;
+                session.messageId = smsRes.message_id || null;
+                session.deliveryMessage = `OTP sent via SMS to ${session.maskedPhone}${smsRes.network ? ` (${smsRes.network})` : ''}`;
+            } else {
+                session.deliveryStatus = 'failed';
+                session.deliveryError = smsRes.error || 'Failed to send SMS OTP.';
+                session.deliveryMessage = `SMS delivery failed: ${session.deliveryError}`;
+            }
+            recordSmsLog({
+                studentId: cleanId,
+                granteeUid: session.granteeUid,
+                recipientPhone: session.phone,
+                message: 'Your ScholarDoc OTP is [PROTECTED]. Valid for 10 mins.',
+                eventType: 'login_otp',
+                status: smsRes.success ? 'sent' : 'failed',
+                messageId: smsRes.message_id,
+                network: smsRes.network,
+                errorMessage: smsRes.error
+            }).catch(() => { });
+            return smsRes;
+        }).catch((err) => {
+            session.deliveryStatus = 'failed';
+            session.deliveryError = err.message || 'Unexpected SMS dispatch error.';
+            session.deliveryMessage = `SMS delivery failed: ${session.deliveryError}`;
+            return { success: false, status: 'failed', error: session.deliveryError };
+        });
+    }
+
+    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 1400) {
+        let timerId = null;
+        const timeoutSentinel = new Promise((resolve) => {
+            timerId = setTimeout(() => resolve({ timedOut: true }), maxWaitMs);
+        });
+        const winner = await Promise.race([
+            dispatchPromise.then((result) => ({ timedOut: false, result })),
+            timeoutSentinel
+        ]);
+        if (timerId) clearTimeout(timerId);
+        return winner;
+    }
+
+    function serializeChannelCooldowns(session, nowTs = Date.now()) {
+        if (!session || !session.channelCooldowns) return { sms: 0, email: 0 };
+        return {
+            sms: Math.max(0, Math.ceil(((session.channelCooldowns.sms || 0) - nowTs) / 1000)),
+            email: Math.max(0, Math.ceil(((session.channelCooldowns.email || 0) - nowTs) / 1000))
+        };
+    }
+
+    // ── API: Student Login with Multi-Channel (SMS / Email) First-Login OTP ──
     if (urlPath === '/api/auth/student-login' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -2532,6 +2923,7 @@ const server = http.createServer(async (req, res) => {
                 const cleanId = String(rawIdentifier).trim();
                 const cleanNo = cleanId.replace(/[- ]/g, '');
                 const rawPassword = String(parsed.password || '').trim();
+                const requestedChannelRaw = String(parsed.channel || parsed.preferredChannel || '').trim().toLowerCase();
 
                 if (!cleanId) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2583,44 +2975,120 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 4. Resolve and Validate Registered Philippine Mobile Number
-                const rawPhone = grantee.mobile_number || grantee.contactNumber;
-                const normalizedPhone = normalizePhilippineMobile(rawPhone);
-                if (!normalizedPhone) {
+                // 4. Resolve Registered SMS & Email Delivery Targets
+                const contacts = resolveGranteeOtpContacts(grantee);
+                const smsConfigured = Boolean(getSemaphoreApiKey());
+                const emailConfigured = Boolean(getGmailTransporter({ pooled: true }));
+                const canSendSms = contacts.hasSms && smsConfigured;
+                const canSendEmail = contacts.hasEmail && emailConfigured;
+
+                if (!contacts.hasSms && !contacts.hasEmail) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
                         isFirstLogin: true,
-                        error: `No valid Philippine mobile number registered for Student ID "${cleanId}" (${rawPhone || 'none on record'}). Please visit the Scholarship Office to register your contact details.`
+                        error: `No valid Philippine mobile number or email address is registered for Student ID "${cleanId}". Please visit the Scholarship Office to register your contact details.`
                     }));
                     return;
                 }
+
+                // Determine initial delivery channel
+                let selectedChannel = 'sms';
+                if (requestedChannelRaw === 'email') {
+                    if (!contacts.hasEmail) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            isFirstLogin: true,
+                            error: `No valid email address is registered for Student ID "${cleanId}". Please choose SMS delivery instead.`
+                        }));
+                        return;
+                    }
+                    selectedChannel = 'email';
+                } else if (requestedChannelRaw === 'sms') {
+                    if (!contacts.hasSms) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            isFirstLogin: true,
+                            error: `No valid Philippine mobile number is registered for Student ID "${cleanId}". Please choose Email delivery instead.`
+                        }));
+                        return;
+                    }
+                    selectedChannel = 'sms';
+                } else {
+                    // Default preference: SMS when valid & configured, automatically falling back to Email if SMS unavailable
+                    if (canSendSms) selectedChannel = 'sms';
+                    else if (canSendEmail) selectedChannel = 'email';
+                    else selectedChannel = contacts.hasSms ? 'sms' : 'email';
+                }
+
+                if (selectedChannel === 'sms' && !smsConfigured) {
+                    if (canSendEmail) {
+                        selectedChannel = 'email';
+                    } else {
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
+                        }));
+                        return;
+                    }
+                }
+                if (selectedChannel === 'email' && !emailConfigured) {
+                    if (canSendSms) {
+                        selectedChannel = 'sms';
+                    } else {
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'Email SMTP gateway is not configured on the server.'
+                        }));
+                        return;
+                    }
+                }
+
+                const availableChannels = {
+                    sms: contacts.hasSms,
+                    email: contacts.hasEmail
+                };
+                const displayMaskedPhone = contacts.maskedPhone || 'Not registered';
+                const displayMaskedEmail = contacts.maskedEmail || null;
 
                 // 5. Rate Limiting & Active Session Re-Entry Check
                 const now = Date.now();
                 const prevSession = activeOtpSessions.get(cleanId);
 
                 if (prevSession) {
-                    // If an OTP was already sent within the cooldown window and is still valid,
-                    // let the student proceed directly to the OTP entry screen without sending a duplicate SMS!
-                    if (now < prevSession.resendAvailableAt && now < prevSession.expiresAt) {
-                        const waitSecs = Math.max(1, Math.ceil((prevSession.resendAvailableAt - now) / 1000));
+                    const prevChannelCooldownUntil = (prevSession.channelCooldowns && prevSession.channelCooldowns[selectedChannel]) ||
+                        (prevSession.channel === selectedChannel ? prevSession.resendAvailableAt : 0);
+
+                    if (now < prevChannelCooldownUntil && now < prevSession.expiresAt) {
+                        const waitSecs = Math.max(1, Math.ceil((prevChannelCooldownUntil - now) / 1000));
                         const remExpire = Math.max(30, Math.ceil((prevSession.expiresAt - now) / 1000));
+                        const activeDest = selectedChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: true,
                             requiresOtp: true,
                             isFirstLogin: true,
                             studentId: cleanId,
-                            maskedPhone: maskPhoneNumber(normalizedPhone),
+                            channel: prevSession.channel || selectedChannel,
+                            maskedPhone: displayMaskedPhone,
+                            maskedEmail: displayMaskedEmail,
+                            availableChannels,
+                            deliveryStatus: prevSession.deliveryStatus || 'sent',
+                            deliveryMessage: prevSession.deliveryMessage || `An active OTP was recently sent to ${activeDest}.`,
+                            deliveryError: prevSession.deliveryError || null,
                             expiresIn: remExpire,
                             resendCooldown: waitSecs,
-                            message: `An active OTP was recently sent to ${maskPhoneNumber(normalizedPhone)}. Please enter it once received.`
+                            channelCooldowns: serializeChannelCooldowns(prevSession, now),
+                            message: `An active OTP was recently sent to ${activeDest}. Please enter it or switch delivery channel.`
                         }));
                         return;
                     }
-                    if (prevSession.resendCount >= 5 && (now - prevSession.resendWindowStart < 3600000)) {
-                        // Even if hourly SMS send limit reached, if current session hasn't expired, allow entering the existing code
+
+                    if (prevSession.resendCount >= 8 && (now - prevSession.resendWindowStart < 3600000)) {
                         if (now < prevSession.expiresAt) {
                             const remExpire = Math.max(30, Math.ceil((prevSession.expiresAt - now) / 1000));
                             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2629,29 +3097,26 @@ const server = http.createServer(async (req, res) => {
                                 requiresOtp: true,
                                 isFirstLogin: true,
                                 studentId: cleanId,
-                                maskedPhone: maskPhoneNumber(normalizedPhone),
+                                channel: prevSession.channel || selectedChannel,
+                                maskedPhone: displayMaskedPhone,
+                                maskedEmail: displayMaskedEmail,
+                                availableChannels,
+                                deliveryStatus: prevSession.deliveryStatus || 'sent',
+                                deliveryMessage: prevSession.deliveryMessage || 'Please enter your active OTP code.',
                                 expiresIn: remExpire,
                                 resendCooldown: 60,
-                                message: `Please enter the OTP sent to ${maskPhoneNumber(normalizedPhone)}.`
+                                channelCooldowns: serializeChannelCooldowns(prevSession, now),
+                                message: 'Please enter the active OTP code sent to you.'
                             }));
                             return;
                         }
                         res.writeHead(429, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: false,
-                            error: 'Rate limit exceeded: Maximum 5 OTP requests per hour. Please try again later.'
+                            error: 'Rate limit exceeded: Maximum OTP requests per hour reached. Please try again later.'
                         }));
                         return;
                     }
-                }
-
-                if (!getSemaphoreApiKey()) {
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        success: false,
-                        error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
-                    }));
-                    return;
                 }
 
                 // 6. Generate Cryptographically Secure 6-digit OTP
@@ -2659,7 +3124,6 @@ const server = http.createServer(async (req, res) => {
                 const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
                 const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
 
-                // 7. Store OTP Session (10-min expiry, 30s resend cooldown, rolling validHashes grace window for delayed carrier SMS)
                 const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
                     ? prevSession.resendWindowStart
                     : now;
@@ -2670,59 +3134,89 @@ const server = http.createServer(async (req, res) => {
                 const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
                     ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
                     : [];
-                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 3);
+                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 4);
 
-                activeOtpSessions.set(cleanId, {
+                const prevCooldowns = (prevSession && prevSession.channelCooldowns) ? { ...prevSession.channelCooldowns } : { sms: 0, email: 0 };
+                prevCooldowns[selectedChannel] = now + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
+
+                const sessionObj = {
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
                     validHashes: validHashes,
-                    phone: normalizedPhone,
+                    channel: selectedChannel,
+                    phone: contacts.phone,
+                    email: contacts.email,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: 'sending',
+                    deliveryMessage: null,
+                    deliveryError: null,
+                    deliveryLatencyMs: null,
                     expiresAt: newExpiresAt,
                     attempts: prevSession ? Math.min(prevSession.attempts || 0, 2) : 0,
-                    resendAvailableAt: now + (OTP_RESEND_COOLDOWN_SECONDS * 1000),
+                    resendAvailableAt: prevCooldowns[selectedChannel],
+                    channelCooldowns: prevCooldowns,
                     resendCount: resendCount,
                     resendWindowStart: resendWindowStart,
                     createdAt: now
+                };
+                activeOtpSessions.set(cleanId, sessionObj);
+
+                const destDisplay = selectedChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
+                console.log(`[OTP LOGIN] Generated ${selectedChannel.toUpperCase()} OTP for student ${cleanId} -> ${destDisplay}: ${otp} (valid 10m)`);
+
+                // 7. Dispatch via selected channel with bounded 1.4s fast-wait for instant delivery confirmation
+                const dispatchPromise = dispatchOtpViaChannel({
+                    session: sessionObj,
+                    channel: selectedChannel,
+                    otp,
+                    grantee
                 });
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, 1400);
 
-                console.log(`[SMS OTP] Generated OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (SHA-256 hash stored, valid 10m)`);
+                // Automatic fallback on initial login: if SMS failed immediately and Email IS available, auto-dispatch via Email!
+                if (!outcome.timedOut && outcome.result && !outcome.result.success) {
+                    const altChannel = selectedChannel === 'sms' ? 'email' : 'sms';
+                    const canFallback = (altChannel === 'email' && canSendEmail) || (altChannel === 'sms' && canSendSms);
+                    if (canFallback && !requestedChannelRaw) {
+                        console.warn(`[OTP LOGIN] Primary ${selectedChannel.toUpperCase()} failed (${outcome.result.error}); auto-failing over to ${altChannel.toUpperCase()} for ${cleanId}!`);
+                        selectedChannel = altChannel;
+                        sessionObj.channelCooldowns[altChannel] = Date.now() + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
+                        sessionObj.resendAvailableAt = sessionObj.channelCooldowns[altChannel];
+                        const fallbackPromise = dispatchOtpViaChannel({
+                            session: sessionObj,
+                            channel: altChannel,
+                            otp,
+                            grantee
+                        });
+                        await awaitFastOtpDispatch(fallbackPromise, 1400);
+                    }
+                }
 
-                // 8. Respond IMMEDIATELY to Client (<100ms UI transition!) while dispatching SMS in parallel
+                const finalDest = sessionObj.channel === 'email' ? displayMaskedEmail : displayMaskedPhone;
+                const channelName = sessionObj.channel === 'email' ? 'email address' : 'registered mobile number';
+
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     requiresOtp: true,
                     isFirstLogin: true,
                     studentId: cleanId,
-                    maskedPhone: maskPhoneNumber(normalizedPhone),
+                    channel: sessionObj.channel,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: sessionObj.deliveryStatus,
+                    deliveryMessage: sessionObj.deliveryMessage,
+                    deliveryError: sessionObj.deliveryError,
+                    deliveryLatencyMs: sessionObj.deliveryLatencyMs,
                     expiresIn: OTP_EXPIRY_SECONDS,
                     resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
-                    message: `A one-time password (OTP) has been sent to your registered mobile number ${maskPhoneNumber(normalizedPhone)}.`
+                    channelCooldowns: serializeChannelCooldowns(sessionObj),
+                    message: `A one-time password (OTP) has been sent to your ${channelName} ${finalDest}.`
                 }));
-
-                // 9. Dispatch SMS immediately via Semaphore's dedicated /api/v4/otp A2P carrier route
-                const otpSmsTemplate = 'Your ScholarDoc verification code is {otp}. Valid for 10 minutes. Do not share this code.';
-                sendSemaphoreSms({
-                    numbers: normalizedPhone,
-                    message: otpSmsTemplate,
-                    sendername: getSemaphoreSenderName(),
-                    isPriority: true,
-                    otpCode: otp
-                }).then((smsResult) => {
-                    console.log(`[SMS OTP] Semaphore dispatch result for ${cleanId}:`, smsResult.status, smsResult.message_id || smsResult.error || '');
-                    return recordSmsLog({
-                        studentId: cleanId,
-                        granteeUid: grantee.uid,
-                        recipientPhone: normalizedPhone,
-                        message: 'Your ScholarDoc verification code is [PROTECTED]. Valid for 10 minutes.',
-                        eventType: 'login_otp',
-                        status: smsResult.success ? 'sent' : 'failed',
-                        messageId: smsResult.message_id,
-                        network: smsResult.network,
-                        errorMessage: smsResult.error
-                    });
-                }).catch(e => console.error('[SMS OTP Async Dispatch Error]', e.message));
             } catch (err) {
                 console.error('[API student-login error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -2732,7 +3226,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ── API: Verify SMS OTP for Student First Login ───────────────────────
+    // ── API: Verify OTP (SMS or Email) for Student First Login ─────────────
     if (urlPath === '/api/auth/otp/verify' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -2749,6 +3243,12 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
+                if (!/^\d{6}$/.test(rawOtp)) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'OTP must be a valid 6-digit numeric code.' }));
+                    return;
+                }
+
                 const session = activeOtpSessions.get(cleanId);
                 const now = Date.now();
 
@@ -2762,7 +3262,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 2. Expiration check (5 minutes)
+                // 2. Expiration check
                 if (now > session.expiresAt) {
                     activeOtpSessions.delete(cleanId);
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2786,15 +3286,16 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 4. Constant-Time Timing-Safe Hash Verification (supports rolling unexpired codes from delayed carrier delivery)
+                // 4. Constant-Time Timing-Safe Hash Verification (checks latest otpHash + rolling validHashes grace pool)
                 const candidateHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
                 const candidateBuf = Buffer.from(candidateHash, 'hex');
-                const hashPool = Array.isArray(session.validHashes) && session.validHashes.length > 0
-                    ? session.validHashes.filter(item => item && item.expiresAt > now)
-                    : [{ hash: session.otpHash, expiresAt: session.expiresAt }];
+                const rawPool = [
+                    { hash: session.otpHash, expiresAt: session.expiresAt },
+                    ...(Array.isArray(session.validHashes) ? session.validHashes : [])
+                ].filter(item => item && item.hash && item.expiresAt > now);
 
                 let isMatch = false;
-                for (const entry of hashPool) {
+                for (const entry of rawPool) {
                     try {
                         const storedBuf = Buffer.from(entry.hash, 'hex');
                         if (candidateBuf.length === storedBuf.length && crypto.timingSafeEqual(candidateBuf, storedBuf)) {
@@ -2826,19 +3327,22 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 // 5. SUCCESS: Enforce Single-Use by Immediately Deleting the Active Session
+                const verifiedChannel = session.channel || 'sms';
+                const verifiedDest = verifiedChannel === 'email' ? session.email : session.phone;
                 activeOtpSessions.delete(cleanId);
 
-                // 6. Mark First Login as Completed (Local Store + Supabase student_grantees + audit_logs + sms_logs)
-                await markFirstLoginCompleted(cleanId, session.granteeUid, session.phone);
+                // 6. Mark First Login as Completed (Local Store + Supabase student_grantees + audit_logs)
+                await markFirstLoginCompleted(cleanId, session.granteeUid, verifiedDest, verifiedChannel);
 
-                console.log(`[SMS OTP] Verification SUCCESS for student ${cleanId} (${session.phone}). First login completed!`);
+                console.log(`[OTP VERIFY] Verification SUCCESS via ${verifiedChannel.toUpperCase()} for student ${cleanId} (${verifiedDest}). First login completed!`);
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     verified: true,
+                    channel: verifiedChannel,
                     studentId: cleanId,
-                    message: 'SMS OTP verified successfully. First login completed.'
+                    message: `${verifiedChannel === 'email' ? 'Email' : 'SMS'} OTP verified successfully. First login completed.`
                 }));
             } catch (err) {
                 console.error('[API otp/verify error]', err);
@@ -2849,8 +3353,8 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ── API: Resend SMS OTP with Rate Limiting ────────────────────────────
-    if (urlPath === '/api/auth/otp/resend' && req.method === 'POST') {
+    // ── API: Send / Switch Channel / Resend OTP (Email or SMS) with Per-Channel Rate Limiting ──
+    if ((urlPath === '/api/auth/otp/resend' || urlPath === '/api/auth/otp/send') && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
@@ -2858,6 +3362,7 @@ const server = http.createServer(async (req, res) => {
                 const parsed = JSON.parse(body || '{}');
                 const rawIdentifier = parsed.studentId || parsed.student_no || '';
                 const cleanId = String(rawIdentifier).trim();
+                const requestedChannelRaw = String(parsed.channel || '').trim().toLowerCase();
 
                 if (!cleanId) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2865,7 +3370,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 1. Verify eligibility and mobile number
+                // 1. Verify eligibility and resolve both SMS & Email contacts
                 const eligibility = await validateGranteeEligibility(cleanId);
                 if (!eligibility.isEligible) {
                     res.writeHead(403, { 'Content-Type': 'application/json' });
@@ -2874,48 +3379,95 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 const grantee = eligibility.grantee;
-                const normalizedPhone = normalizePhilippineMobile(grantee.mobile_number || grantee.contactNumber);
-                if (!normalizedPhone) {
+                const contacts = resolveGranteeOtpContacts(grantee);
+                const prevSession = activeOtpSessions.get(cleanId);
+
+                const targetChannel = (requestedChannelRaw === 'email' || requestedChannelRaw === 'sms')
+                    ? requestedChannelRaw
+                    : (prevSession?.channel || (contacts.hasSms ? 'sms' : 'email'));
+
+                const availableChannels = {
+                    sms: contacts.hasSms,
+                    email: contacts.hasEmail
+                };
+                const displayMaskedPhone = contacts.maskedPhone || 'Not registered';
+                const displayMaskedEmail = contacts.maskedEmail || null;
+
+                // Validate selected channel contact availability
+                if (targetChannel === 'email' && !contacts.hasEmail) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
-                        error: 'No valid Philippine mobile number registered for this student.'
+                        channel: 'email',
+                        availableChannels,
+                        error: 'No valid email address is registered for your account. Please select SMS delivery instead.'
+                    }));
+                    return;
+                }
+                if (targetChannel === 'sms' && !contacts.hasSms) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'sms',
+                        availableChannels,
+                        error: 'No valid Philippine mobile number is registered for your account. Please select Email delivery instead.'
                     }));
                     return;
                 }
 
-                // 2. Enforce Rate Limiting
-                const now = Date.now();
-                const prevSession = activeOtpSessions.get(cleanId);
-
-                if (prevSession) {
-                    if (now < prevSession.resendAvailableAt) {
-                        const waitSecs = Math.ceil((prevSession.resendAvailableAt - now) / 1000);
-                        res.writeHead(429, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({
-                            success: false,
-                            error: `Please wait ${waitSecs} seconds before requesting a new OTP.`,
-                            cooldownRemaining: waitSecs
-                        }));
-                        return;
-                    }
-                    if (prevSession.resendCount >= 5 && (now - prevSession.resendWindowStart < 3600000)) {
-                        res.writeHead(429, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({
-                            success: false,
-                            error: 'Rate limit exceeded: Maximum 5 OTP requests per hour. Please try again later.'
-                        }));
-                        return;
-                    }
-                }
-
-                if (!getSemaphoreApiKey()) {
+                // Validate gateway configuration
+                if (targetChannel === 'sms' && !getSemaphoreApiKey()) {
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
+                        channel: 'sms',
+                        availableChannels,
                         error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
                     }));
                     return;
+                }
+                if (targetChannel === 'email' && !getGmailTransporter({ pooled: true })) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'email',
+                        availableChannels,
+                        error: 'Email SMTP gateway is not configured on the server.'
+                    }));
+                    return;
+                }
+
+                // 2. Enforce Per-Channel Cooldown (switching SMS <-> Email sends immediately without waiting!)
+                const now = Date.now();
+                if (prevSession) {
+                    const channelCooldownUntil = (prevSession.channelCooldowns && prevSession.channelCooldowns[targetChannel]) ||
+                        ((!prevSession.channelCooldowns && (prevSession.channel || 'sms') === targetChannel) ? prevSession.resendAvailableAt : 0);
+
+                    // Allow immediate retry if the previous attempt on that channel failed!
+                    const prevSameChannelFailed = prevSession.channel === targetChannel && prevSession.deliveryStatus === 'failed';
+
+                    if (!prevSameChannelFailed && now < channelCooldownUntil) {
+                        const waitSecs = Math.max(1, Math.ceil((channelCooldownUntil - now) / 1000));
+                        const label = targetChannel === 'email' ? 'Email' : 'SMS';
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            channel: targetChannel,
+                            error: `Please wait ${waitSecs} seconds before requesting a new ${label} OTP.`,
+                            cooldownRemaining: waitSecs,
+                            channelCooldowns: serializeChannelCooldowns(prevSession, now)
+                        }));
+                        return;
+                    }
+
+                    if (prevSession.resendCount >= 8 && (now - prevSession.resendWindowStart < 3600000)) {
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'Rate limit exceeded: Maximum OTP requests per hour reached. Please try again later.'
+                        }));
+                        return;
+                    }
                 }
 
                 // 3. Generate New 6-digit OTP and SHA-256 Hash (preserving unexpired in-flight hashes in rolling grace pool)
@@ -2935,62 +3487,156 @@ const server = http.createServer(async (req, res) => {
                     : (prevSession && prevSession.otpHash && prevSession.expiresAt > now
                         ? [{ hash: prevSession.otpHash, expiresAt: prevSession.expiresAt }]
                         : []);
-                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 3);
+                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 4);
 
-                activeOtpSessions.set(cleanId, {
+                const updatedCooldowns = (prevSession && prevSession.channelCooldowns)
+                    ? { ...prevSession.channelCooldowns }
+                    : { sms: 0, email: 0 };
+                updatedCooldowns[targetChannel] = now + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
+
+                const sessionObj = {
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
                     validHashes: validHashes,
-                    phone: normalizedPhone,
+                    channel: targetChannel,
+                    phone: contacts.phone,
+                    email: contacts.email,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: 'sending',
+                    deliveryMessage: null,
+                    deliveryError: null,
+                    deliveryLatencyMs: null,
                     expiresAt: newExpiresAt,
                     attempts: 0,
-                    resendAvailableAt: now + (OTP_RESEND_COOLDOWN_SECONDS * 1000),
+                    resendAvailableAt: updatedCooldowns[targetChannel],
+                    channelCooldowns: updatedCooldowns,
                     resendCount: resendCount,
                     resendWindowStart: resendWindowStart,
                     createdAt: now
+                };
+                activeOtpSessions.set(cleanId, sessionObj);
+
+                const targetMasked = targetChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
+                console.log(`[OTP DISPATCH] New ${targetChannel.toUpperCase()} OTP for student ${cleanId} -> ${targetMasked}: ${otp} (valid 10m, pool: ${validHashes.length})`);
+
+                // 4. Await bounded 1.4s fast dispatch so fast sends/errors report immediately without UI lag
+                const dispatchPromise = dispatchOtpViaChannel({
+                    session: sessionObj,
+                    channel: targetChannel,
+                    otp,
+                    grantee
                 });
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, 1400);
 
-                console.log(`[SMS OTP RESEND] New OTP for student ${cleanId} -> ${normalizedPhone}: ${otp} (valid 10m, active pool: ${validHashes.length})`);
+                if (!outcome.timedOut && outcome.result && !outcome.result.success) {
+                    // Reset cooldown on failed channel so student can retry or switch immediately
+                    sessionObj.channelCooldowns[targetChannel] = 0;
+                    res.writeHead(502, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        studentId: cleanId,
+                        channel: targetChannel,
+                        deliveryStatus: 'failed',
+                        deliveryError: sessionObj.deliveryError,
+                        availableChannels,
+                        maskedPhone: displayMaskedPhone,
+                        maskedEmail: displayMaskedEmail,
+                        error: sessionObj.deliveryError || `Failed to send OTP via ${targetChannel.toUpperCase()}.`
+                    }));
+                    return;
+                }
 
-                // 4. Respond IMMEDIATELY to Client (<100ms) while dispatching via dedicated /api/v4/otp route
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     studentId: cleanId,
-                    maskedPhone: maskPhoneNumber(normalizedPhone),
+                    channel: targetChannel,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: sessionObj.deliveryStatus,
+                    deliveryMessage: sessionObj.deliveryMessage,
+                    deliveryError: sessionObj.deliveryError,
+                    deliveryLatencyMs: sessionObj.deliveryLatencyMs,
                     resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
+                    channelCooldowns: serializeChannelCooldowns(sessionObj),
                     expiresIn: OTP_EXPIRY_SECONDS,
-                    message: `A new OTP has been sent to ${maskPhoneNumber(normalizedPhone)}.`
+                    message: `A new OTP has been sent via ${targetChannel === 'email' ? 'Email' : 'SMS'} to ${targetMasked}.`
                 }));
-
-                const otpSmsTemplate = 'Your ScholarDoc verification code is {otp}. Valid for 10 minutes. Do not share this code.';
-                sendSemaphoreSms({
-                    numbers: normalizedPhone,
-                    message: otpSmsTemplate,
-                    sendername: getSemaphoreSenderName(),
-                    isPriority: true,
-                    otpCode: otp
-                }).then((smsResult) => {
-                    console.log(`[SMS OTP RESEND] Semaphore dispatch result for ${cleanId}:`, smsResult.status, smsResult.message_id || smsResult.error || '');
-                    return recordSmsLog({
-                        studentId: cleanId,
-                        granteeUid: grantee.uid,
-                        recipientPhone: normalizedPhone,
-                        message: 'Your ScholarDoc verification code is [PROTECTED]. Valid for 10 minutes.',
-                        eventType: 'login_otp',
-                        status: smsResult.success ? 'sent' : 'failed',
-                        messageId: smsResult.message_id,
-                        network: smsResult.network,
-                        errorMessage: smsResult.error
-                    });
-                }).catch(e => console.error('[SMS OTP Resend Async Dispatch Error]', e.message));
             } catch (err) {
                 console.error('[API otp/resend error]', err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: err.message }));
             }
         });
+        return;
+    }
+
+    // ── API: Live OTP Delivery Telemetry Poll (Resolves 'sending' -> 'sent'/'failed') ──
+    if (urlPath === '/api/auth/otp/delivery-status' && (req.method === 'GET' || req.method === 'POST')) {
+        const respondTelemetry = async (rawIdentifier) => {
+            const cleanId = String(rawIdentifier || '').trim();
+            if (!cleanId) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                return;
+            }
+            const session = activeOtpSessions.get(cleanId);
+            if (!session) {
+                const eligibility = await validateGranteeEligibility(cleanId);
+                const contacts = eligibility.isEligible ? resolveGranteeOtpContacts(eligibility.grantee) : null;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    hasActiveSession: false,
+                    maskedPhone: contacts?.maskedPhone || null,
+                    maskedEmail: contacts?.maskedEmail || null,
+                    availableChannels: contacts ? { sms: contacts.hasSms, email: contacts.hasEmail } : { sms: false, email: false }
+                }));
+                return;
+            }
+            const now = Date.now();
+            const remExpire = Math.max(0, Math.ceil((session.expiresAt - now) / 1000));
+            const cooldowns = serializeChannelCooldowns(session, now);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                hasActiveSession: remExpire > 0,
+                studentId: cleanId,
+                channel: session.channel || 'sms',
+                deliveryStatus: session.deliveryStatus || 'sent',
+                deliveryMessage: session.deliveryMessage || null,
+                deliveryError: session.deliveryError || null,
+                deliveryLatencyMs: session.deliveryLatencyMs || null,
+                maskedPhone: session.maskedPhone || null,
+                maskedEmail: session.maskedEmail || null,
+                availableChannels: session.availableChannels || { sms: Boolean(session.phone), email: Boolean(session.email) },
+                expiresIn: remExpire,
+                resendCooldown: cooldowns[session.channel || 'sms'] || 0,
+                channelCooldowns: cooldowns
+            }));
+        };
+
+        if (req.method === 'GET') {
+            const parsedUrl = new URL(req.url, 'http://localhost');
+            const idParam = parsedUrl.searchParams.get('studentId') || parsedUrl.searchParams.get('student_no') || '';
+            await respondTelemetry(idParam);
+        } else {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const parsed = JSON.parse(body || '{}');
+                    await respondTelemetry(parsed.studentId || parsed.student_no || '');
+                } catch (_) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload' }));
+                }
+            });
+        }
         return;
     }
 
@@ -3038,7 +3684,7 @@ const server = http.createServer(async (req, res) => {
                 res.end(JSON.stringify({
                     success: true,
                     studentId: cleanId,
-                    message: `First login reset successfully for ${cleanId}. Next login will require SMS OTP.`
+                    message: `First login reset successfully for ${cleanId}. Next login will require OTP verification.`
                 }));
             } catch (err) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -3072,6 +3718,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             const grantee = eligibility.grantee;
+            const contacts = resolveGranteeOtpContacts(grantee);
             const completed = isFirstLoginCompleted(cleanId, grantee);
             const activeSession = activeOtpSessions.get(cleanId);
 
@@ -3083,7 +3730,16 @@ const server = http.createServer(async (req, res) => {
                 requiresOtp: !completed,
                 hasActiveSession: !!activeSession,
                 studentId: cleanId,
-                maskedPhone: maskPhoneNumber(grantee.mobile_number || grantee.contactNumber)
+                channel: activeSession?.channel || (contacts.hasSms ? 'sms' : 'email'),
+                deliveryStatus: activeSession?.deliveryStatus || null,
+                deliveryMessage: activeSession?.deliveryMessage || null,
+                deliveryError: activeSession?.deliveryError || null,
+                maskedPhone: contacts.maskedPhone || maskPhoneNumber(grantee.mobile_number || grantee.contactNumber),
+                maskedEmail: contacts.maskedEmail || null,
+                availableChannels: {
+                    sms: contacts.hasSms,
+                    email: contacts.hasEmail
+                }
             }));
         };
 
@@ -4637,6 +5293,9 @@ if (require.main === module) {
         maintainAdbReverse();
         setInterval(maintainAdbReverse, 25000);
 
+        // Pre-warm Gmail SMTP TLS connection pool for instant Email OTP delivery
+        warmUpOtpTransports();
+
         // Start background watcher daemons
         startNotificationSmsWatcher();
         startGranteeMessagingWatcher();
@@ -4666,6 +5325,10 @@ Object.assign(vercelHandler, {
     markFirstLoginCompleted,
     activeOtpSessions,
     completedFirstLoginStudents,
+    sendOtpEmail,
+    maskEmailAddress,
+    isValidOtpEmail,
+    resolveGranteeOtpContacts,
     sendSingleGranteeEmail,
     sendSingleGranteeSms,
     pollNewGranteesAndMessage,
