@@ -2210,7 +2210,7 @@ try {
 const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || 'eoueeoikuorzymkq').replace(/\s+/g, '');
 const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-new.vercel.app';
-const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
+const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk';
 
 function getGmailTransporter() {
     if (!nodemailer) return null;
