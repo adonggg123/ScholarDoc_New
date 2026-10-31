@@ -370,7 +370,7 @@ serve(async (req) => {
     // 1. Validate environment configuration
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const senderEmail = Deno.env.get("SENDER_EMAIL") || "ScholarDoc <onboarding@resend.dev>";
-    const downloadUrl = Deno.env.get("APP_DOWNLOAD_URL") || "https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk";
+    const downloadUrl = Deno.env.get("APP_DOWNLOAD_URL") || "https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.1/ScholarDoc.apk";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
 
