@@ -2336,9 +2336,9 @@ function getGmailTransporter({ pooled = true, port = gmailPreferredPort } = {}) 
         pool: pooled,
         maxConnections: 3,
         maxMessages: 100,
-        connectionTimeout: 6000,
-        greetingTimeout: 5000,
-        socketTimeout: 10000,
+        connectionTimeout: 30000,
+        greetingTimeout: 25000,
+        socketTimeout: 45000,
         auth: {
             user: GMAIL_USER,
             pass: GMAIL_APP_PASSWORD
@@ -2983,8 +2983,15 @@ const server = http.createServer(async (req, res) => {
                 const contacts = resolveGranteeOtpContacts(grantee);
                 const smsConfigured = Boolean(getSemaphoreApiKey());
                 const emailConfigured = Boolean(getGmailTransporter({ pooled: true }));
-                const canSendSms = contacts.hasSms && smsConfigured;
-                const canSendEmail = contacts.hasEmail && emailConfigured;
+                const canSendSms = Boolean(contacts.hasSms && smsConfigured);
+                const canSendEmail = Boolean(contacts.hasEmail && emailConfigured);
+
+                const availableChannels = {
+                    sms: canSendSms,
+                    email: canSendEmail
+                };
+                const displayMaskedPhone = contacts.maskedPhone || 'Not registered';
+                const displayMaskedEmail = contacts.maskedEmail || 'Not registered';
 
                 if (!contacts.hasSms && !contacts.hasEmail) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2996,68 +3003,74 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // Determine initial delivery channel
-                let selectedChannel = 'sms';
+                if (!canSendSms && !canSendEmail) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        isFirstLogin: true,
+                        error: 'Both SMS and Email dispatch gateways are temporarily unavailable on the server. Please contact system support.'
+                    }));
+                    return;
+                }
+
+                // 4.1 First-Login Workflow: User must first choose their preferred OTP delivery method (SMS or Email)
+                if (!requestedChannelRaw) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        requiresOtp: true,
+                        isFirstLogin: true,
+                        requiresChannelSelection: true,
+                        studentId: cleanId,
+                        fullName: grantee.full_name || grantee.fullName || 'Student Scholar',
+                        maskedPhone: displayMaskedPhone,
+                        maskedEmail: displayMaskedEmail,
+                        availableChannels,
+                        message: 'Credentials verified. Please choose your preferred OTP delivery method (SMS or Email).'
+                    }));
+                    return;
+                }
+
+                // Determine chosen delivery channel
+                let selectedChannel = '';
                 if (requestedChannelRaw === 'email') {
-                    if (!contacts.hasEmail) {
+                    if (!canSendEmail) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: false,
                             isFirstLogin: true,
-                            error: `No valid email address is registered for Student ID "${cleanId}". Please choose SMS delivery instead.`
+                            requiresChannelSelection: true,
+                            availableChannels,
+                            error: !contacts.hasEmail
+                                ? `No valid email address is registered for Student ID "${cleanId}". Please choose SMS delivery instead.`
+                                : 'Email SMTP gateway is temporarily unavailable. Please choose SMS delivery instead.'
                         }));
                         return;
                     }
                     selectedChannel = 'email';
                 } else if (requestedChannelRaw === 'sms') {
-                    if (!contacts.hasSms) {
+                    if (!canSendSms) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: false,
                             isFirstLogin: true,
-                            error: `No valid Philippine mobile number is registered for Student ID "${cleanId}". Please choose Email delivery instead.`
+                            requiresChannelSelection: true,
+                            availableChannels,
+                            error: !contacts.hasSms
+                                ? `No valid Philippine mobile number is registered for Student ID "${cleanId}". Please choose Email delivery instead.`
+                                : 'SMS gateway is temporarily unavailable. Please choose Email delivery instead.'
                         }));
                         return;
                     }
                     selectedChannel = 'sms';
                 } else {
-                    // Default preference: SMS when valid & configured, automatically falling back to Email if SMS unavailable
-                    if (canSendSms) selectedChannel = 'sms';
-                    else if (canSendEmail) selectedChannel = 'email';
-                    else selectedChannel = contacts.hasSms ? 'sms' : 'email';
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: `Invalid delivery channel "${requestedChannelRaw}". Please select either SMS or Email.`
+                    }));
+                    return;
                 }
-
-                if (selectedChannel === 'sms' && !smsConfigured) {
-                    if (canSendEmail) {
-                        selectedChannel = 'email';
-                    } else {
-                        res.writeHead(500, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({
-                            success: false,
-                            error: 'SMS gateway is not configured on the server (missing SEMAPHORE_API_KEY).'
-                        }));
-                        return;
-                    }
-                }
-                if (selectedChannel === 'email' && !emailConfigured) {
-                    if (canSendSms) {
-                        selectedChannel = 'sms';
-                    } else {
-                        res.writeHead(500, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify({
-                            success: false,
-                            error: 'Email SMTP gateway is not configured on the server.'
-                        }));
-                        return;
-                    }
-                }
-
-                const availableChannels = {
-                    sms: contacts.hasSms,
-                    email: contacts.hasEmail
-                };
-                const displayMaskedPhone = contacts.maskedPhone || 'Not registered';
-                const displayMaskedEmail = contacts.maskedEmail || null;
 
                 // 5. Rate Limiting & Active Session Re-Entry Check
                 const now = Date.now();
@@ -3346,6 +3359,8 @@ const server = http.createServer(async (req, res) => {
                     verified: true,
                     channel: verifiedChannel,
                     studentId: cleanId,
+                    email: session.email || null,
+                    granteeUid: session.granteeUid || null,
                     message: `${verifiedChannel === 'email' ? 'Email' : 'SMS'} OTP verified successfully. First login completed.`
                 }));
             } catch (err) {

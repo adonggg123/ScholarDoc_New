@@ -7,7 +7,7 @@
     <title>ScholarDoc — Security Verification</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <meta name="description"
-        content="ScholarDoc Two-Factor Security Verification. Enter the 6-digit SMS OTP sent to your registered mobile number.">
+        content="ScholarDoc Two-Factor Security Verification. Enter the 6-digit OTP sent to your registered contact channel.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,12 +39,12 @@
             --success: #10B981;
             --success-soft: #ECFDF5;
             --success-border: #A7F3D0;
-            --radius-card: 20px;
-            --radius-btn: 12px;
-            --radius-input: 12px;
+            --radius-card: 10px;
+            --radius-btn: 10px;
+            --radius-input: 10px;
             --shadow-card: 0 20px 45px -10px rgba(10, 25, 49, 0.12), 0 10px 20px -5px rgba(10, 25, 49, 0.06);
             --shadow-btn: 0 10px 24px -6px rgba(10, 25, 49, 0.25);
-            --shadow-focus: 0 0 0 4px rgba(245, 176, 37, 0.22);
+            --shadow-focus: 0 0 0 3px rgba(245, 176, 37, 0.22);
         }
 
         * {
@@ -93,7 +93,7 @@
             border-radius: var(--radius-card);
             border: 1px solid var(--border-subtle);
             box-shadow: var(--shadow-card);
-            padding: 40px 36px;
+            padding: 36px 32px;
             text-align: center;
             position: relative;
             overflow: hidden;
@@ -117,7 +117,7 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .brand-logo {
@@ -154,16 +154,16 @@
         .hero-badge-wrapper {
             display: flex;
             justify-content: center;
-            margin-bottom: 18px;
+            margin-bottom: 16px;
             position: relative;
         }
 
         .hero-badge {
-            width: 72px;
-            height: 72px;
+            width: 68px;
+            height: 68px;
             border-radius: 50%;
-            background: linear-gradient(135deg, rgba(10, 25, 49, 0.05) 0%, rgba(245, 176, 37, 0.12) 100%);
-            border: 2px solid rgba(245, 176, 37, 0.35);
+            background: linear-gradient(135deg, rgba(10, 25, 49, 0.05) 0%, rgba(245, 176, 37, 0.14) 100%);
+            border: 2px solid rgba(245, 176, 37, 0.4);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -173,8 +173,8 @@
         }
 
         .hero-badge i {
-            width: 34px;
-            height: 34px;
+            width: 32px;
+            height: 32px;
             stroke-width: 2.2;
         }
 
@@ -188,18 +188,9 @@
         }
 
         @keyframes pulse-ring {
-            0% {
-                transform: scale(0.95);
-                opacity: 0.6;
-            }
-            50% {
-                transform: scale(1.15);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(1.15);
-                opacity: 0;
-            }
+            0% { transform: scale(0.95); opacity: 0.6; }
+            50% { transform: scale(1.15); opacity: 0; }
+            100% { transform: scale(1.15); opacity: 0; }
         }
 
         /* Eyebrow Chip */
@@ -237,19 +228,61 @@
             font-size: 13.5px;
             color: var(--text-muted);
             line-height: 1.55;
-            margin-bottom: 22px;
+            margin-bottom: 20px;
             padding: 0 8px;
         }
 
-        .masked-phone-chip {
+        .masked-target-chip {
             font-weight: 700;
             color: var(--primary-navy);
             background: #F1F5F9;
-            padding: 2px 8px;
-            border-radius: 6px;
+            padding: 3px 10px;
+            border-radius: 8px;
             display: inline-block;
             font-family: monospace;
             letter-spacing: 0.5px;
+            margin-top: 4px;
+            border: 1px solid #E2E8F0;
+        }
+
+        /* Channel Switcher Button */
+        .channel-switch-wrapper {
+            margin-bottom: 20px;
+        }
+
+        .btn-switch-channel {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px dashed #CBD5E1;
+            border-radius: var(--radius-btn);
+            background: #F8FAFC;
+            color: var(--primary-navy);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-switch-channel:hover:not(:disabled) {
+            background: #FFFDF7;
+            border-color: var(--accent-gold);
+            color: #0A1931;
+            box-shadow: 0 4px 12px rgba(245, 176, 37, 0.12);
+        }
+
+        .btn-switch-channel:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-switch-channel i {
+            width: 15px;
+            height: 15px;
+            color: var(--accent-gold);
         }
 
         /* Error & Info Alerts */
@@ -308,7 +341,7 @@
 
         .otp-digit-input {
             width: 100%;
-            height: 58px;
+            height: 56px;
             text-align: center;
             font-size: 24px;
             font-weight: 800;
@@ -367,7 +400,7 @@
             font-size: 13px;
             font-weight: 600;
             color: var(--text-muted);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .timer-bar.expired {
@@ -392,7 +425,7 @@
         /* Action Buttons */
         .btn-verify {
             width: 100%;
-            height: 50px;
+            height: 48px;
             background: linear-gradient(135deg, var(--primary-navy) 0%, #152A4A 100%);
             color: #FFFFFF;
             border: none;
@@ -455,12 +488,12 @@
 
         /* Resend & Secondary Section */
         .resend-section {
-            margin-top: 22px;
-            padding-top: 20px;
+            margin-top: 20px;
+            padding-top: 18px;
             border-top: 1px solid var(--border-subtle);
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
         }
 
@@ -522,10 +555,10 @@
 
         /* Help Info Footer Card */
         .help-card {
-            margin-top: 20px;
+            margin-top: 18px;
             background: rgba(255, 251, 235, 0.7);
             border: 1px solid #FDE68A;
-            border-radius: 12px;
+            border-radius: 10px;
             padding: 12px 14px;
             text-align: left;
             display: flex;
@@ -546,8 +579,8 @@
         /* Mobile Viewport Adjustments */
         @media (max-width: 480px) {
             .otp-card {
-                padding: 30px 20px;
-                border-radius: 16px;
+                padding: 26px 18px;
+                border-radius: 10px;
             }
 
             .otp-inputs-grid {
@@ -555,7 +588,7 @@
             }
 
             .otp-digit-input {
-                height: 50px;
+                height: 48px;
                 font-size: 20px;
                 border-radius: 8px;
             }
@@ -585,9 +618,9 @@
 
             <!-- Hero Badge Icon -->
             <div class="hero-badge-wrapper">
-                <div class="hero-badge">
+                <div class="hero-badge" id="heroBadge">
                     <div class="hero-badge-pulse"></div>
-                    <i data-lucide="shield-check"></i>
+                    <i data-lucide="shield-check" id="heroIcon"></i>
                 </div>
             </div>
 
@@ -599,12 +632,20 @@
             </div>
 
             <!-- Title & Subtitle -->
-            <h1 class="otp-title">SMS Security Verification</h1>
-            <p class="otp-desc">
-                For your account security, a 6-digit one-time password (OTP) has been dispatched to your registered mobile number:
+            <h1 class="otp-title" id="otpTitle">Security Verification</h1>
+            <p class="otp-desc" id="otpDesc">
+                For your account security, a 6-digit one-time password (OTP) has been dispatched to your <span id="channelNameLabel">registered contact</span>:
                 <br>
-                <span class="masked-phone-chip" id="maskedPhoneDisplay">Loading phone...</span>
+                <span class="masked-target-chip" id="maskedTargetDisplay">Loading...</span>
             </p>
+
+            <!-- Channel Switcher Button -->
+            <div class="channel-switch-wrapper" id="channelSwitchWrapper">
+                <button type="button" class="btn-switch-channel" id="switchChannelBtn">
+                    <i data-lucide="mail" id="switchChannelIcon"></i>
+                    <span id="switchChannelText">Send code via Email instead</span>
+                </button>
+            </div>
 
             <!-- Error Banner -->
             <div class="alert-banner error hidden" id="errorBanner" role="alert">
@@ -632,7 +673,7 @@
                 <!-- Expiration Countdown -->
                 <div class="timer-bar" id="timerBar">
                     <i data-lucide="clock"></i>
-                    <span>Code expires in <span class="timer-value" id="expireTimer">05:00</span></span>
+                    <span>Code expires in <span class="timer-value" id="expireTimer">10:00</span></span>
                 </div>
 
                 <!-- Verify Button -->
@@ -646,9 +687,9 @@
             <!-- Resend & Back Section -->
             <div class="resend-section">
                 <div class="resend-row">
-                    <span>Didn't receive the SMS code?</span>
+                    <span id="resendPromptLabel">Didn't receive the code?</span>
                     <button type="button" class="btn-resend" id="resendBtn" disabled>
-                        Resend OTP (<span id="resendTimer">60</span>s)
+                        Resend OTP (<span id="resendTimer">30</span>s)
                     </button>
                 </div>
 
@@ -658,12 +699,12 @@
             </div>
 
             <!-- Help Contact Box -->
-            <div class="help-card">
+            <div class="help-card" id="helpCard">
                 <i data-lucide="info"></i>
-                <div>
-                    <strong>Lost access to this mobile number?</strong>
+                <div id="helpCardText">
+                    <strong>Didn't receive the code?</strong>
                     <br>
-                    Please visit the Scholarship & Student Affairs Unit at USTP Oroquieta Campus (Mobod) to update your registered contact information.
+                    Please verify your signal or check your email Spam folder. If you still have trouble, visit the Scholarship Unit at USTP Oroquieta Campus (Mobod).
                 </div>
             </div>
         </div>
@@ -684,16 +725,22 @@
         }) : null;
 
         // Initialize Lucide icons
-        if (window.lucide) {
-            lucide.createIcons();
+        function refreshIcons() {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
         }
+        refreshIcons();
 
         // ── Retrieve State from URL Params or Session Storage ──
         const urlParams = new URLSearchParams(window.location.search);
         let studentId = urlParams.get('student_id') || urlParams.get('studentId') || '';
+        let currentChannel = (urlParams.get('channel') || '').toLowerCase();
         let maskedPhone = urlParams.get('phone') || urlParams.get('masked_phone') || '';
-        let initialCooldown = parseInt(urlParams.get('cooldown') || '60', 10);
-        let initialExpiresIn = parseInt(urlParams.get('expires_in') || '300', 10);
+        let maskedEmail = urlParams.get('email') || urlParams.get('masked_email') || '';
+        let initialCooldown = parseInt(urlParams.get('cooldown') || '30', 10);
+        let initialExpiresIn = parseInt(urlParams.get('expires_in') || '600', 10);
+        let availableChannels = { sms: true, email: true };
 
         // Fallback to sessionStorage
         try {
@@ -701,20 +748,36 @@
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (!studentId && parsed.studentId) studentId = parsed.studentId;
+                if (!currentChannel && parsed.channel) currentChannel = parsed.channel.toLowerCase();
                 if (!maskedPhone && parsed.maskedPhone) maskedPhone = parsed.maskedPhone;
+                if (!maskedEmail && parsed.maskedEmail) maskedEmail = parsed.maskedEmail;
+                if (parsed.availableChannels) availableChannels = parsed.availableChannels;
                 if (parsed.resendCooldown) initialCooldown = parsed.resendCooldown;
                 if (parsed.expiresIn) initialExpiresIn = parsed.expiresIn;
             }
         } catch (_) {}
 
-        // If no student ID was provided, kick back to login
+        if (!currentChannel) currentChannel = 'sms';
+
+        // If no student ID was provided, return to login
         if (!studentId) {
             alert('No pending student login session found. Please enter your Student ID on the login page.');
             window.location.href = '/login.html';
         }
 
         // DOM elements
-        const maskedPhoneDisplay = document.getElementById('maskedPhoneDisplay');
+        const otpTitle = document.getElementById('otpTitle');
+        const channelNameLabel = document.getElementById('channelNameLabel');
+        const maskedTargetDisplay = document.getElementById('maskedTargetDisplay');
+        const heroBadge = document.getElementById('heroBadge');
+        const heroIcon = document.getElementById('heroIcon');
+        const switchChannelWrapper = document.getElementById('channelSwitchWrapper');
+        const switchChannelBtn = document.getElementById('switchChannelBtn');
+        const switchChannelIcon = document.getElementById('switchChannelIcon');
+        const switchChannelText = document.getElementById('switchChannelText');
+        const resendPromptLabel = document.getElementById('resendPromptLabel');
+        const helpCardText = document.getElementById('helpCardText');
+
         const errorBanner = document.getElementById('errorBanner');
         const errorMessage = document.getElementById('errorMessage');
         const successBanner = document.getElementById('successBanner');
@@ -732,10 +795,6 @@
 
         const inputs = Array.from(document.querySelectorAll('.otp-digit-input'));
 
-        if (maskedPhoneDisplay) {
-            maskedPhoneDisplay.textContent = maskedPhone || 'registered phone number';
-        }
-
         // Clear pending session if user explicitly clicks back to login
         if (backToLoginLink) {
             backToLoginLink.addEventListener('click', () => {
@@ -743,10 +802,79 @@
             });
         }
 
+        // ── Dynamic UI Adaptor based on active channel (SMS or Email) ──
+        function renderActiveChannelUI() {
+            const isEmail = currentChannel === 'email';
+
+            if (isEmail) {
+                otpTitle.textContent = 'Email Security Verification';
+                channelNameLabel.textContent = 'registered email address';
+                maskedTargetDisplay.textContent = maskedEmail || 'registered email address';
+                if (heroIcon) heroIcon.setAttribute('data-lucide', 'mail');
+                resendPromptLabel.textContent = "Didn't receive the email code?";
+
+                helpCardText.innerHTML = `
+                    <strong>Didn't receive the email?</strong>
+                    <br>
+                    Please check your <strong>Spam</strong> or <strong>Promotions</strong> folder. If email delivery is delayed, you can switch to SMS verification above.
+                `;
+
+                // Switch button config: switch to SMS
+                if (availableChannels && availableChannels.sms) {
+                    switchChannelWrapper.style.display = 'block';
+                    if (switchChannelIcon) switchChannelIcon.setAttribute('data-lucide', 'message-square');
+                    switchChannelText.textContent = 'Receive verification code via SMS instead';
+                } else {
+                    switchChannelWrapper.style.display = 'none';
+                }
+            } else {
+                otpTitle.textContent = 'SMS Security Verification';
+                channelNameLabel.textContent = 'registered mobile number';
+                maskedTargetDisplay.textContent = maskedPhone || 'registered mobile number';
+                if (heroIcon) heroIcon.setAttribute('data-lucide', 'shield-check');
+                resendPromptLabel.textContent = "Didn't receive the SMS code?";
+
+                helpCardText.innerHTML = `
+                    <strong>Didn't receive the SMS code?</strong>
+                    <br>
+                    Please verify your mobile network signal. If cellular delivery is delayed, you can switch to Email verification above.
+                `;
+
+                // Switch button config: switch to Email
+                if (availableChannels && availableChannels.email) {
+                    switchChannelWrapper.style.display = 'block';
+                    if (switchChannelIcon) switchChannelIcon.setAttribute('data-lucide', 'mail');
+                    switchChannelText.textContent = 'Receive verification code via Email instead';
+                } else {
+                    switchChannelWrapper.style.display = 'none';
+                }
+            }
+            refreshIcons();
+        }
+
+        renderActiveChannelUI();
+
+        // ── Fetch Initial Status from Server to Ensure Fresh Telemetry ──
+        async function fetchFreshStatus() {
+            try {
+                const res = await fetch(`/api/auth/otp/status?studentId=${encodeURIComponent(studentId)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.maskedPhone) maskedPhone = data.maskedPhone;
+                    if (data.maskedEmail) maskedEmail = data.maskedEmail;
+                    if (data.availableChannels) availableChannels = data.availableChannels;
+                    if (data.channel && !urlParams.get('channel')) {
+                        currentChannel = data.channel;
+                    }
+                    renderActiveChannelUI();
+                }
+            } catch (_) {}
+        }
+        fetchFreshStatus();
+
         // ── OTP Inputs Auto-Advancement, Backspace & Paste Handler ──
         inputs.forEach((input, index) => {
-            // Auto focus next input on entry
-            input.addEventListener('input', (e) => {
+            input.addEventListener('input', () => {
                 const val = input.value.replace(/\D/g, '');
                 input.value = val ? val[0] : '';
 
@@ -756,7 +884,6 @@
                         inputs[index + 1].focus();
                         inputs[index + 1].select();
                     } else {
-                        // Check if all 6 digits filled; if so, trigger verification
                         const fullCode = getEnteredOtp();
                         if (fullCode.length === 6) {
                             handleVerifyOtp();
@@ -767,7 +894,6 @@
                 }
             });
 
-            // Backspace auto-retreat
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Backspace') {
                     if (!input.value && index > 0) {
@@ -788,7 +914,6 @@
                 }
             });
 
-            // Paste 6-digit code support
             input.addEventListener('paste', (e) => {
                 e.preventDefault();
                 const pasteData = (e.clipboardData || window.clipboardData).getData('text').trim();
@@ -828,9 +953,8 @@
             successBanner.classList.add('hidden');
             inputs.forEach(i => i.classList.add('error'));
 
-            // Trigger card shake animation
             otpCard.classList.remove('shake-animation');
-            void otpCard.offsetWidth; // trigger reflow
+            void otpCard.offsetWidth;
             otpCard.classList.add('shake-animation');
         }
 
@@ -858,7 +982,7 @@
             }
         }
 
-        // ── Expiration Countdown (5 min) ──
+        // ── Expiration Countdown ──
         let expiresRemaining = initialExpiresIn;
         let expireInterval = null;
 
@@ -866,7 +990,7 @@
             if (expiresRemaining <= 0) {
                 expireTimer.textContent = '00:00';
                 timerBar.classList.add('expired');
-                showError('Your OTP code has expired. Please click "Resend OTP" to receive a new code.');
+                showError('Your OTP code has expired. Please click "Resend OTP" to request a new code.');
                 verifyBtn.disabled = true;
                 clearInterval(expireInterval);
                 return;
@@ -880,15 +1004,15 @@
         expireInterval = setInterval(updateExpireDisplay, 1000);
         updateExpireDisplay();
 
-        // ── Resend Cooldown Countdown (60s) ──
+        // ── Resend Cooldown Countdown ──
         let cooldownRemaining = initialCooldown;
         let cooldownInterval = null;
 
         function updateCooldownDisplay() {
             if (cooldownRemaining <= 0) {
                 resendBtn.disabled = false;
-                resendBtn.innerHTML = '<i data-lucide="refresh-cw" style="width:14px;height:14px;margin-right:4px;"></i> Resend OTP';
-                if (window.lucide) lucide.createIcons();
+                resendBtn.innerHTML = '<i data-lucide="refresh-cw" style="width:13px;height:13px;margin-right:4px;"></i> Resend OTP';
+                refreshIcons();
                 clearInterval(cooldownInterval);
                 return;
             }
@@ -900,7 +1024,69 @@
         cooldownInterval = setInterval(updateCooldownDisplay, 1000);
         updateCooldownDisplay();
 
-        // ── Resend OTP Handler ──
+        function resetTimers(newExpire, newCooldown) {
+            expiresRemaining = newExpire || 600;
+            timerBar.classList.remove('expired');
+            verifyBtn.disabled = false;
+            clearInterval(expireInterval);
+            expireInterval = setInterval(updateExpireDisplay, 1000);
+            updateExpireDisplay();
+
+            cooldownRemaining = newCooldown || 30;
+            clearInterval(cooldownInterval);
+            cooldownInterval = setInterval(updateCooldownDisplay, 1000);
+            updateCooldownDisplay();
+        }
+
+        // ── Channel Switcher Handler ──
+        switchChannelBtn.addEventListener('click', async () => {
+            const nextChannel = currentChannel === 'sms' ? 'email' : 'sms';
+            clearError();
+            switchChannelBtn.disabled = true;
+            const originalText = switchChannelText.textContent;
+            switchChannelText.textContent = `Switching to ${nextChannel.toUpperCase()}...`;
+
+            try {
+                const res = await fetch('/api/auth/otp/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        studentId: studentId,
+                        channel: nextChannel
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || data.message || `Failed to switch to ${nextChannel.toUpperCase()}.`);
+                }
+
+                currentChannel = nextChannel;
+                if (data.maskedPhone) maskedPhone = data.maskedPhone;
+                if (data.maskedEmail) maskedEmail = data.maskedEmail;
+                if (data.availableChannels) availableChannels = data.availableChannels;
+
+                renderActiveChannelUI();
+                resetTimers(data.expiresIn || 600, data.resendCooldown || 30);
+                clearOtpInputs();
+
+                const targetLabel = nextChannel === 'email' ? 'Email' : 'SMS';
+                const destLabel = nextChannel === 'email' ? maskedEmail : maskedPhone;
+                showSuccess(`Verification method switched! A new 6-digit code was dispatched via ${targetLabel} to ${destLabel}.`);
+
+                setTimeout(() => {
+                    successBanner.classList.add('hidden');
+                }, 4500);
+
+            } catch (err) {
+                showError(err.message || 'Error switching delivery method.');
+            } finally {
+                switchChannelBtn.disabled = false;
+            }
+        });
+
+        // ── Resend OTP Handler (Dispatches to the Active Channel) ──
         resendBtn.addEventListener('click', async () => {
             if (resendBtn.disabled) return;
             clearError();
@@ -911,7 +1097,10 @@
                 const res = await fetch('/api/auth/otp/resend', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ studentId: studentId })
+                    body: JSON.stringify({
+                        studentId: studentId,
+                        channel: currentChannel
+                    })
                 });
 
                 const data = await res.json();
@@ -930,24 +1119,17 @@
                     throw new Error(data.error || data.message || 'Failed to resend OTP.');
                 }
 
-                // Reset timers
-                expiresRemaining = data.expiresIn || 300;
-                timerBar.classList.remove('expired');
-                clearInterval(expireInterval);
-                expireInterval = setInterval(updateExpireDisplay, 1000);
-                updateExpireDisplay();
+                resetTimers(data.expiresIn || 600, data.resendCooldown || 30);
 
-                cooldownRemaining = data.resendCooldown || 60;
-                clearInterval(cooldownInterval);
-                cooldownInterval = setInterval(updateCooldownDisplay, 1000);
-                updateCooldownDisplay();
-
-                if (data.maskedPhone && maskedPhoneDisplay) {
-                    maskedPhoneDisplay.textContent = data.maskedPhone;
-                }
+                if (data.maskedPhone) maskedPhone = data.maskedPhone;
+                if (data.maskedEmail) maskedEmail = data.maskedEmail;
+                renderActiveChannelUI();
 
                 clearOtpInputs();
-                showSuccess('A new 6-digit OTP code has been dispatched to your mobile number.');
+                const chanLabel = currentChannel === 'email' ? 'email address' : 'mobile number';
+                const destLabel = currentChannel === 'email' ? maskedEmail : maskedPhone;
+                showSuccess(`A new 6-digit OTP code has been dispatched to your ${chanLabel} (${destLabel}).`);
+
                 setTimeout(() => {
                     successBanner.classList.add('hidden');
                 }, 4000);
@@ -965,7 +1147,7 @@
             const otpCode = getEnteredOtp();
 
             if (otpCode.length < 6) {
-                showError('Please enter the complete 6-digit code sent via SMS.');
+                showError(`Please enter the complete 6-digit code sent via ${currentChannel === 'email' ? 'Email' : 'SMS'}.`);
                 return;
             }
 
@@ -1022,21 +1204,27 @@
                     pendingPassword,
                     cleanId,
                     cleanId.replace(/[- ]/g, ''),
-                    cleanId.padLeft ? cleanId.padLeft(6, '0') : cleanId.padStart(6, '0')
+                    cleanId.padStart ? cleanId.padStart(6, '0') : cleanId
                 ].filter(p => p && p.length >= 6);
 
                 if (supabaseClient) {
-                    for (const pwd of candidatePasswords) {
-                        try {
-                            const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
-                                email: studentEmail,
-                                password: pwd
-                            });
-                            if (!signInErr && signInData && signInData.user) {
-                                authResponse = signInData;
-                                break;
-                            }
-                        } catch (_) {}
+                    const candidateEmails = [studentEmail];
+                    if (data.email) candidateEmails.unshift(data.email);
+
+                    for (const emailToTry of candidateEmails) {
+                        for (const pwd of candidatePasswords) {
+                            try {
+                                const { data: signInData, error: signInErr } = await supabaseClient.auth.signInWithPassword({
+                                    email: emailToTry,
+                                    password: pwd
+                                });
+                                if (!signInErr && signInData && signInData.user) {
+                                    authResponse = signInData;
+                                    break;
+                                }
+                            } catch (_) {}
+                        }
+                        if (authResponse) break;
                     }
 
                     // Auto-provision if not yet registered in Supabase Auth

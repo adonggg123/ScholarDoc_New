@@ -55,9 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(
-                          15,
-                        ), // Corner curve 15px
+                        borderRadius: BorderRadius.circular(10), // Corner curve 10px
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xFF0F3260).withOpacity(0.06),
