@@ -63,6 +63,11 @@ function findFilePath(urlPath) {
         if (fs.existsSync(loginAdmin)) return loginAdmin;
     }
 
+    if (urlPath === '/download' || urlPath === '/download.html') {
+        const downloadFile = path.join(ROOT, 'student_web', 'download.html');
+        if (fs.existsSync(downloadFile)) return downloadFile;
+    }
+
     if (urlPath === '/otp' || urlPath === '/otp.html') {
         const rootOtp = path.join(ROOT, 'otp.html');
         if (fs.existsSync(rootOtp)) return rootOtp;
@@ -2210,7 +2215,8 @@ try {
 const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || 'eoueeoikuorzymkq').replace(/\s+/g, '');
 const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-new.vercel.app';
-const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk';
+const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://scholar-doc-new.vercel.app/download';
+const DIRECT_APK_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk';
 
 function getGmailTransporter() {
     if (!nodemailer) return null;
@@ -2309,7 +2315,8 @@ function generateGranteeEmailHtml(grantee) {
           <p>Submit your scholarship documents (Certificate of Registration, School ID, and SA form) and track your stipend disbursement seamlessly on your mobile device.</p>
           <a href="${grantee.downloadUrl}" class="btn-download" target="_blank">Download ScholarDoc Application</a>
           <div style="margin-top: 14px; font-size: 11.5px; color: #64748b;">
-            Direct link: <a href="${grantee.downloadUrl}" style="color: #0F3260; word-break: break-all;">${grantee.downloadUrl}</a>
+            Direct download page: <a href="${grantee.downloadUrl}" style="color: #0F3260; font-weight: 700; word-break: break-all;">${grantee.downloadUrl}</a>
+            <br><span style="color: #64748b; font-size: 11px;">Direct APK link: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk" style="color: #0F3260; text-decoration: underline;">Download ScholarDoc.apk directly</a></span>
           </div>
         </div>
         <div class="instructions">

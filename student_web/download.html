@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download ScholarDoc Mobile App — Official Android APK</title>
+    <meta name="description" content="Download the official ScholarDoc mobile app for USTP Oroquieta scholars to submit documents, track verification, and receive stipend notifications.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #040d1a 0%, #0a1f3f 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+        .container {
+            width: 100%;
+            max-width: 520px;
+            background: rgba(15, 43, 87, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 36px 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+        .logo-box {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 20px;
+            background: #ffffff;
+            border-radius: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            padding: 8px;
+        }
+        .logo-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+            font-size: 12.5px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 26px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        p.subtitle {
+            font-size: 14.5px;
+            color: #94a3b8;
+            line-height: 1.5;
+            margin-bottom: 28px;
+        }
+        .btn-download {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            background: linear-gradient(135deg, #FBC02D 0%, #F59E0B 100%);
+            color: #06152d;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 16px 24px;
+            border-radius: 14px;
+            text-decoration: none;
+            box-shadow: 0 10px 25px rgba(245, 158, 11, 0.35);
+            transition: all 0.2s ease;
+            margin-bottom: 14px;
+        }
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 30px rgba(245, 158, 11, 0.45);
+        }
+        .btn-download:active {
+            transform: translateY(0);
+        }
+        .alt-link {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 30px;
+        }
+        .alt-link a {
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .alt-link a:hover {
+            text-decoration: underline;
+        }
+        .steps-box {
+            text-align: left;
+            background: rgba(6, 21, 45, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px;
+        }
+        .steps-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .step-item {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #cbd5e1;
+        }
+        .step-item:last-child {
+            margin-bottom: 0;
+        }
+        .step-num {
+            width: 22px;
+            height: 22px;
+            background: #1e3a8a;
+            color: #93c5fd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .step-item strong {
+            color: #ffffff;
+        }
+        .footer {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-box">
+            <img src="app_logo3.png" alt="ScholarDoc Logo" onerror="this.src='/favicon.png'">
+        </div>
+        
+        <div class="badge">
+            <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i>
+            Official Verified Android App
+        </div>
+
+        <h1>Download ScholarDoc</h1>
+        <p class="subtitle">Digital Scholarship Verification & Billing Platform for USTP Oroquieta scholars and grantees.</p>
+
+        <!-- Primary Direct Download Button -->
+        <a id="downloadBtn" href="https://github.com/adonggg123/ScholarDoc_New/releases/latest/download/ScholarDoc.apk" class="btn-download">
+            <i data-lucide="download" style="width: 20px; height: 20px;"></i>
+            <span>Download APK (Android)</span>
+        </a>
+
+        <div class="alt-link">
+            Trouble downloading? <a href="https://github.com/adonggg123/ScholarDoc_New/releases/latest" target="_blank">View on GitHub Releases</a>
+        </div>
+
+        <!-- How to Install Guide -->
+        <div class="steps-box">
+            <div class="steps-title">
+                <i data-lucide="help-circle" style="width: 15px; height: 15px; color: #F59E0B;"></i>
+                How to Install on Android
+            </div>
+            <div class="step-item">
+                <div class="step-num">1</div>
+                <div>Tap <strong>Download APK</strong>. If your browser asks <em>"File might be harmful"</em>, tap <strong>Download anyway</strong> (it is safe and scanned).</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div>When the download completes, tap <strong>Open</strong> in your notifications or Downloads folder.</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div>If prompted <em>"Install unknown apps"</em>, tap <strong>Settings</strong> &rarr; switch on <strong>Allow from this source</strong>, then tap <strong>Install</strong>.</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            USTP Oroquieta Campus &bull; Scholarship Office &bull; &copy; 2026 ScholarDoc
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Optional: auto-trigger download if accessed with ?auto=1
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('auto') === '1') {
+            setTimeout(() => {
+                window.location.href = document.getElementById('downloadBtn').href;
+            }, 800);
+        }
+    </script>
+</body>
+</html>

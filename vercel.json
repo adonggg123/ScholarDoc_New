@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/download", "destination": "/student_web/download.html" },
     { "source": "/", "destination": "/student_web/landing.html" },
     { "source": "/landing", "destination": "/student_web/landing.html" },
     { "source": "/landing.html", "destination": "/student_web/landing.html" },
