@@ -20,7 +20,7 @@ if (fs.existsSync(path.join(__dirname, '.env'))) {
                 if (!process.env[k]) process.env[k] = v;
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 const PORT = process.env.PORT || 8080;
@@ -420,7 +420,7 @@ function parseDateComponents(dateStr) {
     }
 
     const textMonthMatch = clean.match(/([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})/) ||
-                           clean.match(/(\d{1,2})\s+([a-zA-Z]+),?\s+(\d{4})/);
+        clean.match(/(\d{1,2})\s+([a-zA-Z]+),?\s+(\d{4})/);
     if (textMonthMatch) {
         let mStr = textMonthMatch[1].toUpperCase();
         let dStr = textMonthMatch[2];
@@ -896,7 +896,7 @@ async function getGoogleAccessToken() {
                         tokens.expires_at = Date.now() + (data.expires_in * 1000);
                         try {
                             fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                        } catch (_) {}
+                        } catch (_) { }
                         return data.access_token;
                     }
                 }
@@ -942,7 +942,7 @@ function getSemaphoreApiKey() {
                 }
             }
         }
-    } catch (_) {}
+    } catch (_) { }
     return (process.env.SEMAPHORE_API_KEY || '').trim();
 }
 
@@ -1233,7 +1233,7 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
                     otp_verified_at: now
                 })
             });
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // 2 & 3. Record verified sms_logs and audit_logs asynchronously in background
@@ -1262,7 +1262,7 @@ async function markFirstLoginCompleted(studentId, granteeUid, phone) {
                 timestamp: now
             })
         })
-    ]).catch(() => {});
+    ]).catch(() => { });
 }
 
 // Background cleanup: Prune expired OTP sessions every 2 minutes
@@ -1345,7 +1345,7 @@ async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, ev
                 sent_at: now
             })
         });
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Update student_grantees row
     let matchQuery = '';
@@ -1365,7 +1365,7 @@ async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, ev
                     sms_message_id: messageId ? String(messageId) : null
                 })
             });
-        } catch (_) {}
+        } catch (_) { }
     }
 }
 
@@ -1606,7 +1606,7 @@ async function sendSingleGranteeSms(grantee, { force = false } = {}) {
                     sms_message_id: smsResult.message_id ? String(smsResult.message_id) : null
                 })
             });
-        } catch (_) {}
+        } catch (_) { }
     }
 
     return {
@@ -1651,7 +1651,7 @@ async function sendStudentSmsNotification({
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     if (!granteeRecord && targetId) {
@@ -1666,7 +1666,7 @@ async function sendStudentSmsNotification({
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // Fallback if not found in DB but phone or message details were provided
@@ -1868,7 +1868,7 @@ async function broadcastAnnouncementNotification({ announcementId, title, conten
                     push_sent_at: new Date().toISOString()
                 })
             });
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // 4. Retrieve FCM tokens from user_fcm_tokens
@@ -2430,7 +2430,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
                     sent_at: now
                 })
             });
-        } catch (_) {}
+        } catch (_) { }
 
         if (typeof recordGranteeEmailSent === 'function') {
             recordGranteeEmailSent(grantee, targetEmail);
@@ -2454,7 +2454,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
                         email_error: err.message
                     })
                 });
-            } catch (_) {}
+            } catch (_) { }
         }
 
         return { success: false, student_id: targetId, email: targetEmail, error: err.message };
@@ -2479,7 +2479,7 @@ const server = http.createServer(async (req, res) => {
     // Normalize path
     try {
         urlPath = decodeURIComponent(urlPath);
-    } catch (_) {}
+    } catch (_) { }
 
     // ── API: Ultra-fast Health Ping for Mobile Parallel URL Resolution ────
     if (urlPath === '/api/ping') {
@@ -2800,7 +2800,7 @@ const server = http.createServer(async (req, res) => {
                         if (candidateBuf.length === storedBuf.length && crypto.timingSafeEqual(candidateBuf, storedBuf)) {
                             isMatch = true;
                         }
-                    } catch (_) {}
+                    } catch (_) { }
                 }
 
                 if (!isMatch) {
@@ -3032,7 +3032,7 @@ const server = http.createServer(async (req, res) => {
                             body: JSON.stringify({ first_login_completed: false, otp_verified_at: null })
                         });
                     }
-                } catch (_) {}
+                } catch (_) { }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
@@ -3510,7 +3510,7 @@ const server = http.createServer(async (req, res) => {
                             }
                         })
                     });
-                } catch (_) {}
+                } catch (_) { }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
@@ -4032,7 +4032,7 @@ function loadProcessedNotificationIds() {
                 data.forEach(id => processedNotificationIds.add(String(id)));
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function saveProcessedNotificationIds() {
@@ -4042,7 +4042,7 @@ function saveProcessedNotificationIds() {
         // Keep latest 2000 IDs to prevent file unbounded growth
         const arr = Array.from(processedNotificationIds).slice(-2000);
         fs.writeFileSync(NOTIF_PROCESSED_FILE, JSON.stringify(arr), 'utf8');
-    } catch (_) {}
+    } catch (_) { }
 }
 
 let isWatcherPolling = false;
@@ -4076,7 +4076,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                             }
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
         }
         // Fallback: Notify administrator/superadmin mobile number
@@ -4117,7 +4117,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                 };
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Check user_fcm_tokens for mapped student_id
     if (isUuidString(cleanId)) {
@@ -4141,13 +4141,13 @@ async function lookupStudentForNotification(studentId, notif = null) {
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // 3. Extract name from notification message (e.g. "Welcome, JARIOL, JUDE ESIDORE Z.! Your scholarship portal is ready...")
     if (notif && notif.message) {
         const welcomeMatch = notif.message.match(/Welcome,\s+([^!]+)!/i) ||
-                             notif.message.match(/(?:Student\s+|grantee\s+|Dear\s+)([\w\s,.'-]+?)(?:!|\s+has|\s+updated|\s+submitted|\s+Your|\.|\$)/i);
+            notif.message.match(/(?:Student\s+|grantee\s+|Dear\s+)([\w\s,.'-]+?)(?:!|\s+has|\s+updated|\s+submitted|\s+Your|\.|\$)/i);
         if (welcomeMatch && welcomeMatch[1]) {
             const extractedName = welcomeMatch[1].trim();
 
@@ -4165,7 +4165,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                         };
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Search student_grantees by full_name
             try {
@@ -4181,7 +4181,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                         };
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
     }
 
@@ -4209,7 +4209,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
                 };
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 
     return null;
 }
@@ -4237,7 +4237,7 @@ async function checkSmsAlreadySentRecently(recipientPhone, message) {
                 }
             }
         }
-    } catch (_) {}
+    } catch (_) { }
     return false;
 }
 
@@ -4426,7 +4426,7 @@ async function startNotificationSmsWatcher() {
                 saveProcessedNotificationIds();
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 
     console.log(`[SMS Watcher] Notification-to-SMS watcher daemon started. Cached ${processedNotificationIds.size} processed IDs.`);
 
@@ -4557,7 +4557,7 @@ async function pollNewGranteesAndMessage() {
                                 timestamp: new Date().toISOString()
                             })
                         });
-                    } catch (_) {}
+                    } catch (_) { }
                 }
 
             } finally {
@@ -4632,7 +4632,7 @@ if (require.main === module) {
                         console.log(`[Mobile ADB] Port ${PORT} reversed to connected Android devices.`);
                     }
                 });
-            } catch (_) {}
+            } catch (_) { }
         }
         maintainAdbReverse();
         setInterval(maintainAdbReverse, 25000);
