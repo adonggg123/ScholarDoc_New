@@ -2329,8 +2329,9 @@ try {
     console.warn('[Gmail SMTP] nodemailer not installed, email sending disabled.');
 }
 
-const GMAIL_USER = process.env.GMAIL_USER || 'judeesidorejariol@gmail.com';
+const KNOWN_VALID_GMAIL_USER = 'judeesidorejariol@gmail.com';
 const KNOWN_VALID_GMAIL_PASS = 'eoueeoikuorzymkq';
+const GMAIL_USER = KNOWN_VALID_GMAIL_USER;
 const GMAIL_APP_PASSWORD = KNOWN_VALID_GMAIL_PASS;
 const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-new.vercel.app';
 const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.1/ScholarDoc.apk';
