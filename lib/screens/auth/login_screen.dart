@@ -389,51 +389,20 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
 
-        // If First Login: Navigate to Multi-Channel (Email / SMS) OTP Verification Screen
+        // If First Login: Require channel selection or navigate to OTP verification
         if (initRes['requiresOtp'] == true) {
-          final maskedPhone = (initRes['maskedPhone'] as String?) ?? 'your registered phone';
-          final maskedEmail = initRes['maskedEmail'] as String?;
-          final initialChannel = (initRes['channel'] as String?) ?? 'sms';
-          final availRaw = initRes['availableChannels'];
-          final availMap = availRaw is Map ? availRaw : const {};
-          final smsAvailable = availMap['sms'] is bool ? (availMap['sms'] as bool) : true;
-          final emailAvailable = availMap['email'] is bool
-              ? (availMap['email'] as bool)
-              : (maskedEmail != null && maskedEmail.trim().isNotEmpty);
-          final deliveryStatus = (initRes['deliveryStatus'] as String?) ?? 'sent';
-          final deliveryMessage = (initRes['deliveryMessage'] as String?) ??
-              (initRes['message'] as String?);
-          final deliveryError = initRes['deliveryError'] as String?;
-          final cooldownsRaw = initRes['channelCooldowns'];
-          Map<String, int>? channelCooldowns;
-          if (cooldownsRaw is Map) {
-            channelCooldowns = {
-              'sms': (cooldownsRaw['sms'] as num?)?.toInt() ?? 0,
-              'email': (cooldownsRaw['email'] as num?)?.toInt() ?? 0,
-            };
+          if (initRes['requiresChannelSelection'] == true) {
+            _showOtpChannelSelectionModal(
+              studentId: rawStudentId,
+              password: rawPassword,
+              initRes: initRes,
+            );
+            return;
           }
-          final expiresIn = (initRes['expiresIn'] as num?)?.toInt() ?? 600;
-          final resendCooldown = (initRes['resendCooldown'] as num?)?.toInt() ?? 30;
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OtpVerificationScreen(
-                studentId: rawStudentId,
-                password: rawPassword,
-                maskedPhone: maskedPhone,
-                maskedEmail: maskedEmail,
-                initialChannel: initialChannel,
-                smsAvailable: smsAvailable,
-                emailAvailable: emailAvailable,
-                initialDeliveryStatus: deliveryStatus,
-                initialDeliveryMessage: deliveryMessage,
-                initialDeliveryError: deliveryError,
-                initialChannelCooldowns: channelCooldowns,
-                expiresIn: expiresIn,
-                resendCooldown: resendCooldown,
-              ),
-            ),
+          _navigateToOtpScreen(
+            studentId: rawStudentId,
+            password: rawPassword,
+            res: initRes,
           );
           return;
         }
@@ -516,6 +485,505 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _navigateToOtpScreen({
+    required String studentId,
+    required String password,
+    required Map<String, dynamic> res,
+    String? channelOverride,
+  }) {
+    final maskedPhone = (res['maskedPhone'] as String?) ?? 'your registered phone';
+    final maskedEmail = res['maskedEmail'] as String?;
+    final initialChannel = channelOverride ?? (res['channel'] as String?) ?? 'sms';
+    final availRaw = res['availableChannels'];
+    final availMap = availRaw is Map ? availRaw : const {};
+    final smsAvailable = availMap['sms'] is bool ? (availMap['sms'] as bool) : true;
+    final emailAvailable = availMap['email'] is bool
+        ? (availMap['email'] as bool)
+        : (maskedEmail != null && maskedEmail.trim().isNotEmpty);
+    final deliveryStatus = (res['deliveryStatus'] as String?) ?? 'sent';
+    final deliveryMessage = (res['deliveryMessage'] as String?) ?? (res['message'] as String?);
+    final deliveryError = res['deliveryError'] as String?;
+    final cooldownsRaw = res['channelCooldowns'];
+    Map<String, int>? channelCooldowns;
+    if (cooldownsRaw is Map) {
+      channelCooldowns = {
+        'sms': (cooldownsRaw['sms'] as num?)?.toInt() ?? 0,
+        'email': (cooldownsRaw['email'] as num?)?.toInt() ?? 0,
+      };
+    }
+    final expiresIn = (res['expiresIn'] as num?)?.toInt() ?? 600;
+    final resendCooldown = (res['resendCooldown'] as num?)?.toInt() ?? 30;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OtpVerificationScreen(
+          studentId: studentId,
+          password: password,
+          maskedPhone: maskedPhone,
+          maskedEmail: maskedEmail,
+          initialChannel: initialChannel,
+          smsAvailable: smsAvailable,
+          emailAvailable: emailAvailable,
+          initialDeliveryStatus: deliveryStatus,
+          initialDeliveryMessage: deliveryMessage,
+          initialDeliveryError: deliveryError,
+          initialChannelCooldowns: channelCooldowns,
+          expiresIn: expiresIn,
+          resendCooldown: resendCooldown,
+        ),
+      ),
+    );
+  }
+
+  void _showOtpChannelSelectionModal({
+    required String studentId,
+    required String password,
+    required Map<String, dynamic> initRes,
+  }) {
+    final fullName = (initRes['fullName'] as String?) ?? 'Student Scholar';
+    final maskedPhone = (initRes['maskedPhone'] as String?) ?? '09•• ••• ••••';
+    final maskedEmail = (initRes['maskedEmail'] as String?) ?? '••••@ustp.edu.ph';
+    final availRaw = initRes['availableChannels'];
+    final availMap = availRaw is Map ? availRaw : const {};
+    final bool canSms = availMap['sms'] is bool ? (availMap['sms'] as bool) : true;
+    final bool canEmail = availMap['email'] is bool
+        ? (availMap['email'] as bool)
+        : (initRes['maskedEmail'] != null);
+
+    String selectedChannel = canSms ? 'sms' : (canEmail ? 'email' : 'sms');
+    bool isSending = false;
+    String? modalError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.90,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x330F172A),
+                    blurRadius: 32,
+                    offset: Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    top: 14,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFCBD5E1),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Hero Icon badge
+                      Center(
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFFFFBEB),
+                            border: Border.all(color: const Color(0xFFFDE68A), width: 2),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x26F5B025),
+                                blurRadius: 16,
+                                offset: Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            LucideIcons.shieldCheck,
+                            color: Color(0xFF0F3260),
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Eyebrow badge
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.keyRound, size: 12, color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 5),
+                              Text(
+                                'FIRST-TIME LOGIN SECURITY SETUP',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                  color: const Color(0xFF0A1931),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Title
+                      Text(
+                        'Choose Verification Method',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0A1931),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Subtitle
+                      Text(
+                        'Welcome, $fullName! Select where you would like to receive your 6-digit one-time password (OTP):',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: const Color(0xFF64748B),
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Error message if any
+                      if (modalError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.alertCircle, color: Color(0xFFDC2626), size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  modalError!,
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFB91C1C)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Option 1: SMS Card
+                      _buildChannelOptionCard(
+                        title: 'SMS / Mobile Number',
+                        badge: 'Instant SMS',
+                        badgeBg: const Color(0xFFFEF3C7),
+                        badgeFg: const Color(0xFF92400E),
+                        target: maskedPhone,
+                        desc: 'Dispatched directly to your registered mobile number',
+                        icon: LucideIcons.messageSquare,
+                        isSelected: selectedChannel == 'sms',
+                        isEnabled: canSms,
+                        onTap: () {
+                          if (canSms) setModalState(() => selectedChannel = 'sms');
+                        },
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Option 2: Email Card
+                      _buildChannelOptionCard(
+                        title: 'Email Address',
+                        badge: 'Official Email',
+                        badgeBg: const Color(0xFFEFF6FF),
+                        badgeFg: const Color(0xFF1E40AF),
+                        target: maskedEmail,
+                        desc: 'Dispatched to your registered scholar email address',
+                        icon: LucideIcons.mail,
+                        isSelected: selectedChannel == 'email',
+                        isEnabled: canEmail,
+                        onTap: () {
+                          if (canEmail) setModalState(() => selectedChannel = 'email');
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Security note
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.lock, size: 13, color: Color(0xFF0A1931)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Your OTP code is single-use and valid for 10 minutes.',
+                                style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Primary Button: Send Verification Code
+                      SizedBox(
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: isSending
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    isSending = true;
+                                    modalError = null;
+                                  });
+                                  try {
+                                    final sendRes = await _authService.initiateStudentLogin(
+                                      studentId: studentId,
+                                      password: password,
+                                      preferredChannel: selectedChannel,
+                                    );
+                                    if (!context.mounted) return;
+                                    Navigator.pop(ctx);
+                                    _navigateToOtpScreen(
+                                      studentId: studentId,
+                                      password: password,
+                                      res: sendRes,
+                                      channelOverride: selectedChannel,
+                                    );
+                                  } catch (e) {
+                                    setModalState(() {
+                                      isSending = false;
+                                      modalError = e.toString().replaceAll('Exception: ', '').trim();
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF5B025),
+                            foregroundColor: const Color(0xFF0A1931),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: isSending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(Color(0xFF0A1931)),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(LucideIcons.send, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'SEND VERIFICATION CODE',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Cancel Button
+                      TextButton(
+                        onPressed: isSending ? null : () => Navigator.pop(ctx),
+                        child: Text(
+                          'Back to Login',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildChannelOptionCard({
+    required String title,
+    required String badge,
+    required Color badgeBg,
+    required Color badgeFg,
+    required String target,
+    required String desc,
+    required IconData icon,
+    required bool isSelected,
+    required bool isEnabled,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: isEnabled ? onTap : null,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: !isEnabled
+              ? const Color(0xFFF8FAFC)
+              : (isSelected ? const Color(0xFFFFFDF7) : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: !isEnabled
+                ? const Color(0xFFE2E8F0)
+                : (isSelected ? const Color(0xFFF5B025) : const Color(0xFFE2E8F0)),
+            width: isSelected ? 2 : 1.5,
+          ),
+          boxShadow: isSelected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x1AF5B025),
+                    blurRadius: 10,
+                    offset: Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF0A1931) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                size: 18,
+                color: isSelected ? const Color(0xFFF5B025) : const Color(0xFF0A1931),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0A1931),
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isEnabled ? badgeBg : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isEnabled ? badge : 'Unavailable',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: isEnabled ? badgeFg : const Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    target,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0A1931),
+                    ),
+                  ),
+                  Text(
+                    desc,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? const Color(0xFFF5B025) : Colors.transparent,
+                border: Border.all(
+                  color: isSelected ? const Color(0xFFF5B025) : const Color(0xFFCBD5E1),
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(LucideIcons.check, size: 12, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showGranteeAccessDeniedModal({required String studentId}) {

@@ -30,7 +30,7 @@ export class SmsNotificationService {
             if (res.ok) {
                 return await res.json();
             }
-        } catch (_) {}
+        } catch (_) { }
 
         // Fallback to Edge function
         try {
@@ -38,7 +38,7 @@ export class SmsNotificationService {
             if (res.ok) {
                 return await res.json();
             }
-        } catch (_) {}
+        } catch (_) { }
 
         return { configured: false, status: 'unavailable', message: 'Unable to reach SMS server.' };
     }
@@ -74,7 +74,7 @@ export class SmsNotificationService {
             const data = await res.json();
             if (res.ok && data.success) return data;
             if (data && (data.error || data.message)) return data;
-        } catch (_) {}
+        } catch (_) { }
 
         // 2. Fallback to Supabase Edge Function
         try {
@@ -152,7 +152,7 @@ export class SmsNotificationService {
                 const data = await res.json();
                 return data.logs || [];
             }
-        } catch (_) {}
+        } catch (_) { }
         return [];
     }
 
