@@ -445,11 +445,11 @@ export class StudentSyncService {
     static normalizeStudentRecord(ss = {}, f2Match = null, gmMatch = null, existing = {}, activeDeadline = null) {
         ss = ss || {};
         existing = existing || {};
-        const studentNo = ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || existing.student_no || existing.studentId || 'N/A';
-        const fullName = ss.full_name || ss.fullName || (f2Match ? (f2Match.given_name ? `${f2Match.last_name || ''}, ${f2Match.given_name} ${f2Match.middle_initial || ''}`.trim() : f2Match.name) : null) || existing.full_name || existing.fullName || 'Unknown Student';
-        const program = ss.program_name || ss.course || f2Match?.degree_program || existing.program_name || existing.course || 'BSIT';
-        const yearLevel = ss.year_level || ss.year || f2Match?.year_level || existing.year_level || '1';
-        const birthdate = ss.date_of_birth || ss.birthdate || f2Match?.birthdate || existing.date_of_birth || 'N/A';
+        const studentNo = (existing.student_no && existing.student_no !== 'N/A') ? existing.student_no : (existing.studentId || ss.student_no || ss.studentId || f2Match?.student_number || f2Match?.student_no || 'N/A');
+        const fullName = (existing.full_name && existing.full_name !== 'Unknown Student') ? existing.full_name : (existing.fullName || ss.full_name || ss.fullName || (f2Match ? (f2Match.given_name ? `${f2Match.last_name || ''}, ${f2Match.given_name} ${f2Match.middle_initial || ''}`.trim() : f2Match.name) : null) || 'Unknown Student');
+        const program = existing.program_name || existing.course || ss.program_name || ss.course || f2Match?.degree_program || 'BSIT';
+        const yearLevel = existing.year_level || existing.year || ss.year_level || ss.year || f2Match?.year_level || '1';
+        const birthdate = existing.date_of_birth || existing.birthdate || ss.date_of_birth || ss.birthdate || f2Match?.birthdate || 'N/A';
         
         let gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
         if (gender === 'M' || gender === 'Male' || gender === 'male') gender = 'Male';
@@ -622,10 +622,10 @@ export class StudentSyncService {
             gender: gender,
             civil_status: ss.civil_status || existing.civil_status || 'Single',
             religion: religion,
-            mobile_number: ss.mobile_number || f2Match?.phone_number || ss.contactNumber || existing.mobile_number || 'N/A',
-            contactNumber: ss.mobile_number || f2Match?.phone_number || ss.contactNumber || existing.mobile_number || 'N/A',
-            email_address: ss.email_address || f2Match?.email_address || ss.email || existing.email_address || 'N/A',
-            email: ss.email_address || f2Match?.email_address || ss.email || existing.email_address || 'N/A',
+            mobile_number: (existing.mobile_number && existing.mobile_number !== 'N/A') ? existing.mobile_number : ((existing.contactNumber && existing.contactNumber !== 'N/A') ? existing.contactNumber : (ss.mobile_number || f2Match?.phone_number || ss.contactNumber || 'N/A')),
+            contactNumber: (existing.contactNumber && existing.contactNumber !== 'N/A') ? existing.contactNumber : ((existing.mobile_number && existing.mobile_number !== 'N/A') ? existing.mobile_number : (ss.mobile_number || f2Match?.phone_number || ss.contactNumber || 'N/A')),
+            email_address: (existing.email_address && existing.email_address !== 'N/A') ? existing.email_address : ((existing.email && existing.email !== 'N/A') ? existing.email : (ss.email_address || f2Match?.email_address || ss.email || 'N/A')),
+            email: (existing.email && existing.email !== 'N/A') ? existing.email : ((existing.email_address && existing.email_address !== 'N/A') ? existing.email_address : (ss.email_address || f2Match?.email_address || ss.email || 'N/A')),
 
             // Family
             father_full_name: fatherName,
