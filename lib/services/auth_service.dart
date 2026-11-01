@@ -77,7 +77,7 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 6));
+            .timeout(const Duration(seconds: 8));
       } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
         lastConnectionError = connErr;
@@ -220,7 +220,7 @@ class AuthService {
                 'password': password.trim(),
               }),
             )
-            .timeout(const Duration(seconds: 6));
+            .timeout(const Duration(seconds: 8));
       } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
         lastErr = connErr;
@@ -295,7 +295,7 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 6));
+            .timeout(const Duration(seconds: 8));
       } catch (connErr) {
         ApiConfig.clearWorkingBaseUrl();
         lastErr = connErr;

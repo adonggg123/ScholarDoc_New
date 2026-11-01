@@ -40,9 +40,9 @@ class ApiConfig {
       if (defaultTargetPlatform == TargetPlatform.android) {
         return [
           'http://127.0.0.1:8080',       // Physical device via adb reverse tcp:8080 tcp:8080
-          'http://192.168.254.104:8080', // Active Host PC Wi-Fi LAN IP
-          'http://192.168.8.124:8080',   // Alternate Host Wi-Fi LAN IP
           'http://10.0.2.2:8080',        // Android Emulator loopback
+          defaultProductionUrl,          // Production Vercel cloud (works over cellular and any Wi-Fi)
+          'http://192.168.254.104:8080', // Active Host PC Wi-Fi LAN IP
         ];
       }
     } catch (_) {}
@@ -50,8 +50,8 @@ class ApiConfig {
     return [
       'http://localhost:8080',
       'http://127.0.0.1:8080',
+      defaultProductionUrl,
       'http://192.168.254.104:8080',
-      'http://192.168.8.124:8080',
     ];
   }
 
@@ -59,7 +59,7 @@ class ApiConfig {
   static String get baseUrl {
     if (_workingBaseUrl != null) return _workingBaseUrl!;
     final list = candidateUrls;
-    return list.isNotEmpty ? list.first : 'http://localhost:8080';
+    return list.isNotEmpty ? list.first : defaultProductionUrl;
   }
 
   /// Caches a confirmed responsive URL so subsequent calls connect instantly without probing.
@@ -95,7 +95,7 @@ class ApiConfig {
       }
       http
           .get(Uri.parse('$candidate/api/ping'))
-          .timeout(const Duration(milliseconds: 900))
+          .timeout(const Duration(milliseconds: 1800))
           .then((res) {
         if (res.statusCode == 200 && !completer.isCompleted) {
           setWorkingBaseUrl(candidate);
@@ -114,6 +114,6 @@ class ApiConfig {
     if (winner != null) {
       return <String>{winner, ...all}.toList();
     }
-    return all;
+    return <String>{defaultProductionUrl, ...all}.toList();
   }
 }

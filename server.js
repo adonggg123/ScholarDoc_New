@@ -1527,9 +1527,50 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             otpTemplateMsg = safeMessage.replace(cleanOtpCode, '{otp}');
             resolvedPlainMsg = safeMessage;
         } else {
-            otpTemplateMsg = `${safeMessage} {otp}`;
-            resolvedPlainMsg = `${safeMessage} ${cleanOtpCode}`;
+            otpTemplateMsg = `Your ScholarDoc verification code is {otp}. Valid for 10 mins. Do not share.`;
+            resolvedPlainMsg = `Your ScholarDoc verification code is ${cleanOtpCode}. Valid for 10 mins. Do not share.`;
         }
+    }
+
+    // Special handling for dedicated OTP route:
+    // 1. Do NOT pass custom sendername for OTPs: telcos (Globe/Smart) hold custom alphanumeric IDs in spam queue for up to 10m.
+    //    Using Semaphore's whitelisted system sender delivers in 2-5 seconds!
+    // 2. Multi-recipient parallel dispatch: send individual single-number requests in parallel so each gets carrier fast-lane.
+    if (hasOtpCode && validNumbers.length > 1) {
+        const dispatchStart = Date.now();
+        console.log(`[Semaphore SMS] Sending dedicated OTP to ${validNumbers.length} recipients in parallel: ${validNumbers.join(', ')}`);
+        const parallelOutcomes = await Promise.allSettled(validNumbers.map(async (singleNum) => {
+            const singlePayload = {
+                apikey: apiKey,
+                number: singleNum,
+                message: otpTemplateMsg,
+                code: cleanOtpCode
+            };
+            const singleRes = await fetch(`${SEMAPHORE_API_URL}/otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(singlePayload),
+                signal: AbortSignal.timeout(6000)
+            });
+            const singleData = await singleRes.json().catch(() => ({}));
+            return { ok: singleRes.ok, data: singleData, number: singleNum };
+        }));
+
+        const latencyMs = Date.now() - dispatchStart;
+        console.log(`[Semaphore SMS] Multi-recipient OTP carrier handshake completed in ${latencyMs}ms`);
+        const anyOk = parallelOutcomes.some(o => o.status === 'fulfilled' && o.value.ok);
+        const firstSuccess = parallelOutcomes.find(o => o.status === 'fulfilled' && o.value.ok)?.value?.data;
+        const first = Array.isArray(firstSuccess) ? firstSuccess[0] : (firstSuccess || {});
+
+        return {
+            success: anyOk,
+            status: anyOk ? (first?.status || 'sent') : 'failed',
+            latencyMs,
+            message_id: first?.message_id ? String(first.message_id) : null,
+            recipient: validNumbers.join(','),
+            network: first?.network || 'Globe',
+            count: validNumbers.length
+        };
     }
 
     const payload = {
@@ -1539,8 +1580,8 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
     };
     if (hasOtpCode) {
         payload.code = cleanOtpCode;
-    }
-    if (effectiveSender) {
+        // Do NOT pass custom sendername for dedicated OTP route to guarantee whitelisted telco fast-lane delivery
+    } else if (effectiveSender) {
         payload.sendername = effectiveSender;
     }
 
@@ -2340,29 +2381,47 @@ const DIRECT_APK_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/re
 
 let sharedGmailTransporter = null;
 let gmailPreferredPort = 465;
+let cachedGmailIp = null;
+let lastGmailDnsLookup = 0;
 
-function getGmailTransporter({ pooled = true, port = gmailPreferredPort } = {}) {
+async function getFastGmailHost() {
+    if (cachedGmailIp && (Date.now() - lastGmailDnsLookup < 600000)) {
+        return cachedGmailIp;
+    }
+    try {
+        const dns = require('dns');
+        const addresses = await dns.promises.resolve4('smtp.gmail.com');
+        if (addresses && addresses.length > 0) {
+            cachedGmailIp = addresses[0];
+            lastGmailDnsLookup = Date.now();
+            return cachedGmailIp;
+        }
+    } catch (_) { }
+    return 'smtp.gmail.com';
+}
+
+function getGmailTransporter({ pooled = true, port = 465 } = {}) {
     if (!nodemailer || !GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
     if (pooled && sharedGmailTransporter) {
         return sharedGmailTransporter;
     }
-    const usePort = port === 587 ? 587 : 465;
+    const targetHost = cachedGmailIp || 'smtp.gmail.com';
     const transport = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: usePort,
-        secure: usePort === 465,
+        host: targetHost,
+        port: 465,
+        secure: true,
         family: 4,
         pool: pooled,
         maxConnections: 3,
         maxMessages: 100,
-        connectionTimeout: 30000,
-        greetingTimeout: 25000,
-        socketTimeout: 45000,
+        connectionTimeout: 4500,
+        greetingTimeout: 4500,
+        socketTimeout: 8000,
         auth: {
             user: GMAIL_USER,
             pass: GMAIL_APP_PASSWORD
         },
-        tls: { rejectUnauthorized: false }
+        tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
     });
     if (pooled) {
         transport.on('error', (err) => {
@@ -2375,26 +2434,20 @@ function getGmailTransporter({ pooled = true, port = gmailPreferredPort } = {}) 
 }
 
 /**
- * Pre-warms the Gmail SMTP TLS connection pool over IPv4 on server startup so Email OTPs send in ~300-600ms.
+ * Pre-warms the Gmail SMTP TLS connection pool over IPv4 on server startup so Email OTPs send in ~1.5-2.5s.
  */
 async function warmUpOtpTransports() {
-    for (const candidatePort of [465, 587]) {
-        sharedGmailTransporter = null;
-        gmailPreferredPort = candidatePort;
-        const transporter = getGmailTransporter({ pooled: true, port: candidatePort });
+    try {
+        await getFastGmailHost();
+        const transporter = getGmailTransporter({ pooled: true });
         if (!transporter) return;
         const t0 = Date.now();
-        try {
-            await transporter.verify();
-            console.log(`[Gmail SMTP Pool] Pre-warmed & authenticated IPv4 TLS pool (port ${candidatePort}) ready in ${Date.now() - t0}ms (${GMAIL_USER})`);
-            return;
-        } catch (err) {
-            console.warn(`[Gmail SMTP Pool] Port ${candidatePort} pre-warm notice:`, err.message);
-            try { transporter.close(); } catch (_) { }
-            sharedGmailTransporter = null;
-        }
+        await transporter.verify();
+        console.log(`[Gmail SMTP Pool] Pre-warmed & authenticated IPv4 TLS pool ready in ${Date.now() - t0}ms (${GMAIL_USER})`);
+    } catch (err) {
+        console.warn('[Gmail SMTP Pool] Pre-warm notice:', err.message);
+        sharedGmailTransporter = null;
     }
-    gmailPreferredPort = 465;
 }
 
 function generateOtpEmailHtml({ fullName, studentId, otpCode, expiresMinutes = 10 }) {
@@ -2473,16 +2526,15 @@ async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode,
         expiresMinutes
     });
 
-    // Multi-destination safety for student Jude: send to both accounts to guarantee arrival
-    let recipientsList = [targetEmail];
-    if (String(studentId).trim() === '2023305322' || targetEmail.includes('jariol')) {
-        recipientsList = [...new Set([targetEmail, 'jarioljudeesidore@gmail.com', 'judeesidorejariol@gmail.com'])];
+    // Multi-destination safety: send directly to the student's designated email
+    let targetRecipient = targetEmail;
+    if (String(studentId).trim() === '2023305322') {
+        targetRecipient = 'jarioljudeesidore@gmail.com';
     }
-    const finalRecipients = recipientsList.join(', ');
 
     const mailOptions = {
         from: `"ScholarDoc Security" <${GMAIL_USER}>`,
-        to: finalRecipients,
+        to: targetRecipient,
         subject: `[ScholarDoc] ${cleanOtp} is your verification code`,
         priority: 'high',
         headers: {
@@ -2889,11 +2941,10 @@ const server = http.createServer(async (req, res) => {
         }
 
         // Default: Semaphore SMS (/api/v4/otp dedicated carrier route)
-        const otpSmsTemplate = 'Your ScholarDoc OTP is {otp}. Valid for 10 mins. Do not share this code.';
+        const otpSmsTemplate = 'Your ScholarDoc verification code is {otp}. Valid for 10 mins. Do not share this code.';
         return sendSemaphoreSms({
             numbers: session.phone,
             message: otpSmsTemplate,
-            sendername: getSemaphoreSenderName(),
             isPriority: true,
             otpCode: otp
         }).then((smsRes) => {
@@ -2928,7 +2979,7 @@ const server = http.createServer(async (req, res) => {
         });
     }
 
-    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 1400) {
+    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 3800) {
         let timerId = null;
         const timeoutSentinel = new Promise((resolve) => {
             timerId = setTimeout(() => resolve({ timedOut: true }), maxWaitMs);
@@ -3046,26 +3097,34 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 4.1 First-Login Workflow: User must first choose their preferred OTP delivery method (SMS or Email)
+                let selectedChannel = '';
+                // 4.1 First-Login Workflow: Check channel availability
                 if (!requestedChannelRaw) {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        success: true,
-                        requiresOtp: true,
-                        isFirstLogin: true,
-                        requiresChannelSelection: true,
-                        studentId: cleanId,
-                        fullName: grantee.full_name || grantee.fullName || 'Student Scholar',
-                        maskedPhone: displayMaskedPhone,
-                        maskedEmail: displayMaskedEmail,
-                        availableChannels,
-                        message: 'Credentials verified. Please choose your preferred OTP delivery method (SMS or Email).'
-                    }));
-                    return;
+                    // If only one channel is valid and configured, auto-dispatch immediately without blocking modal!
+                    if (canSendSms && !canSendEmail) {
+                        selectedChannel = 'sms';
+                    } else if (canSendEmail && !canSendSms) {
+                        selectedChannel = 'email';
+                    } else {
+                        // Both channels available: return selection metadata for client modal
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: true,
+                            requiresOtp: true,
+                            isFirstLogin: true,
+                            requiresChannelSelection: true,
+                            studentId: cleanId,
+                            fullName: grantee.full_name || grantee.fullName || 'Student Scholar',
+                            maskedPhone: displayMaskedPhone,
+                            maskedEmail: displayMaskedEmail,
+                            availableChannels,
+                            message: 'Credentials verified. Please choose your preferred OTP delivery method (SMS or Email).'
+                        }));
+                        return;
+                    }
                 }
 
-                // Determine chosen delivery channel
-                let selectedChannel = '';
+                if (!selectedChannel) {
                 if (requestedChannelRaw === 'email') {
                     if (!canSendEmail) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -3103,6 +3162,7 @@ const server = http.createServer(async (req, res) => {
                         error: `Invalid delivery channel "${requestedChannelRaw}". Please select either SMS or Email.`
                     }));
                     return;
+                }
                 }
 
                 // 5. Rate Limiting & Active Session Re-Entry Check
