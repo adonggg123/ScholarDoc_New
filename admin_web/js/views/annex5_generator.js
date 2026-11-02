@@ -2,6 +2,7 @@
 import { BillingService } from '../services/billing_service.js';
 import { VerificationService } from '../services/verification_service.js';
 import { AnnexSyncService } from '../services/annex_sync_service.js';
+import { AdminNotificationService } from '../services/admin_notification_service.js';
 
 const supabase = window.supabaseClient;
 
@@ -1125,6 +1126,16 @@ async function handleSchoolFile(file) {
                     console.warn('Could not write audit log:', e);
                 }
 
+                // Log activity notification for Admin
+                try {
+                    await AdminNotificationService.notifySubmission({
+                        title: 'School Enrollment List Uploaded',
+                        message: `Uploaded "${file.name}" with ${storedCount} student records for Annex 5 cross-matching.`,
+                        type: 'success',
+                        metadata: { filename: file.name, count: storedCount }
+                    });
+                } catch (_) { }
+
                 showToast(`Loaded and stored ${storedCount} records in school_students database!`, 'check-circle');
             } catch (dbErr) {
                 console.error('Database store error:', dbErr);
@@ -1982,6 +1993,14 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
             action: `Review Queue: Categorized ${granteeName} to ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}`,
             studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
         }]).then(() => { }).catch(err => console.warn('Could not record audit log:', err));
+
+        // Dispatch activity notification
+        AdminNotificationService.notifyStatusChange({
+            title: 'Review Queue Item Resolved',
+            message: `Grantee "${granteeName}" resolved to Annex ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}.`,
+            type: targetForm === 'form2' ? 'success' : 'warning',
+            metadata: { student: granteeName, form: targetForm, reason: specialReason }
+        }).catch(() => { });
     } catch (e) {
         console.warn('Audit log error:', e);
     }
@@ -2093,6 +2112,14 @@ if (btnAutoResolveAll) {
                 action: `Review Queue: Batch categorized ${count} grantees to Form 3 (Not enrolled)`,
                 studentId: 'BATCH_RESOLVE'
             }]).then(() => { }).catch(e => console.warn(e));
+
+            // Log activity notification for Admin
+            AdminNotificationService.notifyStatusChange({
+                title: 'Bulk Review Items Auto-Resolved',
+                message: `Auto-resolved ${count} review queue grantees to Annex Form 3 (Reason: Not Enrolled).`,
+                type: 'warning',
+                metadata: { count, form: 'Form 3' }
+            }).catch(() => { });
         } catch (_) { }
 
         updateKPIMetrics();
@@ -2180,6 +2207,13 @@ if (btnClearForm2) {
             updateKPIMetrics();
             renderForm2Table(verifiedForm2List);
             showToast('Annex Form 2 table data removed.', 'check-circle');
+
+            AdminNotificationService.notifyRecordUpdate({
+                title: 'Annex Form 2 Cleared',
+                message: 'Registrar Admin cleared all records from the Annex Form 2 table.',
+                type: 'warning',
+                metadata: { form: 'Form 2' }
+            }).catch(() => { });
         }
     });
 }
@@ -2211,6 +2245,13 @@ if (btnClearForm3) {
             updateKPIMetrics();
             renderForm3Table(verifiedForm3List);
             showToast('Annex Form 3 table data removed.', 'check-circle');
+
+            AdminNotificationService.notifyRecordUpdate({
+                title: 'Annex Form 3 Cleared',
+                message: 'Registrar Admin cleared all records from the Annex Form 3 table.',
+                type: 'warning',
+                metadata: { form: 'Form 3' }
+            }).catch(() => { });
         }
     });
 }
@@ -2298,6 +2339,14 @@ async function exportForm2Excel() {
         const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
         downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 2 Excel generated successfully!', 'check-circle');
+
+        // Log activity notification for Admin
+        AdminNotificationService.notifySubmission({
+            title: 'Annex 5 Form 2 Generated',
+            message: `Generated and exported official CHED Annex 5 Form 2 (Enrolled Grantees) with ${studentsToFill.length} students.`,
+            type: 'success',
+            metadata: { form: 'Form 2', count: studentsToFill.length }
+        }).catch(() => { });
     } catch (err) {
         console.error('Form 2 generation error:', err);
         alert('Failed to generate Form 2: ' + err.message);
@@ -2341,6 +2390,14 @@ async function exportForm3Excel() {
         const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
         downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 3 Excel generated successfully!', 'check-circle');
+
+        // Log activity notification for Admin
+        AdminNotificationService.notifySubmission({
+            title: 'Annex 5 Form 3 Generated',
+            message: `Generated and exported official CHED Annex 5 Form 3 (Exceptions / Not Enrolled) with ${studentsToFill.length} students.`,
+            type: 'warning',
+            metadata: { form: 'Form 3', count: studentsToFill.length }
+        }).catch(() => { });
     } catch (err) {
         console.error('Form 3 generation error:', err);
         alert('Failed to generate Form 3: ' + err.message);
@@ -2367,6 +2424,13 @@ if (btnRunMatch) {
             btnRunMatch.innerHTML = '<i class="icon-refresh-cw" style="font-size: 16px;"></i> Run Automated Cross-Verification';
             btnRunMatch.disabled = false;
             showToast('Cross-Verification completed! Forms updated.', 'check-circle');
+
+            AdminNotificationService.notifyRecordUpdate({
+                title: 'Cross-Verification Completed',
+                message: `Cross-matched ${rawSuperAdminGrantees.length} grantees: ${verifiedForm2List.length} verified for Form 2, ${verifiedForm3List.length} in Form 3, and ${needsReviewList.length} in review queue.`,
+                type: 'info',
+                metadata: { total: rawSuperAdminGrantees.length, form2: verifiedForm2List.length, form3: verifiedForm3List.length, review: needsReviewList.length }
+            }).catch(() => { });
         }, 500);
     });
 }

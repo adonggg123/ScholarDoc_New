@@ -18,7 +18,17 @@ async function loadNotifications() {
                 .select()
                 .eq('studentId', uid)
                 .order('timestamp', { ascending: false });
-            if (!error && data) items = data;
+            if (!error && data) {
+                items = data.filter(n => {
+                    const sid = (n.studentId || '').toLowerCase();
+                    const title = (n.title || '').toLowerCase();
+                    const isAdminActivity = title.startsWith('new submission:') ||
+                                            title.startsWith('record update:') ||
+                                            title.startsWith('status change:') ||
+                                            n.type === 'admin_activity';
+                    return sid !== 'admin' && sid !== 'superadmin' && !isAdminActivity;
+                });
+            }
         }
 
         // If no user-specific notifications found, show default system welcome/update notifications

@@ -464,6 +464,16 @@ submitBtn?.addEventListener('click', async () => {
             isRead: false,
         });
 
+        // Notify Registrar Admin of new student document submission
+        await sb.from('notifications').insert({
+            studentId: 'admin',
+            title: 'New Submission: Student Documents Submitted',
+            message: `${profile?.fullName || 'A student'} submitted scholarship documentary requirements.`,
+            type: 'info',
+            isRead: false,
+            timestamp: new Date().toISOString()
+        });
+
         // Clear draft
         localStorage.removeItem('scholardoc_draft_sa');
 

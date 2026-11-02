@@ -568,6 +568,39 @@ studentForm.addEventListener('submit', async (e) => {
             }
             if (updRes.error) throw updRes.error;
 
+            // Synchronize with annex_form_2 and school_students
+            const stdNo = studentData.student_no || studentData.studentId;
+            if (stdNo) {
+                const annexUpdates = {};
+                const emailVal = studentData.email_address || studentData.email;
+                if (emailVal) annexUpdates.email_address = emailVal;
+                const phoneVal = studentData.mobile_number || studentData.contactNumber;
+                if (phoneVal) annexUpdates.phone_number = phoneVal;
+                const dobVal = studentData.date_of_birth || studentData.birthdate;
+                if (dobVal) annexUpdates.birthdate = dobVal;
+                const courseVal = studentData.program_name || studentData.course;
+                if (courseVal) annexUpdates.degree_program = courseVal;
+                const yrVal = studentData.year_level || studentData.year;
+                if (yrVal) {
+                    const m = String(yrVal).match(/\d+/);
+                    annexUpdates.year_level = m ? m[0] : String(yrVal);
+                }
+                const genderVal = studentData.gender;
+                if (genderVal) annexUpdates.sex_at_birth = genderVal.toLowerCase().startsWith('m') ? 'M' : 'F';
+                const saVal = studentData.sa_number || studentData.saNumber;
+                if (saVal && saVal.toUpperCase() !== 'N/A') annexUpdates.tes_application_number = saVal;
+
+                if (Object.keys(annexUpdates).length > 0) {
+                    annexUpdates.updated_at = new Date().toISOString();
+                    await supabase.from('annex_form_2').update(annexUpdates).eq('student_number', stdNo);
+                    await supabase.from('school_students').update({
+                        email_address: emailVal,
+                        mobile_number: phoneVal,
+                        updated_at: new Date().toISOString()
+                    }).eq('student_no', stdNo);
+                }
+            }
+
             await supabase.from('audit_logs').insert([{
                 userName: 'Admin',
                 role: 'Admin',

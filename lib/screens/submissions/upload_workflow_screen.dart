@@ -116,6 +116,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         final docs = (data['documents'] is Map) ? data['documents'] : {};
         setState(() {
           _studentFullName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
+          _studentBirthdate = (data['birthdate'] ?? data['date_of_birth'] ?? '').toString().trim();
           final saCandidates = [
             docs['saNumber'],
             docs['sa_number'],
@@ -2472,6 +2473,12 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             studentId: 'superadmin',
             title: 'ID Validation Submitted',
             message: 'Student $fullName has uploaded ID documents for validation.',
+            type: 'info',
+          );
+          await notificationService.sendNotification(
+            studentId: 'admin',
+            title: 'New Submission: Student Documents Submitted',
+            message: 'Student $fullName ($studentId) submitted documentary requirements.',
             type: 'info',
           );
 

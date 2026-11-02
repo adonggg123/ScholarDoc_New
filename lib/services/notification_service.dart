@@ -150,6 +150,15 @@ class NotificationService {
             final id = n['id']?.toString();
             if (id == null || deletedNotificationIds.value.contains(id)) return false;
 
+            final sid = (n['studentId'] ?? '').toString().toLowerCase();
+            final title = (n['title'] ?? '').toString();
+            final type = (n['type'] ?? '').toString().toLowerCase();
+            final isAdminActivity = title.startsWith('New Submission:') ||
+                title.startsWith('Record Update:') ||
+                title.startsWith('Status Change:') ||
+                type == 'admin_activity';
+            if (sid == 'admin' || sid == 'superadmin' || isAdminActivity) return false;
+
             // Hide notification if it references an announcement that was deleted or is inactive
             final annId = n['announcementId']?.toString();
             if (annId != null && annId.isNotEmpty) {
@@ -181,6 +190,15 @@ class NotificationService {
       final filtered = list.where((n) {
         final id = n['id']?.toString();
         if (id == null || deletedNotificationIds.value.contains(id)) return false;
+
+        final sid = (n['studentId'] ?? '').toString().toLowerCase();
+        final title = (n['title'] ?? '').toString();
+        final type = (n['type'] ?? '').toString().toLowerCase();
+        final isAdminActivity = title.startsWith('New Submission:') ||
+            title.startsWith('Record Update:') ||
+            title.startsWith('Status Change:') ||
+            type == 'admin_activity';
+        if (sid == 'admin' || sid == 'superadmin' || isAdminActivity) return false;
 
         final annId = n['announcementId']?.toString();
         if (annId != null && annId.isNotEmpty) {

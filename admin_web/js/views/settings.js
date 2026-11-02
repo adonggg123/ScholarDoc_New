@@ -282,6 +282,15 @@ async function handleSaveEmail() {
         } catch (_) {}
 
         showToast(`Email for ${acc.role} updated successfully!`, 'success');
+        try {
+            if (window.AdminNotificationService) {
+                window.AdminNotificationService.notifyRecordUpdate({
+                    title: 'Admin Email Updated',
+                    message: `Admin email address was updated to "${newEmail}".`,
+                    type: 'success'
+                });
+            }
+        } catch (_) {}
     } catch (err) {
         console.error('Save email error:', err);
         showToast(err.message || 'Failed to update email.', 'error');
@@ -369,6 +378,15 @@ async function handleSaveUsername() {
         } catch (_) { }
 
         showToast(`Username for ${acc.role} updated successfully!`, 'success');
+        try {
+            if (window.AdminNotificationService) {
+                window.AdminNotificationService.notifyRecordUpdate({
+                    title: 'Admin Username Updated',
+                    message: `Admin username was updated to "${newUsername}".`,
+                    type: 'success'
+                });
+            }
+        } catch (_) {}
     } catch (err) {
         console.error('Save username error:', err);
         showToast('Failed to save username: ' + (err.message || err), 'error');
@@ -460,6 +478,15 @@ async function handleSavePassword() {
         } catch (_) { }
 
         showToast(`Password for ${acc.role} successfully changed!`, 'success');
+        try {
+            if (window.AdminNotificationService) {
+                window.AdminNotificationService.notifyRecordUpdate({
+                    title: 'Admin Password Changed',
+                    message: 'Admin account security password was changed successfully.',
+                    type: 'success'
+                });
+            }
+        } catch (_) {}
         if (curPwInput) curPwInput.value = '';
         if (newPwInput) newPwInput.value = '';
         if (confPwInput) confPwInput.value = '';

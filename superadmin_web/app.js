@@ -38,7 +38,7 @@ if (togglePwdBtn && passwordInput) {
         passwordInput.type = obscurePassword ? 'password' : 'text';
         togglePwdBtn.innerHTML = '';
         const icon = document.createElement('i');
-        icon.setAttribute('data-lucide', obscurePassword ? 'eye' : 'eye-off');
+        icon.setAttribute('data-lucide', obscurePassword ? 'eye-off' : 'eye');
         togglePwdBtn.appendChild(icon);
         if (window.lucide) lucide.createIcons();
     });

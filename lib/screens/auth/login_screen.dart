@@ -185,8 +185,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       _obscurePassword
-                                          ? LucideIcons.eye
-                                          : LucideIcons.eyeOff,
+                                          ? LucideIcons.eyeOff
+                                          : LucideIcons.eye,
                                       color: Colors.grey.shade400,
                                       size: 20,
                                     ),

@@ -4813,6 +4813,41 @@ function saveProcessedNotificationIds() {
     } catch (_) { }
 }
 
+function isAdminOrSuperAdminTarget(targetId) {
+    if (!targetId) return false;
+    const clean = String(targetId).trim().toLowerCase();
+    return clean === 'admin' ||
+           clean === 'superadmin' ||
+           clean === 'registrar' ||
+           clean.startsWith('admin_') ||
+           clean.startsWith('superadmin_');
+}
+
+function isAdminActivityNotification(notif) {
+    if (!notif) return false;
+    const target = (notif.studentId || notif.student_id || '').trim().toLowerCase();
+    if (isAdminOrSuperAdminTarget(target)) return true;
+
+    const type = (notif.type || '').toLowerCase();
+    if (type === 'admin_activity' || type === 'system_activity') return true;
+
+    const title = (notif.title || '').trim().toLowerCase();
+    if (
+        title.startsWith('new submission:') ||
+        title.startsWith('record update:') ||
+        title.startsWith('status change:') ||
+        title.startsWith('[submission]') ||
+        title.startsWith('[update]') ||
+        title.startsWith('[status]') ||
+        title.startsWith('[registrar]') ||
+        title.startsWith('[super admin]')
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
 let isWatcherPolling = false;
 
 async function lookupStudentForNotification(studentId, notif = null) {
@@ -4821,40 +4856,10 @@ async function lookupStudentForNotification(studentId, notif = null) {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
     };
 
-    // If notification target is admin or superadmin, check if a specific student is mentioned in message
-    if (studentId === 'admin' || studentId === 'superadmin') {
-        if (notif && notif.message) {
-            const nameMatch = notif.message.match(/^(?:Student\s+)?([A-Za-z\s.]+?)(?:\s+has\s+|\s+updated\s+|\s+submitted)/i);
-            if (nameMatch && nameMatch[1]) {
-                const studentName = nameMatch[1].trim();
-                try {
-                    const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(full_name.ilike.*${encodeURIComponent(studentName)}*,fullName.ilike.*${encodeURIComponent(studentName)}*)&limit=1`, { headers });
-                    if (res.ok) {
-                        const rows = await res.json();
-                        if (Array.isArray(rows) && rows.length > 0) {
-                            const s = rows[0];
-                            const rawPhone = s.mobile_number || s.contactNumber || s.phone_number || s.documents?.contactNumber || s.familyDetails?.contactNumber;
-                            if (rawPhone) {
-                                return {
-                                    student_no: s.student_no || s.studentId,
-                                    uid: s.uid || s.id,
-                                    full_name: s.full_name || s.fullName,
-                                    rawPhone
-                                };
-                            }
-                        }
-                    }
-                } catch (_) { }
-            }
-        }
-        // Fallback: Notify administrator/superadmin mobile number
-        const adminPhone = process.env.ADMIN_PHONE_NUMBER || '09653793139';
-        return {
-            student_no: studentId,
-            uid: studentId,
-            full_name: 'Administrator',
-            rawPhone: adminPhone
-        };
+    // Administrative & Admin activity notifications appear ONLY in the Admin interface
+    // and must NEVER trigger SMS notifications to students' mobile numbers or administrative numbers.
+    if (isAdminOrSuperAdminTarget(studentId) || isAdminActivityNotification(notif)) {
+        return null;
     }
 
     if (!studentId) return null;
@@ -4915,7 +4920,7 @@ async function lookupStudentForNotification(studentId, notif = null) {
     // 3. Extract name from notification message (e.g. "Welcome, JARIOL, JUDE ESIDORE Z.! Your scholarship portal is ready...")
     if (notif && notif.message) {
         const welcomeMatch = notif.message.match(/Welcome,\s+([^!]+)!/i) ||
-            notif.message.match(/(?:Student\s+|grantee\s+|Dear\s+)([\w\s,.'-]+?)(?:!|\s+has|\s+updated|\s+submitted|\s+Your|\.|\$)/i);
+            notif.message.match(/Dear\s+([\w\s,.'-]+?)(?:!|\s+Your|\.|\$)/i);
         if (welcomeMatch && welcomeMatch[1]) {
             const extractedName = welcomeMatch[1].trim();
 
@@ -5049,22 +5054,29 @@ async function pollNotificationsAndSendSms() {
                 continue;
             }
 
-            // 1. Deliver FCM Push Notification directly to student mobile devices
-            if (targetStudentId !== 'admin' && targetStudentId !== 'superadmin') {
-                try {
-                    await sendStudentPushNotification({
-                        targetStudentId,
-                        title: notif.title,
-                        message: notif.message,
-                        type: notif.type,
-                        notifId: notifId
-                    });
-                } catch (pushErr) {
-                    console.warn(`[Push Dispatcher] Error sending push for ${notifId}:`, pushErr.message);
-                }
+            // Exclude administrative notifications:
+            // Admin activity notifications appear ONLY in the Admin interface and must NOT trigger
+            // SMS notifications to students' mobile numbers or mobile FCM push.
+            if (isAdminActivityNotification(notif) || isAdminOrSuperAdminTarget(targetStudentId)) {
+                processedNotificationIds.add(notifId);
+                saveProcessedNotificationIds();
+                continue;
             }
 
-            // 2. Look up student details & registered phone number (or admin fallback) for SMS
+            // 1. Deliver FCM Push Notification directly to student mobile devices
+            try {
+                await sendStudentPushNotification({
+                    targetStudentId,
+                    title: notif.title,
+                    message: notif.message,
+                    type: notif.type,
+                    notifId: notifId
+                });
+            } catch (pushErr) {
+                console.warn(`[Push Dispatcher] Error sending push for ${notifId}:`, pushErr.message);
+            }
+
+            // 2. Look up student details & registered phone number for student mobile workflow SMS
             const studentInfo = await lookupStudentForNotification(targetStudentId, notif);
             if (!studentInfo || !studentInfo.rawPhone) {
                 processedNotificationIds.add(notifId);
@@ -5174,6 +5186,11 @@ async function startNotificationSmsWatcher() {
                 const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
                 for (const row of rows) {
                     const notifId = String(row.id);
+                    const targetStudentId = row.studentId || row.student_id;
+                    if (isAdminActivityNotification(row) || isAdminOrSuperAdminTarget(targetStudentId)) {
+                        processedNotificationIds.add(notifId);
+                        continue;
+                    }
                     let rowMsg = (row.message || '').trim().toLowerCase();
                     const title = (row.title || '').trim().toLowerCase();
                     const isWelcome = title.includes('welcome') || rowMsg.includes('welcome');

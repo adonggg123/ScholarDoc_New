@@ -809,6 +809,19 @@ window.updateSaStatus = async function (newStatus, isFinalRejection = false) {
         if (actualSa) {
             s.saNumber = actualSa;
             s.sa_number = actualSa;
+
+            // Sync approved SA number to annex_form_2
+            const stdNo = s.student_no || s.studentId;
+            if (stdNo && actualSa.toUpperCase() !== 'N/A') {
+                try {
+                    await supabase.from('annex_form_2').update({
+                        tes_application_number: actualSa,
+                        updated_at: new Date().toISOString()
+                    }).eq('student_number', stdNo);
+                } catch (annexErr) {
+                    console.warn('Could not sync SA number to annex_form_2:', annexErr);
+                }
+            }
         }
 
         // 2. Audit Log

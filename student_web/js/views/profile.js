@@ -565,6 +565,16 @@ async function persistSectionChanges({ sectionScope, buttonEl, textEl, defaultLa
                     isRead: false,
                     timestamp: nowIso
                 }]);
+
+                // Notify Registrar Admin of student profile update
+                await sb.from('notifications').insert([{
+                    studentId: 'admin',
+                    title: 'Record Update: Student Profile Updated',
+                    message: `${fullNameStr} updated profile information (${auditAction.toLowerCase()}).`,
+                    type: 'info',
+                    isRead: false,
+                    timestamp: nowIso
+                }]);
             } catch (_) {}
 
             if (uid) {

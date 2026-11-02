@@ -641,10 +641,15 @@ async function loadNotifications(options = {}) {
 
         if (error) throw error;
 
-        // Strict client-side isolation filter: discard any regular Admin notification
+        // Strict client-side isolation filter: discard any regular Admin notification or Admin activity
         systemNotifications = (data || []).filter(n => {
             const sid = (n.studentId || '').toLowerCase();
-            return sid !== 'admin' && (sid === 'superadmin' || sid === superUsername.toLowerCase() || sid === superUid);
+            const title = (n.title || '').toLowerCase();
+            const isAdminActivity = title.startsWith('new submission:') ||
+                                    title.startsWith('record update:') ||
+                                    title.startsWith('status change:') ||
+                                    n.type === 'admin_activity';
+            return !isAdminActivity && sid !== 'admin' && (sid === 'superadmin' || sid === superUsername.toLowerCase() || sid === superUid);
         });
 
         // If background polling detects an unseen unread notification, trigger the alerts
@@ -819,8 +824,13 @@ function setupRealtimeNotifications() {
 
                 // STRICT SEPARATION: Only proceed if this notification is intended for Super Admin
                 const isForSuper = (target === 'superadmin' || target === superUsername || (superUid && target === superUid));
-                if (!isForSuper || target === 'admin') {
-                    return; // Ignore regular Admin notifications completely!
+                const notifTitle = (payload.new?.title || '').toLowerCase();
+                const isAdminActivity = notifTitle.startsWith('new submission:') ||
+                                        notifTitle.startsWith('record update:') ||
+                                        notifTitle.startsWith('status change:') ||
+                                        payload.new?.type === 'admin_activity';
+                if (!isForSuper || target === 'admin' || isAdminActivity) {
+                    return; // Ignore regular Admin activity notifications completely!
                 }
 
                 if (payload.eventType === 'INSERT' && payload.new) {

@@ -450,7 +450,7 @@ export class StudentSyncService {
         const program = existing.program_name || existing.course || ss.program_name || ss.course || f2Match?.degree_program || 'BSIT';
         const yearLevel = existing.year_level || existing.year || ss.year_level || ss.year || f2Match?.year_level || '1';
         const birthdate = existing.date_of_birth || existing.birthdate || ss.date_of_birth || ss.birthdate || f2Match?.birthdate || 'N/A';
-        
+
         let gender = ss.gender || (f2Match?.sex_at_birth === 'F' ? 'Female' : (f2Match?.sex_at_birth === 'M' ? 'Male' : null)) || existing.gender || 'Female';
         if (gender === 'M' || gender === 'Male' || gender === 'male') gender = 'Male';
         else if (gender === 'F' || gender === 'Female' || gender === 'female') gender = 'Female';
