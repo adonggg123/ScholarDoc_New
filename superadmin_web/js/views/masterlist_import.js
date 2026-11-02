@@ -3376,106 +3376,126 @@ export function initMasterlistImport() {
         }, 200);
     }
 
-    // Consolidated Annex 5 Excel Export (Forms 1, 2, and 3 in one workbook)
-    async function exportConsolidatedAnnex5Excel(triggerBtn) {
-        const origHtml = triggerBtn ? triggerBtn.innerHTML : '';
+    // Annex Auto-Fill Excel Exports
+    const mapStudentsForForm2 = (list) => {
+        return list.map(item => {
+            const grantee = item.grantee || {};
+            const matched = item.matchedStudent || {};
+            return {
+                ...grantee,
+                ...matched,
+                studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                batch: grantee.batch || matched.batch || '1',
+                gender: matched.gender || grantee.gender || 'M',
+                birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                course: matched.course || grantee.course || grantee.program || '',
+                year: matched.year || grantee.year || '1',
+                email: matched.email || matched.authEmail || grantee.email || '',
+                contactNumber: matched.contactNumber || matched.phone || grantee.contactNumber || grantee.phone || ''
+            };
+        });
+    };
+
+    const mapStudentsForForm3 = (list) => {
+        return list.map(item => {
+            const grantee = item.grantee || {};
+            const matched = item.matchedStudent || {};
+            const specialReason = item.specialStatusReason || matched.status || 'Not enrolled';
+            return {
+                ...grantee,
+                ...matched,
+                studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
+                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
+                lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
+                firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
+                middleName: grantee.middle_name || grantee.middleName || matched.middleName || matched.middle_name || '',
+                batch: grantee.batch || matched.batch || '1',
+                gender: matched.gender || grantee.gender || 'M',
+                birthdate: matched.birthdate || matched.birthday || grantee.birthdate || grantee.birthday || '',
+                course: matched.course || grantee.course || grantee.program || '',
+                year: matched.year || grantee.year || '1',
+                status: specialReason,
+                remarks: item.remarks || (specialReason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${specialReason}`)
+            };
+        });
+    };
+
+    const exportConsolidatedAnnex = async (triggerBtn) => {
+        const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
         try {
             if (triggerBtn) {
+                triggerBtn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
                 triggerBtn.disabled = true;
-                triggerBtn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Exporting...';
             }
 
+            // Fetch template
             let resp = await fetch('/assets/0_Annex_5_TES_New_Billing_Form.xlsx');
             if (!resp.ok) {
                 resp = await fetch('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
             }
             if (!resp.ok) {
-                throw new Error('Could not load 0_Annex_5_TES_New_Billing_Form.xlsx template');
+                resp = await fetch('../assets/0_Annex_5_TES_New_Billing_Form.xlsx');
             }
-            const templateBlob = await resp.blob();
+            if (!resp.ok) {
+                throw new Error('Could not load Annex 5 template (0_Annex_5_TES_New_Billing_Form.xlsx)');
+            }
+            const blob = await resp.blob();
 
-            const mapAnnexItemBase = (item) => {
-                const grantee = item.grantee || {};
-                const student = item.matchedStudent || {};
-                const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
-                let name = VerificationService.normalizeName(rawNameStr);
-                if (!name.lastName && !name.firstName) {
-                    const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
-                    const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
-                    const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
-                    name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
-                } else if (!name.mi) {
-                    const m = (student.mi || grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
-                    if (m) name.mi = m.charAt(0).toUpperCase();
-                }
+            const studentsForm2 = mapStudentsForForm2(verifiedForm2List);
+            const studentsForm3 = mapStudentsForForm3(verifiedForm3List);
 
-                return {
-                    studentId: student.studentId || student.student_no || student.studentNo || student.student_id || grantee.student_id || grantee.studentNo || 'N/A',
-                    saNumber: student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || 'N/A',
-                    lastName: name.lastName || 'N/A',
-                    firstName: name.firstName || 'N/A',
-                    mi: name.mi || '',
-                    gender: (student.gender || grantee.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
-                    birthdate: student.birthdate || student.birthday || grantee.birthdate || grantee.birthday || '01/01/2000',
-                    degree: student.program_name || student.programName || student.course || grantee.course || grantee.program_name || grantee.program || 'BSIT',
-                    year: String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1',
-                    email: student.email || student.authEmail || grantee.email || 'N/A',
-                    phone: student.contactNumber || student.phone || grantee.contactNumber || grantee.phone || 'N/A',
-                    batch: grantee.batch || student.batch || '1',
-                    tesAmount: student.tesAmount ?? student.tes_amount ?? grantee.tes_amount ?? 10000,
-                    pwdAmount: student.pwdAmount ?? student.pwd_amount ?? grantee.pwd_amount ?? 0
-                };
+            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
+                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
+                || (verifiedForm2List[0]?.grantee?.batch)
+                || (verifiedForm2List[0]?.matchedStudent?.batch)
+                || (studentsForm2[0]?.batch)
+                || '1';
+
+            const metadata = {
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                batch: currentBatch,
+                regionalCode: '10',
+                heiCode: 'USTP'
             };
 
-            const form2Students = verifiedForm2List.map(item => mapAnnexItemBase(item));
+            const result = await BillingService.fillConsolidatedAnnex5(blob, studentsForm2, studentsForm3, metadata);
+            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const fileName = `Annex_5_TES_Consolidated_${ayClean}_${semClean}_${Date.now()}.xlsx`;
 
-            const form3Students = verifiedForm3List.map(item => {
-                const base = mapAnnexItemBase(item);
-                const reason = item.specialStatusReason || item.matchedStudent?.status || 'Not enrolled';
-                const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
-                return {
-                    ...base,
-                    status: reason,
-                    remarks
-                };
-            });
-
-            const result = await BillingService.fillAnnex5ConsolidatedWorkbook(templateBlob, {
-                form2Students,
-                form3Students,
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester
-            });
-
-            const ayClean = String(selectedAcademicYear || 'All_AY').replace(/[^a-zA-Z0-9-]/g, '_');
-            const semClean = String(selectedSemester || 'All_Sem').replace(/[^a-zA-Z0-9]/g, '_');
-            downloadBlob(result.blob, `Annex_5_TES_New_Billing_Form_${ayClean}_${semClean}.xlsx`);
+            downloadBlob(result.blob, fileName);
 
             if (typeof window.showToast === 'function') {
-                window.showToast(
-                    `Exported Annex 5 Excel workbook (Form 2: ${result.form2Count}, Form 3: ${result.form3Count}).`,
-                    'check-circle-2'
-                );
+                window.showToast(`Exported Consolidated Annex 5 (${result.form2Count} Form 2, ${result.form3Count} Form 3 records)!`, 'check-circle');
             }
         } catch (err) {
-            console.error('Annex 5 Excel export error:', err);
-            alert('Failed to export Annex 5 Excel workbook: ' + err.message);
+            console.error('Consolidated Annex 5 export error:', err);
+            alert('Failed to generate Consolidated Annex 5: ' + err.message);
         } finally {
             if (triggerBtn) {
+                triggerBtn.innerHTML = originalHtml;
                 triggerBtn.disabled = false;
-                triggerBtn.innerHTML = origHtml;
             }
         }
-    }
+    };
 
     if (btnExportAnnexExcel) {
-        btnExportAnnexExcel.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportAnnexExcel));
+        btnExportAnnexExcel.addEventListener('click', () => exportConsolidatedAnnex(btnExportAnnexExcel));
     }
+
     if (btnExportF2) {
-        btnExportF2.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportF2));
+        btnExportF2.addEventListener('click', () => exportConsolidatedAnnex(btnExportF2));
     }
+
     if (btnExportF3) {
-        btnExportF3.addEventListener('click', () => exportConsolidatedAnnex5Excel(btnExportF3));
+        btnExportF3.addEventListener('click', () => exportConsolidatedAnnex(btnExportF3));
     }
 
     // Annex Search Inputs

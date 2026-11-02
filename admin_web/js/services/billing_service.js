@@ -87,10 +87,10 @@ export class BillingService {
             }
 
             if (!match && fullName !== '' && scholarship !== '') {
-                match = masterList.find(s =>
+                match = masterList.find(s => 
                     String(s.fullName || '').trim().toLowerCase() === fullName.toLowerCase() &&
                     (String(s.scholarship_name || s.scholarshipName || s.scholarship || '').trim().toLowerCase() === scholarship.toLowerCase() ||
-                        String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
+                     String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
                 );
             }
 
@@ -104,16 +104,16 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Student ID', ['studentId']);
                 this._fillIfEmpty(resultRow, match, 'Full Name', ['fullName']);
                 this._fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarship_name', 'scholarshipName', 'scholarship', 'scholarshipType']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Course/Program', ['course']);
                 this._fillIfEmpty(resultRow, match, 'Degree/Program', ['course']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Year Level', ['year', 'scholarYearLevel']);
                 this._fillIfEmpty(resultRow, match, 'Year', ['year', 'scholarYearLevel']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Semester', ['semester']);
                 this._fillIfEmpty(resultRow, match, 'Academic Year', ['academicYear', 'ay']);
-
+                
                 const family = match.familyDetails || {};
                 this._fillIfEmpty(resultRow, match, 'SA Number', ['saNumber', () => family.saNumber]); // Function trick not supported like this, so just mapping to string below
                 if (!resultRow['SA Number'] && family.saNumber) resultRow['SA Number'] = family.saNumber;
@@ -121,20 +121,20 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Sex at Birth (M/F)', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Sex', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Gender', ['gender']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Birthdate (mm/dd/yyyy)', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthdate', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birth Date', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthday', ['birthdate']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'E-mail address', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email Address', ['email']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Phone Number', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Phone', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Contact Number', ['contactNumber']);
-
+                
                 this._fillIfEmpty(resultRow, match, 'Status', ['status']);
             } else {
                 unmatchedCount++;
@@ -162,7 +162,7 @@ export class BillingService {
         if (!data || data.length === 0) return;
 
         const headers = Object.keys(data[0]).filter(k => k !== 'matchStatus');
-
+        
         if (asCsv) {
             const rows = [headers];
             for (let row of data) {
@@ -206,7 +206,7 @@ export class BillingService {
             const restParts = rest.split(/\s+/);
             let givenName = '';
             let middleInitial = '';
-
+            
             if (restParts.length > 1) {
                 const lastPart = restParts[restParts.length - 1];
                 middleInitial = lastPart.charAt(0).toUpperCase();
@@ -288,6 +288,22 @@ export class BillingService {
                     return '16';
             }
         }
+    }
+
+    static _extractRowStyles(doc, rowNum) {
+        const row = Array.from(doc.getElementsByTagName("row")).find(r => r.getAttribute("r") === String(rowNum));
+        const styles = {};
+        if (row) {
+            const cells = Array.from(row.getElementsByTagName("c"));
+            for (let c of cells) {
+                const r = c.getAttribute("r") || "";
+                const col = r.replace(/[0-9]/g, "");
+                if (col && c.getAttribute("s")) {
+                    styles[col] = c.getAttribute("s");
+                }
+            }
+        }
+        return styles;
     }
 
     static _escapeXml(unsafe) {
@@ -373,7 +389,7 @@ export class BillingService {
         }
     }
 
-    static _injectForm2Rows(xmlStr, students) {
+    static _injectForm2Rows(xmlStr, students, metadata = {}) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlStr, "application/xml");
         const sheetData = doc.getElementsByTagName("sheetData")[0];
@@ -381,6 +397,25 @@ export class BillingService {
         const templateCapacity = 6;
         const footerStartRow = 48;
         const shiftCount = students.length > templateCapacity ? students.length - templateCapacity : 0;
+
+        const row42Styles = this._extractRowStyles(doc, startRow);
+        const row48Styles = this._extractRowStyles(doc, 48);
+        const row49Styles = this._extractRowStyles(doc, 49);
+        const row50Styles = this._extractRowStyles(doc, 50);
+        const row51Styles = this._extractRowStyles(doc, 51);
+        const row52Styles = this._extractRowStyles(doc, 52);
+
+        // Header Title (Row 10 B10: "TES Batch [Batch] - [Semester] and Academic Year [AY]")
+        if (metadata && (metadata.batch || metadata.academicYear || metadata.semester)) {
+            const rawBatch = String(metadata.batch || '1').trim();
+            const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
+            const academicYear = metadata.academicYear || '2024-2025';
+            const semester = metadata.semester || '1st Semester';
+            const titleVal = `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`;
+            let row10 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '10');
+            if (!row10) row10 = this._getOrCreateRow(doc, sheetData, 10);
+            this._fillCell(doc, row10, 'B10', titleVal, false, '308');
+        }
 
         if (shiftCount > 0) {
             // 1. Shift mergeCells with rows >= footerStartRow
@@ -441,12 +476,13 @@ export class BillingService {
                     return cell;
                 };
 
-                addCell('A', '31');
+                addCell('A', row42Styles['A'] || '31');
                 for (let c = 1; c <= 16; c++) {
-                    addCell(this._colLetter(c), this._defaultStyle(c, true));
+                    const colLet = this._colLetter(c);
+                    addCell(colLet, row42Styles[colLet] || this._defaultStyle(c, true));
                 }
                 for (let col of ['R', 'S', 'T', 'U', 'V', 'W', 'X']) {
-                    addCell(col, '1');
+                    addCell(col, row42Styles[col] || '1');
                 }
             }
         }
@@ -492,13 +528,21 @@ export class BillingService {
             const studId = String(s.studentId || s.student_id || s.studentNumber || '').trim();
             const email = String(s.email || s.authEmail || s.emailAddress || '').trim();
             const phone = String(s.contactNumber || s.phone || s.phoneNumber || '').trim();
-            const batchVal = Number(s.batch ? String(s.batch).replace(/\D/g, '') : 1) || 1;
+            const rawBatchStr = String(s.batch || metadata.batch || '1').replace(/^batch\s*/i, '').trim();
+            const parsedBatchNum = parseFloat(rawBatchStr);
+            const isBatchNum = !isNaN(parsedBatchNum) && isFinite(parsedBatchNum);
 
             const rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
 
-            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, true));
-            const num_ = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, true, this._defaultStyle(colIdx, true));
+            const str = (colIdx, val) => {
+                const cLet = this._colLetter(colIdx);
+                this._fillCell(doc, rowEl, addr(colIdx), val, false, row42Styles[cLet] || this._defaultStyle(colIdx, true));
+            };
+            const num_ = (colIdx, val) => {
+                const cLet = this._colLetter(colIdx);
+                this._fillCell(doc, rowEl, addr(colIdx), val, true, row42Styles[cLet] || this._defaultStyle(colIdx, true));
+            };
 
             // Template Row 41 Headers:
             // B: 5-digit Control Number (1)
@@ -529,7 +573,11 @@ export class BillingService {
             str(10, year);                           // K: Year Level
             str(11, email);                          // L: E-mail address
             str(12, phone);                          // M: Phone Number
-            num_(13, batchVal);                      // N: TES Batch
+            if (isBatchNum) {
+                num_(13, parsedBatchNum);                // N: TES Batch
+            } else {
+                str(13, rawBatchStr || '1');             // N: TES Batch
+            }
             num_(14, 10000);                         // O: TES Amount
             num_(15, 0);                             // P: TES-3A Person with Disability
             num_(16, 10000);                         // Q: TOTAL AMOUNT
@@ -550,25 +598,25 @@ export class BillingService {
 
         const row48 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow48));
         if (row48) {
-            this._fillCell(doc, row48, `O${targetRow48}`, totalTesAmount, true, '25');
-            this._fillCell(doc, row48, `P${targetRow48}`, totalPwdAmount, true, '24');
-            this._fillCell(doc, row48, `Q${targetRow48}`, totalAmount, true, '23');
+            this._fillCell(doc, row48, `O${targetRow48}`, totalTesAmount, true, row48Styles['O'] || '25');
+            this._fillCell(doc, row48, `P${targetRow48}`, totalPwdAmount, true, row48Styles['P'] || '24');
+            this._fillCell(doc, row48, `Q${targetRow48}`, totalAmount, true, row48Styles['Q'] || '23');
         }
         const row49 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow49));
         if (row49) {
-            this._fillCell(doc, row49, `Q${targetRow49}`, totalAmount, true, '12');
+            this._fillCell(doc, row49, `Q${targetRow49}`, totalAmount, true, row49Styles['Q'] || '12');
         }
         const row50 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow50));
         if (row50) {
-            this._fillCell(doc, row50, `Q${targetRow50}`, mgmtFee, true, '17');
+            this._fillCell(doc, row50, `Q${targetRow50}`, mgmtFee, true, row50Styles['Q'] || '17');
         }
         const row51 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow51));
         if (row51) {
-            this._fillCell(doc, row51, `Q${targetRow51}`, campusTotal, true, '12');
+            this._fillCell(doc, row51, `Q${targetRow51}`, campusTotal, true, row51Styles['Q'] || '12');
         }
         const row52 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(targetRow52));
         if (row52) {
-            this._fillCell(doc, row52, `Q${targetRow52}`, campusTotal, true, '7');
+            this._fillCell(doc, row52, `Q${targetRow52}`, campusTotal, true, row52Styles['Q'] || '7');
         }
 
         const serializer = new XMLSerializer();
@@ -583,6 +631,8 @@ export class BillingService {
         const templateCapacity = 6;
         const footerStartRow = 40;
         const shiftCount = students.length > templateCapacity ? students.length - templateCapacity : 0;
+
+        const row34Styles = this._extractRowStyles(doc, startRow);
 
         if (shiftCount > 0) {
             // 1. Shift mergeCells with rows >= footerStartRow
@@ -643,12 +693,13 @@ export class BillingService {
                     return cell;
                 };
 
-                addCell('A', '13');
+                addCell('A', row34Styles['A'] || '13');
                 for (let c = 1; c <= 12; c++) {
-                    addCell(this._colLetter(c), this._defaultStyle(c, false));
+                    const colLet = this._colLetter(c);
+                    addCell(colLet, row34Styles[colLet] || this._defaultStyle(c, false));
                 }
                 for (let col of ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA']) {
-                    addCell(col, '1');
+                    addCell(col, row34Styles[col] || '1');
                 }
             }
         }
@@ -703,7 +754,10 @@ export class BillingService {
             rowEl.setAttribute('thickBot', '1');
             const addr = (colIdx) => `${this._colLetter(colIdx)}${rowNum}`;
 
-            const str = (colIdx, val) => this._fillCell(doc, rowEl, addr(colIdx), val, false, this._defaultStyle(colIdx, false));
+            const str = (colIdx, val) => {
+                const cLet = this._colLetter(colIdx);
+                this._fillCell(doc, rowEl, addr(colIdx), val, false, row34Styles[cLet] || this._defaultStyle(colIdx, false));
+            };
 
             // Template Row 33 Headers:
             // B: 5-digit Control Number (1)
@@ -737,16 +791,215 @@ export class BillingService {
     }
 
     /**
+     * Injects Form 1 statement values:
+     * 1. TES Batch Number: Row 9 (B9) and Billing Reference No in Row 11 (U11)
+     * 2. Date: Row 12 (U12)
+     * 3. PHP Amount: Row 19 (W19) & summary breakdown in Rows 24-29 (U24-U29)
+     * 4. Fiscal Year & Academic Year: Rows 17-19 (E17, E18, E19)
+     */
+    static _injectForm1Summary(xmlStr, form2Count, totalTesAmount, totalPwdAmount, totalAmount, mgmtFee, campusTotal, metadata = {}) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlStr, "application/xml");
+        const sheetData = doc.getElementsByTagName("sheetData")[0];
+
+        const setCell = (rowNum, addr, val, isNumeric, defaultStyle) => {
+            let rowEl = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === String(rowNum));
+            if (!rowEl) rowEl = this._getOrCreateRow(doc, sheetData, rowNum);
+            this._fillCell(doc, rowEl, addr, val, isNumeric, defaultStyle);
+        };
+
+        // 1. TES Batch Number
+        const rawBatch = String(metadata.batch || '1').trim();
+        const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
+
+        // Academic Year & Semester
+        const academicYear = metadata.academicYear || '2024-2025';
+        const semester = metadata.semester || '1st Semester';
+        const ayMatch = academicYear.match(/\b(20\d\d)\b/);
+        const ayStartYear = ayMatch ? parseInt(ayMatch[1], 10) : new Date().getFullYear();
+
+        let termCode = '1';
+        if (semester.toLowerCase().includes('2nd') || semester.includes('2')) {
+            termCode = '2';
+        } else if (semester.toLowerCase().includes('summer') || semester.toLowerCase().includes('midyear')) {
+            termCode = '3';
+        }
+
+        // 4. Fiscal Year (applicable budget year under GAA)
+        let fiscalYear = metadata.fiscalYear;
+        if (!fiscalYear) {
+            fiscalYear = (termCode === '2') ? String(ayStartYear + 1) : String(ayStartYear);
+        }
+
+        // 2. Date: Current formatted date
+        const now = new Date();
+        const formattedDate = metadata.date || now.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // 3. PHP Amount: Formatted with currency prefix, commas, and two decimals
+        const formattedPhpAmount = 'PhP ' + totalTesAmount.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        // Billing Reference No: REGIONAL_CODE-HEI_CODE-AY-TERM-TRANCH:BATCH
+        const regionalCode = metadata.regionalCode || '10';
+        const heiCode = metadata.heiCode || 'USTP';
+        const tranch = metadata.tranch || '1';
+        const billingRefNo = `${regionalCode}-${heiCode}-${ayStartYear}-${termCode}-${tranch}:${cleanBatch}`;
+
+        // Top Header Fields Automation:
+        // Row 9 (B9:Y9): "TES Batch [Batch] - [Semester] and Academic Year [AY]"
+        setCell(9, 'B9', `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`, false, '291');
+
+        // Row 11 (U11): TES Billing Statement Reference No.
+        setCell(11, 'U11', billingRefNo, false, '20');
+
+        // Row 12 (U12:Y12): Date
+        setCell(12, 'U12', formattedDate, false, '292');
+
+        // Responsibility Center description with Term, AY, and Fiscal Year:
+        // Row 17 (E17)
+        setCell(17, 'E17', `Request for payment of the Tertiary Education Subsidy (TES) grant for ${semester},  `, false, '38');
+        // Row 18 (E18)
+        setCell(18, 'E18', `Academic Year ${academicYear} to be charged against the funds for Universal Access to Quality `, false, '38');
+        // Row 19 (E19)
+        setCell(19, 'E19', `Tertiary Education (UAQTE) under General Appropriation Act (GAA)  for Fiscal Year ${fiscalYear}, `, false, '38');
+
+        // Row 19 (W19:Y19): PHP Amount Box under Amount Column
+        setCell(19, 'W19', formattedPhpAmount, false, '297');
+
+        // Breakdown Table (Rows 24-29)
+        setCell(24, 'U24', form2Count, true, '270');
+        setCell(25, 'U25', totalTesAmount, true, '272');
+        setCell(26, 'U26', totalPwdAmount, true, '274');
+        setCell(27, 'U27', totalAmount, true, '274');
+        setCell(28, 'U28', mgmtFee, true, '274');
+        setCell(29, 'U29', campusTotal, true, '274');
+
+        const serializer = new XMLSerializer();
+        return serializer.serializeToString(doc);
+    }
+
+    /**
+     * Resolves the worksheet XML path in the zip for a given sheet name.
+     */
+    static async _resolveSheetPath(zip, sheetName, defaultPath) {
+        try {
+            const wbFile = zip.file('xl/workbook.xml');
+            const relsFile = zip.file('xl/_rels/workbook.xml.rels');
+            if (!wbFile || !relsFile) return defaultPath;
+
+            const wbXml = await wbFile.async('string');
+            const relsXml = await relsFile.async('string');
+
+            const parser = new DOMParser();
+            const wbDoc = parser.parseFromString(wbXml, 'application/xml');
+            const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+            const sheets = Array.from(wbDoc.getElementsByTagName('sheet'));
+            const targetSheet = sheets.find(s => (s.getAttribute('name') || '').trim().toLowerCase() === sheetName.trim().toLowerCase());
+            if (!targetSheet) return defaultPath;
+
+            const rId = targetSheet.getAttribute('r:id');
+            if (!rId) return defaultPath;
+
+            const rels = Array.from(relsDoc.getElementsByTagName('Relationship'));
+            const rel = rels.find(r => r.getAttribute('Id') === rId);
+            if (!rel) return defaultPath;
+
+            let target = rel.getAttribute('Target') || '';
+            if (target.startsWith('/')) target = target.slice(1);
+            if (!target.startsWith('xl/')) target = 'xl/' + target;
+            return target;
+        } catch (e) {
+            console.warn(`Could not resolve sheet path for "${sheetName}":`, e);
+            return defaultPath;
+        }
+    }
+
+    /**
+     * Fills Consolidated Annex 5 (0_Annex_5_TES_New_Billing_Form.xlsx)
+     * containing Form 1 (Statement), Form 2 (Grantees & Billing), and Form 3 (Not Included).
+     */
+    static async fillConsolidatedAnnex5(templateBytes, studentsForm2 = [], studentsForm3 = [], metadata = {}) {
+        const zip = await JSZip.loadAsync(templateBytes);
+
+        // 1. Resolve sheet XML paths
+        const sheetPath1 = await this._resolveSheetPath(zip, 'Annex 5-TES New Form 1', 'xl/worksheets/sheet1.xml');
+        const sheetPath2 = await this._resolveSheetPath(zip, 'Annex 5-TES New Form 2', 'xl/worksheets/sheet2.xml');
+        const sheetPath3 = await this._resolveSheetPath(zip, 'Annex 5-TES New Form 3', 'xl/worksheets/sheet3.xml');
+
+        // 2. Populate Form 2 (Enrolled Grantees & Billing)
+        if (zip.file(sheetPath2)) {
+            let sheet2Xml = await zip.file(sheetPath2).async("string");
+            sheet2Xml = this._injectForm2Rows(sheet2Xml, studentsForm2, metadata);
+            zip.file(sheetPath2, sheet2Xml);
+        }
+
+        // 3. Populate Form 3 (Not Included Students)
+        if (zip.file(sheetPath3)) {
+            let sheet3Xml = await zip.file(sheetPath3).async("string");
+            sheet3Xml = this._injectForm3Rows(sheet3Xml, studentsForm3);
+            zip.file(sheetPath3, sheet3Xml);
+        }
+
+        // 4. Calculate Billing Totals from Form 2
+        const totalTesAmount = studentsForm2.length * 10000;
+        const totalPwdAmount = 0;
+        const totalAmount = totalTesAmount + totalPwdAmount;
+        const mgmtFee = Math.round(totalAmount * 0.01);
+        const campusTotal = totalAmount + mgmtFee;
+
+        // 5. Populate Form 1 (Consolidated Summary Statement)
+        if (zip.file(sheetPath1)) {
+            let sheet1Xml = await zip.file(sheetPath1).async("string");
+            sheet1Xml = this._injectForm1Summary(
+                sheet1Xml,
+                studentsForm2.length,
+                totalTesAmount,
+                totalPwdAmount,
+                totalAmount,
+                mgmtFee,
+                campusTotal,
+                metadata
+            );
+            zip.file(sheetPath1, sheet1Xml);
+        }
+
+        // 6. Generate compressed Excel (.xlsx) file
+        const blob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        return {
+            blob,
+            form2Count: studentsForm2.length,
+            form3Count: studentsForm3.length,
+            totalAmount: campusTotal
+        };
+    }
+
+    /**
      * Fills Annex 5 - Form 2 template (.xlsx)
      */
-    static async fillAnnex5Form2(templateBytes, students) {
+    static async fillAnnex5Form2(templateBytes, students, metadata = {}) {
         const zip = await JSZip.loadAsync(templateBytes);
         if (zip.file('xl/worksheets/sheet1.xml')) {
             let sheet1Xml = await zip.file('xl/worksheets/sheet1.xml').async("string");
-            sheet1Xml = this._injectForm2Rows(sheet1Xml, students);
+            sheet1Xml = this._injectForm2Rows(sheet1Xml, students, metadata);
             zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
         }
-        const blob = await zip.generateAsync({ type: 'blob' });
+        const blob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
         return { blob, count: students.length };
     }
 
@@ -760,7 +1013,11 @@ export class BillingService {
             sheet1Xml = this._injectForm3Rows(sheet1Xml, students);
             zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
         }
-        const blob = await zip.generateAsync({ type: 'blob' });
+        const blob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
         return { blob, count: students.length };
     }
 
