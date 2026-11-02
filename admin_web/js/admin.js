@@ -666,7 +666,7 @@ window.showWebPopupNotification = function (title, message, notificationId) {
 
 // ── Activity-Based Notification System State ────────────────────────
 let isInitialNotificationLoad = true;
-let currentCategoryFilter = 'all';
+let currentCategoryFilter = 'record_update';
 let filterUnreadOnly = false;
 let activeModalNotification = null;
 
@@ -699,11 +699,21 @@ async function loadNotifications(options = {}) {
             return sid !== 'superadmin' && (sid === 'admin' || sid === adminUsername.toLowerCase() || sid === adminUid);
         });
 
-        // Annotate each notification with its activity category
-        systemNotifications = rawList.map(n => ({
-            ...n,
-            category: AdminNotificationService.classifyCategory(n)
-        }));
+        // Registrar interface: Retain ONLY Record Updates (remove submission and status)
+        systemNotifications = rawList
+            .filter(n => {
+                const title = (n.title || '').toLowerCase();
+                const msg = (n.message || '').toLowerCase();
+                if (title.startsWith('new submission') || title.includes('[submission]')) return false;
+                if (title.startsWith('status change') || title.includes('[status]')) return false;
+                if (title.includes('sa verification') || title.includes('id validation')) return false;
+                if (title.includes('student documents submitted') || msg.includes('submitted documentary requirements')) return false;
+                return true;
+            })
+            .map(n => ({
+                ...n,
+                category: 'record_update'
+            }));
 
         // If background polling detects an unseen unread notification, trigger the alerts
         if (options.checkNewAlerts && !isInitialNotificationLoad) {
@@ -752,20 +762,17 @@ async function loadNotifications(options = {}) {
 }
 
 function updateCategoryCounts() {
-    const totalAll = systemNotifications.length;
-    const totalSubmission = systemNotifications.filter(n => n.category === 'submission').length;
-    const totalRecordUpdate = systemNotifications.filter(n => n.category === 'record_update').length;
-    const totalStatusChange = systemNotifications.filter(n => n.category === 'status_change').length;
+    const totalRecordUpdate = systemNotifications.length;
 
     const countAllEl = document.getElementById('count-all');
     const countSubEl = document.getElementById('count-submission');
     const countRecEl = document.getElementById('count-record_update');
     const countStatEl = document.getElementById('count-status_change');
 
-    if (countAllEl) countAllEl.textContent = totalAll;
-    if (countSubEl) countSubEl.textContent = totalSubmission;
+    if (countAllEl) countAllEl.textContent = totalRecordUpdate;
+    if (countSubEl) countSubEl.textContent = 0;
     if (countRecEl) countRecEl.textContent = totalRecordUpdate;
-    if (countStatEl) countStatEl.textContent = totalStatusChange;
+    if (countStatEl) countStatEl.textContent = 0;
 }
 
 function updateBellBadge() {
@@ -794,29 +801,17 @@ function renderNotificationsDropdown() {
         filtered = filtered.filter(n => !n.isRead);
     }
 
-    // Update filter label
+    // Update filter label (Registrar interface only shows Record Updates)
     const filterLabel = document.getElementById('activity-active-filter-label');
     if (filterLabel) {
-        const catMap = {
-            'all': 'All Activities',
-            'submission': 'Submissions Only',
-            'record_update': 'Record Updates Only',
-            'status_change': 'Status Changes Only'
-        };
-        filterLabel.textContent = `${catMap[currentCategoryFilter] || 'Activities'}${filterUnreadOnly ? ' (Unread)' : ''} • ${filtered.length}`;
+        filterLabel.textContent = `Record Updates${filterUnreadOnly ? ' (Unread)' : ''} • ${filtered.length}`;
     }
 
     if (filtered.length === 0) {
-        const emptyLabels = {
-            'all': 'No recent activities recorded for Registrar.',
-            'submission': 'No submission activities yet.',
-            'record_update': 'No record update activities yet.',
-            'status_change': 'No status change activities yet.'
-        };
         container.innerHTML = `
             <div style="padding: 36px 16px; text-align: center; color: var(--text-secondary); font-size: 12px; font-family: inherit;">
                 <i class="icon-inbox" style="font-size: 28px; opacity: 0.35; display: block; margin: 0 auto 8px auto;"></i>
-                ${filterUnreadOnly ? 'No unread notifications in this category.' : (emptyLabels[currentCategoryFilter] || 'No activities found.')}
+                ${filterUnreadOnly ? 'No unread record update activities.' : 'No record update activities yet.'}
             </div>
         `;
         if (window.lucide) {
@@ -1121,6 +1116,14 @@ function setupRealtimeNotifications() {
 
                 if (payload.eventType === 'INSERT' && payload.new) {
                     const notif = payload.new;
+                    const notifTitle = (notif.title || '').toLowerCase();
+                    const notifMsg = (notif.message || '').toLowerCase();
+
+                    // Registrar interface: ignore non-update notifications (submissions and status changes)
+                    if (notifTitle.startsWith('new submission') || notifTitle.includes('[submission]')) return;
+                    if (notifTitle.startsWith('status change') || notifTitle.includes('[status]')) return;
+                    if (notifTitle.includes('sa verification') || notifTitle.includes('id validation')) return;
+                    if (notifTitle.includes('student documents submitted') || notifMsg.includes('submitted documentary requirements')) return;
 
                     // Deduplicate
                     const notifIdStr = String(notif.id || '');
@@ -1130,7 +1133,7 @@ function setupRealtimeNotifications() {
                     }
                     if (notifIdStr) seenNotificationIds.add(notifIdStr);
 
-                    const category = AdminNotificationService.classifyCategory(notif);
+                    const category = 'record_update';
 
                     // 1. Display desktop pop-up notification in LOWER-RIGHT corner of screen with activity category
                     window.showDesktopPopupNotification({
@@ -1180,10 +1183,10 @@ function setupRealtimeNotifications() {
                     if (oldStatus && newStatus && oldStatus !== newStatus) {
                         window.showDesktopPopupNotification({
                             id: `grantee_status_${payload.new.id}_${Date.now()}`,
-                            title: `Status Change: ${studentName}`,
-                            message: `Grantee application status updated from "${oldStatus}" to "${newStatus}".`,
-                            type: newStatus.toLowerCase().includes('approved') ? 'success' : 'warning',
-                            category: 'status_change',
+                            title: `Record Update: ${studentName}`,
+                            message: `Grantee application record updated from "${oldStatus}" to "${newStatus}".`,
+                            type: newStatus.toLowerCase().includes('approved') ? 'success' : 'info',
+                            category: 'record_update',
                             role: 'Registrar',
                             timestamp: new Date().toISOString()
                         });

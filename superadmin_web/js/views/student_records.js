@@ -1127,7 +1127,7 @@ window.approveStudent = async function (uid) {
         // Notify Admin that grantee has been approved and is ready for Annex 5 Billing Form
         await supabase.from('notifications').insert([{
             studentId: 'admin',
-            title: 'Grantee Approved: Ready for Annex 5',
+            title: 'Record Update: Grantee Approved for Annex 5',
             message: `Super Admin approved scholar grantee ${student?.fullName || 'student'}. Available for Annex 5 Billing.`,
             type: 'success',
             isRead: false,
@@ -1307,7 +1307,7 @@ window.rejectStudent = async function (uid) {
         // Notify Admin of application rejection update for records reconciliation
         await supabase.from('notifications').insert([{
             studentId: 'admin',
-            title: 'Scholarship Application Rejected',
+            title: 'Record Update: Scholarship Application Rejected',
             message: `Super Admin rejected application for ${student?.fullName || 'student'}. Records updated.`,
             type: 'warning',
             isRead: false,

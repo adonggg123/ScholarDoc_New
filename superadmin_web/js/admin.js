@@ -1,3 +1,4 @@
+import { SuperAdminNotificationService } from './services/superadmin_notification_service.js';
 // Supabase Configuration
 const supabaseUrl = 'https://ywavesulvkqwpsejprxp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
@@ -476,15 +477,64 @@ function _fallbackDirectNotification(title, message, iconUrl, tag, id) {
         notif.onclick = function() {
             window.focus();
             notif.close();
-            window.handleWebNotificationClick(id, title);
+            window.handleActivityCardClick(id);
         };
     } catch (e) {
         console.warn('Native desktop notification notice:', e);
     }
 }
 
+// ── Audio Cue: Subtle Activity Chime ───────────────────────────────
+function playActivityChime() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, now); // D5
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+    } catch (_) { }
+}
+
+// ── Helpers: Formatting & Escaping ──────────────────────────────────
+function formatTimeAgo(timestamp) {
+    if (!timestamp) return 'Just now';
+    const now = Date.now();
+    const date = new Date(timestamp).getTime();
+    const diffSec = Math.floor((now - date) / 1000);
+
+    if (diffSec < 45) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+
+    return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 // Display small pop-up notification in the LOWER-RIGHT corner of the computer screen
-window.showDesktopPopupNotification = function({ id, title, message, type = 'info', role = 'Super Admin', timestamp }) {
+window.showDesktopPopupNotification = function ({ id, title, message, type = 'info', category = null, role = 'Super Admin', timestamp }) {
     let container = document.getElementById('desktop-notifications-container');
     if (!container) {
         container = document.createElement('div');
@@ -508,10 +558,30 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
     popup.setAttribute('role', 'alert');
     if (id) popup.dataset.id = String(id);
 
+    // Auto-detect category if not explicitly supplied
+    if (!category && window.SuperAdminNotificationService) {
+        category = window.SuperAdminNotificationService.classifyCategory({ title, message, type });
+    }
+    const catLabel = (window.SuperAdminNotificationService && window.SuperAdminNotificationService.CATEGORY_LABELS[category]) || 'Activity';
+
     let iconClass = 'icon-bell';
     let iconBg = 'rgba(15, 50, 96, 0.1)';
     let iconColor = 'var(--primary-color, #0F3260)';
-    if (type === 'success') {
+    if (category === 'submission') {
+        iconClass = 'icon-upload-cloud';
+        iconColor = '#059669';
+        iconBg = 'rgba(16, 185, 129, 0.12)';
+    } else if (category === 'record_update') {
+        iconClass = 'icon-refresh-cw';
+        iconColor = '#2563EB';
+        iconBg = 'rgba(59, 130, 246, 0.12)';
+    } else if (category === 'status_change') {
+        iconClass = 'icon-activity';
+        iconColor = '#D97706';
+        iconBg = 'rgba(245, 158, 11, 0.12)';
+    }
+
+    if (type === 'success' && category !== 'submission') {
         iconClass = 'icon-check-circle-2';
         iconBg = 'rgba(16, 185, 129, 0.12)';
         iconColor = '#10B981';
@@ -529,12 +599,15 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
         ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : 'Just now';
 
+    // Clean display title
+    const displayTitle = (title || 'Activity Alert').replace(/^(\[[^\]]+\]|\w+ \w+:)\s*/i, '').trim();
+
     popup.innerHTML = `
         <div class="desktop-popup-inner">
             <div class="desktop-popup-header">
-                <span class="desktop-popup-badge">
+                <span class="desktop-popup-badge ${category || ''}">
                     <span class="pulse-dot"></span>
-                    ${role} Alert
+                    ${escapeHtml(catLabel)}
                 </span>
                 <span class="desktop-popup-time">${timeDisplay}</span>
                 <button type="button" class="desktop-popup-close" title="Dismiss" aria-label="Dismiss">✕</button>
@@ -544,8 +617,8 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
                     <i class="${iconClass}" style="font-size: 18px;"></i>
                 </div>
                 <div class="desktop-popup-content">
-                    <h4 class="desktop-popup-title">${title}</h4>
-                    <p class="desktop-popup-msg">${message}</p>
+                    <h4 class="desktop-popup-title">${escapeHtml(displayTitle)}</h4>
+                    <p class="desktop-popup-msg">${escapeHtml(message)}</p>
                 </div>
             </div>
             <div class="desktop-popup-footer">
@@ -569,7 +642,7 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
     popup.addEventListener('click', (e) => {
         if (e.target.closest('.desktop-popup-close')) return;
         dismiss();
-        window.handleWebNotificationClick(id, title);
+        window.handleActivityCardClick(id);
     });
 
     const closeBtn = popup.querySelector('.desktop-popup-close');
@@ -599,13 +672,16 @@ window.showDesktopPopupNotification = function({ id, title, message, type = 'inf
     container.appendChild(popup);
     startTimer();
 
+    // Play subtle audio cue
+    playActivityChime();
+
     if (window.lucide) {
-        try { window.lucide.createIcons(); } catch (_) {}
+        try { window.lucide.createIcons(); } catch (_) { }
     }
 };
 
 // Backward-compatible alias for existing callers
-window.showWebPopupNotification = function(title, message, notificationId) {
+window.showWebPopupNotification = function (title, message, notificationId) {
     window.showDesktopPopupNotification({
         id: notificationId,
         title: title,
@@ -615,8 +691,11 @@ window.showWebPopupNotification = function(title, message, notificationId) {
     });
 };
 
-// ── Role-Specific Notifications (Super Admin Web Interface ONLY) ────────────
+// ── Activity-Based Notification System State (Super Admin) ──────────
 let isInitialNotificationLoad = true;
+let currentCategoryFilter = 'all';
+let filterUnreadOnly = false;
+let activeModalNotification = null;
 
 async function loadNotifications(options = {}) {
     try {
@@ -637,20 +716,23 @@ async function loadNotifications(options = {}) {
             .select('*')
             .or(filterParts.join(','))
             .order('timestamp', { ascending: false })
-            .limit(30);
+            .limit(50);
 
         if (error) throw error;
 
-        // Strict client-side isolation filter: discard any regular Admin notification or Admin activity
-        systemNotifications = (data || []).filter(n => {
+        // Strict client-side isolation filter: discard any regular Admin notification
+        const rawList = (data || []).filter(n => {
             const sid = (n.studentId || '').toLowerCase();
-            const title = (n.title || '').toLowerCase();
-            const isAdminActivity = title.startsWith('new submission:') ||
-                                    title.startsWith('record update:') ||
-                                    title.startsWith('status change:') ||
-                                    n.type === 'admin_activity';
-            return !isAdminActivity && sid !== 'admin' && (sid === 'superadmin' || sid === superUsername.toLowerCase() || sid === superUid);
+            return sid !== 'admin' && (sid === 'superadmin' || sid === superUsername.toLowerCase() || sid === superUid);
         });
+
+        // Annotate each notification with its activity category
+        systemNotifications = rawList.map(n => ({
+            ...n,
+            category: window.SuperAdminNotificationService
+                ? window.SuperAdminNotificationService.classifyCategory(n)
+                : SuperAdminNotificationService.classifyCategory(n)
+        }));
 
         // If background polling detects an unseen unread notification, trigger the alerts
         if (options.checkNewAlerts && !isInitialNotificationLoad) {
@@ -662,12 +744,13 @@ async function loadNotifications(options = {}) {
                         title: n.title || 'Super Admin Notification',
                         message: n.message || '',
                         type: n.type || 'info',
+                        category: n.category,
                         role: 'Super Admin',
                         timestamp: n.timestamp || new Date().toISOString()
                     });
                     window.triggerSystemPushNotification({
                         id: n.id,
-                        title: `[Super Admin] ${n.title || 'New Notification'}`,
+                        title: `[Super Admin] ${n.title || 'New Activity'}`,
                         message: n.message || '',
                         role: 'superadmin'
                     });
@@ -683,11 +766,35 @@ async function loadNotifications(options = {}) {
             isInitialNotificationLoad = false;
         }
 
+        updateCategoryCounts();
         renderNotificationsDropdown();
         updateBellBadge();
+
+        // Update last sync time
+        const syncTimeEl = document.getElementById('activity-last-sync-time');
+        if (syncTimeEl) {
+            syncTimeEl.textContent = `Synced ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
     } catch (e) {
-        console.error('Error loading Super Admin notifications:', e);
+        console.error('Error loading Super Admin activity notifications:', e);
     }
+}
+
+function updateCategoryCounts() {
+    const totalAll = systemNotifications.length;
+    const totalSubmission = systemNotifications.filter(n => n.category === 'submission').length;
+    const totalRecordUpdate = systemNotifications.filter(n => n.category === 'record_update').length;
+    const totalStatusChange = systemNotifications.filter(n => n.category === 'status_change').length;
+
+    const countAllEl = document.getElementById('count-all');
+    const countSubEl = document.getElementById('count-submission');
+    const countRecEl = document.getElementById('count-record_update');
+    const countStatEl = document.getElementById('count-status_change');
+
+    if (countAllEl) countAllEl.textContent = totalAll;
+    if (countSubEl) countSubEl.textContent = totalSubmission;
+    if (countRecEl) countRecEl.textContent = totalRecordUpdate;
+    if (countStatEl) countStatEl.textContent = totalStatusChange;
 }
 
 function updateBellBadge() {
@@ -707,101 +814,328 @@ function renderNotificationsDropdown() {
     const container = document.getElementById('notification-items-container');
     if (!container) return;
 
-    if (systemNotifications.length === 0) {
+    // Filter by category
+    let filtered = systemNotifications;
+    if (currentCategoryFilter !== 'all') {
+        filtered = filtered.filter(n => n.category === currentCategoryFilter);
+    }
+    if (filterUnreadOnly) {
+        filtered = filtered.filter(n => !n.isRead);
+    }
+
+    // Update filter label
+    const filterLabel = document.getElementById('activity-active-filter-label');
+    if (filterLabel) {
+        const catMap = {
+            'all': 'All Activities',
+            'submission': 'Submissions Only',
+            'record_update': 'Record Updates Only',
+            'status_change': 'Status Changes Only'
+        };
+        filterLabel.textContent = `${catMap[currentCategoryFilter] || 'Activities'}${filterUnreadOnly ? ' (Unread)' : ''} • ${filtered.length}`;
+    }
+
+    if (filtered.length === 0) {
+        const emptyLabels = {
+            'all': 'No recent activities recorded for Super Admin.',
+            'submission': 'No submission activities yet.',
+            'record_update': 'No record update activities yet.',
+            'status_change': 'No status change activities yet.'
+        };
         container.innerHTML = `
-            <div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 12px; font-family: inherit;">
-                <i class="icon-bell-off" style="font-size: 24px; opacity: 0.4; display: block; margin: 0 auto 8px auto;"></i>
-                No notifications for Super Admin yet.
+            <div style="padding: 36px 16px; text-align: center; color: var(--text-secondary); font-size: 12px; font-family: inherit;">
+                <i class="icon-inbox" style="font-size: 28px; opacity: 0.35; display: block; margin: 0 auto 8px auto;"></i>
+                ${filterUnreadOnly ? 'No unread notifications in this category.' : (emptyLabels[currentCategoryFilter] || 'No activities found.')}
             </div>
         `;
         if (window.lucide) {
-            try { window.lucide.createIcons(); } catch (_) {}
+            try { window.lucide.createIcons(); } catch (_) { }
         }
         return;
     }
 
-    container.innerHTML = systemNotifications.map(n => {
-        let iconClass = 'icon-info';
-        let colorClass = 'var(--primary-color, #0F3260)';
-        if (n.type === 'success') {
-            iconClass = 'icon-check-circle-2';
-            colorClass = 'var(--success, #4CAF50)';
-        } else if (n.type === 'warning') {
-            iconClass = 'icon-alert-circle';
-            colorClass = 'var(--warning, #FF9800)';
-        } else if (n.type === 'error') {
-            iconClass = 'icon-x-circle';
-            colorClass = 'var(--error, #F44336)';
+    // Temporal Grouping: Group into Today, Yesterday, Earlier
+    const now = new Date();
+    const todayStr = now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+
+    const groups = {
+        'Today': [],
+        'Yesterday': [],
+        'Earlier': []
+    };
+
+    filtered.forEach(n => {
+        if (!n.timestamp) {
+            groups['Earlier'].push(n);
+            return;
         }
+        const notifDate = new Date(n.timestamp);
+        const dStr = notifDate.toDateString();
+        if (dStr === todayStr) {
+            groups['Today'].push(n);
+        } else if (dStr === yesterdayStr) {
+            groups['Yesterday'].push(n);
+        } else {
+            groups['Earlier'].push(n);
+        }
+    });
 
-        const dateStr = n.timestamp ? new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        const bg = n.isRead ? 'transparent' : 'var(--notification-unread-bg)';
-        const border = n.isRead ? '1px solid transparent' : '1px solid var(--notification-unread-border)';
+    let html = '';
+    for (const [groupName, items] of Object.entries(groups)) {
+        if (items.length === 0) continue;
 
-        return `
-            <div class="notification-item" style="padding: 10px; border-radius: 10px; background: ${bg}; border: ${border}; display: flex; gap: 10px; cursor: pointer; transition: background 0.15s;" onclick="handleWebNotificationClick('${n.id}', '${n.title}')" onmouseover="this.style.background='var(--notification-unread-border)'" onmouseout="this.style.background='${bg}'">
-                <div style="width: 28px; height: 28px; border-radius: 50%; background: ${colorClass}15; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="${iconClass}" style="color: ${colorClass}; font-size: 14px;"></i>
-                </div>
-                <div style="flex: 1; min-width: 0; font-family: inherit;">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-                        <span style="font-weight: ${n.isRead ? '600' : '700'}; font-size: 12px; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${n.title}</span>
-                        <span style="font-size: 9px; color: var(--text-secondary); flex-shrink: 0;">${dateStr}</span>
+        html += `<div class="activity-group-title">${groupName}</div>`;
+
+        items.forEach(n => {
+            const timeAgo = formatTimeAgo(n.timestamp);
+            const category = n.category || SuperAdminNotificationService.classifyCategory(n);
+            const badgeLabel = SuperAdminNotificationService.CATEGORY_LABELS[category] || 'Activity';
+
+            let iconClass = 'icon-info';
+            let iconColor = 'var(--primary-color, #0F3260)';
+            let iconBg = 'rgba(15, 50, 96, 0.1)';
+
+            if (category === 'submission') {
+                iconClass = 'icon-upload-cloud';
+                iconColor = '#059669';
+                iconBg = 'rgba(16, 185, 129, 0.12)';
+            } else if (category === 'record_update') {
+                iconClass = 'icon-refresh-cw';
+                iconColor = '#2563EB';
+                iconBg = 'rgba(59, 130, 246, 0.12)';
+            } else if (category === 'status_change') {
+                iconClass = 'icon-activity';
+                iconColor = '#D97706';
+                iconBg = 'rgba(245, 158, 11, 0.12)';
+            }
+
+            if (n.type === 'success' && category !== 'submission') {
+                iconClass = 'icon-check-circle-2';
+                iconColor = '#10B981';
+                iconBg = 'rgba(16, 185, 129, 0.12)';
+            } else if (n.type === 'error') {
+                iconClass = 'icon-alert-octagon';
+                iconColor = '#EF4444';
+                iconBg = 'rgba(239, 68, 68, 0.12)';
+            }
+
+            // Clean title for display
+            const displayTitle = (n.title || 'Activity Alert').replace(/^(\[[^\]]+\]|\w+ \w+:)\s*/i, '').trim();
+
+            html += `
+                <div class="activity-card ${n.isRead ? '' : 'unread'}" data-id="${n.id}" onclick="handleActivityCardClick('${n.id}')">
+                    ${!n.isRead ? '<span class="activity-unread-indicator" title="Unread activity"></span>' : ''}
+                    <div class="activity-icon-container" style="background: ${iconBg}; color: ${iconColor};">
+                        <i class="${iconClass}" style="font-size: 16px;"></i>
                     </div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${n.message}</div>
+                    <div class="activity-body">
+                        <div class="activity-top-row">
+                            <span class="activity-cat-badge ${category}">
+                                <i class="${category === 'submission' ? 'icon-upload-cloud' : (category === 'status_change' ? 'icon-check-circle' : 'icon-refresh-cw')}" style="font-size: 10px;"></i>
+                                ${badgeLabel}
+                            </span>
+                            <span class="activity-timestamp">${timeAgo}</span>
+                        </div>
+                        <div class="activity-title" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</div>
+                        <div class="activity-message">${escapeHtml(n.message || '')}</div>
+                        <div class="activity-item-actions" onclick="event.stopPropagation()">
+                            <button type="button" class="activity-read-toggle-btn" onclick="toggleReadStatus('${n.id}', ${!n.isRead})" title="${n.isRead ? 'Mark as unread' : 'Mark as read'}">
+                                <i class="${n.isRead ? 'icon-circle' : 'icon-check'}" style="font-size: 10px;"></i> ${n.isRead ? 'Unread' : 'Mark Read'}
+                            </button>
+                            <button type="button" class="activity-read-toggle-btn" onclick="openActivityDetails('${n.id}')" title="View complete details">
+                                <i class="icon-eye" style="font-size: 10px;"></i> View Details
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        `;
-    }).join('');
+            `;
+        });
+    }
+
+    container.innerHTML = html;
 
     if (window.lucide) {
-        try { window.lucide.createIcons(); } catch (_) {}
+        try { window.lucide.createIcons(); } catch (_) { }
     }
 }
 
-window.handleWebNotificationClick = async function(notificationId, title) {
+// Toggle read/unread status for an individual notification
+window.toggleReadStatus = async function (notificationId, targetState) {
     try {
-        if (notificationId) {
-            await window.supabaseClient
-                .from('notifications')
-                .update({ isRead: true })
-                .eq('id', notificationId);
-        }
+        if (!notificationId) return;
 
-        // Close dropdown
-        if (notificationDropdown) notificationDropdown.classList.add('hidden');
+        // Optimistically update local array
+        const notif = systemNotifications.find(n => String(n.id) === String(notificationId));
+        if (notif) notif.isRead = targetState;
 
-        // Context-aware navigation for Super Admin Dashboard
-        const lowerTitle = (title || '').toLowerCase();
-        if (lowerTitle.includes('sa number') || lowerTitle.includes('sa verification')) {
-            window.navigateToView('sa_verification');
-        } else if (lowerTitle.includes('id validation') || lowerTitle.includes('id document') || lowerTitle.includes('sticker')) {
-            window.navigateToView('id_validation');
-        } else if (lowerTitle.includes('masterlist') || lowerTitle.includes('import') || lowerTitle.includes('cross-match')) {
-            window.navigateToView('masterlist_import');
-        } else if (lowerTitle.includes('announcement')) {
-            window.navigateToView('announcements');
-        } else if (lowerTitle.includes('audit') || lowerTitle.includes('activity')) {
-            window.navigateToView('audit_logs');
-        } else if (lowerTitle.includes('report')) {
-            window.navigateToView('reports');
-        } else if (lowerTitle.includes('scholarship')) {
-            window.navigateToView('scholarships');
-        } else if (lowerTitle.includes('setting') || lowerTitle.includes('password') || lowerTitle.includes('security')) {
-            window.navigateToView('settings');
-        } else if (lowerTitle.includes('student') || lowerTitle.includes('profile') || lowerTitle.includes('grantee')) {
-            window.navigateToView('student_records');
-        } else {
-            // Default: Dashboard overview
-            window.navigateToView('dashboard');
-        }
+        updateBellBadge();
+        renderNotificationsDropdown();
 
-        // Reload notifications list
-        loadNotifications();
-    } catch (e) {
-        console.error('Error handling Super Admin notification click:', e);
+        // Persist to Supabase
+        await window.supabaseClient
+            .from('notifications')
+            .update({ isRead: targetState })
+            .eq('id', notificationId);
+
+    } catch (err) {
+        console.error('Error toggling notification read status:', err);
     }
 };
+
+window.handleActivityCardClick = async function (id) {
+    const notif = systemNotifications.find(n => String(n.id) === String(id));
+    if (!notif) return;
+
+    // Mark as read if currently unread
+    if (!notif.isRead) {
+        await toggleReadStatus(id, true);
+    }
+
+    // Close dropdown
+    if (notificationDropdown) notificationDropdown.classList.add('hidden');
+
+    // Context-aware navigation for Super Admin Dashboard
+    const lowerTitle = (notif.title || '').toLowerCase();
+    const lowerMsg = (notif.message || '').toLowerCase();
+    const combined = `${lowerTitle} ${lowerMsg}`;
+
+    if (combined.includes('school student') || combined.includes('school enrollment') || combined.includes('school_students') || combined.includes('student record')) {
+        window.navigateToView('student_records');
+    } else if (combined.includes('masterlist') || combined.includes('grantee') || combined.includes('import')) {
+        window.navigateToView('masterlist_import');
+    } else if (combined.includes('sa number') || combined.includes('sa verification')) {
+        window.navigateToView('sa_verification');
+    } else if (combined.includes('id validation') || combined.includes('id document') || combined.includes('sticker')) {
+        window.navigateToView('id_validation');
+    } else if (combined.includes('announcement')) {
+        window.navigateToView('announcements');
+    } else if (combined.includes('audit') || combined.includes('activity')) {
+        window.navigateToView('audit_logs');
+    } else if (combined.includes('report') || combined.includes('analytics')) {
+        window.navigateToView('reports');
+    } else if (combined.includes('scholarship')) {
+        window.navigateToView('scholarships');
+    } else if (combined.includes('setting') || combined.includes('password') || combined.includes('security')) {
+        window.navigateToView('settings');
+    } else {
+        // Default: Dashboard overview
+        window.navigateToView('dashboard');
+    }
+};
+
+// Backward-compatible alias for existing callers
+window.handleWebNotificationClick = function (notificationId, title) {
+    window.handleActivityCardClick(notificationId);
+};
+
+window.openActivityDetails = function (id) {
+    const notif = systemNotifications.find(n => String(n.id) === String(id));
+    if (!notif) return;
+
+    activeModalNotification = notif;
+    const modal = document.getElementById('activity-details-modal');
+    if (!modal) return;
+
+    const category = notif.category || SuperAdminNotificationService.classifyCategory(notif);
+    const badgeLabel = SuperAdminNotificationService.CATEGORY_LABELS[category] || 'Activity';
+
+    const modalBadge = document.getElementById('modal-activity-badge');
+    const modalTypeBadge = document.getElementById('modal-activity-type-badge');
+    const modalTitle = document.getElementById('modal-activity-title');
+    const modalMessage = document.getElementById('modal-activity-message');
+    const modalTimestamp = document.getElementById('modal-activity-timestamp');
+    const modalScope = document.getElementById('modal-activity-scope');
+    const markReadBtn = document.getElementById('modal-mark-read-btn');
+    const actionBtn = document.getElementById('modal-action-btn');
+
+    if (modalBadge) {
+        modalBadge.className = `activity-cat-badge ${category}`;
+        modalBadge.innerHTML = `<i class="${category === 'submission' ? 'icon-upload-cloud' : (category === 'status_change' ? 'icon-check-circle' : 'icon-refresh-cw')}" style="font-size: 11px;"></i> ${badgeLabel}`;
+    }
+
+    if (modalTypeBadge) {
+        const typeMap = { 'success': 'Success', 'warning': 'Warning', 'error': 'Critical Alert', 'info': 'Information' };
+        modalTypeBadge.textContent = typeMap[notif.type] || 'Information';
+        modalTypeBadge.style.color = notif.type === 'success' ? '#10B981' : (notif.type === 'warning' ? '#F59E0B' : (notif.type === 'error' ? '#EF4444' : 'var(--text-secondary)'));
+    }
+
+    if (modalTitle) modalTitle.textContent = (notif.title || 'Activity Alert').replace(/^(\[[^\]]+\]|\w+ \w+:)\s*/i, '').trim();
+    if (modalMessage) modalMessage.textContent = notif.message || '';
+    if (modalTimestamp) modalTimestamp.textContent = notif.timestamp ? new Date(notif.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
+    if (modalScope) modalScope.textContent = notif.studentId === 'superadmin' ? 'Super Admin Interface' : 'ScholarDoc Platform';
+
+    if (markReadBtn) {
+        markReadBtn.textContent = notif.isRead ? 'Mark as Unread' : 'Mark as Read';
+        markReadBtn.onclick = async () => {
+            await toggleReadStatus(notif.id, !notif.isRead);
+            modal.classList.remove('open');
+        };
+    }
+
+    if (actionBtn) {
+        actionBtn.onclick = () => {
+            modal.classList.remove('open');
+            window.handleActivityCardClick(notif.id);
+        };
+    }
+
+    modal.classList.add('open');
+    if (window.lucide) {
+        try { window.lucide.createIcons(); } catch (_) { }
+    }
+};
+
+function setupActivityTabsAndFilters() {
+    const tabs = document.querySelectorAll('.notif-tab[data-category]');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            e.stopPropagation();
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentCategoryFilter = tab.dataset.category || 'all';
+            renderNotificationsDropdown();
+        });
+    });
+
+    const unreadCheckbox = document.getElementById('filter-unread-only');
+    if (unreadCheckbox) {
+        unreadCheckbox.addEventListener('change', (e) => {
+            filterUnreadOnly = e.target.checked;
+            renderNotificationsDropdown();
+        });
+    }
+
+    const refreshBtn = document.getElementById('refresh-notifs-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            refreshBtn.classList.add('syncing');
+            await loadNotifications({ checkNewAlerts: false });
+            setTimeout(() => refreshBtn.classList.remove('syncing'), 600);
+        });
+    }
+
+    // Modal close listeners
+    const closeActivityModalBtn = document.getElementById('close-activity-modal-btn');
+    if (closeActivityModalBtn) {
+        closeActivityModalBtn.addEventListener('click', () => {
+            const modal = document.getElementById('activity-details-modal');
+            if (modal) modal.classList.remove('open');
+        });
+    }
+
+    const activityModal = document.getElementById('activity-details-modal');
+    if (activityModal) {
+        activityModal.addEventListener('click', (e) => {
+            if (e.target === activityModal) {
+                activityModal.classList.remove('open');
+            }
+        });
+    }
+}
 
 function setupRealtimeNotifications() {
     // Request desktop push notification permission on startup
@@ -824,13 +1158,8 @@ function setupRealtimeNotifications() {
 
                 // STRICT SEPARATION: Only proceed if this notification is intended for Super Admin
                 const isForSuper = (target === 'superadmin' || target === superUsername || (superUid && target === superUid));
-                const notifTitle = (payload.new?.title || '').toLowerCase();
-                const isAdminActivity = notifTitle.startsWith('new submission:') ||
-                                        notifTitle.startsWith('record update:') ||
-                                        notifTitle.startsWith('status change:') ||
-                                        payload.new?.type === 'admin_activity';
-                if (!isForSuper || target === 'admin' || isAdminActivity) {
-                    return; // Ignore regular Admin activity notifications completely!
+                if (!isForSuper || target === 'admin') {
+                    return; // Ignore regular Admin notifications completely!
                 }
 
                 if (payload.eventType === 'INSERT' && payload.new) {
@@ -844,25 +1173,33 @@ function setupRealtimeNotifications() {
                     }
                     if (notifIdStr) seenNotificationIds.add(notifIdStr);
 
-                    // 1. Display desktop pop-up notification in LOWER-RIGHT corner of screen
+                    const category = window.SuperAdminNotificationService
+                        ? window.SuperAdminNotificationService.classifyCategory(notif)
+                        : 'system';
+
+                    // 1. Play audio chime
+                    playActivityChime();
+
+                    // 2. Display desktop pop-up notification in LOWER-RIGHT corner of screen
                     window.showDesktopPopupNotification({
                         id: notif.id,
                         title: notif.title || 'Super Admin Notification',
                         message: notif.message || '',
                         type: notif.type || 'info',
+                        category: category,
                         role: 'Super Admin',
                         timestamp: notif.timestamp || new Date().toISOString()
                     });
 
-                    // 2. Trigger native OS desktop push notification (supports background delivery)
+                    // 3. Trigger native OS desktop push notification (supports background delivery)
                     window.triggerSystemPushNotification({
                         id: notif.id,
-                        title: `[Super Admin] ${notif.title || 'New Notification'}`,
+                        title: `[Super Admin] ${notif.title || 'New Activity'}`,
                         message: notif.message || '',
                         role: 'superadmin'
                     });
 
-                    // 3. Refresh dropdown & bell badge
+                    // 4. Refresh dropdown & bell badge
                     loadNotifications();
                 } else {
                     loadNotifications();
@@ -955,6 +1292,11 @@ function initDashboard() {
     checkSession();
     loadNotifications();
     setupRealtimeNotifications();
+    setupActivityTabsAndFilters();
+
+    window.addEventListener('superadmin_activity_logged', () => {
+        loadNotifications({ checkNewAlerts: false });
+    });
 
     if (window.lucide) {
         try { window.lucide.createIcons(); } catch (_) {}

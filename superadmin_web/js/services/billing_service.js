@@ -87,10 +87,10 @@ export class BillingService {
             }
 
             if (!match && fullName !== '' && scholarship !== '') {
-                match = masterList.find(s => 
+                match = masterList.find(s =>
                     String(s.fullName || '').trim().toLowerCase() === fullName.toLowerCase() &&
                     (String(s.scholarship_name || s.scholarshipName || s.scholarship || '').trim().toLowerCase() === scholarship.toLowerCase() ||
-                     String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
+                        String(s.scholarshipType || '').trim().toLowerCase() === scholarship.toLowerCase())
                 );
             }
 
@@ -104,16 +104,16 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Student ID', ['studentId']);
                 this._fillIfEmpty(resultRow, match, 'Full Name', ['fullName']);
                 this._fillIfEmpty(resultRow, match, 'Scholarship Type', ['scholarship_name', 'scholarshipName', 'scholarship', 'scholarshipType']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Course/Program', ['course']);
                 this._fillIfEmpty(resultRow, match, 'Degree/Program', ['course']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Year Level', ['year', 'scholarYearLevel']);
                 this._fillIfEmpty(resultRow, match, 'Year', ['year', 'scholarYearLevel']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Semester', ['semester']);
                 this._fillIfEmpty(resultRow, match, 'Academic Year', ['academicYear', 'ay']);
-                
+
                 const family = match.familyDetails || {};
                 this._fillIfEmpty(resultRow, match, 'SA Number', ['saNumber', () => family.saNumber]); // Function trick not supported like this, so just mapping to string below
                 if (!resultRow['SA Number'] && family.saNumber) resultRow['SA Number'] = family.saNumber;
@@ -121,20 +121,20 @@ export class BillingService {
                 this._fillIfEmpty(resultRow, match, 'Sex at Birth (M/F)', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Sex', ['gender']);
                 this._fillIfEmpty(resultRow, match, 'Gender', ['gender']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Birthdate (mm/dd/yyyy)', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthdate', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birth Date', ['birthdate']);
                 this._fillIfEmpty(resultRow, match, 'Birthday', ['birthdate']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'E-mail address', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email', ['email']);
                 this._fillIfEmpty(resultRow, match, 'Email Address', ['email']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Phone Number', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Phone', ['contactNumber']);
                 this._fillIfEmpty(resultRow, match, 'Contact Number', ['contactNumber']);
-                
+
                 this._fillIfEmpty(resultRow, match, 'Status', ['status']);
             } else {
                 unmatchedCount++;
@@ -162,7 +162,7 @@ export class BillingService {
         if (!data || data.length === 0) return;
 
         const headers = Object.keys(data[0]).filter(k => k !== 'matchStatus');
-        
+
         if (asCsv) {
             const rows = [headers];
             for (let row of data) {
@@ -206,7 +206,7 @@ export class BillingService {
             const restParts = rest.split(/\s+/);
             let givenName = '';
             let middleInitial = '';
-            
+
             if (restParts.length > 1) {
                 const lastPart = restParts[restParts.length - 1];
                 middleInitial = lastPart.charAt(0).toUpperCase();
@@ -415,6 +415,43 @@ export class BillingService {
             let row10 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '10');
             if (!row10) row10 = this._getOrCreateRow(doc, sheetData, 10);
             this._fillCell(doc, row10, 'B10', titleVal, false, '308');
+
+            // Reference Number (Row 11 O11): If standalone template (has external reference [1] or no formula)
+            let row11 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '11');
+            if (row11) {
+                const o11Cell = Array.from(row11.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === 'O11');
+                if (o11Cell) {
+                    const fTag = o11Cell.getElementsByTagName('f')[0];
+                    const fText = fTag ? fTag.textContent : '';
+                    if (!fTag || fText.includes('[')) {
+                        const ayMatch = academicYear.match(/\b(20\d\d)\b/);
+                        const ayStartYear = ayMatch ? parseInt(ayMatch[1], 10) : new Date().getFullYear();
+                        let termCode = '1';
+                        if (semester.toLowerCase().includes('2nd') || semester.includes('2')) termCode = '2';
+                        else if (semester.toLowerCase().includes('summer') || semester.toLowerCase().includes('midyear')) termCode = '3';
+                        const regionalCode = metadata.regionalCode || '10';
+                        const heiCode = metadata.heiCode || 'USTP';
+                        const tranch = metadata.tranch || '1';
+                        const billingRefNo = `${regionalCode}-${heiCode}-${ayStartYear}-${termCode}-${tranch}:${cleanBatch}`;
+                        this._fillCell(doc, row11, 'O11', billingRefNo, false, o11Cell.getAttribute('s') || '120');
+                    }
+                }
+            }
+
+            // Date (Row 12 O12)
+            let row12 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '12');
+            if (row12) {
+                const o12Cell = Array.from(row12.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === 'O12');
+                if (o12Cell) {
+                    const now = new Date();
+                    const formattedDate = metadata.date || now.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    this._fillCell(doc, row12, 'O12', formattedDate, false, o12Cell.getAttribute('s') || '119');
+                }
+            }
         }
 
         if (shiftCount > 0) {
@@ -623,7 +660,7 @@ export class BillingService {
         return serializer.serializeToString(doc);
     }
 
-    static _injectForm3Rows(xmlStr, students) {
+    static _injectForm3Rows(xmlStr, students, metadata = {}) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlStr, "application/xml");
         const sheetData = doc.getElementsByTagName("sheetData")[0];
@@ -633,6 +670,38 @@ export class BillingService {
         const shiftCount = students.length > templateCapacity ? students.length - templateCapacity : 0;
 
         const row34Styles = this._extractRowStyles(doc, startRow);
+
+        // Header Title (Row 9 B9: "TES Batch [Batch] - [Semester] and Academic Year [AY]")
+        if (metadata && (metadata.batch || metadata.academicYear || metadata.semester)) {
+            const rawBatch = String(metadata.batch || '1').trim();
+            const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
+            const academicYear = metadata.academicYear || '2024-2025';
+            const semester = metadata.semester || '1st Semester';
+            const titleVal = `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`;
+
+            let row9 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '9');
+            if (!row9) row9 = this._getOrCreateRow(doc, sheetData, 9);
+            const b9Cell = Array.from(row9.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === 'B9');
+            const hasFormula = b9Cell && b9Cell.getElementsByTagName('f').length > 0;
+            if (!hasFormula) {
+                this._fillCell(doc, row9, 'B9', titleVal, false, b9Cell ? b9Cell.getAttribute('s') || '35' : '35');
+            }
+
+            // Date (Row 11 L11)
+            let row11 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '11');
+            if (row11) {
+                const l11Cell = Array.from(row11.childNodes).find(n => n.nodeName === 'c' && n.getAttribute('r') === 'L11');
+                if (l11Cell) {
+                    const now = new Date();
+                    const formattedDate = metadata.date || now.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    this._fillCell(doc, row11, 'L11', formattedDate, false, l11Cell.getAttribute('s') || '21');
+                }
+            }
+        }
 
         if (shiftCount > 0) {
             // 1. Shift mergeCells with rows >= footerStartRow
@@ -943,7 +1012,7 @@ export class BillingService {
         // 3. Populate Form 3 (Not Included Students)
         if (zip.file(sheetPath3)) {
             let sheet3Xml = await zip.file(sheetPath3).async("string");
-            sheet3Xml = this._injectForm3Rows(sheet3Xml, studentsForm3);
+            sheet3Xml = this._injectForm3Rows(sheet3Xml, studentsForm3, metadata);
             zip.file(sheetPath3, sheet3Xml);
         }
 
@@ -1006,11 +1075,11 @@ export class BillingService {
     /**
      * Fills Annex 5 - Form 3 template (.xlsx)
      */
-    static async fillAnnex5Form3(templateBytes, students) {
+    static async fillAnnex5Form3(templateBytes, students, metadata = {}) {
         const zip = await JSZip.loadAsync(templateBytes);
         if (zip.file('xl/worksheets/sheet1.xml')) {
             let sheet1Xml = await zip.file('xl/worksheets/sheet1.xml').async("string");
-            sheet1Xml = this._injectForm3Rows(sheet1Xml, students);
+            sheet1Xml = this._injectForm3Rows(sheet1Xml, students, metadata);
             zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
         }
         const blob = await zip.generateAsync({

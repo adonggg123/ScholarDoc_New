@@ -809,15 +809,17 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
                 timestamp: new Date().toISOString()
             }]);
 
-            // Notify Admin of Super Admin ID validation update
-            await supabase.from('notifications').insert([{
-                studentId: 'admin',
-                title: `ID Validation: ${newStatus}`,
-                message: `Super Admin marked ID Validation as ${newStatus} for ${s.fullName || s.full_name || 'student'}.`,
-                type: newStatus === 'Verified' ? 'success' : 'warning',
-                isRead: false,
-                timestamp: new Date().toISOString()
-            }]);
+
+
+            // Log activity notification for Super Admin
+            if (window.SuperAdminNotificationService) {
+                await window.SuperAdminNotificationService.notifyStatusChange({
+                    title: `ID Validation: ${newStatus}`,
+                    message: `Marked ID Validation as ${newStatus} for ${s.fullName || s.full_name || 'student'}.`,
+                    type: newStatus === 'Verified' ? 'success' : 'warning',
+                    metadata: { studentId: s.studentId, studentNo: s.student_no, status: newStatus }
+                });
+            }
         } catch (notifErr) {
             console.warn('Could not send notification:', notifErr);
         }

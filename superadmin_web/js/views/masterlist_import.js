@@ -944,6 +944,30 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 window.showToast(`Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
             }
 
+            // Notify Registrar of newly imported grantees ready for Annex 5 TES Billing
+            try {
+                await window.supabaseClient.from('notifications').insert([{
+                    studentId: 'admin',
+                    title: 'Record Update: New Grantees Masterlist Uploaded',
+                    message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedBatch || 'Batch 1.1'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                    type: 'success',
+                    isRead: false,
+                    timestamp: new Date().toISOString()
+                }]);
+            } catch (_) { }
+
+            // Log activity notification for Super Admin
+            try {
+                if (window.SuperAdminNotificationService) {
+                    await window.SuperAdminNotificationService.notifySubmission({
+                        title: 'New Grantees Masterlist Uploaded',
+                        message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedBatch || 'Batch 1.1'}). Registrar notified for Annex 5 review.`,
+                        type: 'success',
+                        metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, batch: selectedBatch }
+                    });
+                }
+            } catch (_) { }
+
             // Re-render table and badges according to active term filter
             applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
 
@@ -1238,17 +1262,29 @@ async function saveRecordsToDatabase() {
             btnSaveRecords.style.background = '#10b981';
         }
 
-        // Notify Admin of newly imported grantees ready for Annex 5 TES Billing
+        // 1. Notify Registrar of newly imported grantees ready for Annex 5 TES Billing
         try {
             await window.supabaseClient.from('notifications').insert([{
                 studentId: 'admin',
-                title: 'New Grantees Masterlist Imported',
-                message: `Super Admin imported ${validToInsert.length} new grantees. Records ready for Annex 5 TES Billing review.`,
-                type: 'info',
+                title: 'Record Update: New Grantees Masterlist Uploaded',
+                message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedSemester || '1st Sem'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                type: 'success',
                 isRead: false,
                 timestamp: new Date().toISOString()
             }]);
-        } catch (_) {}
+        } catch (_) { }
+
+        // 2. Log activity notification for Super Admin
+        try {
+            if (window.SuperAdminNotificationService) {
+                await window.SuperAdminNotificationService.notifySubmission({
+                    title: 'New Grantees Masterlist Uploaded',
+                    message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedSemester || '1st Sem'}). Registrar notified for Annex 5 review.`,
+                    type: 'success',
+                    metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, semester: selectedSemester }
+                });
+            }
+        } catch (_) { }
 
         await fetchExistingMasterlist();
 
@@ -3486,16 +3522,128 @@ export function initMasterlistImport() {
         }
     };
 
+    const exportForm2Only = async (triggerBtn) => {
+        const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
+        try {
+            if (triggerBtn) {
+                triggerBtn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+                triggerBtn.disabled = true;
+            }
+
+            // Fetch Form 2 template
+            let resp = await fetch('/assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) resp = await fetch('assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) resp = await fetch('../assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) resp = await fetch('superadmin_web/assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) {
+                throw new Error('Could not load Annex 5 Form 2 template (Annex 5-TES New Form 2.xlsx)');
+            }
+            const blob = await resp.blob();
+
+            const studentsForm2 = mapStudentsForForm2(verifiedForm2List);
+
+            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
+                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
+                || (verifiedForm2List[0]?.grantee?.batch)
+                || (verifiedForm2List[0]?.matchedStudent?.batch)
+                || (studentsForm2[0]?.batch)
+                || '1';
+
+            const metadata = {
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                batch: currentBatch,
+                regionalCode: '10',
+                heiCode: 'USTP'
+            };
+
+            const result = await BillingService.fillAnnex5Form2(blob, studentsForm2, metadata);
+            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const fileName = `Annex_5_TES_Form_2_${ayClean}_${semClean}_${Date.now()}.xlsx`;
+
+            downloadBlob(result.blob, fileName);
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(`Exported Annex 5 - Form 2 (${result.count} records)!`, 'check-circle');
+            }
+        } catch (err) {
+            console.error('Annex 5 Form 2 export error:', err);
+            alert('Failed to generate Annex 5 Form 2: ' + err.message);
+        } finally {
+            if (triggerBtn) {
+                triggerBtn.innerHTML = originalHtml;
+                triggerBtn.disabled = false;
+            }
+        }
+    };
+
+    const exportForm3Only = async (triggerBtn) => {
+        const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
+        try {
+            if (triggerBtn) {
+                triggerBtn.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Generating...';
+                triggerBtn.disabled = true;
+            }
+
+            // Fetch Form 3 template
+            let resp = await fetch('/assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) resp = await fetch('assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) resp = await fetch('../assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) resp = await fetch('superadmin_web/assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) {
+                throw new Error('Could not load Annex 5 Form 3 template (Annex 5-TES New Form 3.xlsx)');
+            }
+            const blob = await resp.blob();
+
+            const studentsForm3 = mapStudentsForForm3(verifiedForm3List);
+
+            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
+                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
+                || (verifiedForm3List[0]?.grantee?.batch)
+                || (verifiedForm3List[0]?.matchedStudent?.batch)
+                || (studentsForm3[0]?.batch)
+                || '1';
+
+            const metadata = {
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                batch: currentBatch,
+                regionalCode: '10',
+                heiCode: 'USTP'
+            };
+
+            const result = await BillingService.fillAnnex5Form3(blob, studentsForm3, metadata);
+            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const fileName = `Annex_5_TES_Form_3_${ayClean}_${semClean}_${Date.now()}.xlsx`;
+
+            downloadBlob(result.blob, fileName);
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(`Exported Annex 5 - Form 3 (${result.count} records)!`, 'check-circle');
+            }
+        } catch (err) {
+            console.error('Annex 5 Form 3 export error:', err);
+            alert('Failed to generate Annex 5 Form 3: ' + err.message);
+        } finally {
+            if (triggerBtn) {
+                triggerBtn.innerHTML = originalHtml;
+                triggerBtn.disabled = false;
+            }
+        }
+    };
+
     if (btnExportAnnexExcel) {
         btnExportAnnexExcel.addEventListener('click', () => exportConsolidatedAnnex(btnExportAnnexExcel));
     }
 
     if (btnExportF2) {
-        btnExportF2.addEventListener('click', () => exportConsolidatedAnnex(btnExportF2));
+        btnExportF2.addEventListener('click', () => exportForm2Only(btnExportF2));
     }
 
     if (btnExportF3) {
-        btnExportF3.addEventListener('click', () => exportConsolidatedAnnex(btnExportF3));
+        btnExportF3.addEventListener('click', () => exportForm3Only(btnExportF3));
     }
 
     // Annex Search Inputs

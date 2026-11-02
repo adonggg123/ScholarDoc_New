@@ -1126,14 +1126,26 @@ async function handleSchoolFile(file) {
                     console.warn('Could not write audit log:', e);
                 }
 
-                // Log activity notification for Admin
+                // Log activity notification for Admin (Registrar)
                 try {
-                    await AdminNotificationService.notifySubmission({
+                    await AdminNotificationService.notifyRecordUpdate({
                         title: 'School Enrollment List Uploaded',
                         message: `Uploaded "${file.name}" with ${storedCount} student records for Annex 5 cross-matching.`,
                         type: 'success',
                         metadata: { filename: file.name, count: storedCount }
                     });
+                } catch (_) { }
+
+                // Notify Super Admin of newly uploaded school student records
+                try {
+                    await supabase.from('notifications').insert([{
+                        studentId: 'superadmin',
+                        title: 'New Submission: School Student Records Uploaded',
+                        message: `Registrar uploaded "${file.name}" containing ${storedCount} school student records for scholarship validation.`,
+                        type: 'info',
+                        isRead: false,
+                        timestamp: new Date().toISOString()
+                    }]);
                 } catch (_) { }
 
                 showToast(`Loaded and stored ${storedCount} records in school_students database!`, 'check-circle');
@@ -1995,7 +2007,7 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
         }]).then(() => { }).catch(err => console.warn('Could not record audit log:', err));
 
         // Dispatch activity notification
-        AdminNotificationService.notifyStatusChange({
+        AdminNotificationService.notifyRecordUpdate({
             title: 'Review Queue Item Resolved',
             message: `Grantee "${granteeName}" resolved to Annex ${targetForm === 'form2' ? 'Form 2 (Enrolled)' : `Form 3 (${specialReason})`}.`,
             type: targetForm === 'form2' ? 'success' : 'warning',
@@ -2114,7 +2126,7 @@ if (btnAutoResolveAll) {
             }]).then(() => { }).catch(e => console.warn(e));
 
             // Log activity notification for Admin
-            AdminNotificationService.notifyStatusChange({
+            AdminNotificationService.notifyRecordUpdate({
                 title: 'Bulk Review Items Auto-Resolved',
                 message: `Auto-resolved ${count} review queue grantees to Annex Form 3 (Reason: Not Enrolled).`,
                 type: 'warning',
@@ -2341,7 +2353,7 @@ async function exportForm2Excel() {
         showToast('Annex 5 Form 2 Excel generated successfully!', 'check-circle');
 
         // Log activity notification for Admin
-        AdminNotificationService.notifySubmission({
+        AdminNotificationService.notifyRecordUpdate({
             title: 'Annex 5 Form 2 Generated',
             message: `Generated and exported official CHED Annex 5 Form 2 (Enrolled Grantees) with ${studentsToFill.length} students.`,
             type: 'success',
@@ -2392,7 +2404,7 @@ async function exportForm3Excel() {
         showToast('Annex 5 Form 3 Excel generated successfully!', 'check-circle');
 
         // Log activity notification for Admin
-        AdminNotificationService.notifySubmission({
+        AdminNotificationService.notifyRecordUpdate({
             title: 'Annex 5 Form 3 Generated',
             message: `Generated and exported official CHED Annex 5 Form 3 (Exceptions / Not Enrolled) with ${studentsToFill.length} students.`,
             type: 'warning',

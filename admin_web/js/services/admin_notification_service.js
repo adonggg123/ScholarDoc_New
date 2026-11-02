@@ -5,24 +5,17 @@
  * Centralized service for logging, classifying, and managing activity-based
  * notifications in the Admin (Registrar) interface.
  * 
- * Activities are organized into three primary categories:
- * - Submissions: New document uploads, school student lists, generated Annex 5 forms.
- * - Record Updates: Cross-verification updates, profile edits, masterlist imports, data clearing.
- * - Status Changes: Review queue resolutions, grantee approvals/rejections, SA/ID verifications.
+ * In the Registrar interface, only Record Updates are tracked.
+ * All administrative registrar activities (such as masterlist sync, Annex 5 cross-matching,
+ * student records updates, and file imports) are organized as Record Updates.
  */
 
 const CATEGORIES = {
-    SUBMISSION: 'submission',
-    RECORD_UPDATE: 'record_update',
-    STATUS_CHANGE: 'status_change',
-    SYSTEM: 'system'
+    RECORD_UPDATE: 'record_update'
 };
 
 const CATEGORY_LABELS = {
-    [CATEGORIES.SUBMISSION]: 'New Submission',
-    [CATEGORIES.RECORD_UPDATE]: 'Record Update',
-    [CATEGORIES.STATUS_CHANGE]: 'Status Change',
-    [CATEGORIES.SYSTEM]: 'System Notice'
+    [CATEGORIES.RECORD_UPDATE]: 'Record Update'
 };
 
 export class AdminNotificationService {
@@ -42,102 +35,20 @@ export class AdminNotificationService {
 
     /**
      * Parse and classify any notification into an activity category.
+     * In the Registrar interface, only Record Updates remain.
      * @param {Object} notification 
-     * @returns {'submission'|'record_update'|'status_change'|'system'}
+     * @returns {'record_update'}
      */
     static classifyCategory(notification) {
-        if (!notification) return CATEGORIES.SYSTEM;
-
-        const title = (notification.title || '').toLowerCase();
-        const msg = (notification.message || '').toLowerCase();
-        const combined = `${title} ${msg}`;
-
-        // 1. Explicit prefix or bracket tag
-        if (title.includes('new submission') || title.includes('[submission]') || title.includes('submission:')) {
-            return CATEGORIES.SUBMISSION;
-        }
-        if (title.includes('record update') || title.includes('[update]') || title.includes('update:')) {
-            return CATEGORIES.RECORD_UPDATE;
-        }
-        if (title.includes('status change') || title.includes('[status]') || title.includes('status:')) {
-            return CATEGORIES.STATUS_CHANGE;
-        }
-
-        // 2. Keyword detection for Submissions
-        if (
-            combined.includes('submitted') ||
-            combined.includes('new submission') ||
-            combined.includes('document submission') ||
-            combined.includes('documents submitted') ||
-            combined.includes('uploaded school') ||
-            combined.includes('file uploaded') ||
-            combined.includes('annex form 2 generated') ||
-            combined.includes('annex form 3 generated') ||
-            combined.includes('billing generated') ||
-            combined.includes('form exported') ||
-            combined.includes('new document') ||
-            combined.includes('sa number submitted') ||
-            combined.includes('id validation submitted')
-        ) {
-            return CATEGORIES.SUBMISSION;
-        }
-
-        // 3. Keyword detection for Status Changes
-        if (
-            combined.includes('status change') ||
-            combined.includes('status:') ||
-            combined.includes('resolved') ||
-            combined.includes('auto-resolve') ||
-            combined.includes('marked as') ||
-            combined.includes('grantee approved') ||
-            combined.includes('application approved') ||
-            combined.includes('application rejected') ||
-            combined.includes('grantee rejected') ||
-            combined.includes('sa verification:') ||
-            combined.includes('id validation:') ||
-            combined.includes('verified') ||
-            combined.includes('revision required') ||
-            combined.includes('rejected')
-        ) {
-            return CATEGORIES.STATUS_CHANGE;
-        }
-
-        // 4. Keyword detection for Record Updates
-        if (
-            combined.includes('updated') ||
-            combined.includes('record update') ||
-            combined.includes('cross-verification') ||
-            combined.includes('cross-matched') ||
-            combined.includes('masterlist imported') ||
-            combined.includes('new grantees masterlist') ||
-            combined.includes('cleared') ||
-            combined.includes('synchronized') ||
-            combined.includes('profile updated') ||
-            combined.includes('settings updated') ||
-            combined.includes('password changed') ||
-            combined.includes('registered')
-        ) {
-            return CATEGORIES.RECORD_UPDATE;
-        }
-
-        return CATEGORIES.SYSTEM;
+        return CATEGORIES.RECORD_UPDATE;
     }
 
     /**
-     * Format a display title ensuring it contains the proper category tag.
+     * Format a display title ensuring it contains the Record Update category tag.
      */
     static formatTitle(category, title) {
         const cleanTitle = (title || 'Activity Alert').replace(/^(\[[^\]]+\]|\w+ \w+:)\s*/i, '').trim();
-        switch (category) {
-            case CATEGORIES.SUBMISSION:
-                return `New Submission: ${cleanTitle}`;
-            case CATEGORIES.RECORD_UPDATE:
-                return `Record Update: ${cleanTitle}`;
-            case CATEGORIES.STATUS_CHANGE:
-                return `Status Change: ${cleanTitle}`;
-            default:
-                return cleanTitle;
-        }
+        return `Record Update: ${cleanTitle}`;
     }
 
     /**
@@ -145,10 +56,11 @@ export class AdminNotificationService {
      * @param {Object} options
      * @param {string} options.title - Notification headline
      * @param {string} options.message - Detailed explanation of the activity
-     * @param {'submission'|'record_update'|'status_change'|'system'} [options.category]
+     * @param {'record_update'} [options.category]
      * @param {'info'|'success'|'warning'|'error'} [options.type='info']
      * @param {Object} [options.metadata] - Extra structured metadata
      * @param {boolean} [options.showLocalPopup=true] - Whether to immediately pop up in UI
+     * @param {string} [options.studentId='admin'] - Target role/identifier
      */
     static async logActivity({
         title,
@@ -159,7 +71,7 @@ export class AdminNotificationService {
         showLocalPopup = true,
         studentId = 'admin'
     }) {
-        const fullTitle = this.formatTitle(category, title);
+        const fullTitle = this.formatTitle(CATEGORIES.RECORD_UPDATE, title);
         const timestamp = new Date().toISOString();
 
         // 1. Persist to Supabase `notifications` table
@@ -189,7 +101,7 @@ export class AdminNotificationService {
             id: insertedId || `local_${Date.now()}`,
             title: fullTitle,
             message: message,
-            category: category,
+            category: CATEGORIES.RECORD_UPDATE,
             type: type,
             isRead: false,
             timestamp: timestamp,
@@ -205,26 +117,13 @@ export class AdminNotificationService {
                 title: fullTitle,
                 message: message,
                 type: type,
-                category: category,
+                category: CATEGORIES.RECORD_UPDATE,
                 role: 'Registrar',
                 timestamp: timestamp
             });
         }
 
         return activityPayload;
-    }
-
-    /**
-     * Helper to log a Submission activity.
-     */
-    static async notifySubmission({ title, message, type = 'success', metadata = null }) {
-        return this.logActivity({
-            title,
-            message,
-            category: CATEGORIES.SUBMISSION,
-            type,
-            metadata
-        });
     }
 
     /**
@@ -241,16 +140,14 @@ export class AdminNotificationService {
     }
 
     /**
-     * Helper to log a Status Change activity.
+     * Backward-compatible aliases routing to Record Update in Registrar interface
      */
+    static async notifySubmission({ title, message, type = 'success', metadata = null }) {
+        return this.notifyRecordUpdate({ title, message, type, metadata });
+    }
+
     static async notifyStatusChange({ title, message, type = 'success', metadata = null }) {
-        return this.logActivity({
-            title,
-            message,
-            category: CATEGORIES.STATUS_CHANGE,
-            type,
-            metadata
-        });
+        return this.notifyRecordUpdate({ title, message, type, metadata });
     }
 }
 

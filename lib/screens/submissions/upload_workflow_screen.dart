@@ -2475,12 +2475,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             message: 'Student $fullName has uploaded ID documents for validation.',
             type: 'info',
           );
-          await notificationService.sendNotification(
-            studentId: 'admin',
-            title: 'New Submission: Student Documents Submitted',
-            message: 'Student $fullName ($studentId) submitted documentary requirements.',
-            type: 'info',
-          );
 
           await _auditService.logActivity(
             action:

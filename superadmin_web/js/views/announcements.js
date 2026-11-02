@@ -573,6 +573,16 @@ if (form) {
 
                 if (window.showToast) window.showToast('Announcement posted successfully!', 'check-circle');
 
+                try {
+                    if (window.SuperAdminNotificationService) {
+                        await window.SuperAdminNotificationService.notifyRecordUpdate({
+                            title: 'New Announcement Published',
+                            message: `Published announcement "${dataObj.title || 'Announcement'}" for student grantees.`,
+                            type: 'info'
+                        });
+                    }
+                } catch (_) { }
+
                 // Trigger push and/or SMS notification if enabled
                 if (sendPushChecked || sendSmsChecked) {
                     await triggerAnnouncementPush(createdDoc, false, sendSmsChecked);

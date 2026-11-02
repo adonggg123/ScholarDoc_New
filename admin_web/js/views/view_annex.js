@@ -533,7 +533,7 @@ async function exportForm2Excel() {
         const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
         downloadBlob(result.blob, `Archived_Annex5_Form2_${ayStr}_${semStr}${progStr}.xlsx`);
         if (window.showToast) window.showToast('Form 2 Excel downloaded successfully!', 'check-circle');
-        AdminNotificationService.notifySubmission({
+        AdminNotificationService.notifyRecordUpdate({
             title: 'Historical Annex Form 2 Exported',
             message: `Exported ${studentsToFill.length} archived Form 2 records for AY ${selAY ? selAY.value : '2024-2025'} (${selSem ? selSem.value : '1st Semester'}).`,
             type: 'info',
@@ -587,7 +587,7 @@ async function exportForm3Excel() {
         const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
         downloadBlob(result.blob, `Archived_Annex5_Form3_${ayStr}_${semStr}${progStr}.xlsx`);
         if (window.showToast) window.showToast('Form 3 Excel downloaded successfully!', 'check-circle');
-        AdminNotificationService.notifySubmission({
+        AdminNotificationService.notifyRecordUpdate({
             title: 'Historical Annex Form 3 Exported',
             message: `Exported ${studentsToFill.length} archived Form 3 records for AY ${selAY ? selAY.value : '2024-2025'} (${selSem ? selSem.value : '1st Semester'}).`,
             type: 'info',
