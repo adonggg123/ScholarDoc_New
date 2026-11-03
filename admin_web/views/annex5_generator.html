@@ -58,6 +58,73 @@
         </div>
     </div>
 
+    <!-- School Term & Academic Filter Bar -->
+    <div class="card"
+        style="padding: 14px 20px; border-radius: 16px; border-top: 3px solid #1E88E5; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; background: var(--surface-color); border: 1px solid var(--border-color); box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+            <span
+                style="font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 20px; background: rgba(30,136,229,0.1); color: #1E88E5; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="icon-calendar" style="font-size: 13px;"></i> REGISTRAR SCHOOL TERM
+            </span>
+
+            <!-- Term Filter Pill Controls -->
+            <div
+                style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.03); padding: 4px 12px; border-radius: 12px; border: 1px solid var(--border-color);">
+                <!-- Academic Year Filter -->
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="icon-calendar" style="font-size: 14px; color: var(--primary-color);"></i>
+                    <span
+                        style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">A.Y.</span>
+                    <select id="admin-filter-ay"
+                        style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px;">
+                        <option value="2024-2025" selected>2024-2025</option>
+                        <option value="2023-2024">2023-2024</option>
+                        <option value="All">All School Years</option>
+                        <option value="custom">+ Custom A.Y....</option>
+                    </select>
+                </div>
+                <div style="width: 1px; height: 18px; background: var(--border-color);"></div>
+                <!-- Semester Filter -->
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="icon-clock" style="font-size: 14px; color: #1E88E5;"></i>
+                    <span
+                        style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Sem</span>
+                    <select id="admin-filter-sem"
+                        style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px;">
+                        <option value="1st Semester" selected>1st Semester</option>
+                        <option value="2nd Semester">2nd Semester</option>
+                        <option value="Summer / Midyear">Summer / Midyear</option>
+                        <option value="All">All Semesters</option>
+                        <option value="custom">+ Custom Semester...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- + Custom Term Button -->
+            <button id="admin-btn-custom-term" type="button"
+                title="Create custom Academic Year or Semester"
+                style="display: inline-flex; align-items: center; gap: 5px; background: rgba(245, 158, 11, 0.1); color: #B45309; border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 10px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                <i class="icon-plus-circle" style="font-size: 12px;"></i>
+                <span>+ Custom Term</span>
+            </button>
+
+            <!-- Sync / Refresh Term Button -->
+            <button id="admin-btn-refresh-term" type="button"
+                title="Sync database for selected school year and semester"
+                style="display: inline-flex; align-items: center; gap: 5px; background: rgba(30, 136, 229, 0.08); color: #1E88E5; border: 1px solid rgba(30, 136, 229, 0.2); border-radius: 10px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                <i id="admin-icon-refresh-term" class="icon-refresh-cw" style="font-size: 12px;"></i>
+                <span>Sync Term</span>
+            </button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="admin-term-status-badge"
+                style="font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: rgba(16,185,129,0.1); color: #10b981; display: inline-flex; align-items: center; gap: 5px;">
+                <i class="icon-check-circle-2" style="font-size: 13px;"></i> Active Term: <strong id="admin-active-term-label">2024-2025 • 1st Semester</strong>
+            </span>
+        </div>
+    </div>
+
     <!-- Dual Masterlist Source & File Upload Panel -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
         <!-- Left: Official School Student Master List (Admin File Upload & Table) -->
@@ -503,6 +570,54 @@
                         style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save
                         & Categorize</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registrar Custom Academic Year & Semester Modal -->
+    <div id="admin-custom-term-modal" class="modal hidden"
+        style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px;">
+        <div class="card"
+            style="width: 100%; max-width: 480px; background: var(--surface-color, #ffffff); border-radius: 20px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.25); border: 1px solid var(--border-color); overflow: hidden; padding: 0;">
+            <div
+                style="padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div
+                        style="width: 36px; height: 36px; border-radius: 10px; background: rgba(30, 136, 229, 0.1); color: #1E88E5; display: flex; align-items: center; justify-content: center;">
+                        <i class="icon-calendar-plus" style="font-size: 18px;"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary);">Add Custom Term (Registrar)</h3>
+                        <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Create custom Academic Years or Semesters</p>
+                    </div>
+                </div>
+                <button type="button" id="admin-btn-close-custom-term" class="icon-btn"
+                    style="border: none; background: transparent; cursor: pointer; color: var(--text-secondary); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                    <i class="icon-x" style="font-size: 16px;"></i>
+                </button>
+            </div>
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 18px;">
+                <div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px;">New
+                        Academic Year (e.g. 2026-2027)</label>
+                    <input type="text" id="admin-input-custom-ay" placeholder="YYYY-YYYY (e.g. 2026-2027)"
+                        style="width: 100%; height: 42px; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+                <div>
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px;">New
+                        Semester (Optional, e.g. Summer 2026, 3rd Trimester)</label>
+                    <input type="text" id="admin-input-custom-sem" placeholder="e.g. Summer Term or Trimester 1"
+                        style="width: 100%; height: 42px; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+            </div>
+            <div
+                style="padding: 16px 24px; background: rgba(0,0,0,0.02); border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+                <button type="button" id="admin-btn-cancel-custom-term" class="btn btn-outline"
+                    style="padding: 9px 18px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer;">Cancel</button>
+                <button type="button" id="admin-btn-save-custom-term" class="btn btn-primary"
+                    style="padding: 9px 20px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; background: #1E88E5; border: none; color: white;">Save & Select Term</button>
             </div>
         </div>
     </div>

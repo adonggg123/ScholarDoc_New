@@ -3,6 +3,7 @@ import { BillingService } from '../services/billing_service.js';
 import { VerificationService } from '../services/verification_service.js';
 import { AnnexSyncService } from '../services/annex_sync_service.js';
 import { AdminNotificationService } from '../services/admin_notification_service.js';
+import { AcademicYearService } from '../services/academic_year_service.js';
 
 const supabase = window.supabaseClient;
 
@@ -127,6 +128,10 @@ function resolveGranteeBatch(record) {
 }
 
 // State
+let selectedAcademicYear = '2024-2025';
+let selectedSemester = '1st Semester';
+let isPopulatingRegistrarTerms = false;
+
 let rawSuperAdminGrantees = [];
 let rawSchoolStudents = [];
 let uploadedSchoolFile = null;
@@ -188,8 +193,31 @@ async function loadInitialData() {
             .select('*')
             .order('created_at', { ascending: false });
 
+        let localTermCache = {};
+        try {
+            localTermCache = JSON.parse(localStorage.getItem('scholardoc_grantee_terms') || '{}');
+        } catch (_) { }
+
+        function getGranteeTerm(m, ln, fn, mn) {
+            let ay = m.academic_year || m.academicYear;
+            let sem = m.semester;
+            if (!ay || !sem) {
+                const normKey = `${(ln || '').toLowerCase()}|${(fn || '').toLowerCase()}|${(mn || '').toLowerCase()}`.replace(/[^a-z0-9|]/g, '');
+                const rawName = `${ln}, ${fn} ${mn}`.toLowerCase().trim();
+                const cached = (m.id && localTermCache[m.id]) || (normKey && localTermCache[normKey]) || (rawName && localTermCache[rawName]);
+                if (cached) {
+                    if (!ay) ay = cached.academicYear;
+                    if (!sem) sem = cached.semester;
+                }
+            }
+            return {
+                academicYear: ay || '2024-2025',
+                semester: sem || '1st Semester'
+            };
+        }
+
         if (!errMasterlist && masterlistData && masterlistData.length > 0) {
-            rawSuperAdminGrantees = masterlistData.map(m => {
+            const mapped = masterlistData.map(m => {
                 let fn = m.first_name || '';
                 let mn = m.middle_name || '';
                 let ln = m.last_name || '';
@@ -204,6 +232,7 @@ async function loadInitialData() {
                     mn = parsed.middleName || mn;
                     ln = parsed.lastName;
                 }
+                const term = getGranteeTerm(m, ln, fn, mn);
                 return {
                     id: m.id,
                     name: m.name || `${ln}, ${fn} ${mn}`.trim(),
@@ -213,11 +242,23 @@ async function loadInitialData() {
                     batch: resolveGranteeBatch({ ...m, last_name: ln, first_name: fn, middle_name: mn }),
                     student_id: m.student_id || '',
                     course: m.course || m.program || '',
-                    year: m.year || '1'
+                    year: m.year || '1',
+                    academicYear: term.academicYear,
+                    semester: term.semester
                 };
             });
+
+            // Filter according to selected academic year & semester
+            rawSuperAdminGrantees = mapped.filter(g => {
+                const matchAy = selectedAcademicYear === 'All' || g.academicYear === selectedAcademicYear;
+                const matchSem = selectedSemester === 'All' || g.semester === selectedSemester;
+                return matchAy && matchSem;
+            });
+
             const syncEl = document.getElementById('superadmin-sync-status');
-            if (syncEl) syncEl.innerHTML = `<i class="icon-check-circle-2" style="font-size: 14px;"></i> Synced with Super Admin Import (${rawSuperAdminGrantees.length} records)`;
+            if (syncEl) {
+                syncEl.innerHTML = `<i class="icon-check-circle-2" style="font-size: 14px;"></i> Synced with Super Admin Import (${rawSuperAdminGrantees.length} records for ${selectedAcademicYear} • ${selectedSemester})`;
+            }
         } else {
             // When table is empty or deleted in Supabase, show strictly empty list
             rawSuperAdminGrantees = [];
@@ -267,12 +308,16 @@ async function loadInitialData() {
             rawSchoolStudents = [];
         }
 
-        // 3. Automatic Restore from Supabase Database for Form 2 & Form 3
+        // 3. Automatic Restore from Supabase Database for Form 2 & Form 3 for active term
         try {
-            const dbSync = await AnnexSyncService.loadFromSupabase();
+            const dbSync = await AnnexSyncService.loadFromSupabase({
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                fallbackToLatest: false
+            });
             if (dbSync && dbSync.fromDb) {
                 if ((!dbSync.form2List || dbSync.form2List.length === 0) && (!dbSync.form3List || dbSync.form3List.length === 0)) {
-                    // Database tables annex_form_2 and annex_form_3 are empty - clear local cache
+                    // Database tables annex_form_2 and annex_form_3 are empty for this term
                     AnnexSyncService.clearVerifiedData({ clearSupabase: false });
                     verifiedForm2List = [];
                     verifiedForm3List = [];
@@ -286,9 +331,15 @@ async function loadInitialData() {
                         form3List: verifiedForm3List,
                         needsReviewList: [],
                         updatedBy: 'Supabase Auto-Restore',
-                        syncToDb: false
+                        syncToDb: false,
+                        academicYear: selectedAcademicYear,
+                        semester: selectedSemester
                     });
                 }
+            } else {
+                verifiedForm2List = [];
+                verifiedForm3List = [];
+                needsReviewList = [];
             }
         } catch (dbErr) {
             console.warn('Auto-restore check error:', dbErr);
@@ -1652,7 +1703,9 @@ function runCrossVerification(forceFresh = false) {
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
         updatedBy: window.currentAdmin?.username || 'Admin',
-        syncToDb: false
+        syncToDb: false,
+        academicYear: selectedAcademicYear,
+        semester: selectedSemester
     });
 
     updateKPIMetrics();
@@ -1988,7 +2041,9 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
-        updatedBy: window.currentAdmin?.username || 'Admin'
+        updatedBy: window.currentAdmin?.username || 'Admin',
+        academicYear: selectedAcademicYear,
+        semester: selectedSemester
     });
     if (synced) {
         verifiedForm2List = synced.form2List;
@@ -2109,7 +2164,9 @@ if (btnAutoResolveAll) {
             form2List: verifiedForm2List,
             form3List: verifiedForm3List,
             needsReviewList: needsReviewList,
-            updatedBy: window.currentAdmin?.username || 'Admin'
+            updatedBy: window.currentAdmin?.username || 'Admin',
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
         });
         if (synced) {
             verifiedForm2List = synced.form2List;
@@ -2207,11 +2264,13 @@ if (btnClearForm2) {
                 form3List: verifiedForm3List,
                 needsReviewList: needsReviewList,
                 updatedBy: 'Admin',
-                syncToDb: false
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
             if (window.supabaseClient) {
                 try {
-                    await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    await window.supabaseClient.from('annex_form_2').delete().match({ academic_year: selectedAcademicYear, semester: selectedSemester });
                 } catch (err) {
                     console.warn('Error deleting annex_form_2 from database:', err);
                 }
@@ -2245,11 +2304,13 @@ if (btnClearForm3) {
                 form3List: verifiedForm3List,
                 needsReviewList: needsReviewList,
                 updatedBy: 'Admin',
-                syncToDb: false
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
             if (window.supabaseClient) {
                 try {
-                    await window.supabaseClient.from('annex_form_3').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    await window.supabaseClient.from('annex_form_3').delete().match({ academic_year: selectedAcademicYear, semester: selectedSemester });
                 } catch (err) {
                     console.warn('Error deleting annex_form_3 from database:', err);
                 }
@@ -2271,7 +2332,11 @@ if (btnClearForm3) {
 // Manual Supabase DB Refresh Action
 const refreshAdminFromDb = async () => {
     try {
-        const dbSync = await AnnexSyncService.loadFromSupabase();
+        const dbSync = await AnnexSyncService.loadFromSupabase({
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester,
+            fallbackToLatest: false
+        });
         if (dbSync && dbSync.fromDb) {
             verifiedForm2List = dbSync.form2List || [];
             verifiedForm3List = dbSync.form3List || [];
@@ -2281,7 +2346,9 @@ const refreshAdminFromDb = async () => {
                 form3List: verifiedForm3List,
                 needsReviewList: [],
                 updatedBy: 'Supabase Manual Refresh',
-                syncToDb: false
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
             updateKPIMetrics();
             renderForm2Table(verifiedForm2List);
@@ -2348,7 +2415,10 @@ async function exportForm2Excel() {
                 contactNumber: matched.contactNumber || matched.phone || grantee.contactNumber || grantee.phone || ''
             };
         });
-        const result = await BillingService.fillAnnex5Form2(blob, studentsToFill);
+        const result = await BillingService.fillAnnex5Form2(blob, studentsToFill, {
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
         downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_2_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 2 Excel generated successfully!', 'check-circle');
 
@@ -2399,7 +2469,10 @@ async function exportForm3Excel() {
             };
         });
 
-        const result = await BillingService.fillAnnex5Form3(blob, studentsToFill);
+        const result = await BillingService.fillAnnex5Form3(blob, studentsToFill, {
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
         downloadBlob(result.blob, `AutoFilled_Annex_5_TES_Form_3_${Date.now()}.xlsx`);
         showToast('Annex 5 Form 3 Excel generated successfully!', 'check-circle');
 
@@ -2468,5 +2541,174 @@ AnnexSyncService.onSync((synced) => {
     }
 });
 
-// Initial Load
-loadInitialData();
+// ── School Term & Custom Academic Year Filter Setup (Registrar) ──────
+async function populateRegistrarTerms() {
+    if (isPopulatingRegistrarTerms) return;
+    isPopulatingRegistrarTerms = true;
+    try {
+        const [years, semesters] = await Promise.all([
+            AcademicYearService.getAcademicYears(),
+            AcademicYearService.getSemesters()
+        ]);
+
+        const selectAY = document.getElementById('admin-filter-ay');
+        const selectSem = document.getElementById('admin-filter-sem');
+
+        if (selectAY) {
+            let ayHtml = years.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('');
+            ayHtml += `<option value="All" ${selectedAcademicYear === 'All' ? 'selected' : ''}>All School Years</option>`;
+            ayHtml += `<option value="custom">+ Custom A.Y....</option>`;
+            selectAY.innerHTML = ayHtml;
+            selectAY.value = selectedAcademicYear;
+        }
+
+        if (selectSem) {
+            let semHtml = semesters.map(s => `<option value="${s}" ${s === selectedSemester ? 'selected' : ''}>${s}</option>`).join('');
+            semHtml += `<option value="All" ${selectedSemester === 'All' ? 'selected' : ''}>All Semesters</option>`;
+            semHtml += `<option value="custom">+ Custom Semester...</option>`;
+            selectSem.innerHTML = semHtml;
+            selectSem.value = selectedSemester;
+        }
+
+        updateRegistrarActiveTermLabel();
+    } catch (e) {
+        console.warn('Error populating registrar terms:', e);
+    } finally {
+        isPopulatingRegistrarTerms = false;
+    }
+}
+
+function updateRegistrarActiveTermLabel() {
+    const lbl = document.getElementById('admin-active-term-label');
+    if (lbl) {
+        lbl.textContent = `${selectedAcademicYear} • ${selectedSemester}`;
+    }
+}
+
+function openRegistrarCustomTermModal(defaultFocus = 'ay') {
+    const modal = document.getElementById('admin-custom-term-modal');
+    if (!modal) return;
+    const inpAy = document.getElementById('admin-input-custom-ay');
+    const inpSem = document.getElementById('admin-input-custom-sem');
+    if (inpAy) inpAy.value = '';
+    if (inpSem) inpSem.value = '';
+    modal.classList.remove('hidden');
+    if (defaultFocus === 'sem' && inpSem) inpSem.focus();
+    else if (inpAy) inpAy.focus();
+}
+
+function closeRegistrarCustomTermModal() {
+    const modal = document.getElementById('admin-custom-term-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function handleRegistrarTermChange(newAy, newSem) {
+    if (newAy === 'custom') {
+        openRegistrarCustomTermModal('ay');
+        const selectAY = document.getElementById('admin-filter-ay');
+        if (selectAY) selectAY.value = selectedAcademicYear;
+        return;
+    }
+    if (newSem === 'custom') {
+        openRegistrarCustomTermModal('sem');
+        const selectSem = document.getElementById('admin-filter-sem');
+        if (selectSem) selectSem.value = selectedSemester;
+        return;
+    }
+
+    if (newAy !== undefined) selectedAcademicYear = newAy;
+    if (newSem !== undefined) selectedSemester = newSem;
+
+    updateRegistrarActiveTermLabel();
+    await loadInitialData();
+}
+
+function setupRegistrarTermListeners() {
+    const selectAY = document.getElementById('admin-filter-ay');
+    const selectSem = document.getElementById('admin-filter-sem');
+    const btnCustom = document.getElementById('admin-btn-custom-term');
+    const btnRefresh = document.getElementById('admin-btn-refresh-term');
+    const btnCloseModal = document.getElementById('admin-btn-close-custom-term');
+    const btnCancelModal = document.getElementById('admin-btn-cancel-custom-term');
+    const btnSaveModal = document.getElementById('admin-btn-save-custom-term');
+    const iconRefresh = document.getElementById('admin-icon-refresh-term');
+
+    if (selectAY) {
+        selectAY.addEventListener('change', (e) => handleRegistrarTermChange(e.target.value, undefined));
+    }
+    if (selectSem) {
+        selectSem.addEventListener('change', (e) => handleRegistrarTermChange(undefined, e.target.value));
+    }
+    if (btnCustom) {
+        btnCustom.addEventListener('click', () => openRegistrarCustomTermModal('ay'));
+    }
+    if (btnCloseModal) {
+        btnCloseModal.addEventListener('click', closeRegistrarCustomTermModal);
+    }
+    if (btnCancelModal) {
+        btnCancelModal.addEventListener('click', closeRegistrarCustomTermModal);
+    }
+    if (btnRefresh) {
+        btnRefresh.addEventListener('click', async () => {
+            if (iconRefresh) iconRefresh.style.animation = 'spin 0.8s linear infinite';
+            try {
+                await loadInitialData();
+                showToast(`Synchronized database for ${selectedAcademicYear} (${selectedSemester})`, 'check-circle');
+            } finally {
+                if (iconRefresh) {
+                    setTimeout(() => { iconRefresh.style.animation = ''; }, 300);
+                }
+            }
+        });
+    }
+
+    if (btnSaveModal) {
+        btnSaveModal.addEventListener('click', async () => {
+            const inpAy = document.getElementById('admin-input-custom-ay');
+            const inpSem = document.getElementById('admin-input-custom-sem');
+            const ayVal = (inpAy ? inpAy.value : '').trim();
+            const semVal = (inpSem ? inpSem.value : '').trim();
+
+            if (!ayVal && !semVal) {
+                alert('Please enter a valid Academic Year (e.g. 2026-2027) or Semester.');
+                return;
+            }
+
+            let addedAy = null;
+            let addedSem = null;
+
+            if (ayVal) {
+                addedAy = await AcademicYearService.addCustomAcademicYear(ayVal);
+            }
+            if (semVal) {
+                addedSem = await AcademicYearService.addCustomSemester(semVal);
+            }
+
+            closeRegistrarCustomTermModal();
+            await populateRegistrarTerms();
+
+            if (addedAy) selectedAcademicYear = addedAy;
+            if (addedSem) selectedSemester = addedSem;
+
+            const selAy = document.getElementById('admin-filter-ay');
+            if (selAy && addedAy) selAy.value = addedAy;
+            const selSem = document.getElementById('admin-filter-sem');
+            if (selSem && addedSem) selSem.value = addedSem;
+
+            updateRegistrarActiveTermLabel();
+            showToast(`Custom term saved: ${selectedAcademicYear} • ${selectedSemester}`, 'check-circle');
+            await loadInitialData();
+        });
+    }
+
+    // Subscribe to cross-interface updates
+    AcademicYearService.onTermsUpdated(async () => {
+        await populateRegistrarTerms();
+    });
+}
+
+// Initial Setup & Load
+setupRegistrarTermListeners();
+populateRegistrarTerms().then(() => {
+    loadInitialData();
+});

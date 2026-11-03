@@ -2,6 +2,7 @@
 import { StudentSyncService } from '../services/student_sync_service.js';
 import { EmailNotificationService } from '../services/email_notification_service.js';
 import { SmsNotificationService } from '../services/sms_notification_service.js';
+import { AcademicYearService } from '../services/academic_year_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -68,6 +69,37 @@ function populateBatchFilter() {
     }
 }
 
+async function populateStudentGranteesTerms() {
+    const filterAyEl = document.getElementById('filter-ay') || filterAy;
+    if (!filterAyEl) return;
+    try {
+        const years = await AcademicYearService.getAcademicYears();
+        const curVal = filterAyEl.value || 'AY 2024-2025, 1st Sem';
+        
+        let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
+        years.forEach(y => {
+            opts.push(`<option value="AY ${y}, 1st Sem" ${curVal === `AY ${y}, 1st Sem` ? 'selected' : ''}>AY ${y}, 1st Sem</option>`);
+            opts.push(`<option value="AY ${y}, 2nd Sem" ${curVal === `AY ${y}, 2nd Sem` ? 'selected' : ''}>AY ${y}, 2nd Sem</option>`);
+        });
+        filterAyEl.innerHTML = opts.join('');
+        if (opts.some(o => o.includes(`value="${curVal}"`))) {
+            filterAyEl.value = curVal;
+        } else {
+            filterAyEl.value = 'AY 2024-2025, 1st Sem';
+        }
+        const selectedOpt = filterAyEl.options[filterAyEl.selectedIndex];
+        const ayDisp = document.getElementById('ay-display');
+        if (ayDisp && selectedOpt) {
+            ayDisp.innerText = selectedOpt.text;
+        }
+    } catch (_) { }
+}
+
+AcademicYearService.onTermsUpdated(async () => {
+    await populateStudentGranteesTerms();
+    applyFilters();
+});
+
 // Modal Elements
 const modal = document.getElementById('student-modal');
 const closeModalBtn = document.getElementById('close-modal-btn');
@@ -89,6 +121,7 @@ async function loadStudents() {
             if (window.lucide) window.lucide.createIcons();
         }
 
+        await populateStudentGranteesTerms();
         allStudents = await StudentSyncService.loadAndSyncStudents();
         populateBatchFilter();
         applyFilters();
@@ -203,16 +236,17 @@ function applyFilters() {
             const sSem = (s.semester || '').toLowerCase();
             if (!sAy || sAy === 'n/a') {
                 matchAy = true;
-            } else if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
-                if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
-                else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
-                else if (!ay.includes('Sem')) matchAy = true;
-            } else if (ay.includes('2023-2024') && sAy.includes('2023-2024')) {
-                if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
-                else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
-                else if (!ay.includes('Sem')) matchAy = true;
             } else {
-                matchAy = sAy.includes(ay.toLowerCase());
+                const yearMatch = ay.match(/\d{4}-\d{4}/);
+                const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
+                const matchYear = !filterYear || sAy.includes(filterYear);
+
+                let matchSemester = true;
+                if (ay.toLowerCase().includes('1st') && !sSem.includes('1st') && sSem) matchSemester = false;
+                else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
+                else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
+
+                matchAy = matchYear && matchSemester;
             }
         }
 
@@ -495,7 +529,7 @@ studentForm.addEventListener('submit', async (e) => {
                     .or(`student_no.eq.${studentIdClean},full_name.ilike.%${fullNameClean}%`)
                     .limit(1);
                 if (ssCheck && ssCheck.length > 0) isRegistered = true;
-            } catch (_) {}
+            } catch (_) { }
 
             if (isRegistered && ssCheck && ssCheck.length > 0) {
                 const reg = ssCheck[0];
@@ -532,8 +566,8 @@ studentForm.addEventListener('submit', async (e) => {
             await supabase.from('audit_logs').insert([{
                 userName: 'Admin',
                 role: 'Admin',
-                action: isRegistered 
-                    ? `Added and auto-approved registered student grantee: ${studentData.fullName}` 
+                action: isRegistered
+                    ? `Added and auto-approved registered student grantee: ${studentData.fullName}`
                     : `Added new student record: ${studentData.fullName}`,
                 studentId: studentData.studentId,
                 ipAddress: 'Web Browser'
@@ -685,7 +719,7 @@ function showStudentModal(student) {
 
     // Avatar generation with aspect-ratio protection and initial fallback
     const nameParts = fullName.replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).filter(Boolean);
-    const initials = nameParts.length >= 2 
+    const initials = nameParts.length >= 2
         ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
         : (nameParts[0] ? nameParts[0].slice(0, 2).toUpperCase() : 'GD');
 
@@ -867,9 +901,9 @@ function showStudentModal(student) {
                         <div>
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Payouts Received</span>
                             <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
-                                ${hasPayouts 
-                                    ? `<i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts} ${payouts === '1' ? 'Payout' : 'Payouts'}` 
-                                    : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}
+                                ${hasPayouts
+            ? `<i class="icon-wallet" style="font-size: 14px; color: #D97706;"></i> ${payouts} ${payouts === '1' ? 'Payout' : 'Payouts'}`
+            : '<span style="color: var(--text-secondary); font-style: italic; font-weight: 400; font-size: 12.5px;">Not specified yet</span>'}
                             </span>
                         </div>
                     </div>
@@ -1037,8 +1071,8 @@ window.editStudent = function (uid) {
     }
     inpSa.value = student.saNumber || fam.saNumber || '';
     inpScholarYear.value = student.scholarYearLevel || fam.scholarYearLevel || fam.yearBecameScholar || '';
-    const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '') 
-        ? student.payoutsReceived 
+    const currentPayouts = (student.payoutsReceived !== undefined && student.payoutsReceived !== null && String(student.payoutsReceived).trim() !== '')
+        ? student.payoutsReceived
         : ((fam.payoutsReceived !== undefined && fam.payoutsReceived !== null && String(fam.payoutsReceived).trim() !== '') ? fam.payoutsReceived : '');
     inpPayouts.value = currentPayouts;
     inpFatherEdu.value = fam.fatherEduStatus || 'Non-graduate';
@@ -1124,6 +1158,16 @@ window.approveStudent = async function (uid) {
             timestamp: new Date().toISOString()
         }]);
 
+        // Notify Admin that grantee has been approved and is ready for Annex 5 Billing Form
+        await supabase.from('notifications').insert([{
+            studentId: 'admin',
+            title: 'Record Update: Grantee Approved for Annex 5',
+            message: `Super Admin approved scholar grantee ${student?.fullName || 'student'}. Available for Annex 5 Billing.`,
+            type: 'success',
+            isRead: false,
+            timestamp: new Date().toISOString()
+        }]);
+
         // Mirror in-app notification directly to SMS via Semaphore with identical content
         const phone = student?.mobile_number || student?.contactNumber || student?.phone_number;
         if (phone) {
@@ -1202,10 +1246,10 @@ window.sendGranteeEmail = async function (uid, force = false) {
 };
 
 window.sendGranteeSms = async function (uid, force = false) {
-    const student = allStudents.find(s => 
-        (s.uid && String(s.uid) === String(uid)) || 
-        (s.id && String(s.id) === String(uid)) || 
-        (s.student_no && String(s.student_no) === String(uid)) || 
+    const student = allStudents.find(s =>
+        (s.uid && String(s.uid) === String(uid)) ||
+        (s.id && String(s.id) === String(uid)) ||
+        (s.student_no && String(s.student_no) === String(uid)) ||
         (s.studentId && String(s.studentId) === String(uid))
     );
     if (!student) {
@@ -1290,6 +1334,16 @@ window.rejectStudent = async function (uid) {
             title: 'Application Rejected',
             message: 'We regret to inform you that your scholarship application has been rejected.',
             type: 'error',
+            isRead: false,
+            timestamp: new Date().toISOString()
+        }]);
+
+        // Notify Admin of application rejection update for records reconciliation
+        await supabase.from('notifications').insert([{
+            studentId: 'admin',
+            title: 'Record Update: Scholarship Application Rejected',
+            message: `Super Admin rejected application for ${student?.fullName || 'student'}. Records updated.`,
+            type: 'warning',
             isRead: false,
             timestamp: new Date().toISOString()
         }]);

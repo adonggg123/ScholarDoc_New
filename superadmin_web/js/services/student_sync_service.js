@@ -517,6 +517,34 @@ export class StudentSyncService {
             (f2Match?.id && localBatchMap[f2Match.id]) ||
             (gmMatch?.id && localBatchMap[gmMatch.id]);
 
+        // Check localStorage grantee terms mapping if available
+        let localTermMap = {};
+        try {
+            localTermMap = JSON.parse(localStorage.getItem('scholardoc_grantee_terms') || '{}');
+        } catch (_) { }
+
+        const cachedTerm = (sNo && localTermMap[sNo]) ||
+            (saNum && localTermMap[saNum]) ||
+            (exId && localTermMap[exId]) ||
+            (normFullName && localTermMap[normFullName]) ||
+            (f2Match?.id && localTermMap[f2Match.id]) ||
+            (gmMatch?.id && localTermMap[gmMatch.id]);
+
+        const resolvedAY = f2Match?.academic_year ||
+            f2Match?.academicYear ||
+            gmMatch?.academic_year ||
+            gmMatch?.academicYear ||
+            (cachedTerm && cachedTerm.academicYear) ||
+            existing.academic_year ||
+            existing.academicYear ||
+            '2024-2025';
+
+        const resolvedSem = f2Match?.semester ||
+            gmMatch?.semester ||
+            (cachedTerm && cachedTerm.semester) ||
+            existing.semester ||
+            '1st Semester';
+
         const rawBatch = cachedBatch ||
             f2Match?.tes_batch ||
             f2Match?.batch ||
@@ -609,9 +637,9 @@ export class StudentSyncService {
             role: 'student',
             sa_number: saNumber,
             saNumber: saNumber,
-            academic_year: f2Match?.academic_year || existing.academic_year || '2024-2025',
-            academicYear: f2Match?.academic_year || existing.academic_year || '2024-2025',
-            semester: f2Match?.semester || existing.semester || '1st Semester',
+            academic_year: resolvedAY,
+            academicYear: resolvedAY,
+            semester: resolvedSem,
             total_amount: f2Match?.total_amount || 10000.00,
             tes_amount: f2Match?.tes_amount || 10000.00,
 
@@ -638,7 +666,7 @@ export class StudentSyncService {
                 fatherEduStatus: fatherEdu,
                 motherName: motherName,
                 motherEduStatus: motherEdu,
-                yearlyIncome: existingFam.yearlyIncome || '₱120,000',
+                yearlyIncome: existingFam.yearlyIncome || 'â‚±120,000',
                 religion: religion,
                 tribe: existingFam.tribe || 'N/A',
                 saNumber: saNumber,
@@ -835,10 +863,12 @@ export class StudentSyncService {
                         email_sent_at: null
                     });
                 } else if (existingSg) {
-                    // Update database record if status differs from dynamic computed status
+                    // Update database record if status or term differs from dynamic computed record
                     const needsStatusSync = existingSg.status !== normalized.status ||
                         existingSg.saVerificationStatus !== normalized.saVerificationStatus ||
-                        existingSg.idValidationStatus !== normalized.idValidationStatus;
+                        existingSg.idValidationStatus !== normalized.idValidationStatus ||
+                        (normalized.academic_year && existingSg.academic_year !== normalized.academic_year) ||
+                        (normalized.semester && existingSg.semester !== normalized.semester);
 
                     if (needsStatusSync) {
                         toUpdate.push({
@@ -849,6 +879,9 @@ export class StudentSyncService {
                             sa_verification_status: normalized.saVerificationStatus,
                             idValidationStatus: normalized.idValidationStatus,
                             id_validation_status: normalized.idValidationStatus,
+                            academic_year: normalized.academic_year,
+                            academicYear: normalized.academicYear,
+                            semester: normalized.semester,
                             documents: {
                                 ...(existingSg.documents || {}),
                                 saVerificationStatus: normalized.saVerificationStatus,

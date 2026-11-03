@@ -2,6 +2,8 @@
 import { BillingService } from '../services/billing_service.js';
 import { VerificationService } from '../services/verification_service.js';
 import { AnnexSyncService } from '../services/annex_sync_service.js';
+import { AcademicYearService } from '../services/academic_year_service.js';
+import { StudentSyncService } from '../services/student_sync_service.js';
 
 // Dynamically load document parsing libraries if needed
 if (!window.pdfjsLib) {
@@ -132,7 +134,7 @@ function normalizeName(lastName, firstName, middleName) {
     return full.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// ── Batch Helpers & Persistent Storage ──────────────────────────────
+// â”€â”€ Batch Helpers & Persistent Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getSelectedImportBatch() {
     if (!selectImportBatch) {
         selectImportBatch = document.getElementById('select-import-batch');
@@ -249,7 +251,7 @@ function updateStep1TargetTermBadge(ay = selectedAcademicYear, sem = selectedSem
     if (termBadgeText) {
         const ayText = (!ay || ay === 'All') ? 'All School Years' : `A.Y. ${ay}`;
         const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
-        termBadgeText.textContent = `${ayText} • ${semText}`;
+        termBadgeText.textContent = `${ayText} â€¢ ${semText}`;
     }
 }
 
@@ -258,7 +260,7 @@ function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemes
     if (termIndicatorText) {
         const ayText = (!ay || ay === 'All') ? 'All School Years' : `${ay}`;
         const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
-        termIndicatorText.textContent = `Filtered by: ${ayText} • ${semText}`;
+        termIndicatorText.textContent = `Filtered by: ${ayText} â€¢ ${semText}`;
     }
 }
 
@@ -806,7 +808,7 @@ async function checkAndFlagDuplicates(records, selectedBatch) {
     return { skippedCount, importedCount };
 }
 
-// ── Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database ──
+// â”€â”€ Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database â”€â”€
 async function executeAutoImportPipeline(file, explicitBatch) {
     if (!file) return;
 
@@ -879,32 +881,46 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 first_name: r.firstName,
                 middle_name: r.middleName || '',
                 name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
-                batch: r.batch || selectedBatch
+                batch: r.batch || selectedBatch,
+                academic_year: selectedAcademicYear,
+                semester: selectedSemester
             }));
 
             let insertedData = null;
-            const { data: resData, error: insertErr } = await window.supabaseClient
+            let { data: resData, error: insertErr } = await window.supabaseClient
                 .from(tableName)
                 .insert(toInsert)
                 .select();
 
             if (insertErr) {
-                if (insertErr.code === 'PGRST204' || insertErr.code === '42703' || String(insertErr.message || '').includes('batch')) {
-                    console.warn("Table 'new_grantees_masterlist' does not have 'batch' column yet. Saving records without batch column and caching batch locally.", insertErr);
-                    const toInsertFallback = validToInsert.map(r => ({
+                // If academic_year, semester, or batch column not present, fallback with batch only or base columns
+                console.warn("Table insert fallback: Trying without term columns or batch if not existing.", insertErr);
+                const toInsertFallback = validToInsert.map(r => ({
+                    last_name: r.lastName,
+                    first_name: r.firstName,
+                    middle_name: r.middleName || '',
+                    name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
+                    batch: r.batch || selectedBatch
+                }));
+                const { data: fbData, error: fbErr } = await window.supabaseClient
+                    .from(tableName)
+                    .insert(toInsertFallback)
+                    .select();
+                if (fbErr) {
+                    const toInsertFallbackNoBatch = validToInsert.map(r => ({
                         last_name: r.lastName,
                         first_name: r.firstName,
                         middle_name: r.middleName || '',
                         name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim()
                     }));
-                    const { data: fallbackData, error: fallbackErr } = await window.supabaseClient
+                    const { data: noBatchData, error: noBatchErr } = await window.supabaseClient
                         .from(tableName)
-                        .insert(toInsertFallback)
+                        .insert(toInsertFallbackNoBatch)
                         .select();
-                    if (fallbackErr) throw fallbackErr;
-                    insertedData = fallbackData;
+                    if (noBatchErr) throw noBatchErr;
+                    insertedData = noBatchData;
                 } else {
-                    throw insertErr;
+                    insertedData = fbData;
                 }
             } else {
                 insertedData = resData;
@@ -937,6 +953,57 @@ async function executeAutoImportPipeline(file, explicitBatch) {
             cacheGranteeBatches(allMasterlistRecords);
             cacheGranteeTerms(allMasterlistRecords, selectedAcademicYear, selectedSemester);
 
+            // Automatically assign the selected academic year & semester to student grantee records in database
+            try {
+                const { data: existingSgList } = await window.supabaseClient
+                    .from('student_grantees')
+                    .select('*');
+
+                const toUpdateSg = [];
+                (validToInsert || []).forEach(importedR => {
+                    const impLast = (importedR.lastName || importedR.last_name || '').toLowerCase().trim();
+                    const impFirst = (importedR.firstName || importedR.first_name || '').toLowerCase().trim();
+                    const impId = String(importedR.studentId || importedR.student_id || '').trim();
+
+                    const matchedSg = (existingSgList || []).find(sg => {
+                        const sgId = String(sg.student_no || sg.studentId || '').trim();
+                        if (impId && sgId && impId === sgId) return true;
+                        const sgLast = (sg.last_name || '').toLowerCase().trim();
+                        const sgFirst = (sg.first_name || sg.given_name || '').toLowerCase().trim();
+                        if (impLast && sgLast && impLast === sgLast) {
+                            if (!impFirst || !sgFirst || impFirst === sgFirst || impFirst.includes(sgFirst) || sgFirst.includes(impFirst)) return true;
+                        }
+                        const sgName = String(sg.full_name || sg.fullName || '').toLowerCase().trim();
+                        return impLast && sgName.includes(impLast);
+                    });
+
+                    if (matchedSg) {
+                        toUpdateSg.push(window.supabaseClient
+                            .from('student_grantees')
+                            .update({
+                                academic_year: selectedAcademicYear,
+                                academicYear: selectedAcademicYear,
+                                semester: selectedSemester,
+                                batch: importedR.batch || selectedBatch,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('id', matchedSg.id));
+                    }
+                });
+
+                if (toUpdateSg.length > 0) {
+                    await Promise.all(toUpdateSg);
+                    console.log(`Assigned A.Y. ${selectedAcademicYear} (${selectedSemester}) to ${toUpdateSg.length} existing student_grantees.`);
+                }
+
+                // Call StudentSyncService to reconcile, sync, and persist any remaining student grantees
+                if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+                    await StudentSyncService.loadAndSyncStudents();
+                }
+            } catch (sgErr) {
+                console.warn('Error assigning academic year to student_grantees:', sgErr);
+            }
+
             if (ocrStatusText) ocrStatusText.textContent = `Complete: Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!`;
             if (ocrProgressBar) ocrProgressBar.style.width = '100%';
 
@@ -949,7 +1016,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 await window.supabaseClient.from('notifications').insert([{
                     studentId: 'admin',
                     title: 'Record Update: New Grantees Masterlist Uploaded',
-                    message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedBatch || 'Batch 1.1'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                    message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedBatch || 'Batch 1.1'}). Records are ready for Registrar Annex 5 TES Billing review.`,
                     type: 'success',
                     isRead: false,
                     timestamp: new Date().toISOString()
@@ -961,7 +1028,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 if (window.SuperAdminNotificationService) {
                     await window.SuperAdminNotificationService.notifySubmission({
                         title: 'New Grantees Masterlist Uploaded',
-                        message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedBatch || 'Batch 1.1'}). Registrar notified for Annex 5 review.`,
+                        message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedBatch || 'Batch 1.1'}). Registrar notified for Annex 5 review.`,
                         type: 'success',
                         metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, batch: selectedBatch }
                     });
@@ -1267,7 +1334,7 @@ async function saveRecordsToDatabase() {
             await window.supabaseClient.from('notifications').insert([{
                 studentId: 'admin',
                 title: 'Record Update: New Grantees Masterlist Uploaded',
-                message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedSemester || '1st Sem'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedSemester || '1st Sem'}). Records are ready for Registrar Annex 5 TES Billing review.`,
                 type: 'success',
                 isRead: false,
                 timestamp: new Date().toISOString()
@@ -1279,7 +1346,7 @@ async function saveRecordsToDatabase() {
             if (window.SuperAdminNotificationService) {
                 await window.SuperAdminNotificationService.notifySubmission({
                     title: 'New Grantees Masterlist Uploaded',
-                    message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} • ${selectedSemester || '1st Sem'}). Registrar notified for Annex 5 review.`,
+                    message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedSemester || '1st Sem'}). Registrar notified for Annex 5 review.`,
                     type: 'success',
                     metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, semester: selectedSemester }
                 });
@@ -1485,7 +1552,7 @@ function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
     };
 }
 
-// ── Render School Student Records Table ──────────────────────────
+// â”€â”€ Render School Student Records Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderSchoolStudentsTable(students) {
     const tbody = document.getElementById('tbody-school-students');
     const countEl = document.getElementById('school-students-count');
@@ -1587,7 +1654,7 @@ function filterSchoolStudents() {
     renderSchoolStudentsTable(filtered);
 }
 
-// ── Export School Student Records as CSV ────────────────────────
+// â”€â”€ Export School Student Records as CSV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function updateSchoolExportButtonText() {
     const btnText = document.getElementById('text-export-school-csv');
     if (!btnText) return;
@@ -1652,10 +1719,10 @@ function exportSchoolStudentsCSV() {
         'Religion',
         'Mobile Number',
         'Email Address',
-        'Father’s Full Name',
-        'Father’s Occupation',
-        'Mother’s Full Name',
-        'Mother’s Occupation',
+        'Fatherâ€™s Full Name',
+        'Fatherâ€™s Occupation',
+        'Motherâ€™s Full Name',
+        'Motherâ€™s Occupation',
         'Status'
     ];
 
@@ -1751,10 +1818,10 @@ function downloadSchoolStudentTemplate() {
         'Religion',
         'Mobile Number',
         'Email Address',
-        'Father’s Full Name',
-        'Father’s Occupation',
-        'Mother’s Full Name',
-        'Mother’s Occupation'
+        'Fatherâ€™s Full Name',
+        'Fatherâ€™s Occupation',
+        'Motherâ€™s Full Name',
+        'Motherâ€™s Occupation'
     ];
 
     const sampleData = [
@@ -2454,7 +2521,7 @@ function updateAnnexKPIs() {
     const countF3 = document.getElementById('sa-stat-form3-count');
 
     if (countF2) countF2.textContent = `${f2Count} Enrolled Grantees`;
-    if (amtF2) amtF2.textContent = `₱${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
+    if (amtF2) amtF2.textContent = `â‚±${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
     if (countF3) countF3.textContent = `${f3Count} Not Included Grantees`;
 }
 
@@ -2509,9 +2576,9 @@ function renderAnnexForm2Table(items) {
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
                 <td style="text-align: center;">${grantee.batch || '1'}</td>
-                <td style="font-weight: 600; color: #2E7D32;">₱10,000.00</td>
-                <td style="text-align: center; color: var(--text-secondary);">₱0.00</td>
-                <td style="font-weight: 700; color: #2E7D32;">₱10,000.00</td>
+                <td style="font-weight: 600; color: #2E7D32;">â‚±10,000.00</td>
+                <td style="text-align: center; color: var(--text-secondary);">â‚±0.00</td>
+                <td style="font-weight: 700; color: #2E7D32;">â‚±10,000.00</td>
             </tr>
         `;
     }).join('');
@@ -2649,7 +2716,7 @@ function renderAnnexReviewQueue(items) {
                     <div>
                         <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
                         <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-secondary);">
-                            ID: <strong>${granteeId}</strong> • Program: <strong>${granteeProg}</strong> • Batch: <strong>${grantee.batch || '1'}</strong>
+                            ID: <strong>${granteeId}</strong> â€¢ Program: <strong>${granteeProg}</strong> â€¢ Batch: <strong>${grantee.batch || '1'}</strong>
                         </p>
                     </div>
                     <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(229,57,53,0.1); color: #D32F2F;">
@@ -2903,7 +2970,7 @@ async function fetchExistingMasterlist() {
     }
 }
 
-// ── Exported Initialization Function ────────────────────────────────
+// â”€â”€ Exported Initialization Function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function initMasterlistImport() {
     dropZone = document.getElementById('drop-zone');
     fileInput = document.getElementById('file-input');
@@ -3107,6 +3174,19 @@ export function initMasterlistImport() {
     iconRefreshTerm = document.getElementById('sa-icon-refresh-term');
 
     const handleTermChange = async (newAY, newSem) => {
+        if (newAY === 'custom') {
+            openSuperAdminCustomTermModal('ay');
+            if (headerFilterAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
+            if (filterAcademicYear) filterAcademicYear.value = selectedAcademicYear;
+            return;
+        }
+        if (newSem === 'custom') {
+            openSuperAdminCustomTermModal('sem');
+            if (headerFilterSemester) headerFilterSemester.value = selectedSemester;
+            if (filterSemester) filterSemester.value = selectedSemester;
+            return;
+        }
+
         if (newAY !== undefined) selectedAcademicYear = newAY;
         if (newSem !== undefined) selectedSemester = newSem;
 
@@ -3120,6 +3200,78 @@ export function initMasterlistImport() {
 
         await loadTermData(selectedAcademicYear, selectedSemester);
     };
+
+    const modalCustomTerm = document.getElementById('sa-custom-term-modal');
+    const btnCustomTerm = document.getElementById('sa-btn-custom-term');
+    const btnCloseCustomTerm = document.getElementById('sa-btn-close-custom-term');
+    const btnCancelCustomTerm = document.getElementById('sa-btn-cancel-custom-term');
+    const btnSaveCustomTerm = document.getElementById('sa-btn-save-custom-term');
+    const inputCustomAy = document.getElementById('sa-input-custom-ay');
+    const inputCustomSem = document.getElementById('sa-input-custom-sem');
+
+    const openSuperAdminCustomTermModal = (defaultFocus = 'ay') => {
+        if (!modalCustomTerm) return;
+        if (inputCustomAy) inputCustomAy.value = '';
+        if (inputCustomSem) inputCustomSem.value = '';
+        modalCustomTerm.classList.remove('hidden');
+        if (defaultFocus === 'sem' && inputCustomSem) inputCustomSem.focus();
+        else if (inputCustomAy) inputCustomAy.focus();
+    };
+
+    const closeSuperAdminCustomTermModal = () => {
+        if (modalCustomTerm) modalCustomTerm.classList.add('hidden');
+    };
+
+    if (btnCustomTerm) {
+        btnCustomTerm.addEventListener('click', () => openSuperAdminCustomTermModal('ay'));
+    }
+    if (btnCloseCustomTerm) {
+        btnCloseCustomTerm.addEventListener('click', closeSuperAdminCustomTermModal);
+    }
+    if (btnCancelCustomTerm) {
+        btnCancelCustomTerm.addEventListener('click', closeSuperAdminCustomTermModal);
+    }
+    if (btnSaveCustomTerm) {
+        btnSaveCustomTerm.addEventListener('click', async () => {
+            const ayVal = (inputCustomAy ? inputCustomAy.value : '').trim();
+            const semVal = (inputCustomSem ? inputCustomSem.value : '').trim();
+
+            if (!ayVal && !semVal) {
+                alert('Please enter a valid Academic Year (e.g. 2026-2027) or Semester.');
+                return;
+            }
+
+            let addedAy = null;
+            let addedSem = null;
+
+            if (ayVal) {
+                addedAy = await AcademicYearService.addCustomAcademicYear(ayVal);
+            }
+            if (semVal) {
+                addedSem = await AcademicYearService.addCustomSemester(semVal);
+            }
+
+            closeSuperAdminCustomTermModal();
+            await populateDistinctAcademicYears();
+
+            if (addedAy) selectedAcademicYear = addedAy;
+            if (addedSem) selectedSemester = addedSem;
+
+            if (headerFilterAcademicYear && addedAy) headerFilterAcademicYear.value = addedAy;
+            if (filterAcademicYear && addedAy) filterAcademicYear.value = addedAy;
+            if (headerFilterSemester && addedSem) headerFilterSemester.value = addedSem;
+            if (filterSemester && addedSem) filterSemester.value = addedSem;
+
+            if (window.showToast) {
+                window.showToast(`Custom term saved: ${selectedAcademicYear} • ${selectedSemester}`, 'check-circle');
+            }
+            await handleTermChange(selectedAcademicYear, selectedSemester);
+        });
+    }
+
+    AcademicYearService.onTermsUpdated(async () => {
+        await populateDistinctAcademicYears();
+    });
 
     if (filterAcademicYear) {
         filterAcademicYear.addEventListener('change', (e) => handleTermChange(e.target.value, undefined));
@@ -3149,30 +3301,40 @@ export function initMasterlistImport() {
     }
 
     const populateDistinctAcademicYears = async () => {
-        const baseYears = new Set(['2024-2025', '2023-2024', '2022-2023', '2021-2022']);
         try {
-            if (window.supabaseClient) {
-                const [resF2, resF3, resSG] = await Promise.all([
-                    window.supabaseClient.from('annex_form_2').select('academic_year'),
-                    window.supabaseClient.from('annex_form_3').select('academic_year'),
-                    window.supabaseClient.from('student_grantees').select('academic_year')
-                ]);
-                (resF2.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
-                (resF3.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
-                (resSG.data || []).forEach(r => { if (r.academic_year) baseYears.add(r.academic_year.trim()); });
+            const [years, semesters] = await Promise.all([
+                AcademicYearService.getAcademicYears(),
+                AcademicYearService.getSemesters()
+            ]);
+
+            const ayHtml = years.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('') +
+                `<option value="All" ${selectedAcademicYear === 'All' ? 'selected' : ''}>All School Years</option>` +
+                `<option value="custom">+ Custom A.Y....</option>`;
+
+            if (filterAcademicYear) {
+                filterAcademicYear.innerHTML = ayHtml;
+                filterAcademicYear.value = selectedAcademicYear;
+            }
+            if (headerFilterAcademicYear) {
+                headerFilterAcademicYear.innerHTML = ayHtml;
+                headerFilterAcademicYear.value = selectedAcademicYear;
+            }
+
+            const semHtml = semesters.map(s => `<option value="${s}" ${s === selectedSemester ? 'selected' : ''}>${s}</option>`).join('') +
+                `<option value="All" ${selectedSemester === 'All' ? 'selected' : ''}>All Semesters</option>` +
+                `<option value="custom">+ Custom Semester...</option>`;
+
+            if (filterSemester) {
+                filterSemester.innerHTML = semHtml;
+                filterSemester.value = selectedSemester;
+            }
+            if (headerFilterSemester) {
+                headerFilterSemester.innerHTML = semHtml;
+                headerFilterSemester.value = selectedSemester;
             }
         } catch (e) {
-            console.warn('Could not query distinct academic years in Superadmin:', e);
+            console.warn('Could not query distinct terms in Super Admin:', e);
         }
-
-        (allMasterlistRecords || []).forEach(r => { if (r.academicYear) baseYears.add(r.academicYear.trim()); });
-
-        const sortedYears = Array.from(baseYears).sort().reverse();
-        const html = sortedYears.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('') +
-            `<option value="All" ${selectedAcademicYear === 'All' ? 'selected' : ''}>All School Years</option>`;
-
-        if (filterAcademicYear) filterAcademicYear.innerHTML = html;
-        if (headerFilterAcademicYear) headerFilterAcademicYear.innerHTML = html;
     };
 
     const loadTermData = async (ay, sem) => {
