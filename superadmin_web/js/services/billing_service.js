@@ -882,8 +882,14 @@ export class BillingService {
         const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
 
         // Academic Year & Semester
-        const academicYear = metadata.academicYear || '2024-2025';
-        const semester = metadata.semester || '1st Semester';
+        let academicYear = metadata.academicYear || '2024-2025';
+        if (academicYear === 'All' || !academicYear.includes('-')) {
+            academicYear = '2024-2025';
+        }
+        let semester = metadata.semester || '1st Semester';
+        if (semester === 'All') {
+            semester = '1st Semester';
+        }
         const ayMatch = academicYear.match(/\b(20\d\d)\b/);
         const ayStartYear = ayMatch ? parseInt(ayMatch[1], 10) : new Date().getFullYear();
 
@@ -909,7 +915,7 @@ export class BillingService {
         });
 
         // 3. PHP Amount: Formatted with currency prefix, commas, and two decimals
-        const formattedPhpAmount = 'PhP ' + totalTesAmount.toLocaleString('en-US', {
+        const formattedPhpAmount = 'PhP ' + totalAmount.toLocaleString('en-US', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
@@ -920,6 +926,12 @@ export class BillingService {
         const tranch = metadata.tranch || '1';
         const billingRefNo = `${regionalCode}-${heiCode}-${ayStartYear}-${termCode}-${tranch}:${cleanBatch}`;
 
+        // HEI Header (Row 4 & Row 5)
+        const heiName = metadata.heiName || 'University of Science and Technology of Southern Philippines';
+        const heiAddress = metadata.heiAddress || 'Oroquieta Campus, Mobod, Oroquieta City, Misamis Occidental';
+        setCell(4, 'A4', heiName, false, '5');
+        setCell(5, 'A5', heiAddress, false, '5');
+
         // Top Header Fields Automation:
         // Row 9 (B9:Y9): "TES Batch [Batch] - [Semester] and Academic Year [AY]"
         setCell(9, 'B9', `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`, false, '291');
@@ -929,6 +941,13 @@ export class BillingService {
 
         // Row 12 (U12:Y12): Date
         setCell(12, 'U12', formattedDate, false, '292');
+
+        // CHED Regional Office (Row 14 E14, Row 15 E15, Row 16 C16)
+        const regionalOffice = metadata.regionalOffice || `CHED - Regional Office ${regionalCode}`;
+        const regionalAddress = metadata.regionalAddress || 'Zone 6, Bayabas, Cagayan de Oro City';
+        setCell(14, 'E14', regionalOffice, false, '28');
+        setCell(15, 'E15', regionalAddress, false, '35');
+        setCell(16, 'C16', regionalOffice, false, '248');
 
         // Responsibility Center description with Term, AY, and Fiscal Year:
         // Row 17 (E17)

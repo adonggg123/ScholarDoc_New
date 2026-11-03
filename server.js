@@ -298,11 +298,10 @@ async function callDocumentOcr(base64Image, { isSticker = false, expectedName = 
         if (!hasYear || !hasSem || text.length < 15) {
             console.log('[Document OCR] Running Engine 1 ensemble for sticker recognition...');
             const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
-            if (textE1 && textE1.length > 0) {
-                if (!text || textE1.length > text.length || (!hasYear && /(?:202[0-9]|203[0-5])/i.test(textE1))) {
-                    text = text ? `${text}\n${textE1}` : textE1;
-                    engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
-                }
+            if (textE1 && textE1.trim().length > 0) {
+                // Combine both engines so parser can draw year and semester from both
+                text = text ? `${text}\n${textE1.trim()}` : textE1.trim();
+                engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
             }
         }
     } else {
@@ -315,11 +314,10 @@ async function callDocumentOcr(base64Image, { isSticker = false, expectedName = 
         if (needsEngine1) {
             console.log('[Document OCR] Running Engine 1 ensemble for Front ID / Document OCR...');
             const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
-            if (textE1 && textE1.length > 0) {
-                if (!text || textE1.length > text.length) {
-                    text = text ? `${text}\n${textE1}` : textE1;
-                    engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
-                }
+            if (textE1 && textE1.trim().length > 0) {
+                // Combine both engines so name parser can draw words from both
+                text = text ? `${text}\n${textE1.trim()}` : textE1.trim();
+                engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
             }
         }
     }
@@ -333,6 +331,23 @@ async function callDocumentOcr(base64Image, { isSticker = false, expectedName = 
 
 // Backward-compatible alias for existing callers
 const callVisionApi = callDocumentOcr;
+
+function cleanOcrGlyphs(str) {
+    if (!str) return '';
+    return String(str).toUpperCase()
+        .replace(/0/g, 'O')
+        .replace(/[1\|!]/g, 'I')
+        .replace(/5/g, 'S')
+        .replace(/8/g, 'B')
+        .replace(/2/g, 'Z')
+        .replace(/3/g, 'E')
+        .replace(/4/g, 'A')
+        .replace(/@/g, 'A')
+        .replace(/\$/g, 'S')
+        .replace(/VV/g, 'W')
+        .replace(/RN/g, 'M')
+        .replace(/[Ññ]/g, 'N');
+}
 
 function normalizeName(name) {
     if (!name) return '';
@@ -367,17 +382,50 @@ function levenshteinDistance(a, b) {
 
 function tokenMatchesText(token, rawText, words) {
     if (!token || !rawText) return false;
-    const t = token.toUpperCase();
+    const t = token.toUpperCase().trim();
+    if (!t) return false;
+
+    // Direct case-insensitive word boundary match
     if (new RegExp(`\\b${t}\\b`, 'i').test(rawText)) return true;
-    if (t.length >= 4 && rawText.includes(t)) return true;
+
+    // Substring match for tokens of length >= 3
+    if (t.length >= 3 && rawText.includes(t)) return true;
+
+    // Glyph-normalized match (e.g. J0Y -> JOY, D3N -> DEN, KR1SHA -> KRISHA)
+    const tClean = cleanOcrGlyphs(t);
+    const rawClean = cleanOcrGlyphs(rawText);
+    if (new RegExp(`\\b${tClean}\\b`, 'i').test(rawClean)) return true;
+    if (tClean.length >= 3 && rawClean.includes(tClean)) return true;
+
+    // Fuzzy Levenshtein match across detected words
     for (const w of words) {
-        if (w === t) return true;
-        if (w.length >= 4 && Math.abs(w.length - t.length) <= 1) {
-            const dist = levenshteinDistance(w, t);
-            if (dist <= 1 && t.length >= 4) return true;
-            if (dist <= 2 && t.length >= 7) return true;
+        const wUpper = w.toUpperCase();
+        if (wUpper === t) return true;
+
+        const wClean = cleanOcrGlyphs(wUpper);
+        if (wClean === tClean) return true;
+
+        if (t.length >= 3 && Math.abs(w.length - t.length) <= 1) {
+            const dist = levenshteinDistance(wUpper, t);
+            if (dist <= 1) return true;
+
+            const distClean = levenshteinDistance(wClean, tClean);
+            if (distClean <= 1) return true;
+        }
+        if (t.length >= 7 && Math.abs(w.length - t.length) <= 2) {
+            const dist = levenshteinDistance(wUpper, t);
+            if (dist <= 2) return true;
         }
     }
+
+    // Single-letter initial match: e.g. "Z." or "Z" matching "ZACARIAS"
+    if (t.length >= 3) {
+        const initial = t[0];
+        if (new RegExp(`\\b${initial}\\.?\\s`, 'i').test(rawText) || new RegExp(`\\s${initial}\\.?\\b`, 'i').test(rawText)) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -402,13 +450,8 @@ function verifyNameMatch(rawText, expectedName) {
         };
     }
 
-    const expTokens = expClean.split(' ').filter(t => t.length > 1);
-    if (expTokens.length === 0) {
-        return { matches: true, detectedName: expectedName, confidence: 1.0, message: 'Name verified' };
-    }
-
-    // Direct exact or substring match
-    if (raw.includes(expClean)) {
+    // Direct exact or substring match (including glyph normalized)
+    if (raw.includes(expClean) || cleanOcrGlyphs(raw).includes(cleanOcrGlyphs(expClean))) {
         return {
             matches: true,
             detectedName: expectedName,
@@ -417,28 +460,64 @@ function verifyNameMatch(rawText, expectedName) {
         };
     }
 
-    const rawWords = raw.split(/[^A-Z0-9]+/).filter(w => w.length > 1);
-
-    // Determine expected surname and first name (supports "LAST, FIRST MIDDLE" and "FIRST MIDDLE LAST")
-    let surname = '';
-    let firstName = '';
-    if (expectedName.includes(',')) {
-        const parts = expectedName.split(',');
-        const lastPartTokens = normalizeName(parts[0]).split(' ').filter(Boolean);
-        const firstPartTokens = normalizeName(parts[1] || '').split(' ').filter(Boolean);
-        surname = lastPartTokens[0] || expTokens[0];
-        firstName = firstPartTokens[0] || expTokens[expTokens.length - 1];
-    } else {
-        firstName = expTokens[0];
-        surname = expTokens[expTokens.length - 1];
+    const expTokens = expClean.split(' ').filter(t => t.length >= 2);
+    if (expTokens.length === 0) {
+        return { matches: true, detectedName: expectedName, confidence: 1.0, message: 'Name verified' };
     }
 
-    const hasFirstAndLast = (
-        tokenMatchesText(firstName, raw, rawWords) &&
-        tokenMatchesText(surname, raw, rawWords)
-    );
+    const rawWords = raw.split(/[^A-Z0-9]+/).filter(w => w.length >= 2);
 
-    const matchedTokens = expTokens.filter(token => tokenMatchesText(token, raw, rawWords));
+    // Segment into Surname, Given Name(s), and Middle Name
+    let surnameTokens = [];
+    let givenTokens = [];
+    let middleTokens = [];
+
+    if (expectedName.includes(',')) {
+        const parts = expectedName.split(',');
+        surnameTokens = normalizeName(parts[0]).split(' ').filter(t => t.length >= 2);
+        const restTokens = normalizeName(parts[1] || '').split(' ').filter(t => t.length >= 2);
+        if (restTokens.length === 1) {
+            givenTokens = [restTokens[0]];
+        } else if (restTokens.length >= 2) {
+            givenTokens = restTokens.slice(0, restTokens.length - 1);
+            middleTokens = [restTokens[restTokens.length - 1]];
+        }
+    } else {
+        const tokens = expTokens;
+        if (tokens.length === 1) {
+            surnameTokens = [tokens[0]];
+            givenTokens = [tokens[0]];
+        } else if (tokens.length === 2) {
+            givenTokens = [tokens[0]];
+            surnameTokens = [tokens[1]];
+        } else {
+            // Check for multi-word surname prefixes: DE LA, DELA, DELOS, DE LOS, SAN, STA, STO
+            const lastTwo = `${tokens[tokens.length - 2]} ${tokens[tokens.length - 1]}`;
+            if (tokens.length >= 4 && (tokens[tokens.length - 3] === 'DE' && (tokens[tokens.length - 2] === 'LA' || tokens[tokens.length - 2] === 'LOS'))) {
+                surnameTokens = tokens.slice(tokens.length - 3);
+                givenTokens = tokens.slice(0, 1);
+                middleTokens = tokens.slice(1, tokens.length - 3);
+            } else if (/^(DE|DELA|DELOS|SAN|STA|STO)\s+/i.test(lastTwo)) {
+                surnameTokens = tokens.slice(tokens.length - 2);
+                givenTokens = tokens.slice(0, 1);
+                middleTokens = tokens.slice(1, tokens.length - 2);
+            } else {
+                givenTokens = tokens.slice(0, tokens.length - 2);
+                middleTokens = [tokens[tokens.length - 2]];
+                surnameTokens = [tokens[tokens.length - 1]];
+                if (givenTokens.length === 0) {
+                    givenTokens = [tokens[0]];
+                    middleTokens = [tokens[1]];
+                }
+            }
+        }
+    }
+
+    const surnameMatches = surnameTokens.some(st => tokenMatchesText(st, raw, rawWords));
+    const givenMatches = givenTokens.some(gt => tokenMatchesText(gt, raw, rawWords));
+    const middleMatches = middleTokens.some(mt => tokenMatchesText(mt, raw, rawWords));
+
+    const matchedTokens = expTokens.filter(t => tokenMatchesText(t, raw, rawWords));
     const tokenRatio = matchedTokens.length / expTokens.length;
 
     // Line-by-line similarity
@@ -456,7 +535,14 @@ function verifyNameMatch(rawText, expectedName) {
         }
     }
 
-    const isMatch = (tokenRatio >= 0.50 && (hasFirstAndLast || expTokens.length <= 2)) || bestScore >= 0.60;
+    // Match if:
+    // 1. Both Surname and Given Name match (even if middle name is omitted or initial on ID)
+    // 2. OR Token ratio >= 0.50 with either surname or given name matching
+    // 3. OR Line score >= 0.50
+    const isMatch = (surnameMatches && givenMatches) ||
+        (tokenRatio >= 0.50 && (surnameMatches || givenMatches)) ||
+        bestScore >= 0.50 ||
+        (expTokens.length <= 2 && (surnameMatches || givenMatches));
 
     let message = '';
     if (isMatch) {
@@ -468,7 +554,7 @@ function verifyNameMatch(rawText, expectedName) {
     return {
         matches: isMatch,
         detectedName: bestLine || matchedTokens.join(' '),
-        confidence: Math.max(tokenRatio, bestScore),
+        confidence: Math.max(tokenRatio, bestScore, (surnameMatches && givenMatches) ? 0.95 : 0.70),
         message
     };
 }
@@ -554,41 +640,62 @@ function verifyBirthdateMatch(rawText, expectedBirthdate) {
         };
     }
 
-    const dobRegexes = [
-        /(?:DOB|D\.O\.B|Birth\s*Date|Date\s*of\s*Birth|Birthday|Kapanganakan)\s*[:\.\-]?\s*([A-Za-z0-9\s,\/\-\.]+)/gi,
-        /\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4})\b/g,
-        /\b(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})\b/g,
-        /\b([a-zA-Z]{3,9}\s+\d{1,2},?\s+\d{4})\b/g,
-        /\b(\d{1,2}\s+[a-zA-Z]{3,9},?\s+\d{4})\b/g
-    ];
-
-    const candidateStrings = [];
-    for (const r of dobRegexes) {
-        let m;
-        while ((m = r.exec(text)) !== null) {
-            candidateStrings.push(m[1] || m[0]);
-        }
+    // 1. Explicit DOB labels (e.g. "DOB: 10/24/2003", "Birth Date: 2003-10-24")
+    const explicitDobRegex = /(?:DOB|D\.O\.B|Birth\s*Date|Date\s*of\s*Birth|Birthday|Kapanganakan)\s*[:\.\-]?\s*([A-Za-z0-9\s,\/\-\.]+)/gi;
+    const explicitCandidates = [];
+    let em;
+    while ((em = explicitDobRegex.exec(text)) !== null) {
+        if (em[1]) explicitCandidates.push(em[1]);
     }
 
     let detectedDate = null;
     let matches = false;
+    let hasExplicitDobMismatch = false;
 
-    for (const cand of candidateStrings) {
+    for (const cand of explicitCandidates) {
         const parsed = parseDateComponents(cand);
         if (parsed) {
             const formatted = `${String(parsed.month).padStart(2, '0')}/${String(parsed.day).padStart(2, '0')}/${parsed.year}`;
-            if (!detectedDate) detectedDate = formatted;
+            detectedDate = formatted;
             if (parsed.year === exp.year) {
                 if ((parsed.month === exp.month && parsed.day === exp.day) ||
                     (parsed.month === exp.day && parsed.day === exp.month)) {
                     matches = true;
-                    detectedDate = formatted;
                     break;
                 }
+            } else {
+                hasExplicitDobMismatch = true;
             }
         }
     }
 
+    // 2. If no explicit DOB matched, check general date patterns to see if the student's birthdate appears on the card
+    if (!matches) {
+        const generalDateRegexes = [
+            /\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4})\b/g,
+            /\b(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})\b/g,
+            /\b([a-zA-Z]{3,9}\s+\d{1,2},?\s+\d{4})\b/g,
+            /\b(\d{1,2}\s+[a-zA-Z]{3,9},?\s+\d{4})\b/g
+        ];
+
+        for (const r of generalDateRegexes) {
+            let m;
+            while ((m = r.exec(text)) !== null) {
+                const parsed = parseDateComponents(m[1] || m[0]);
+                if (parsed && parsed.year === exp.year) {
+                    if ((parsed.month === exp.month && parsed.day === exp.day) ||
+                        (parsed.month === exp.day && parsed.day === exp.month)) {
+                        matches = true;
+                        detectedDate = `${String(parsed.month).padStart(2, '0')}/${String(parsed.day).padStart(2, '0')}/${parsed.year}`;
+                        break;
+                    }
+                }
+            }
+            if (matches) break;
+        }
+    }
+
+    // 3. Fallback: check if year and day appear in text
     if (!matches) {
         const hasYear = text.includes(String(exp.year));
         const hasDay = new RegExp(`\\b${exp.day}\\b`).test(text);
@@ -601,14 +708,17 @@ function verifyBirthdateMatch(rawText, expectedBirthdate) {
     let message = '';
     if (matches) {
         message = `Birthdate verified! Matches registered information (${detectedDate}).`;
-    } else if (detectedDate) {
-        message = 'The birthdate on your school ID does not match your registered information. Please check your ID and try again.';
+    } else if (hasExplicitDobMismatch && detectedDate) {
+        message = `The birthdate on your school ID (${detectedDate}) does not match your registered information. Please check your ID and try again.`;
     } else {
-        message = 'Could not detect a matching birthdate on the back of your ID.';
+        // Unlabeled dates (e.g. card issue/expiry dates) must not trigger false rejections
+        matches = true;
+        detectedDate = null;
+        message = 'Birthdate not required/printed on back of ID card.';
     }
 
     return {
-        matches: detectedDate ? matches : true,
+        matches,
         detectedBirthdate: detectedDate,
         message
     };
@@ -695,7 +805,11 @@ function normalizeYear(raw) {
     let clean = String(raw).trim()
         .replace(/\b2[oO]([0-9]{2})/gi, '20$1')
         .replace(/[oO](?=\d)/g, '0')
-        .replace(/(?<=\d)[oO]/g, '0');
+        .replace(/(?<=\d)[oO]/g, '0')
+        .replace(/\b(202)[sS]\b/g, '$15')
+        .replace(/\b(202)[bB]\b/g, '$16')
+        .replace(/\b(202)[lI]\b/g, '$11')
+        .replace(/\b(202)[zZ]\b/g, '$12');
 
     // Replace all Unicode dashes, slashes, "to", dots, and underscores between numbers with hyphen
     clean = clean.replace(
@@ -705,6 +819,12 @@ function normalizeYear(raw) {
 
     // Remove unintended spaces inside digit pairs (e.g. "20 26" -> "2026")
     clean = clean.replace(/\b(20)\s+(\d{2})\b/g, '$1$2');
+
+    // Also support space separated year range: e.g. "2026 2027" or "2026 27"
+    const spaceMatch = clean.match(/(20\d{2})\s+(20\d{2}|\d{2})/);
+    if (spaceMatch) {
+        clean = clean.replace(/(20\d{2})\s+(20\d{2}|\d{2})/, '$1-$2');
+    }
 
     const match = clean.match(/(20\d{2})\s*-\s*(20\d{2}|\d{2})/);
     if (match) {
@@ -731,23 +851,29 @@ function normalizeSemester(raw) {
         .replace(/[\u00B0\u00BA˚]/g, '*')
         .replace(/\s+/g, ' ');
 
-    // 2nd Semester check (handles 2nd, second, 2*, 2°*, 2 nd, 2-nd, 2rd, sem 2, sem2)
+    // 2nd Semester check (handles 2nd, second, 2*, 2°*, 2 nd, 2-nd, 2rd, sem 2, sem2, 2nd term, term 2, [2nd])
     const is2nd = /\b(?:2\s*nd|2\s*rd|second|2[\*+\#\~\^•]+|2)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
         /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:2|ii)\b/i.test(lower) ||
         /\b(?:2|ii)\s*[\/\-]\s*sem\b/i.test(lower) ||
         /\b2nd\s+semester\b/i.test(lower) ||
         /\bsecond\s+semester\b/i.test(lower) ||
-        lower.includes('2* semester') || lower.includes('2* sem');
+        /\b2nd\s+term\b/i.test(lower) ||
+        /\bterm\s*2\b/i.test(lower) ||
+        lower.includes('2* semester') || lower.includes('2* sem') ||
+        /\b2nd\b/i.test(lower);
     if (is2nd) return '2nd Semester';
 
-    // 1st Semester check (handles 1st, first, 1*, 1°*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1)
+    // 1st Semester check (handles 1st, first, 1*, 1°*, 1 st, 1-st, ist, 1sl, 1si, sem 1, sem1, 1st term, term 1, [1st])
     const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
-        /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?\s*(?:1|i)\b/i.test(lower) ||
+        /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?[\s]*(?:1|i)\b/i.test(lower) ||
         /\b(?:1|i)\s*[\/\-]\s*sem\b/i.test(lower) ||
         /\b1st\s+semester\b/i.test(lower) ||
         /\bfirst\s+semester\b/i.test(lower) ||
         /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
-        lower.includes('1* semester') || lower.includes('1* sem');
+        /\b1st\s+term\b/i.test(lower) ||
+        /\bterm\s*1\b/i.test(lower) ||
+        lower.includes('1* semester') || lower.includes('1* sem') ||
+        /\b1st\b/i.test(lower);
     if (is1st) return '1st Semester';
 
     if (/\b(?:summer|mid\s*[\-]?year)\b/i.test(lower)) {
@@ -795,24 +921,37 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         .replace(/\b2[oO]([0-9]{2})/gi, '20$1')
         .replace(/[oO](?=\d)/g, '0')
         .replace(/(?<=\d)[oO]/g, '0')
+        .replace(/\b(202)[sS]\b/g, '$15')
+        .replace(/\b(202)[bB]\b/g, '$16')
+        .replace(/\b(202)[lI]\b/g, '$11')
+        .replace(/\b(202)[zZ]\b/g, '$12')
         .replace(/[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D/\\~_\.]|(?<=\d)\s*(?:to|until)\s*(?=\d)/g, '-');
     cleaned = cleaned.replace(/\b(20)\s+(\d{2})\b/g, '$1$2');
 
     // 1. Extract Academic Year with priority scoring
     let detectedYear = null;
+    const targetNormYear = normalizeYear(currentYear);
+    const targetNormSem = normalizeSemester(currentSem);
+
+    // Priority 0: Direct check against active/target academic year
+    if (targetNormYear && (cleaned.includes(targetNormYear) || cleaned.includes(targetNormYear.replace('-', ' ')))) {
+        detectedYear = targetNormYear;
+    }
 
     // Priority 1: Lines containing sticker keywords (sem, registrar, valid, ustp)
-    const lines = cleaned.split(/[\r\n]+/);
-    for (const line of lines) {
-        if (/(?:sem|registrar|valid|ustp|campus)/i.test(line)) {
-            const lineAyMatch = line.match(/(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b/i);
-            if (lineAyMatch) {
-                const start = parseInt(lineAyMatch[1], 10);
-                const endStr = lineAyMatch[2];
-                const end = endStr.length === 2 ? parseInt(lineAyMatch[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
-                if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
-                    detectedYear = `${start}-${end}`;
-                    break;
+    if (!detectedYear) {
+        const lines = cleaned.split(/[\r\n]+/);
+        for (const line of lines) {
+            if (/(?:sem|registrar|valid|ustp|campus)/i.test(line)) {
+                const lineAyMatch = line.match(/(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b/i);
+                if (lineAyMatch) {
+                    const start = parseInt(lineAyMatch[1], 10);
+                    const endStr = lineAyMatch[2];
+                    const end = endStr.length === 2 ? parseInt(lineAyMatch[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+                    if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+                        detectedYear = `${start}-${end}`;
+                        break;
+                    }
                 }
             }
         }
@@ -833,9 +972,9 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         }
     }
 
-    // Priority 3: Consecutive year range (e.g. 2026-2027) where end == start + 1
+    // Priority 3: Consecutive year range (e.g. 2026-2027 or 2024 2025) where end == start + 1
     if (!detectedYear) {
-        const rangeRegex = /\b(202[0-9]|203[0-5])\s*[-–—/\\~_\.]\s*(202[0-9]|203[0-5]|\d{2})\b/g;
+        const rangeRegex = /\b(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]\s*(202[0-9]|203[0-5]|\d{2})\b/g;
         let match;
         while ((match = rangeRegex.exec(cleaned)) !== null) {
             const start = parseInt(match[1], 10);
@@ -870,6 +1009,8 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
             /\b(?:2|ii)\s*[\/\-]\s*sem\b/i.test(lower) ||
             /\b2nd\s+semester\b/i.test(lower) ||
             /\bsecond\s+semester\b/i.test(lower) ||
+            /\b2nd\s+term\b/i.test(lower) ||
+            /\bterm\s*2\b/i.test(lower) ||
             (hasSemesterWord && (lower.includes('2*') || lower.includes('2°') || lower.includes('2º')));
         const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
             /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?[\s]*(?:1|i)\b/i.test(lower) ||
@@ -877,6 +1018,8 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
             /\b1st\s+semester\b/i.test(lower) ||
             /\bfirst\s+semester\b/i.test(lower) ||
             /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
+            /\b1st\s+term\b/i.test(lower) ||
+            /\bterm\s*1\b/i.test(lower) ||
             (hasSemesterWord && (lower.includes('1*') || lower.includes('1°') || lower.includes('1º')));
 
         const isNearYearOrSticker = /(?:20\d{2}|ay|sy|valid|reg|ustp|campus)/i.test(lower);
@@ -889,6 +1032,7 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         return null;
     }
 
+    const lines = cleaned.split(/[\r\n]+/);
     for (const line of lines) {
         detectedSem = checkSem(line);
         if (detectedSem) break;
@@ -897,14 +1041,24 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         detectedSem = checkSem(cleaned);
     }
 
+    // Direct check for 1st vs 2nd if target term is set and keywords exist
+    if (!detectedSem && targetNormSem) {
+        if (targetNormSem === '1st Semester' && (/\b(?:1st|first|1\*|sem\s*1)\b/i.test(cleaned))) {
+            detectedSem = '1st Semester';
+        } else if (targetNormSem === '2nd Semester' && (/\b(?:2nd|second|2\*|sem\s*2)\b/i.test(cleaned))) {
+            detectedSem = '2nd Semester';
+        }
+    }
+
     const hasValidationStamp = /\b(?:VALIDATED|VALID|VALIDO|VALIDATION|ENROLLED)\b/i.test(text) ||
         /\b(?:Campus\s+)?Registrar\b/i.test(text) ||
-        /\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b/i.test(text);
+        /\b(?:USTP|UST\s*P|U\.S\.T\.P\.)\b/i.test(text) ||
+        /\b(?:OROQUIETA|PANAON|CLAVERIA|JASAAN|ALUBIJID|CDO)\b/i.test(text) ||
+        /\b(?:OFFICIAL|CHED|UNIFAST)\b/i.test(text) ||
+        /\b(?:VALI[0O]ATED|REG1STRAR|ENR[0O]LLED)\b/i.test(text);
 
     const normDetectedYear = detectedYear ? normalizeYear(detectedYear) : null;
     const normDetectedSem = detectedSem ? normalizeSemester(detectedSem) : null;
-    const targetNormYear = normalizeYear(currentYear);
-    const targetNormSem = normalizeSemester(currentSem);
 
     const yearMatches = !!(normDetectedYear && isYearMatching(normDetectedYear, targetNormYear));
     const semMatches = !!(normDetectedSem && isSemesterMatching(normDetectedSem, targetNormSem));

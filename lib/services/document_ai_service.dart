@@ -201,7 +201,7 @@ class DocumentAIScannerService {
       if (decoded == null) return bytes;
 
       final oriented = img.bakeOrientation(decoded);
-      const int maxDimension = 1280;
+      const int maxDimension = 1800;
       img.Image processed = oriented;
 
       if (oriented.width > maxDimension || oriented.height > maxDimension) {
@@ -212,10 +212,10 @@ class DocumentAIScannerService {
         }
       }
 
-      // Slightly enhance contrast and brightness for better text readability on glossy ID stickers
-      processed = img.adjustColor(processed, contrast: 1.15, brightness: 1.02);
+      // Slightly enhance contrast, brightness, and sharpness for better OCR readability
+      processed = img.adjustColor(processed, contrast: 1.20, brightness: 1.03);
 
-      return Uint8List.fromList(img.encodeJpg(processed, quality: 85));
+      return Uint8List.fromList(img.encodeJpg(processed, quality: 90));
     } catch (_) {
       return bytes;
     }
@@ -535,7 +535,7 @@ class DocumentAIScannerService {
     return rawText;
   }
 
-  /// Crops the upper portion (top 58%) of the back ID where the validation sticker is located.
+  /// Crops the upper portion (top 68%) of the back ID where the validation sticker is located.
   static Future<Uint8List> cropUpperStickerROI(Uint8List originalBytes) async {
     // 1. Try package:image for cross-platform rotation handling and contrast boost
     try {
@@ -543,7 +543,7 @@ class DocumentAIScannerService {
       if (decoded != null) {
         final oriented = img.bakeOrientation(decoded);
         final width = oriented.width;
-        final cropHeight = (oriented.height * 0.60).round().clamp(
+        final cropHeight = (oriented.height * 0.68).round().clamp(
           1,
           oriented.height,
         );
@@ -566,7 +566,7 @@ class DocumentAIScannerService {
       final image = frame.image;
 
       final width = image.width;
-      final cropHeight = (image.height * 0.60).round().clamp(1, image.height);
+      final cropHeight = (image.height * 0.68).round().clamp(1, image.height);
 
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);

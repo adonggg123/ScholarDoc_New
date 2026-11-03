@@ -3462,6 +3462,39 @@ export function initMasterlistImport() {
         });
     };
 
+    const resolveExportBatch = (list) => {
+        if (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches') {
+            return filterBatch.value;
+        }
+        if (Array.isArray(list) && list.length > 0) {
+            for (const item of list) {
+                const b = item.batch || item.grantee?.batch || item.matchedStudent?.batch;
+                if (b && String(b).trim() && String(b).trim() !== 'null' && String(b).trim() !== 'undefined') {
+                    return String(b).trim();
+                }
+            }
+        }
+        if (selectImportBatch && selectImportBatch.value && selectImportBatch.value !== 'custom') {
+            return selectImportBatch.value;
+        }
+        if (customBatchInput && customBatchInput.value && customBatchInput.value.trim()) {
+            return customBatchInput.value.trim();
+        }
+        return '1.2';
+    };
+
+    const resolveExportTerm = () => {
+        let ay = selectedAcademicYear;
+        if (!ay || ay === 'All' || !ay.includes('-')) {
+            ay = '2024-2025';
+        }
+        let sem = selectedSemester;
+        if (!sem || sem === 'All') {
+            sem = '1st Semester';
+        }
+        return { academicYear: ay, semester: sem };
+    };
+
     const exportConsolidatedAnnex = async (triggerBtn) => {
         const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
         try {
@@ -3472,12 +3505,11 @@ export function initMasterlistImport() {
 
             // Fetch template
             let resp = await fetch('/assets/0_Annex_5_TES_New_Billing_Form.xlsx');
-            if (!resp.ok) {
-                resp = await fetch('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
-            }
-            if (!resp.ok) {
-                resp = await fetch('../assets/0_Annex_5_TES_New_Billing_Form.xlsx');
-            }
+            if (!resp.ok) resp = await fetch('assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            if (!resp.ok) resp = await fetch('../assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            if (!resp.ok) resp = await fetch('superadmin_web/assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            if (!resp.ok) resp = await fetch('/superadmin_web/assets/0_Annex_5_TES_New_Billing_Form.xlsx');
+            if (!resp.ok) resp = await fetch('0_Annex_5_TES_New_Billing_Form.xlsx');
             if (!resp.ok) {
                 throw new Error('Could not load Annex 5 template (0_Annex_5_TES_New_Billing_Form.xlsx)');
             }
@@ -3485,25 +3517,24 @@ export function initMasterlistImport() {
 
             const studentsForm2 = mapStudentsForForm2(verifiedForm2List);
             const studentsForm3 = mapStudentsForForm3(verifiedForm3List);
-
-            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
-                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
-                || (verifiedForm2List[0]?.grantee?.batch)
-                || (verifiedForm2List[0]?.matchedStudent?.batch)
-                || (studentsForm2[0]?.batch)
-                || '1';
+            const currentBatch = resolveExportBatch(studentsForm2.length > 0 ? studentsForm2 : studentsForm3);
+            const term = resolveExportTerm();
 
             const metadata = {
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester,
+                academicYear: term.academicYear,
+                semester: term.semester,
                 batch: currentBatch,
                 regionalCode: '10',
-                heiCode: 'USTP'
+                heiCode: 'USTP',
+                heiName: 'University of Science and Technology of Southern Philippines',
+                heiAddress: 'Oroquieta Campus, Mobod, Oroquieta City, Misamis Occidental',
+                regionalOffice: 'CHED - Regional Office 10',
+                regionalAddress: 'Zone 6, Bayabas, Cagayan de Oro City'
             };
 
             const result = await BillingService.fillConsolidatedAnnex5(blob, studentsForm2, studentsForm3, metadata);
-            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
-            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const semClean = term.semester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = term.academicYear.replace(/[^a-zA-Z0-9]/g, '_');
             const fileName = `Annex_5_TES_Consolidated_${ayClean}_${semClean}_${Date.now()}.xlsx`;
 
             downloadBlob(result.blob, fileName);
@@ -3535,31 +3566,28 @@ export function initMasterlistImport() {
             if (!resp.ok) resp = await fetch('assets/Annex 5-TES New Form 2.xlsx');
             if (!resp.ok) resp = await fetch('../assets/Annex 5-TES New Form 2.xlsx');
             if (!resp.ok) resp = await fetch('superadmin_web/assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) resp = await fetch('/superadmin_web/assets/Annex 5-TES New Form 2.xlsx');
+            if (!resp.ok) resp = await fetch('assets/Annex_5_TES_New_Form_2.xlsx');
             if (!resp.ok) {
                 throw new Error('Could not load Annex 5 Form 2 template (Annex 5-TES New Form 2.xlsx)');
             }
             const blob = await resp.blob();
 
             const studentsForm2 = mapStudentsForForm2(verifiedForm2List);
-
-            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
-                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
-                || (verifiedForm2List[0]?.grantee?.batch)
-                || (verifiedForm2List[0]?.matchedStudent?.batch)
-                || (studentsForm2[0]?.batch)
-                || '1';
+            const currentBatch = resolveExportBatch(studentsForm2);
+            const term = resolveExportTerm();
 
             const metadata = {
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester,
+                academicYear: term.academicYear,
+                semester: term.semester,
                 batch: currentBatch,
                 regionalCode: '10',
                 heiCode: 'USTP'
             };
 
             const result = await BillingService.fillAnnex5Form2(blob, studentsForm2, metadata);
-            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
-            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const semClean = term.semester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = term.academicYear.replace(/[^a-zA-Z0-9]/g, '_');
             const fileName = `Annex_5_TES_Form_2_${ayClean}_${semClean}_${Date.now()}.xlsx`;
 
             downloadBlob(result.blob, fileName);
@@ -3591,31 +3619,28 @@ export function initMasterlistImport() {
             if (!resp.ok) resp = await fetch('assets/Annex 5-TES New Form 3.xlsx');
             if (!resp.ok) resp = await fetch('../assets/Annex 5-TES New Form 3.xlsx');
             if (!resp.ok) resp = await fetch('superadmin_web/assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) resp = await fetch('/superadmin_web/assets/Annex 5-TES New Form 3.xlsx');
+            if (!resp.ok) resp = await fetch('assets/Annex_5_TES_New_Form_3.xlsx');
             if (!resp.ok) {
                 throw new Error('Could not load Annex 5 Form 3 template (Annex 5-TES New Form 3.xlsx)');
             }
             const blob = await resp.blob();
 
             const studentsForm3 = mapStudentsForForm3(verifiedForm3List);
-
-            const currentBatch = (filterBatch && filterBatch.value && filterBatch.value !== 'All Batches' ? filterBatch.value : null)
-                || (typeof getSelectedImportBatch === 'function' ? getSelectedImportBatch() : null)
-                || (verifiedForm3List[0]?.grantee?.batch)
-                || (verifiedForm3List[0]?.matchedStudent?.batch)
-                || (studentsForm3[0]?.batch)
-                || '1';
+            const currentBatch = resolveExportBatch(studentsForm3);
+            const term = resolveExportTerm();
 
             const metadata = {
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester,
+                academicYear: term.academicYear,
+                semester: term.semester,
                 batch: currentBatch,
                 regionalCode: '10',
                 heiCode: 'USTP'
             };
 
             const result = await BillingService.fillAnnex5Form3(blob, studentsForm3, metadata);
-            const semClean = selectedSemester.replace(/[^a-zA-Z0-9]/g, '_');
-            const ayClean = selectedAcademicYear.replace(/[^a-zA-Z0-9]/g, '_');
+            const semClean = term.semester.replace(/[^a-zA-Z0-9]/g, '_');
+            const ayClean = term.academicYear.replace(/[^a-zA-Z0-9]/g, '_');
             const fileName = `Annex_5_TES_Form_3_${ayClean}_${semClean}_${Date.now()}.xlsx`;
 
             downloadBlob(result.blob, fileName);
