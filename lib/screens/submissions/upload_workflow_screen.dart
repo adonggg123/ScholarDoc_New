@@ -2453,6 +2453,16 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             studentPayload['idBackUrl'] = _idBackUrl;
             studentPayload['id_back_url'] = _idBackUrl;
           }
+          if (_corUrl != null) {
+            studentPayload['corUrl'] = _corUrl;
+            studentPayload['cor_url'] = _corUrl;
+            studentPayload['corFileName'] = _corFileName;
+            studentPayload['cor_file_name'] = _corFileName;
+            studentPayload['corValidated'] = _corValidated;
+            studentPayload['cor_validated'] = _corValidated;
+            studentPayload['corSubmittedAt'] = DateTime.now().toUtc().toIso8601String();
+            studentPayload['cor_submitted_at'] = DateTime.now().toUtc().toIso8601String();
+          }
 
           await _authService.updateStudentProfile(user.id, studentPayload);
 
@@ -2475,10 +2485,19 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
             message: 'Student $fullName has uploaded ID documents for validation.',
             type: 'info',
           );
+          if (_corUrl != null) {
+            await notificationService.sendNotification(
+              studentId: 'superadmin',
+              title: 'Certificate of Registration (COR) Uploaded',
+              message: 'Student $fullName has uploaded Certificate of Registration (COR) for validation.',
+              type: 'info',
+            );
+          }
 
           await _auditService.logActivity(
-            action:
-                'Submitted documents for scholarship verification',
+            action: _corUrl != null
+                ? 'Submitted ID, COR, and scholarship documents for verification'
+                : 'Submitted documents for scholarship verification',
             userName: fullName,
             role: 'Student',
             studentId: studentId,

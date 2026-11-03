@@ -136,21 +136,36 @@ async function syncAcademicTermFromDb() {
 setTimeout(syncAcademicTermFromDb, 1500);
 
 const OCR_SPACE_KEYS = [
-    'helloworld',
     'K88828859988957',
     'K87878892488957',
+    'helloworld',
 ];
 
-function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientation = true, isPdf = false, timeoutMs = 8000 } = {}) {
+let currentOcrKeyIndex = 0;
+
+function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientation = true, isPdf = false, timeoutMs = 10000 } = {}) {
     return new Promise((resolve) => {
         if (!base64Image) return resolve('');
 
-        let keyIndex = 0;
-        function tryNextKey() {
-            if (keyIndex >= OCR_SPACE_KEYS.length) {
-                return resolve('');
+        let attempts = 0;
+        const totalKeys = OCR_SPACE_KEYS.length;
+        let resolved = false;
+
+        function safeResolve(val) {
+            if (!resolved) {
+                resolved = true;
+                resolve(val);
             }
-            const apiKey = OCR_SPACE_KEYS[keyIndex++];
+        }
+
+        function tryNextKey() {
+            if (resolved) return;
+            if (attempts >= totalKeys) {
+                return safeResolve('');
+            }
+            const apiKey = OCR_SPACE_KEYS[(currentOcrKeyIndex + attempts) % totalKeys];
+            attempts++;
+
             const dataUriPrefix = isPdf ? 'data:application/pdf;base64,' : 'data:image/jpeg;base64,';
             const postData = 'apikey=' + encodeURIComponent(apiKey) +
                 '&language=eng' +
@@ -161,6 +176,7 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                 (isPdf ? '&filetype=PDF' : '') +
                 '&base64Image=' + encodeURIComponent(dataUriPrefix + base64Image);
 
+            let reqFinished = false;
             const req = https.request({
                 hostname: 'api.ocr.space',
                 path: '/parse/image',
@@ -174,10 +190,18 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                 let data = '';
                 res.on('data', c => data += c);
                 res.on('end', () => {
+                    if (reqFinished) return;
+                    reqFinished = true;
+
+                    if (res.statusCode !== 200) {
+                        console.warn(`[OCR.space HTTP ${res.statusCode}] Key: ${apiKey}`);
+                        return tryNextKey();
+                    }
+
                     try {
                         const json = JSON.parse(data);
-                        if (json.IsErroredOnProcessing && json.ErrorMessage) {
-                            console.warn('[OCR.space API Error]', json.ErrorMessage);
+                        if (json.error || json.IsErroredOnProcessing) {
+                            console.warn('[OCR.space API Error]', json.error || json.ErrorMessage, `Key: ${apiKey}`);
                             return tryNextKey();
                         }
                         const parsedList = Array.isArray(json.ParsedResults) ? json.ParsedResults : [];
@@ -185,20 +209,34 @@ function callOcrSpace(base64Image, { engine = '2', scale = true, detectOrientati
                             .map(r => (r && r.ParsedText ? String(r.ParsedText).trim() : ''))
                             .filter(Boolean)
                             .join('\n');
-                        resolve(text.trim());
-                    } catch (_) {
+
+                        if (!text.trim()) {
+                            console.warn(`[OCR.space Empty Text] Key: ${apiKey}, trying next key...`);
+                            return tryNextKey();
+                        }
+
+                        // Success! Update starting index so subsequent calls use working key
+                        currentOcrKeyIndex = (currentOcrKeyIndex + attempts - 1) % totalKeys;
+                        safeResolve(text.trim());
+                    } catch (e) {
+                        console.warn('[OCR.space JSON Parse Error]', e.message, `Key: ${apiKey}`);
                         tryNextKey();
                     }
                 });
             });
 
             req.on('error', (err) => {
-                console.warn('[OCR.space Network Error]', err.message);
+                if (reqFinished) return;
+                reqFinished = true;
+                console.warn('[OCR.space Network Error]', err.message, `Key: ${apiKey}`);
                 tryNextKey();
             });
 
             req.setTimeout(timeoutMs, () => {
+                if (reqFinished) return;
+                reqFinished = true;
                 req.destroy();
+                console.warn(`[OCR.space Timeout ${timeoutMs}ms] Key: ${apiKey}`);
                 tryNextKey();
             });
 
@@ -239,7 +277,7 @@ function setInCache(cache, key, value) {
 }
 
 // Dedicated High-Accuracy Document OCR pipeline (No Google Document AI API dependency)
-async function callDocumentOcr(base64Image, { isSticker = false } = {}) {
+async function callDocumentOcr(base64Image, { isSticker = false, expectedName = '' } = {}) {
     if (!base64Image) return { text: '', engine: 'None' };
 
     const imgHash = getSha256(base64Image);
@@ -267,11 +305,22 @@ async function callDocumentOcr(base64Image, { isSticker = false } = {}) {
                 }
             }
         }
-    } else if (!text || text.length < 5) {
-        const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
-        if (textE1) {
-            text = textE1;
-            engine = 'High-Accuracy Document OCR Engine 1';
+    } else {
+        // Pass 2 for Front ID: if text is sparse or expected name was not detected, run Engine 1 ensemble
+        let needsEngine1 = !text || text.length < 15;
+        if (!needsEngine1 && expectedName) {
+            const nameCheck = verifyNameMatch(text, expectedName);
+            if (!nameCheck.matches) needsEngine1 = true;
+        }
+        if (needsEngine1) {
+            console.log('[Document OCR] Running Engine 1 ensemble for Front ID / Document OCR...');
+            const textE1 = await callOcrSpace(base64Image, { engine: '1', scale: true, detectOrientation: true });
+            if (textE1 && textE1.length > 0) {
+                if (!text || textE1.length > text.length) {
+                    text = text ? `${text}\n${textE1}` : textE1;
+                    engine = 'High-Accuracy Document OCR (Multi-Engine Ensemble)';
+                }
+            }
         }
     }
 
@@ -293,6 +342,43 @@ function normalizeName(name) {
         .replace(/\b(MR|MS|MRS|STUDENT|NAME|HON|DR|JR|SR|II|III|IV)\b/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function levenshteinDistance(a, b) {
+    if (!a || !b) return (a || b || '').length;
+    const m = [];
+    for (let i = 0; i <= b.length; i++) m[i] = [i];
+    for (let j = 0; j <= a.length; j++) m[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                m[i][j] = m[i - 1][j - 1];
+            } else {
+                m[i][j] = Math.min(
+                    m[i - 1][j - 1] + 1,
+                    m[i][j - 1] + 1,
+                    m[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return m[b.length][a.length];
+}
+
+function tokenMatchesText(token, rawText, words) {
+    if (!token || !rawText) return false;
+    const t = token.toUpperCase();
+    if (new RegExp(`\\b${t}\\b`, 'i').test(rawText)) return true;
+    if (t.length >= 4 && rawText.includes(t)) return true;
+    for (const w of words) {
+        if (w === t) return true;
+        if (w.length >= 4 && Math.abs(w.length - t.length) <= 1) {
+            const dist = levenshteinDistance(w, t);
+            if (dist <= 1 && t.length >= 4) return true;
+            if (dist <= 2 && t.length >= 7) return true;
+        }
+    }
+    return false;
 }
 
 function verifyNameMatch(rawText, expectedName) {
@@ -331,16 +417,28 @@ function verifyNameMatch(rawText, expectedName) {
         };
     }
 
-    const surname = expTokens[expTokens.length - 1];
-    const firstName = expTokens[0];
+    const rawWords = raw.split(/[^A-Z0-9]+/).filter(w => w.length > 1);
 
-    const matchedTokens = expTokens.filter(token => {
-        const regex = new RegExp(`\\b${token}\\b`, 'i');
-        if (regex.test(raw)) return true;
-        if (token.length >= 4 && raw.includes(token)) return true;
-        return false;
-    });
+    // Determine expected surname and first name (supports "LAST, FIRST MIDDLE" and "FIRST MIDDLE LAST")
+    let surname = '';
+    let firstName = '';
+    if (expectedName.includes(',')) {
+        const parts = expectedName.split(',');
+        const lastPartTokens = normalizeName(parts[0]).split(' ').filter(Boolean);
+        const firstPartTokens = normalizeName(parts[1] || '').split(' ').filter(Boolean);
+        surname = lastPartTokens[0] || expTokens[0];
+        firstName = firstPartTokens[0] || expTokens[expTokens.length - 1];
+    } else {
+        firstName = expTokens[0];
+        surname = expTokens[expTokens.length - 1];
+    }
 
+    const hasFirstAndLast = (
+        tokenMatchesText(firstName, raw, rawWords) &&
+        tokenMatchesText(surname, raw, rawWords)
+    );
+
+    const matchedTokens = expTokens.filter(token => tokenMatchesText(token, raw, rawWords));
     const tokenRatio = matchedTokens.length / expTokens.length;
 
     // Line-by-line similarity
@@ -350,7 +448,7 @@ function verifyNameMatch(rawText, expectedName) {
 
     for (const line of lines) {
         const lineTokens = line.split(' ').filter(Boolean);
-        const intersect = expTokens.filter(t => lineTokens.includes(t));
+        const intersect = expTokens.filter(t => lineTokens.some(lt => tokenMatchesText(t, lt, [lt])));
         const score = intersect.length / Math.max(expTokens.length, 1);
         if (score > bestScore) {
             bestScore = score;
@@ -358,12 +456,7 @@ function verifyNameMatch(rawText, expectedName) {
         }
     }
 
-    const hasFirstAndLast = (
-        (raw.includes(firstName) || matchedTokens.includes(firstName)) &&
-        (raw.includes(surname) || matchedTokens.includes(surname))
-    );
-
-    const isMatch = (tokenRatio >= 0.60 && (hasFirstAndLast || expTokens.length <= 2)) || bestScore >= 0.65;
+    const isMatch = (tokenRatio >= 0.50 && (hasFirstAndLast || expTokens.length <= 2)) || bestScore >= 0.60;
 
     let message = '';
     if (isMatch) {
@@ -778,6 +871,14 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
             /\b2nd\s+semester\b/i.test(lower) ||
             /\bsecond\s+semester\b/i.test(lower) ||
             (hasSemesterWord && (lower.includes('2*') || lower.includes('2°') || lower.includes('2º')));
+        const is1st = /\b(?:1\s*st|1\s*sl|1\s*si|first|[il]\s*st|1[\*+\#\~\^•]+|1)\s*[\.\-]?\s*sem(?:est(?:er|el|r|ev|or)?)?\b/i.test(lower) ||
+            /\bsem(?:est(?:er|el|r|ev|or)?)?\s*[\.\-:\/]?[\s]*(?:1|i)\b/i.test(lower) ||
+            /\b(?:1|i)\s*[\/\-]\s*sem\b/i.test(lower) ||
+            /\b1st\s+semester\b/i.test(lower) ||
+            /\bfirst\s+semester\b/i.test(lower) ||
+            /\b[il]st\s+sem(?:ester)?\b/i.test(lower) ||
+            (hasSemesterWord && (lower.includes('1*') || lower.includes('1°') || lower.includes('1º')));
+
         const isNearYearOrSticker = /(?:20\d{2}|ay|sy|valid|reg|ustp|campus)/i.test(lower);
         if (is2nd || (isNearYearOrSticker && /\b(?:2\s*nd|2\s*rd|second)\b/i.test(lower))) return '2nd Semester';
         if (is1st || (isNearYearOrSticker && /\b(?:1\s*st|1\s*sl|1\s*si|first)\b/i.test(lower))) return '1st Semester';
@@ -4003,6 +4104,9 @@ const server = http.createServer(async (req, res) => {
                     ...parsedSticker,
                     birthdate: birthdateRes.detectedBirthdate,
                     birthdateMatches: birthdateRes.matches === true,
+                    rawText: text,
+                    text: text,
+                    extractedText: text,
                     engine
                 };
                 setInCache(documentAiEndpointCache, cacheKey, responseData);
@@ -4041,7 +4145,7 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: false });
+                const { text, engine } = await callDocumentOcr(base64Image, { isSticker: false, expectedName });
                 const nameRes = verifyNameMatch(text, expectedName);
 
                 const responseData = {

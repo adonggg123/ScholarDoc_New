@@ -326,6 +326,74 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       });
     }
 
+    // 4. Certificate of Registration (COR)
+    final corFileName = _profileData!['corFileName'] ??
+        _profileData!['cor_file_name'] ??
+        docs['corFileName'] ??
+        docs['cor_file_name'];
+    final corUrl = _profileData!['corUrl'] ??
+        _profileData!['cor_url'] ??
+        docs['corUrl'] ??
+        docs['cor_url'];
+    final bool hasCorFiles = (corUrl != null && corUrl.toString().trim().isNotEmpty) ||
+        (corFileName != null && corFileName.toString().trim().isNotEmpty);
+
+    final bool isCorAiValidated = docs['corValidated'] == true ||
+        docs['cor_validated'] == true ||
+        _profileData!['corValidated'] == true ||
+        _profileData!['cor_validated'] == true;
+
+    final bool isCorVerified = _isFieldVerified(docs['corValidationStatus']) ||
+        _isFieldVerified(docs['cor_validation_status']) ||
+        _isFieldVerified(_profileData!['corValidationStatus']) ||
+        _isFieldVerified(_profileData!['cor_validation_status']) ||
+        isIdVerified;
+
+    final bool isCorRejected = _isFieldRejected(docs['corValidationStatus']) ||
+        _isFieldRejected(docs['cor_validation_status']) ||
+        _isFieldRejected(_profileData!['corValidationStatus']) ||
+        _isFieldRejected(_profileData!['cor_validation_status']);
+
+    final String corStatus = isCorVerified
+        ? 'Verified'
+        : (isCorRejected || _profileData!['requiresResubmission'] == true
+            ? 'Needs Correction'
+            : (isCorAiValidated ? 'Verified' : 'Pending'));
+
+    final corTimestamp = docs['corValidatedAt'] ??
+        docs['corSubmittedAt'] ??
+        docs['cor_submitted_at'] ??
+        _profileData!['corSubmittedAt'] ??
+        _profileData!['cor_submitted_at'] ??
+        rawSubmittedAt;
+    final corFormattedTime = _formatDateTime(corTimestamp);
+
+    if (hasCorFiles) {
+      final corAy = docs['corAcademicYear'] ?? docs['cor_academic_year'] ?? _profileData!['academicYear'];
+      final corSem = docs['corSemester'] ?? docs['cor_semester'] ?? _profileData!['semester'];
+      final corExtractedName = docs['corExtractedName'] ?? docs['cor_extracted_name'];
+
+      String corDetail = 'Academic Enrollment Verification Document';
+      if (corAy != null && corSem != null) {
+        corDetail = 'Validated for $corAy • $corSem';
+      } else if (corExtractedName != null) {
+        corDetail = 'Registered Name: $corExtractedName';
+      }
+
+      list.add({
+        'id': 'cor_submission',
+        'type': 'Certificate of Registration (COR)',
+        'category': 'cor',
+        'fileName': (corFileName ?? 'Certificate_of_Registration.pdf').toString(),
+        'fileUrl': corUrl,
+        'status': corStatus,
+        'term': submissionTerm,
+        'dateTime': corFormattedTime,
+        'detail': corDetail,
+        'remarks': docs['corRemarks'] ?? _profileData!['adminRemarks'] ?? docs['adminRemarks'],
+      });
+    }
+
     return list;
   }
 
@@ -699,6 +767,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
     final isIdDoc = type.contains('ID');
     final isAtmDoc = type.contains('ATM') || type.contains('Landbank');
+    final isCorDoc = type.contains('COR') || type.contains('Registration');
 
     return Container(
       decoration: BoxDecoration(
@@ -718,20 +787,26 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               Container(
                 padding: const EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  color: isIdDoc
-                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
-                      : (isAtmDoc
-                          ? const Color(0xFF0D9488).withValues(alpha: 0.1)
-                          : const Color(0xFF6366F1).withValues(alpha: 0.1)),
+                  color: isCorDoc
+                      ? const Color(0xFF059669).withValues(alpha: 0.1)
+                      : (isIdDoc
+                          ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                          : (isAtmDoc
+                              ? const Color(0xFF0D9488).withValues(alpha: 0.1)
+                              : const Color(0xFF6366F1).withValues(alpha: 0.1))),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  isIdDoc
-                      ? LucideIcons.fileText
-                      : (isAtmDoc ? LucideIcons.creditCard : LucideIcons.receipt),
-                  color: isIdDoc
-                      ? AppTheme.primaryColor
-                      : (isAtmDoc ? const Color(0xFF0D9488) : const Color(0xFF6366F1)),
+                  isCorDoc
+                      ? LucideIcons.fileCheck2
+                      : (isIdDoc
+                          ? LucideIcons.fileText
+                          : (isAtmDoc ? LucideIcons.creditCard : LucideIcons.receipt)),
+                  color: isCorDoc
+                      ? const Color(0xFF059669)
+                      : (isIdDoc
+                          ? AppTheme.primaryColor
+                          : (isAtmDoc ? const Color(0xFF0D9488) : const Color(0xFF6366F1))),
                   size: 22,
                 ),
               ),

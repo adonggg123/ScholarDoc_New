@@ -246,7 +246,7 @@ class DocumentAIScannerService {
     final optimizedBytes = await optimizeImageForOcr(imageBytes);
     final base64Img = base64Encode(optimizedBytes);
 
-    // 2. Try Backend Proxy first (fast 8s timeout)
+    // 2. Try Backend Proxy first (resilient 15s timeout)
     onProgress?.call('Analyzing Document AI text...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-front-id');
@@ -259,7 +259,7 @@ class DocumentAIScannerService {
               'expectedName': expectedName,
             }),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -323,7 +323,7 @@ class DocumentAIScannerService {
     final optimizedBytes = await optimizeImageForOcr(imageBytes);
     final base64Img = base64Encode(optimizedBytes);
 
-    // 2. Try Backend High-Accuracy OCR Proxy first (fast 8s timeout)
+    // 2. Try Backend High-Accuracy OCR Proxy first (resilient 15s timeout)
     onProgress?.call('Scanning sticker with Document OCR...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-back-id');
@@ -338,7 +338,7 @@ class DocumentAIScannerService {
               'semester': activeTerm.semester,
             }),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -436,7 +436,7 @@ class DocumentAIScannerService {
     final optimizedBytes = await optimizeImageForOcr(imageBytes);
     final base64Img = base64Encode(optimizedBytes);
 
-    // 2. Try Backend Proxy first (fast 8s timeout)
+    // 2. Try Backend Proxy first (resilient 15s timeout)
     onProgress?.call('Scanning Account Name and SA Number...');
     try {
       final url = Uri.parse('$backendBaseUrl/api/document-ai/scan-atm-proof');
@@ -450,7 +450,7 @@ class DocumentAIScannerService {
               'expectedSaNumber': expectedSaNumber,
             }),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -613,7 +613,7 @@ class DocumentAIScannerService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'image': base64Image}),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -629,7 +629,7 @@ class DocumentAIScannerService {
   static Future<String?> _callOcrSpace(Uint8List imageBytes) async {
     final isPng =
         imageBytes.length > 8 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50;
-    const keys = ['helloworld'];
+    const keys = ['K88828859988957', 'K87878892488957', 'helloworld'];
     String combinedText = '';
 
     for (final key in keys) {
@@ -653,12 +653,16 @@ class DocumentAIScannerService {
           );
 
           final streamedResponse = await request.send().timeout(
-            const Duration(seconds: 15),
+            const Duration(seconds: 12),
           );
           final response = await http.Response.fromStream(streamedResponse);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
+            if (data['error'] != null || data['IsErroredOnProcessing'] == true) {
+              debugPrint('OCR Space API note: ${data['error'] ?? data['ErrorMessage']}');
+              continue;
+            }
             final results = data['ParsedResults'] as List?;
             if (results != null && results.isNotEmpty) {
               final text = (results[0]['ParsedText']?.toString() ?? '').trim();
@@ -666,12 +670,18 @@ class DocumentAIScannerService {
                 combinedText = combinedText.isEmpty
                     ? text
                     : '$combinedText\n$text';
+                if (text.length >= 30) {
+                  return combinedText;
+                }
               }
             }
           }
         } catch (e) {
           debugPrint('OCR Space error: $e');
         }
+      }
+      if (combinedText.isNotEmpty) {
+        return combinedText;
       }
     }
     return combinedText.isNotEmpty ? combinedText : null;
@@ -854,6 +864,41 @@ class DocumentAIScannerService {
     );
   }
 
+  static int _levenshteinDistance(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return (a.length + b.length);
+    List<int> row = List<int>.generate(b.length + 1, (i) => i);
+    for (int i = 1; i <= a.length; i++) {
+      List<int> nextRow = List<int>.filled(b.length + 1, 0);
+      nextRow[0] = i;
+      for (int j = 1; j <= b.length; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        nextRow[j] = [
+          nextRow[j - 1] + 1,
+          row[j] + 1,
+          row[j - 1] + cost,
+        ].reduce((curr, next) => curr < next ? curr : next);
+      }
+      row = nextRow;
+    }
+    return row[b.length];
+  }
+
+  static bool _tokenMatchesText(String token, String rawText, List<String> words) {
+    if (token.isEmpty || rawText.isEmpty) return false;
+    final t = token.toUpperCase();
+    if (RegExp('\\b$t\\b', caseSensitive: false).hasMatch(rawText)) return true;
+    if (t.length >= 4 && rawText.contains(t)) return true;
+    for (final w in words) {
+      if (w == t) return true;
+      if (w.length >= 4 && (w.length - t.length).abs() <= 1) {
+        final dist = _levenshteinDistance(w, t);
+        if (dist <= 1 && t.length >= 4) return true;
+        if (dist <= 2 && t.length >= 7) return true;
+      }
+    }
+    return false;
+  }
+
   /// Verifies expected name in OCR text locally
   static ({
     bool matches,
@@ -901,29 +946,67 @@ class DocumentAIScannerService {
       );
     }
 
-    final surname = expTokens.last;
-    final firstName = expTokens.first;
+    final rawWords = raw
+        .split(RegExp(r'[^A-Z0-9]+'))
+        .where((w) => w.length > 1)
+        .toList();
 
-    final matchedTokens = expTokens.where((token) {
-      if (RegExp('\\b$token\\b', caseSensitive: false).hasMatch(raw))
-        return true;
-      if (token.length >= 4 && raw.contains(token)) return true;
-      return false;
-    }).toList();
-
-    final tokenRatio = matchedTokens.length / expTokens.length;
+    // Determine expected surname and first name (supports "LAST, FIRST MIDDLE" and "FIRST MIDDLE LAST")
+    String surname = '';
+    String firstName = '';
+    if (expectedName.contains(',')) {
+      final parts = expectedName.split(',');
+      final lastPartTokens =
+          normalizeNameString(parts[0]).split(' ').where((t) => t.isNotEmpty).toList();
+      final firstPartTokens = normalizeNameString(parts.length > 1 ? parts[1] : '')
+          .split(' ')
+          .where((t) => t.isNotEmpty)
+          .toList();
+      surname = lastPartTokens.isNotEmpty ? lastPartTokens.first : expTokens.first;
+      firstName = firstPartTokens.isNotEmpty ? firstPartTokens.first : expTokens.last;
+    } else {
+      firstName = expTokens.first;
+      surname = expTokens.last;
+    }
 
     final hasFirstAndLast =
-        (raw.contains(firstName) || matchedTokens.contains(firstName)) &&
-        (raw.contains(surname) || matchedTokens.contains(surname));
+        _tokenMatchesText(firstName, raw, rawWords) &&
+        _tokenMatchesText(surname, raw, rawWords);
+
+    final matchedTokens = expTokens
+        .where((token) => _tokenMatchesText(token, raw, rawWords))
+        .toList();
+    final tokenRatio = matchedTokens.length / expTokens.length;
+
+    // Line-by-line similarity
+    final lines = raw
+        .split(RegExp(r'[\r\n]+'))
+        .map((l) => normalizeNameString(l))
+        .where((l) => l.length >= 3)
+        .toList();
+    String bestLine = '';
+    double bestScore = 0.0;
+
+    for (final line in lines) {
+      final lineTokens = line.split(' ').where((t) => t.isNotEmpty).toList();
+      final intersect = expTokens
+          .where((t) => lineTokens.any((lt) => _tokenMatchesText(t, lt, [lt])))
+          .toList();
+      final score = intersect.length / (expTokens.isEmpty ? 1 : expTokens.length);
+      if (score > bestScore) {
+        bestScore = score;
+        bestLine = line;
+      }
+    }
 
     final isMatch =
-        (tokenRatio >= 0.60 && (hasFirstAndLast || expTokens.length <= 2));
+        (tokenRatio >= 0.50 && (hasFirstAndLast || expTokens.length <= 2)) ||
+        bestScore >= 0.60;
 
     return (
       matches: isMatch,
-      detectedName: matchedTokens.join(' '),
-      confidence: tokenRatio,
+      detectedName: bestLine.isNotEmpty ? bestLine : matchedTokens.join(' '),
+      confidence: tokenRatio > bestScore ? tokenRatio : bestScore,
       message: isMatch
           ? 'The name on your school ID matches your registered profile.'
           : 'The name on your school ID does not match your registered profile. Please scan your own valid school ID again.',

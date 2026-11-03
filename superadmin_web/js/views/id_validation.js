@@ -34,7 +34,8 @@ async function loadIdQueue() {
             const hasPdf = s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url));
             const hasFront = s.idFrontUrl || s.id_front_url || (s.documents && (s.documents.idFrontUrl || s.documents.id_front_url));
             const hasBack = s.idBackUrl || s.id_back_url || (s.documents && (s.documents.idBackUrl || s.documents.id_back_url));
-            return hasPdf || hasFront || hasBack;
+            const hasCor = s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url));
+            return hasPdf || hasFront || hasBack || hasCor;
         });
 
         // Update KPI summary cards
@@ -85,7 +86,8 @@ function updateKpis() {
         }
 
         const pdfUrl = s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url));
-        if (pdfUrl) {
+        const corUrl = s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url));
+        if (pdfUrl || corUrl) {
             pdfCount++;
         }
     });
@@ -163,6 +165,7 @@ function filterIdQueue() {
         const hasFront = !!(s.idFrontUrl || s.documents?.idFrontUrl);
         const hasBack = !!(s.idBackUrl || s.documents?.idBackUrl);
         const hasPdf = !!(s.submissionPdfUrl || s.documents?.submissionPdfUrl);
+        const hasCor = !!(s.corUrl || s.cor_url || s.documents?.corUrl || s.documents?.cor_url);
 
         // Search Match
         const matchQuery = !query || name.includes(query) || studentId.includes(query) || course.toLowerCase().includes(query);
@@ -200,6 +203,8 @@ function filterIdQueue() {
             matchDoc = hasFront || hasBack;
         } else if (docFilter === 'pdf') {
             matchDoc = hasPdf;
+        } else if (docFilter === 'cor') {
+            matchDoc = hasCor;
         }
 
         // Course Match
@@ -274,6 +279,7 @@ function renderQueue() {
         const hasFront = !!(s.idFrontUrl || s.documents?.idFrontUrl);
         const hasBack = !!(s.idBackUrl || s.documents?.idBackUrl);
         const hasPdf = !!(s.submissionPdfUrl || s.documents?.submissionPdfUrl);
+        const hasCor = !!(s.corUrl || s.cor_url || s.documents?.corUrl || s.documents?.cor_url);
 
         // Status Badge Chip
         let statusBadgeHtml = '';
@@ -331,6 +337,9 @@ function renderQueue() {
         }
         if (hasPdf) {
             docBadgesHtml += `<span style="font-size: 9px; font-weight: 700; color: #7C3AED; background: rgba(124, 58, 237, 0.08); padding: 1px 5px; border-radius: 4px;">PDF Dossier</span>`;
+        }
+        if (hasCor) {
+            docBadgesHtml += `<span style="font-size: 9px; font-weight: 700; color: #059669; background: rgba(5, 150, 105, 0.08); padding: 1px 5px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px;"><i class="icon-file-check" style="font-size: 9px;"></i> COR</span>`;
         }
 
         const rawBatch = s.batch || s.tes_batch || s.batch_name;
@@ -420,6 +429,15 @@ function renderPanel() {
     const backUrl = s.idBackUrl || s.id_back_url || s.documents?.idBackUrl || s.documents?.id_back_url;
     const pdfUrl = s.submissionPdfUrl || s.submission_pdf_url || s.documents?.submissionPdfUrl || s.documents?.submission_pdf_url;
     const pdfName = s.submissionPdfName || s.submission_pdf_name || (s.documents && (s.documents.submissionPdfName || s.documents.submission_pdf_name)) || 'Submission_Requirement_Dossier.pdf';
+    const corUrl = s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url));
+    const corName = s.corFileName || s.cor_file_name || (s.documents && (s.documents.corFileName || s.documents.cor_file_name)) || 'Certificate_of_Registration.pdf';
+    const corValidated = s.corValidated ?? s.cor_validated ?? (s.documents && (s.documents.corValidated ?? s.documents.cor_validated));
+    const corNameMatches = s.corNameMatches ?? s.cor_name_matches ?? (s.documents && (s.documents.corNameMatches ?? s.documents.cor_name_matches));
+    const corYearMatches = s.corYearMatches ?? s.cor_year_matches ?? (s.documents && (s.documents.corYearMatches ?? s.documents.cor_year_matches));
+    const corSemesterMatches = s.corSemesterMatches ?? s.cor_semester_matches ?? (s.documents && (s.documents.corSemesterMatches ?? s.documents.cor_semester_matches));
+    const corExtractedName = s.corExtractedName || s.cor_extracted_name || (s.documents && (s.documents.corExtractedName || s.documents.cor_extracted_name));
+    const corAcademicYear = s.corAcademicYear || s.cor_academic_year || (s.documents && (s.documents.corAcademicYear || s.documents.cor_academic_year));
+    const corSemester = s.corSemester || s.cor_semester || (s.documents && (s.documents.corSemester || s.documents.cor_semester));
 
     let idCardsSection = '';
     if (frontUrl || backUrl) {
@@ -531,6 +549,73 @@ function renderPanel() {
         `;
     }
 
+    // Certificate of Registration (COR) Tile
+    let corSectionHtml = '';
+    if (corUrl) {
+        const isCorVerified = corValidated === true || (corNameMatches === true && corYearMatches !== false && corSemesterMatches !== false);
+        corSectionHtml = `
+            <div style="margin-bottom: 16px; padding: 14px; border: 1.5px solid ${isCorVerified ? 'rgba(5, 150, 105, 0.4)' : 'rgba(5, 150, 105, 0.25)'}; border-radius: 12px; background: ${isCorVerified ? 'rgba(5, 150, 105, 0.04)' : 'rgba(5, 150, 105, 0.02)'};">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(5, 150, 105, 0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i class="icon-file-check" style="color: #059669; font-size: 20px;"></i>
+                        </div>
+                        <div style="min-width: 0;">
+                            <div style="font-size: 13px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                                Certificate of Registration (COR)
+                                <span style="font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(5, 150, 105, 0.12); color: #059669;">PDF ONLY</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${corName}">
+                                ${corName}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                        <a href="${corUrl}" target="_blank" style="padding: 7px 12px; background: #059669; color: white; border-radius: 8px; font-size: 11px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);">
+                            <i class="icon-eye" style="font-size: 12px;"></i> View COR
+                        </a>
+                        <a href="${corUrl}" download="${corName}" target="_blank" style="padding: 7px 10px; background: transparent; border: 1.5px solid rgba(5, 150, 105, 0.35); border-radius: 8px; font-size: 11px; font-weight: 700; color: #059669; text-decoration: none; display: inline-flex; align-items: center;" title="Download COR PDF">
+                            <i class="icon-download" style="font-size: 12px;"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- AI / Term Match Verification Badges for COR -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; padding-top: 10px; border-top: 1px dashed rgba(5, 150, 105, 0.25);">
+                    <div style="padding: 6px 8px; border-radius: 6px; background: ${corNameMatches === true ? 'rgba(16, 185, 129, 0.08)' : (corNameMatches === false ? 'rgba(239, 68, 68, 0.08)' : 'rgba(5, 150, 105, 0.06)')}; border: 1px solid ${corNameMatches === true ? 'rgba(16, 185, 129, 0.25)' : (corNameMatches === false ? 'rgba(239, 68, 68, 0.25)' : 'rgba(5, 150, 105, 0.2)')};">
+                        <div style="font-size: 8.5px; font-weight: 800; color: ${corNameMatches === true ? '#10B981' : (corNameMatches === false ? '#EF4444' : '#059669')}; display: flex; align-items: center; gap: 4px;">
+                            <i class="${corNameMatches === true ? 'icon-check-circle' : (corNameMatches === false ? 'icon-alert-circle' : 'icon-user')}" style="font-size: 10px;"></i>
+                            ${corNameMatches === true ? 'NAME MATCHED' : (corNameMatches === false ? 'NAME MISMATCH' : 'STUDENT NAME')}
+                        </div>
+                        <div style="font-size: 9.5px; font-weight: 700; color: var(--text-primary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${corExtractedName || name}">
+                            ${corExtractedName || name}
+                        </div>
+                    </div>
+
+                    <div style="padding: 6px 8px; border-radius: 6px; background: ${corYearMatches === false ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)'}; border: 1px solid ${corYearMatches === false ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)'};">
+                        <div style="font-size: 8.5px; font-weight: 800; color: ${corYearMatches === false ? '#EF4444' : '#10B981'}; display: flex; align-items: center; gap: 4px;">
+                            <i class="${corYearMatches === false ? 'icon-alert-circle' : 'icon-calendar'}" style="font-size: 10px;"></i>
+                            ${corYearMatches === false ? 'YEAR MISMATCH' : 'ACADEMIC YEAR'}
+                        </div>
+                        <div style="font-size: 9.5px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
+                            ${corAcademicYear || 'A.Y. 2024-2025'}
+                        </div>
+                    </div>
+
+                    <div style="padding: 6px 8px; border-radius: 6px; background: ${corSemesterMatches === false ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)'}; border: 1px solid ${corSemesterMatches === false ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)'};">
+                        <div style="font-size: 8.5px; font-weight: 800; color: ${corSemesterMatches === false ? '#EF4444' : '#10B981'}; display: flex; align-items: center; gap: 4px;">
+                            <i class="${corSemesterMatches === false ? 'icon-alert-circle' : 'icon-bookmark'}" style="font-size: 10px;"></i>
+                            ${corSemesterMatches === false ? 'SEM MISMATCH' : 'SEMESTER'}
+                        </div>
+                        <div style="font-size: 9.5px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
+                            ${corSemester || '1st Semester'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     // PDF Document Attachment Tile
     let pdfSectionHtml = '';
     if (pdfUrl) {
@@ -552,12 +637,12 @@ function renderPanel() {
         `;
     }
 
-    if (!frontUrl && !backUrl && !pdfUrl) {
+    if (!frontUrl && !backUrl && !pdfUrl && !corUrl) {
         idCardsSection = `
             <div style="margin-bottom: 16px; padding: 20px; border: 1px dashed var(--border-color); border-radius: 12px; text-align: center; background: rgba(0,0,0,0.01);">
                 <i class="icon-folder-x" style="font-size: 28px; color: var(--text-secondary); margin-bottom: 6px; display: block;"></i>
-                <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">No ID Documents Attached</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Student has not uploaded front/back ID images or requirement PDF files yet.</div>
+                <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">No ID or COR Documents Attached</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Student has not uploaded front/back ID images, requirement PDF, or COR files yet.</div>
             </div>
         `;
     }
@@ -597,17 +682,17 @@ function renderPanel() {
                         ${course} - ${year}
                     </span>
                     ${(() => {
-                        const raw = s.batch || s.tes_batch || s.batch_name;
-                        if (!raw) return '';
-                        let b = String(raw).trim();
-                        if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
-                        else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
-                        return `
+            const raw = s.batch || s.tes_batch || s.batch_name;
+            if (!raw) return '';
+            let b = String(raw).trim();
+            if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
+            else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+            return `
                             <span style="padding: 3px 10px; background: rgba(30, 58, 138, 0.1); border-radius: 20px; color: #1E3A8A; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-layers" style="font-size: 11px;"></i> ${b}
                             </span>
                         `;
-                    })()}
+        })()}
                 </div>
             </div>
 
@@ -615,6 +700,9 @@ function renderPanel() {
 
             <!-- ID Photos Grid -->
             ${idCardsSection}
+
+            <!-- Certificate of Registration (COR) Tile -->
+            ${corSectionHtml}
 
             <!-- PDF Attachment Tile -->
             ${pdfSectionHtml}
@@ -627,7 +715,9 @@ function renderPanel() {
             
             <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;">
                 <span class="id-preset-chip" onclick="applyIdPreset('ID and signatures verified and approved.')">✓ ID & Signatures Verified</span>
+                <span class="id-preset-chip" onclick="applyIdPreset('COR (Certificate of Registration) verified and accepted.')">✓ COR Verified</span>
                 <span class="id-preset-chip" onclick="applyIdPreset('Signature is missing or unclear on the Back ID image. Please re-upload.')">⚠ Signature Missing</span>
+                <span class="id-preset-chip" onclick="applyIdPreset('Uploaded COR is illegible or does not match current academic term. Please re-upload.')">⚠ COR Resubmission</span>
                 <span class="id-preset-chip" onclick="applyIdPreset('ID photo is blurred, obscured, or illegible. Please provide a clear scan.')">⚠ Blurred Photo</span>
                 <span class="id-preset-chip" onclick="applyIdPreset('Submitted ID appears expired or invalid for this academic year.')">⚠ Expired / Invalid ID</span>
             </div>
@@ -712,7 +802,9 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
         const updatedDocs = {
             ...currentDocs,
             idValidationStatus: newStatus,
-            id_validation_status: newStatus
+            id_validation_status: newStatus,
+            corValidationStatus: newStatus,
+            cor_validation_status: newStatus
         };
 
         const currentSaStatus = s.saVerificationStatus || s.sa_verification_status || currentDocs.saVerificationStatus || currentDocs.sa_verification_status || 'Pending';
@@ -740,6 +832,8 @@ window.updateIdStatus = async function (newStatus, isFinalRejection = false) {
             status: calculatedStatus,
             idValidationStatus: newStatus,
             id_validation_status: newStatus,
+            corValidationStatus: newStatus,
+            cor_validation_status: newStatus,
             documents: updatedDocs,
             adminRemarks: remarks,
             admin_remarks: remarks,
@@ -938,18 +1032,19 @@ window.downloadAllIdDocuments = async function () {
         if (res.error) throw res.error;
         const allStudents = res.data;
 
-        // Filter students who have uploaded PDF document requirements
+        // Filter students who have uploaded PDF document requirements or COR
         const eligibleStudents = (allStudents || []).filter(s => {
             const pdfUrl = s.submissionPdfUrl || (s.documents && s.documents.submissionPdfUrl);
-            return !!pdfUrl;
+            const corUrl = s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url));
+            return !!pdfUrl || !!corUrl;
         });
 
         if (eligibleStudents.length === 0) {
             window.closeBulkDownloadModal();
             if (window.showToast) {
-                window.showToast('No student PDF documents available to download.', 'alert-circle');
+                window.showToast('No student PDF documents or COR available to download.', 'alert-circle');
             } else {
-                alert('No student PDF documents available to download.');
+                alert('No student PDF documents or COR available to download.');
             }
             return;
         }
@@ -967,19 +1062,42 @@ window.downloadAllIdDocuments = async function () {
             const batch = eligibleStudents.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (student) => {
                 const pdfUrl = student.submissionPdfUrl || (student.documents && student.documents.submissionPdfUrl);
+                const corUrl = student.corUrl || student.cor_url || (student.documents && (student.documents.corUrl || student.documents.cor_url));
                 const folderName = formatStudentFolderName(student);
-                const fileName = student.submissionPdfName || 'ID Front & Back + Signatures.pdf';
+                const studentFolder = zip.folder(folderName);
+                let studentHadFile = false;
 
-                try {
-                    const response = await fetch(pdfUrl);
-                    if (!response.ok) throw new Error(`HTTP status ${response.status}`);
-                    const pdfBlob = await response.blob();
+                if (pdfUrl) {
+                    try {
+                        const response = await fetch(pdfUrl);
+                        if (response.ok) {
+                            const pdfBlob = await response.blob();
+                            const fileName = student.submissionPdfName || 'ID Front & Back + Signatures.pdf';
+                            studentFolder.file(fileName, pdfBlob);
+                            studentHadFile = true;
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching PDF for student ${folderName}:`, err);
+                    }
+                }
 
-                    const studentFolder = zip.folder(folderName);
-                    studentFolder.file(fileName, pdfBlob);
+                if (corUrl) {
+                    try {
+                        const response = await fetch(corUrl);
+                        if (response.ok) {
+                            const corBlob = await response.blob();
+                            const corFileName = student.corFileName || student.cor_file_name || (student.documents && (student.documents.corFileName || student.documents.cor_file_name)) || 'Certificate_of_Registration.pdf';
+                            studentFolder.file(corFileName, corBlob);
+                            studentHadFile = true;
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching COR for student ${folderName}:`, err);
+                    }
+                }
+
+                if (studentHadFile) {
                     successCount++;
-                } catch (err) {
-                    console.error(`Error fetching PDF for student ${folderName}:`, err);
+                } else {
                     failedCount++;
                 }
             }));

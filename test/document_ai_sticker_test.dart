@@ -391,5 +391,61 @@ void main() {
         expect(cropped, isNotEmpty);
       }
     });
+
+    test('Front ID Name Verification handles inverted name format (Last, First Middle vs First Middle Last)', () {
+      const idCardText = '''
+        UNIVERSITY OF SCIENCE AND TECHNOLOGY OF SOUTHERN PHILIPPINES
+        STUDENT IDENTIFICATION CARD
+        JUDE ESIDORE JARIOL
+        ID NUMBER: 2023305322
+        COURSE: BSIT
+      ''';
+
+      final res = DocumentAIScannerService.verifyNameLocally(
+        idCardText,
+        'JARIOL, JUDE ESIDORE Z.',
+      );
+      expect(res.matches, isTrue);
+      expect(res.confidence, greaterThanOrEqualTo(0.60));
+    });
+
+    test('Front ID Name Verification handles common OCR character substitutions (e.g. 0 for O)', () {
+      const ocrNoisyText = '''
+        USTP STUDENT
+        JUDE E. JARI0L
+        COLLEGE OF INFORMATION TECHNOLOGY
+      ''';
+
+      final res = DocumentAIScannerService.verifyNameLocally(
+        ocrNoisyText,
+        'JARIOL, JUDE ESIDORE',
+      );
+      expect(res.matches, isTrue);
+    });
+
+    test('Front ID Name Verification rejects completely different person or wrong surname', () {
+      const idCardText = '''
+        UNIVERSITY OF SCIENCE AND TECHNOLOGY
+        MARIA CLARA SANTOS
+        ID NO: 2023100200
+      ''';
+
+      final res = DocumentAIScannerService.verifyNameLocally(
+        idCardText,
+        'JARIOL, JUDE ESIDORE',
+      );
+      expect(res.matches, isFalse);
+
+      const wrongSurnameText = '''
+        STUDENT ID
+        JUDE SMITH
+        ID NO: 2023100200
+      ''';
+      final res2 = DocumentAIScannerService.verifyNameLocally(
+        wrongSurnameText,
+        'JARIOL, JUDE ESIDORE',
+      );
+      expect(res2.matches, isFalse);
+    });
   });
 }
