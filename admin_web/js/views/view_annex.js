@@ -1,6 +1,7 @@
 // js/views/view_annex.js
 import { BillingService } from '../services/billing_service.js';
 import { AdminNotificationService } from '../services/admin_notification_service.js';
+import { AcademicYearService } from '../services/academic_year_service.js';
 
 const supabase = window.supabaseClient;
 
@@ -86,7 +87,11 @@ async function populateDistinctAcademicYears() {
     const selAY = document.getElementById('view-filter-ay');
     if (!selAY) return;
 
+    const defaultTerm = AcademicYearService.getDefaultTerm() || { academicYear: '2024-2025', semester: '1st Semester' };
     const baseYears = new Set(['2024-2025', '2023-2024', '2022-2023', '2021-2022']);
+    if (defaultTerm.academicYear) {
+        baseYears.add(defaultTerm.academicYear.trim());
+    }
 
     try {
         if (supabase) {
@@ -103,15 +108,25 @@ async function populateDistinctAcademicYears() {
     }
 
     const sortedYears = Array.from(baseYears).sort().reverse();
-    const currentVal = selAY.value || '2024-2025';
+    const currentVal = selAY.value || defaultTerm.academicYear || '2024-2025';
 
     selAY.innerHTML = sortedYears.map(y => `<option value="${y}">${y}</option>`).join('') +
         `<option value="All">All School Years</option>`;
 
-    if (sortedYears.includes(currentVal)) {
+    if (defaultTerm.academicYear && sortedYears.includes(defaultTerm.academicYear)) {
+        selAY.value = defaultTerm.academicYear;
+    } else if (sortedYears.includes(currentVal)) {
         selAY.value = currentVal;
     } else if (sortedYears.length > 0) {
         selAY.value = sortedYears[0];
+    }
+
+    const selSem = document.getElementById('view-filter-sem');
+    if (selSem && defaultTerm.semester) {
+        const hasSem = Array.from(selSem.options).some(o => o.value === defaultTerm.semester);
+        if (hasSem) {
+            selSem.value = defaultTerm.semester;
+        }
     }
 }
 
@@ -616,6 +631,46 @@ function downloadBlob(blob, filename) {
 
 // ── 9. Event Listeners Setup ────────────────────────────────────────
 function setupEventListeners() {
+    // Cross-tab and system default term synchronization
+    AcademicYearService.onDefaultTermUpdated(async (newTerm) => {
+        if (!newTerm) return;
+        const selAY = document.getElementById('view-filter-ay');
+        const selSem = document.getElementById('view-filter-sem');
+        let shouldRefresh = false;
+
+        if (selAY && newTerm.academicYear) {
+            let hasOpt = Array.from(selAY.options).some(o => o.value === newTerm.academicYear);
+            if (!hasOpt) {
+                const opt = document.createElement('option');
+                opt.value = newTerm.academicYear;
+                opt.textContent = newTerm.academicYear;
+                selAY.insertBefore(opt, selAY.firstChild);
+            }
+            if (selAY.value !== newTerm.academicYear) {
+                selAY.value = newTerm.academicYear;
+                shouldRefresh = true;
+            }
+        }
+
+        if (selSem && newTerm.semester) {
+            let hasSem = Array.from(selSem.options).some(o => o.value === newTerm.semester);
+            if (!hasSem) {
+                const opt = document.createElement('option');
+                opt.value = newTerm.semester;
+                opt.textContent = newTerm.semester;
+                selSem.appendChild(opt);
+            }
+            if (selSem.value !== newTerm.semester) {
+                selSem.value = newTerm.semester;
+                shouldRefresh = true;
+            }
+        }
+
+        if (shouldRefresh) {
+            await fetchRecordsFromSupabase();
+        }
+    });
+
     // School Year change
     const selAY = document.getElementById('view-filter-ay');
     if (selAY) {

@@ -128,9 +128,116 @@ function resolveGranteeBatch(record) {
 }
 
 // State
-let selectedAcademicYear = '2024-2025';
-let selectedSemester = '1st Semester';
+const initialRegistrarTerm = AcademicYearService.getDefaultTerm();
+let selectedAcademicYear = initialRegistrarTerm.academicYear || '2024-2025';
+let selectedSemester = initialRegistrarTerm.semester || '1st Semester';
 let isPopulatingRegistrarTerms = false;
+
+// DOM Elements for School Student Records Target Academic Period
+let selectSchoolAy = null;
+let customSchoolAyContainer = null;
+let customSchoolAyInput = null;
+let selectSchoolSem = null;
+let customSchoolSemContainer = null;
+let customSchoolSemInput = null;
+let schoolTermSelectBox = null;
+let schoolTermValidationHint = null;
+
+// ── Target Term Helpers & Validation for School Student Records Upload ──
+function getSelectedSchoolUploadTerm() {
+    if (!selectSchoolAy) {
+        selectSchoolAy = document.getElementById('select-school-ay');
+        customSchoolAyContainer = document.getElementById('custom-school-ay-container');
+        customSchoolAyInput = document.getElementById('custom-school-ay-input');
+        selectSchoolSem = document.getElementById('select-school-sem');
+        customSchoolSemContainer = document.getElementById('custom-school-sem-container');
+        customSchoolSemInput = document.getElementById('custom-school-sem-input');
+        schoolTermSelectBox = document.getElementById('school-term-selection-container');
+        schoolTermValidationHint = document.getElementById('school-term-validation-hint');
+    }
+
+    if (!selectSchoolAy || !selectSchoolSem) {
+        return { academicYear: selectedAcademicYear, semester: selectedSemester };
+    }
+
+    const ayVal = selectSchoolAy.value;
+    let chosenAy = '';
+    if (ayVal === 'custom') {
+        chosenAy = customSchoolAyInput ? customSchoolAyInput.value.trim() : '';
+    } else if (ayVal && ayVal !== 'All') {
+        chosenAy = ayVal.trim();
+    }
+
+    const semVal = selectSchoolSem.value;
+    let chosenSem = '';
+    if (semVal === 'custom') {
+        chosenSem = customSchoolSemInput ? customSchoolSemInput.value.trim() : '';
+    } else if (semVal && semVal !== 'All') {
+        chosenSem = semVal.trim();
+    }
+
+    if (!chosenAy || !chosenSem) {
+        showSchoolTermError(!chosenAy ? 'ay' : 'sem');
+        return null;
+    }
+
+    clearSchoolTermError();
+
+    // Auto-register custom entries if any
+    if (ayVal === 'custom' && chosenAy) {
+        AcademicYearService.addCustomAcademicYear(chosenAy);
+    }
+    if (semVal === 'custom' && chosenSem) {
+        AcademicYearService.addCustomSemester(chosenSem);
+    }
+
+    // Save chosen values as system defaults
+    AcademicYearService.setDefaultTerm(chosenAy, chosenSem);
+
+    selectedAcademicYear = chosenAy;
+    selectedSemester = chosenSem;
+
+    // Synchronize top filter dropdowns and active term label
+    const topAy = document.getElementById('admin-filter-ay');
+    if (topAy && topAy.value !== chosenAy) topAy.value = chosenAy;
+    const topSem = document.getElementById('admin-filter-sem');
+    if (topSem && topSem.value !== chosenSem) topSem.value = chosenSem;
+    updateRegistrarActiveTermLabel();
+
+    return { academicYear: chosenAy, semester: chosenSem };
+}
+
+function showSchoolTermError(missingField = 'ay') {
+    if (!schoolTermSelectBox) schoolTermSelectBox = document.getElementById('school-term-selection-container');
+    if (!schoolTermValidationHint) schoolTermValidationHint = document.getElementById('school-term-validation-hint');
+    if (schoolTermSelectBox) schoolTermSelectBox.classList.add('error-state');
+    if (schoolTermValidationHint) schoolTermValidationHint.classList.remove('hidden');
+
+    if (missingField === 'ay') {
+        if (selectSchoolAy && selectSchoolAy.value === 'custom' && customSchoolAyInput) {
+            customSchoolAyInput.focus();
+        } else if (selectSchoolAy) {
+            selectSchoolAy.focus();
+        }
+    } else {
+        if (selectSchoolSem && selectSchoolSem.value === 'custom' && customSchoolSemInput) {
+            customSchoolSemInput.focus();
+        } else if (selectSchoolSem) {
+            selectSchoolSem.focus();
+        }
+    }
+
+    if (typeof showToast === 'function') {
+        showToast('Please select or enter an Academic Year and Semester before uploading school student records.', 'alert-triangle');
+    }
+}
+
+function clearSchoolTermError() {
+    if (!schoolTermSelectBox) schoolTermSelectBox = document.getElementById('school-term-selection-container');
+    if (!schoolTermValidationHint) schoolTermValidationHint = document.getElementById('school-term-validation-hint');
+    if (schoolTermSelectBox) schoolTermSelectBox.classList.remove('error-state');
+    if (schoolTermValidationHint) schoolTermValidationHint.classList.add('hidden');
+}
 
 let rawSuperAdminGrantees = [];
 let rawSchoolStudents = [];
@@ -1014,6 +1121,8 @@ const btnClearFile = document.getElementById('btn-clear-school-file');
 if (dropZone && fileInput) {
     dropZone.addEventListener('click', (e) => {
         if (e.target !== btnClearFile && !btnClearFile?.contains(e.target)) {
+            const term = getSelectedSchoolUploadTerm();
+            if (!term) return;
             fileInput.click();
         }
     });
@@ -1034,14 +1143,24 @@ if (dropZone && fileInput) {
         e.preventDefault();
         dropZone.style.borderColor = 'rgba(30,136,229,0.3)';
         dropZone.style.background = 'rgba(30,136,229,0.02)';
+
+        const term = getSelectedSchoolUploadTerm();
+        if (!term) return;
+
         if (e.dataTransfer.files.length > 0) {
-            handleSchoolFile(e.dataTransfer.files[0]);
+            handleSchoolFile(e.dataTransfer.files[0], term);
         }
     });
 
     fileInput.addEventListener('change', (e) => {
+        const term = getSelectedSchoolUploadTerm();
+        if (!term) {
+            fileInput.value = '';
+            return;
+        }
+
         if (e.target.files.length > 0) {
-            handleSchoolFile(e.target.files[0]);
+            handleSchoolFile(e.target.files[0], term);
         }
     });
 }
@@ -1086,7 +1205,13 @@ if (btnClearFile) {
     });
 }
 
-async function handleSchoolFile(file) {
+async function handleSchoolFile(file, explicitTerm) {
+    const chosenTerm = explicitTerm || getSelectedSchoolUploadTerm();
+    if (!chosenTerm) {
+        if (fileInput) fileInput.value = '';
+        return;
+    }
+
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
         alert('Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
@@ -1106,7 +1231,11 @@ async function handleSchoolFile(file) {
         const parsedStudents = await parseSchoolExcelOrCsv(file);
 
         if (parsedStudents.length > 0) {
-            rawSchoolStudents = parsedStudents;
+            rawSchoolStudents = parsedStudents.map(s => ({
+                ...s,
+                academicYear: chosenTerm.academicYear,
+                semester: chosenTerm.semester
+            }));
             updateSourceCounts();
             renderSchoolStudentsTable(rawSchoolStudents);
             runCrossVerification();
@@ -1130,6 +1259,8 @@ async function handleSchoolFile(file) {
                     father_occupation: s.fatherOccupation || null,
                     mother_full_name: s.motherFullName || null,
                     mother_occupation: s.motherOccupation || null,
+                    academic_year: chosenTerm.academicYear,
+                    semester: chosenTerm.semester,
                     scholarship_name: s.scholarship || s.scholarshipName || 'TES',
                     updated_at: new Date().toISOString()
                 };
@@ -1148,7 +1279,7 @@ async function handleSchoolFile(file) {
                     if (upsertErr) {
                         console.warn('Upsert on school_students failed, falling back without scholarship_name or insert:', upsertErr);
                         // If column is missing on school_students table, strip it out gracefully
-                        const strippedBatch = batch.map(({ scholarship_name, ...rest }) => rest);
+                        const strippedBatch = batch.map(({ scholarship_name, academic_year, semester, ...rest }) => rest);
                         const { error: retryErr } = await supabase
                             .from('school_students')
                             .upsert(strippedBatch, { onConflict: 'student_no' });
@@ -1165,12 +1296,40 @@ async function handleSchoolFile(file) {
                     storedCount += batch.length;
                 }
 
+                // Sync matching student_grantees with the selected academic year & semester
+                try {
+                    const { data: sgList } = await supabase.from('student_grantees').select('id, student_no, full_name, last_name');
+                    if (sgList && sgList.length > 0) {
+                        const sgUpdates = [];
+                        rawSchoolStudents.forEach(st => {
+                            const stNo = String(st.studentNo || '').trim();
+                            const stName = String(st.fullName || '').toLowerCase().trim();
+                            const match = sgList.find(sg => {
+                                if (stNo && String(sg.student_no || '').trim() === stNo) return true;
+                                if (stName && String(sg.full_name || '').toLowerCase().trim() === stName) return true;
+                                return false;
+                            });
+                            if (match) {
+                                sgUpdates.push(supabase.from('student_grantees').update({
+                                    academic_year: chosenTerm.academicYear,
+                                    academicYear: chosenTerm.academicYear,
+                                    semester: chosenTerm.semester,
+                                    updated_at: new Date().toISOString()
+                                }).eq('id', match.id));
+                            }
+                        });
+                        if (sgUpdates.length > 0) {
+                            await Promise.all(sgUpdates);
+                        }
+                    }
+                } catch (_) { }
+
                 // Log in audit_logs
                 try {
                     await supabase.from('audit_logs').insert([{
                         userName: window.currentAdmin?.username || 'Admin',
                         role: window.currentAdmin?.role || 'Admin',
-                        action: `Imported and stored ${storedCount} school student records from ${file.name} into school_students database`,
+                        action: `Imported and stored ${storedCount} school student records (${chosenTerm.academicYear} • ${chosenTerm.semester}) from ${file.name} into school_students database`,
                         studentId: 'BATCH_IMPORT'
                     }]);
                 } catch (e) {
@@ -1181,9 +1340,9 @@ async function handleSchoolFile(file) {
                 try {
                     await AdminNotificationService.notifyRecordUpdate({
                         title: 'School Enrollment List Uploaded',
-                        message: `Uploaded "${file.name}" with ${storedCount} student records for Annex 5 cross-matching.`,
+                        message: `Uploaded "${file.name}" with ${storedCount} student records (${chosenTerm.academicYear} • ${chosenTerm.semester}) for Annex 5 cross-matching.`,
                         type: 'success',
-                        metadata: { filename: file.name, count: storedCount }
+                        metadata: { filename: file.name, count: storedCount, academicYear: chosenTerm.academicYear, semester: chosenTerm.semester }
                     });
                 } catch (_) { }
 
@@ -1192,14 +1351,14 @@ async function handleSchoolFile(file) {
                     await supabase.from('notifications').insert([{
                         studentId: 'superadmin',
                         title: 'New Submission: School Student Records Uploaded',
-                        message: `Registrar uploaded "${file.name}" containing ${storedCount} school student records for scholarship validation.`,
+                        message: `Registrar uploaded "${file.name}" containing ${storedCount} school student records (${chosenTerm.academicYear} • ${chosenTerm.semester}) for scholarship validation.`,
                         type: 'info',
                         isRead: false,
                         timestamp: new Date().toISOString()
                     }]);
                 } catch (_) { }
 
-                showToast(`Loaded and stored ${storedCount} records in school_students database!`, 'check-circle');
+                showToast(`Loaded and stored ${storedCount} school student records for ${chosenTerm.academicYear} • ${chosenTerm.semester}!`, 'check-circle');
             } catch (dbErr) {
                 console.error('Database store error:', dbErr);
                 showToast(`Parsed ${parsedStudents.length} records. (Database: ${dbErr.message || 'Check school_students table'})`, 'alert-triangle');
@@ -2570,6 +2729,30 @@ async function populateRegistrarTerms() {
             selectSem.value = selectedSemester;
         }
 
+        // Populate Source 1 School Student Records upload term selectors
+        if (!selectSchoolAy) selectSchoolAy = document.getElementById('select-school-ay');
+        if (!selectSchoolSem) selectSchoolSem = document.getElementById('select-school-sem');
+
+        if (selectSchoolAy) {
+            let sAyHtml = `<option value="" disabled ${!selectedAcademicYear ? 'selected' : ''}>-- Select Academic Year * --</option>`;
+            sAyHtml += years.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('');
+            sAyHtml += `<option value="custom">+ Enter Custom A.Y....</option>`;
+            selectSchoolAy.innerHTML = sAyHtml;
+            if (selectedAcademicYear && selectedAcademicYear !== 'All') {
+                selectSchoolAy.value = selectedAcademicYear;
+            }
+        }
+
+        if (selectSchoolSem) {
+            let sSemHtml = `<option value="" disabled ${!selectedSemester ? 'selected' : ''}>-- Select Semester * --</option>`;
+            sSemHtml += semesters.map(s => `<option value="${s}" ${s === selectedSemester ? 'selected' : ''}>${s}</option>`).join('');
+            sSemHtml += `<option value="custom">+ Enter Custom Semester...</option>`;
+            selectSchoolSem.innerHTML = sSemHtml;
+            if (selectedSemester && selectedSemester !== 'All') {
+                selectSchoolSem.value = selectedSemester;
+            }
+        }
+
         updateRegistrarActiveTermLabel();
     } catch (e) {
         console.warn('Error populating registrar terms:', e);
@@ -2625,12 +2808,24 @@ async function handleRegistrarTermChange(newAy, newSem) {
     if (newAy !== undefined) selectedAcademicYear = newAy;
     if (newSem !== undefined) selectedSemester = newSem;
 
+    const selectAY = document.getElementById('admin-filter-ay');
+    if (selectAY && selectAY.value !== selectedAcademicYear) selectAY.value = selectedAcademicYear;
+    const selectSem = document.getElementById('admin-filter-sem');
+    if (selectSem && selectSem.value !== selectedSemester) selectSem.value = selectedSemester;
+
+    if (!selectSchoolAy) selectSchoolAy = document.getElementById('select-school-ay');
+    if (!selectSchoolSem) selectSchoolSem = document.getElementById('select-school-sem');
+
+    if (selectSchoolAy && selectSchoolAy.value !== selectedAcademicYear && selectedAcademicYear !== 'All') {
+        selectSchoolAy.value = selectedAcademicYear;
+    }
+    if (selectSchoolSem && selectSchoolSem.value !== selectedSemester && selectedSemester !== 'All') {
+        selectSchoolSem.value = selectedSemester;
+    }
+
+    // Save as system default term
     if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
-        fetch('/api/academic-term/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
-        }).catch(() => {});
+        AcademicYearService.setDefaultTerm(selectedAcademicYear, selectedSemester);
     }
 
     updateRegistrarActiveTermLabel();
@@ -2667,11 +2862,7 @@ function setupRegistrarTermListeners() {
             if (iconRefresh) iconRefresh.style.animation = 'spin 0.8s linear infinite';
             try {
                 if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
-                    fetch('/api/academic-term/update', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
-                    }).catch(() => {});
+                    AcademicYearService.setDefaultTerm(selectedAcademicYear, selectedSemester);
                 }
                 await loadInitialData();
                 showToast(`Synchronized database for ${selectedAcademicYear} (${selectedSemester})`, 'check-circle');
@@ -2679,6 +2870,131 @@ function setupRegistrarTermListeners() {
                 if (iconRefresh) {
                     setTimeout(() => { iconRefresh.style.animation = ''; }, 300);
                 }
+            }
+        });
+    }
+
+    // Source 1 Upload Term Listeners
+    selectSchoolAy = document.getElementById('select-school-ay');
+    customSchoolAyContainer = document.getElementById('custom-school-ay-container');
+    customSchoolAyInput = document.getElementById('custom-school-ay-input');
+    selectSchoolSem = document.getElementById('select-school-sem');
+    customSchoolSemContainer = document.getElementById('custom-school-sem-container');
+    customSchoolSemInput = document.getElementById('custom-school-sem-input');
+
+    if (selectSchoolAy) {
+        selectSchoolAy.addEventListener('change', () => {
+            const val = selectSchoolAy.value;
+            if (val === 'custom') {
+                if (customSchoolAyContainer) {
+                    customSchoolAyContainer.classList.remove('hidden');
+                    customSchoolAyContainer.style.display = 'block';
+                }
+                if (customSchoolAyInput) customSchoolAyInput.focus();
+            } else {
+                if (customSchoolAyContainer) {
+                    customSchoolAyContainer.classList.add('hidden');
+                    customSchoolAyContainer.style.display = 'none';
+                }
+                if (val && val !== 'All') {
+                    handleRegistrarTermChange(val, undefined);
+                }
+            }
+            clearSchoolTermError();
+        });
+
+        if (selectSchoolAy.value === 'custom' && customSchoolAyContainer) {
+            customSchoolAyContainer.classList.remove('hidden');
+            customSchoolAyContainer.style.display = 'block';
+        }
+    }
+
+    if (customSchoolAyInput) {
+        customSchoolAyInput.addEventListener('input', () => {
+            clearSchoolTermError();
+        });
+        const commitCustomAy = () => {
+            const val = customSchoolAyInput.value.trim();
+            if (val) {
+                AcademicYearService.addCustomAcademicYear(val);
+                if (selectSchoolAy) {
+                    let hasOpt = Array.from(selectSchoolAy.options).some(o => o.value === val);
+                    if (!hasOpt) {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.textContent = val;
+                        const customOpt = selectSchoolAy.querySelector('option[value="custom"]');
+                        selectSchoolAy.insertBefore(opt, customOpt || null);
+                    }
+                }
+                handleRegistrarTermChange(val, undefined);
+            }
+        };
+        customSchoolAyInput.addEventListener('blur', commitCustomAy);
+        customSchoolAyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                commitCustomAy();
+                if (selectSchoolSem && selectSchoolSem.value === 'custom' && customSchoolSemInput) {
+                    customSchoolSemInput.focus();
+                }
+            }
+        });
+    }
+
+    if (selectSchoolSem) {
+        selectSchoolSem.addEventListener('change', () => {
+            const val = selectSchoolSem.value;
+            if (val === 'custom') {
+                if (customSchoolSemContainer) {
+                    customSchoolSemContainer.classList.remove('hidden');
+                    customSchoolSemContainer.style.display = 'block';
+                }
+                if (customSchoolSemInput) customSchoolSemInput.focus();
+            } else {
+                if (customSchoolSemContainer) {
+                    customSchoolSemContainer.classList.add('hidden');
+                    customSchoolSemContainer.style.display = 'none';
+                }
+                if (val && val !== 'All') {
+                    handleRegistrarTermChange(undefined, val);
+                }
+            }
+            clearSchoolTermError();
+        });
+
+        if (selectSchoolSem.value === 'custom' && customSchoolSemContainer) {
+            customSchoolSemContainer.classList.remove('hidden');
+            customSchoolSemContainer.style.display = 'block';
+        }
+    }
+
+    if (customSchoolSemInput) {
+        customSchoolSemInput.addEventListener('input', () => {
+            clearSchoolTermError();
+        });
+        const commitCustomSem = () => {
+            const val = customSchoolSemInput.value.trim();
+            if (val) {
+                AcademicYearService.addCustomSemester(val);
+                if (selectSchoolSem) {
+                    let hasOpt = Array.from(selectSchoolSem.options).some(o => o.value === val);
+                    if (!hasOpt) {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.textContent = val;
+                        const customOpt = selectSchoolSem.querySelector('option[value="custom"]');
+                        selectSchoolSem.insertBefore(opt, customOpt || null);
+                    }
+                }
+                handleRegistrarTermChange(undefined, val);
+            }
+        };
+        customSchoolSemInput.addEventListener('blur', commitCustomSem);
+        customSchoolSemInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                commitCustomSem();
             }
         });
     }
@@ -2737,6 +3053,10 @@ function setupRegistrarTermListeners() {
             const selSem = document.getElementById('admin-filter-sem');
             if (selSem && selectedSemester) selSem.value = selectedSemester;
 
+            if (selectedAcademicYear && selectedSemester) {
+                AcademicYearService.setDefaultTerm(selectedAcademicYear, selectedSemester);
+            }
+
             updateRegistrarActiveTermLabel();
             showToast(`Custom term saved: ${selectedAcademicYear} • ${selectedSemester}`, 'check-circle');
             await loadInitialData();
@@ -2746,6 +3066,14 @@ function setupRegistrarTermListeners() {
     // Subscribe to cross-interface updates
     AcademicYearService.onTermsUpdated(async () => {
         await populateRegistrarTerms();
+    });
+
+    AcademicYearService.onDefaultTermUpdated(async (newTerm) => {
+        if (newTerm?.academicYear) selectedAcademicYear = newTerm.academicYear;
+        if (newTerm?.semester) selectedSemester = newTerm.semester;
+        await populateRegistrarTerms();
+        updateRegistrarActiveTermLabel();
+        await loadInitialData();
     });
 }
 

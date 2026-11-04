@@ -69,12 +69,15 @@ function populateBatchFilter() {
     }
 }
 
-async function populateStudentGranteesTerms() {
+async function populateStudentGranteesTerms(forceDefault = false) {
     const filterAyEl = document.getElementById('filter-ay') || filterAy;
     if (!filterAyEl) return;
     try {
         const years = await AcademicYearService.getAcademicYears();
-        const curVal = filterAyEl.value || 'AY 2024-2025, 1st Sem';
+        const defaultTerm = AcademicYearService.getDefaultTerm();
+        const semShort = defaultTerm.semester.toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
+        const defaultVal = `AY ${defaultTerm.academicYear}, ${semShort}`;
+        const curVal = forceDefault ? defaultVal : (filterAyEl.value || defaultVal);
         
         let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
         years.forEach(y => {
@@ -85,7 +88,7 @@ async function populateStudentGranteesTerms() {
         if (opts.some(o => o.includes(`value="${curVal}"`))) {
             filterAyEl.value = curVal;
         } else {
-            filterAyEl.value = 'AY 2024-2025, 1st Sem';
+            filterAyEl.value = defaultVal;
         }
         const selectedOpt = filterAyEl.options[filterAyEl.selectedIndex];
         const ayDisp = document.getElementById('ay-display');
@@ -97,6 +100,11 @@ async function populateStudentGranteesTerms() {
 
 AcademicYearService.onTermsUpdated(async () => {
     await populateStudentGranteesTerms();
+    applyFilters();
+});
+
+AcademicYearService.onDefaultTermUpdated(async () => {
+    await populateStudentGranteesTerms(true);
     applyFilters();
 });
 

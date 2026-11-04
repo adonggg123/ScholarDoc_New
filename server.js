@@ -110,6 +110,19 @@ const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'AIzaSyDKFEf2kVwuCGQQYaeBts
 
 const https = require('https');
 
+// Load cached system settings from local disk if available
+try {
+    const settingsPath = path.join(__dirname, 'system_settings.json');
+    if (fs.existsSync(settingsPath)) {
+        const localSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (localSettings.academicYear) activeAcademicYear = String(localSettings.academicYear).trim();
+        if (localSettings.semester) activeSemester = String(localSettings.semester).trim();
+        console.log(`[Academic Term] Initialized from local system_settings.json: AY ${activeAcademicYear} • ${activeSemester}`);
+    }
+} catch (e) {
+    console.warn('[Academic Term] Could not read local system_settings.json:', e.message);
+}
+
 // Dynamic academic period synchronization with Supabase
 async function syncAcademicTermFromDb() {
     try {
@@ -4557,6 +4570,17 @@ const server = http.createServer(async (req, res) => {
                 const { academicYear, semester } = JSON.parse(body || '{}');
                 if (academicYear) activeAcademicYear = String(academicYear).trim();
                 if (semester) activeSemester = String(semester).trim();
+
+                // Persist to local disk system_settings.json
+                try {
+                    fs.writeFileSync(path.join(__dirname, 'system_settings.json'), JSON.stringify({
+                        academicYear: activeAcademicYear,
+                        semester: activeSemester,
+                        updated_at: new Date().toISOString()
+                    }, null, 2));
+                } catch (fsErr) {
+                    console.warn('[Academic Term] Could not save system_settings.json:', fsErr.message);
+                }
 
                 // Persist to Supabase system_settings
                 try {

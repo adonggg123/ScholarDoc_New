@@ -113,8 +113,19 @@ let headerFilterSemester = null;
 let btnRefreshTerm = null;
 let iconRefreshTerm = null;
 
-let selectedAcademicYear = '2024-2025';
-let selectedSemester = '1st Semester';
+// Target Academic Period Elements (Step 1 Upload)
+let selectImportAy = null;
+let customImportAyContainer = null;
+let customImportAyInput = null;
+let selectImportSem = null;
+let customImportSemContainer = null;
+let customImportSemInput = null;
+let importTermSelectBox = null;
+let importTermValidationHint = null;
+
+const initialDefaultTerm = AcademicYearService.getDefaultTerm();
+let selectedAcademicYear = initialDefaultTerm.academicYear || '2024-2025';
+let selectedSemester = initialDefaultTerm.semester || '1st Semester';
 
 function getTableName() {
     return 'new_grantees_masterlist';
@@ -134,7 +145,106 @@ function normalizeName(lastName, firstName, middleName) {
     return full.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// â”€â”€ Batch Helpers & Persistent Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Target Term Helpers & Validation ──────────────────────────────────────────
+function getSelectedImportTerm() {
+    if (!selectImportAy) {
+        selectImportAy = document.getElementById('select-import-ay');
+        customImportAyContainer = document.getElementById('custom-import-ay-container');
+        customImportAyInput = document.getElementById('custom-import-ay-input');
+        selectImportSem = document.getElementById('select-import-sem');
+        customImportSemContainer = document.getElementById('custom-import-sem-container');
+        customImportSemInput = document.getElementById('custom-import-sem-input');
+        importTermSelectBox = document.getElementById('import-term-selection-container');
+        importTermValidationHint = document.getElementById('import-term-validation-hint');
+    }
+
+    if (!selectImportAy || !selectImportSem) {
+        return { academicYear: selectedAcademicYear, semester: selectedSemester };
+    }
+
+    const ayVal = selectImportAy.value;
+    let chosenAy = '';
+    if (ayVal === 'custom') {
+        chosenAy = customImportAyInput ? customImportAyInput.value.trim() : '';
+    } else if (ayVal && ayVal !== 'All') {
+        chosenAy = ayVal.trim();
+    }
+
+    const semVal = selectImportSem.value;
+    let chosenSem = '';
+    if (semVal === 'custom') {
+        chosenSem = customImportSemInput ? customImportSemInput.value.trim() : '';
+    } else if (semVal && semVal !== 'All') {
+        chosenSem = semVal.trim();
+    }
+
+    if (!chosenAy || !chosenSem) {
+        showTermError(!chosenAy ? 'ay' : 'sem');
+        return null;
+    }
+
+    clearTermError();
+
+    // Auto-register custom entries if any
+    if (ayVal === 'custom' && chosenAy) {
+        AcademicYearService.addCustomAcademicYear(chosenAy);
+    }
+    if (semVal === 'custom' && chosenSem) {
+        AcademicYearService.addCustomSemester(chosenSem);
+    }
+
+    // Save chosen values as system defaults
+    AcademicYearService.setDefaultTerm(chosenAy, chosenSem);
+
+    selectedAcademicYear = chosenAy;
+    selectedSemester = chosenSem;
+
+    // Synchronize header filter dropdowns and badges
+    if (headerFilterAcademicYear && headerFilterAcademicYear.value !== chosenAy) {
+        headerFilterAcademicYear.value = chosenAy;
+    }
+    if (headerFilterSemester && headerFilterSemester.value !== chosenSem) {
+        headerFilterSemester.value = chosenSem;
+    }
+    updateStep1TargetTermBadge(chosenAy, chosenSem);
+    updateStep2TermIndicator(chosenAy, chosenSem);
+
+    return { academicYear: chosenAy, semester: chosenSem };
+}
+
+function showTermError(missingField = 'ay') {
+    if (!importTermSelectBox) importTermSelectBox = document.getElementById('import-term-selection-container');
+    if (!importTermValidationHint) importTermValidationHint = document.getElementById('import-term-validation-hint');
+    if (importTermSelectBox) importTermSelectBox.classList.add('error-state');
+    if (importTermValidationHint) importTermValidationHint.classList.remove('hidden');
+
+    if (missingField === 'ay') {
+        if (selectImportAy && selectImportAy.value === 'custom' && customImportAyInput) {
+            customImportAyInput.focus();
+        } else if (selectImportAy) {
+            selectImportAy.focus();
+        }
+    } else {
+        if (selectImportSem && selectImportSem.value === 'custom' && customImportSemInput) {
+            customImportSemInput.focus();
+        } else if (selectImportSem) {
+            selectImportSem.focus();
+        }
+    }
+
+    if (window.showToast) {
+        window.showToast('Please select or enter an Academic Year and Semester before importing new grantees.', 'alert-triangle');
+    }
+}
+
+function clearTermError() {
+    if (!importTermSelectBox) importTermSelectBox = document.getElementById('import-term-selection-container');
+    if (!importTermValidationHint) importTermValidationHint = document.getElementById('import-term-validation-hint');
+    if (importTermSelectBox) importTermSelectBox.classList.remove('error-state');
+    if (importTermValidationHint) importTermValidationHint.classList.add('hidden');
+}
+
+// ── Batch Helpers & Persistent Storage ──────────────────────────
 function getSelectedImportBatch() {
     if (!selectImportBatch) {
         selectImportBatch = document.getElementById('select-import-batch');
@@ -391,8 +501,13 @@ function clearFileState() {
     fetchExistingMasterlist();
 }
 
-async function handleFile(file) {
-    const selectedBatch = getSelectedImportBatch();
+async function handleFile(file, explicitBatch, explicitTerm) {
+    const selectedTerm = explicitTerm || getSelectedImportTerm();
+    if (!selectedTerm) {
+        if (fileInput) fileInput.value = '';
+        return;
+    }
+    const selectedBatch = explicitBatch || getSelectedImportBatch();
     if (!selectedBatch) {
         if (fileInput) fileInput.value = '';
         return;
@@ -415,7 +530,7 @@ async function handleFile(file) {
     if (fileInfoContainer) fileInfoContainer.classList.remove('hidden');
 
     // Expected Flow: Upload File -> Automatically Extract Data -> Display in Table -> Automatically Save to Database
-    await executeAutoImportPipeline(file, selectedBatch);
+    await executeAutoImportPipeline(file, selectedBatch, selectedTerm);
 }
 
 async function extractExcelOrCsv(file, selectedBatch) {
@@ -809,9 +924,13 @@ async function checkAndFlagDuplicates(records, selectedBatch) {
 }
 
 // â”€â”€ Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database â”€â”€
-async function executeAutoImportPipeline(file, explicitBatch) {
+async function executeAutoImportPipeline(file, explicitBatch, explicitTerm) {
     if (!file) return;
 
+    const selectedTerm = explicitTerm || getSelectedImportTerm();
+    if (!selectedTerm) {
+        return;
+    }
     const selectedBatch = explicitBatch || getSelectedImportBatch();
     if (!selectedBatch) {
         return;
@@ -822,7 +941,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
         btnExtract.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Auto-Extracting...';
     }
     if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
-    if (ocrStatusText) ocrStatusText.textContent = `Extracting grantee data for ${selectedBatch}...`;
+    if (ocrStatusText) ocrStatusText.textContent = `Extracting grantee data for ${selectedBatch} (${selectedTerm.academicYear} • ${selectedTerm.semester})...`;
     if (ocrProgressBar) {
         ocrProgressBar.style.width = '35%';
         ocrProgressBar.style.animation = 'pulse 1.5s infinite';
@@ -882,8 +1001,8 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 middle_name: r.middleName || '',
                 name: `${r.lastName}, ${r.firstName} ${r.middleName || ''}`.trim(),
                 batch: r.batch || selectedBatch,
-                academic_year: selectedAcademicYear,
-                semester: selectedSemester
+                academic_year: selectedTerm.academicYear,
+                semester: selectedTerm.semester
             }));
 
             let insertedData = null;
@@ -943,15 +1062,15 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 if (!alreadyExists) {
                     allMasterlistRecords.push({
                         ...newR,
-                        academicYear: selectedAcademicYear,
-                        semester: selectedSemester
+                        academicYear: selectedTerm.academicYear,
+                        semester: selectedTerm.semester
                     });
                 }
             });
 
             // Cache grantee batches and terms locally
             cacheGranteeBatches(allMasterlistRecords);
-            cacheGranteeTerms(allMasterlistRecords, selectedAcademicYear, selectedSemester);
+            cacheGranteeTerms(allMasterlistRecords, selectedTerm.academicYear, selectedTerm.semester);
 
             // Automatically assign the selected academic year & semester to student grantee records in database
             try {
@@ -981,9 +1100,9 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                         toUpdateSg.push(window.supabaseClient
                             .from('student_grantees')
                             .update({
-                                academic_year: selectedAcademicYear,
-                                academicYear: selectedAcademicYear,
-                                semester: selectedSemester,
+                                academic_year: selectedTerm.academicYear,
+                                academicYear: selectedTerm.academicYear,
+                                semester: selectedTerm.semester,
                                 batch: importedR.batch || selectedBatch,
                                 updated_at: new Date().toISOString()
                             })
@@ -993,7 +1112,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
 
                 if (toUpdateSg.length > 0) {
                     await Promise.all(toUpdateSg);
-                    console.log(`Assigned A.Y. ${selectedAcademicYear} (${selectedSemester}) to ${toUpdateSg.length} existing student_grantees.`);
+                    console.log(`Assigned A.Y. ${selectedTerm.academicYear} (${selectedTerm.semester}) to ${toUpdateSg.length} existing student_grantees.`);
                 }
 
                 // Call StudentSyncService to reconcile, sync, and persist any remaining student grantees
@@ -1008,7 +1127,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
             if (ocrProgressBar) ocrProgressBar.style.width = '100%';
 
             if (window.showToast) {
-                window.showToast(`Auto-saved ${validToInsert.length} grantees (${selectedBatch}) to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
+                window.showToast(`Auto-saved ${validToInsert.length} grantees (${selectedTerm.academicYear} • ${selectedTerm.semester} • ${selectedBatch}) to database!${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}`, 'check-circle');
             }
 
             // Notify Registrar of newly imported grantees ready for Annex 5 TES Billing
@@ -1016,7 +1135,7 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 await window.supabaseClient.from('notifications').insert([{
                     studentId: 'admin',
                     title: 'Record Update: New Grantees Masterlist Uploaded',
-                    message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedBatch || 'Batch 1.1'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                    message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedTerm.academicYear} • ${selectedTerm.semester} • ${selectedBatch || 'Batch 1.1'}). Records are ready for Registrar Annex 5 TES Billing review.`,
                     type: 'success',
                     isRead: false,
                     timestamp: new Date().toISOString()
@@ -1028,15 +1147,15 @@ async function executeAutoImportPipeline(file, explicitBatch) {
                 if (window.SuperAdminNotificationService) {
                     await window.SuperAdminNotificationService.notifySubmission({
                         title: 'New Grantees Masterlist Uploaded',
-                        message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedBatch || 'Batch 1.1'}). Registrar notified for Annex 5 review.`,
+                        message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedTerm.academicYear} • ${selectedTerm.semester} • ${selectedBatch || 'Batch 1.1'}). Registrar notified for Annex 5 review.`,
                         type: 'success',
-                        metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, batch: selectedBatch }
+                        metadata: { count: validToInsert.length, academicYear: selectedTerm.academicYear, semester: selectedTerm.semester, batch: selectedBatch }
                     });
                 }
             } catch (_) { }
 
             // Re-render table and badges according to active term filter
-            applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
+            applyTermFilterToMasterlist(selectedTerm.academicYear, selectedTerm.semester);
 
             // Sync with Annex 5 and verification for active term grantees
             const granteesForVerification = extractedRecords.map(m => ({
@@ -2987,6 +3106,133 @@ export function initMasterlistImport() {
     filterBatch = document.getElementById('filter-batch');
     btnClearMasterlist = document.getElementById('btn-clear-masterlist');
 
+    // Target Academic Period Elements (Required before import)
+    selectImportAy = document.getElementById('select-import-ay');
+    customImportAyContainer = document.getElementById('custom-import-ay-container');
+    customImportAyInput = document.getElementById('custom-import-ay-input');
+    selectImportSem = document.getElementById('select-import-sem');
+    customImportSemContainer = document.getElementById('custom-import-sem-container');
+    customImportSemInput = document.getElementById('custom-import-sem-input');
+    importTermSelectBox = document.getElementById('import-term-selection-container');
+    importTermValidationHint = document.getElementById('import-term-validation-hint');
+
+    if (selectImportAy) {
+        selectImportAy.addEventListener('change', () => {
+            const val = selectImportAy.value;
+            if (val === 'custom') {
+                if (customImportAyContainer) {
+                    customImportAyContainer.classList.remove('hidden');
+                    customImportAyContainer.style.display = 'block';
+                }
+                if (customImportAyInput) customImportAyInput.focus();
+            } else {
+                if (customImportAyContainer) {
+                    customImportAyContainer.classList.add('hidden');
+                    customImportAyContainer.style.display = 'none';
+                }
+                if (val && val !== 'All') {
+                    handleTermChange(val, undefined);
+                }
+            }
+            clearTermError();
+        });
+
+        if (selectImportAy.value === 'custom' && customImportAyContainer) {
+            customImportAyContainer.classList.remove('hidden');
+            customImportAyContainer.style.display = 'block';
+        }
+    }
+
+    if (customImportAyInput) {
+        customImportAyInput.addEventListener('input', () => {
+            clearTermError();
+        });
+        const commitImportAy = () => {
+            const val = customImportAyInput.value.trim();
+            if (val) {
+                AcademicYearService.addCustomAcademicYear(val);
+                if (selectImportAy) {
+                    let hasOpt = Array.from(selectImportAy.options).some(o => o.value === val);
+                    if (!hasOpt) {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.textContent = val;
+                        const customOpt = selectImportAy.querySelector('option[value="custom"]');
+                        selectImportAy.insertBefore(opt, customOpt || null);
+                    }
+                }
+                handleTermChange(val, undefined);
+            }
+        };
+        customImportAyInput.addEventListener('blur', commitImportAy);
+        customImportAyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                commitImportAy();
+                if (selectImportSem && selectImportSem.value === 'custom' && customImportSemInput) {
+                    customImportSemInput.focus();
+                }
+            }
+        });
+    }
+
+    if (selectImportSem) {
+        selectImportSem.addEventListener('change', () => {
+            const val = selectImportSem.value;
+            if (val === 'custom') {
+                if (customImportSemContainer) {
+                    customImportSemContainer.classList.remove('hidden');
+                    customImportSemContainer.style.display = 'block';
+                }
+                if (customImportSemInput) customImportSemInput.focus();
+            } else {
+                if (customImportSemContainer) {
+                    customImportSemContainer.classList.add('hidden');
+                    customImportSemContainer.style.display = 'none';
+                }
+                if (val && val !== 'All') {
+                    handleTermChange(undefined, val);
+                }
+            }
+            clearTermError();
+        });
+
+        if (selectImportSem.value === 'custom' && customImportSemContainer) {
+            customImportSemContainer.classList.remove('hidden');
+            customImportSemContainer.style.display = 'block';
+        }
+    }
+
+    if (customImportSemInput) {
+        customImportSemInput.addEventListener('input', () => {
+            clearTermError();
+        });
+        const commitImportSem = () => {
+            const val = customImportSemInput.value.trim();
+            if (val) {
+                AcademicYearService.addCustomSemester(val);
+                if (selectImportSem) {
+                    let hasOpt = Array.from(selectImportSem.options).some(o => o.value === val);
+                    if (!hasOpt) {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.textContent = val;
+                        const customOpt = selectImportSem.querySelector('option[value="custom"]');
+                        selectImportSem.insertBefore(opt, customOpt || null);
+                    }
+                }
+                handleTermChange(undefined, val);
+            }
+        };
+        customImportSemInput.addEventListener('blur', commitImportSem);
+        customImportSemInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                commitImportSem();
+            }
+        });
+    }
+
     // Batch Selection Elements
     selectImportBatch = document.getElementById('select-import-batch');
     customBatchContainer = document.getElementById('custom-batch-container');
@@ -3195,16 +3441,19 @@ export function initMasterlistImport() {
         if (filterSemester && filterSemester.value !== selectedSemester) filterSemester.value = selectedSemester;
         if (headerFilterSemester && headerFilterSemester.value !== selectedSemester) headerFilterSemester.value = selectedSemester;
 
+        if (selectImportAy && selectImportAy.value !== selectedAcademicYear && selectedAcademicYear !== 'All') {
+            selectImportAy.value = selectedAcademicYear;
+        }
+        if (selectImportSem && selectImportSem.value !== selectedSemester && selectedSemester !== 'All') {
+            selectImportSem.value = selectedSemester;
+        }
+
         updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester);
         updateStep2TermIndicator(selectedAcademicYear, selectedSemester);
 
-        // Notify server of active academic term selected by Super Admin
+        // Save system default term!
         if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
-            fetch('/api/academic-term/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
-            }).catch(() => {});
+            AcademicYearService.setDefaultTerm(selectedAcademicYear, selectedSemester);
         }
 
         await loadTermData(selectedAcademicYear, selectedSemester);
@@ -3332,7 +3581,7 @@ export function initMasterlistImport() {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
                 await fetchExistingMasterlist();
                 await loadTermData(selectedAcademicYear, selectedSemester);
@@ -3377,10 +3626,43 @@ export function initMasterlistImport() {
                 headerFilterSemester.innerHTML = semHtml;
                 headerFilterSemester.value = selectedSemester;
             }
+
+            if (!selectImportAy) selectImportAy = document.getElementById('select-import-ay');
+            if (!selectImportSem) selectImportSem = document.getElementById('select-import-sem');
+
+            if (selectImportAy) {
+                let sAyHtml = `<option value="" disabled ${!selectedAcademicYear ? 'selected' : ''}>-- Select Academic Year * --</option>`;
+                sAyHtml += years.map(y => `<option value="${y}" ${y === selectedAcademicYear ? 'selected' : ''}>${y}</option>`).join('');
+                sAyHtml += `<option value="custom">+ Enter Custom A.Y....</option>`;
+                selectImportAy.innerHTML = sAyHtml;
+                if (selectedAcademicYear && selectedAcademicYear !== 'All') {
+                    selectImportAy.value = selectedAcademicYear;
+                }
+            }
+
+            if (selectImportSem) {
+                let sSemHtml = `<option value="" disabled ${!selectedSemester ? 'selected' : ''}>-- Select Semester * --</option>`;
+                sSemHtml += semesters.map(s => `<option value="${s}" ${s === selectedSemester ? 'selected' : ''}>${s}</option>`).join('');
+                sSemHtml += `<option value="custom">+ Enter Custom Semester...</option>`;
+                selectImportSem.innerHTML = sSemHtml;
+                if (selectedSemester && selectedSemester !== 'All') {
+                    selectImportSem.value = selectedSemester;
+                }
+            }
         } catch (e) {
             console.warn('Could not query distinct terms in Super Admin:', e);
         }
     };
+
+    // Real-time synchronization when system default academic term is updated across interfaces
+    AcademicYearService.onDefaultTermUpdated(async (newTerm) => {
+        if (newTerm?.academicYear) selectedAcademicYear = newTerm.academicYear;
+        if (newTerm?.semester) selectedSemester = newTerm.semester;
+        await populateDistinctAcademicYears();
+        updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester);
+        updateStep2TermIndicator(selectedAcademicYear, selectedSemester);
+        await loadTermData(selectedAcademicYear, selectedSemester);
+    });
 
     const loadTermData = async (ay, sem) => {
         if (iconRefreshTerm) iconRefreshTerm.classList.add('sync-spin');
@@ -3466,17 +3748,27 @@ export function initMasterlistImport() {
             dropZone.style.borderColor = 'var(--border-color)';
             dropZone.style.background = 'rgba(0,0,0,0.01)';
 
+            const selectedTerm = getSelectedImportTerm();
+            if (!selectedTerm) {
+                return;
+            }
+
             const selectedBatch = getSelectedImportBatch();
             if (!selectedBatch) {
                 return;
             }
 
             if (e.dataTransfer.files.length > 0) {
-                handleFile(e.dataTransfer.files[0]);
+                handleFile(e.dataTransfer.files[0], selectedBatch, selectedTerm);
             }
         });
 
         dropZone.addEventListener('click', () => {
+            const selectedTerm = getSelectedImportTerm();
+            if (!selectedTerm) {
+                return;
+            }
+
             const selectedBatch = getSelectedImportBatch();
             if (!selectedBatch) {
                 return;
@@ -3487,13 +3779,19 @@ export function initMasterlistImport() {
 
     if (fileInput) {
         fileInput.addEventListener('change', (e) => {
+            const selectedTerm = getSelectedImportTerm();
+            if (!selectedTerm) {
+                fileInput.value = '';
+                return;
+            }
+
             const selectedBatch = getSelectedImportBatch();
             if (!selectedBatch) {
                 fileInput.value = '';
                 return;
             }
             if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
+                handleFile(e.target.files[0], selectedBatch, selectedTerm);
             }
         });
     }
@@ -3505,9 +3803,11 @@ export function initMasterlistImport() {
     if (btnExtract) {
         btnExtract.addEventListener('click', async () => {
             if (!currentFile) return;
+            const selectedTerm = getSelectedImportTerm();
+            if (!selectedTerm) return;
             const selectedBatch = getSelectedImportBatch();
             if (!selectedBatch) return;
-            await executeAutoImportPipeline(currentFile, selectedBatch);
+            await executeAutoImportPipeline(currentFile, selectedBatch, selectedTerm);
         });
     }
 

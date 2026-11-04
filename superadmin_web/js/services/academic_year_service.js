@@ -6,8 +6,10 @@
  */
 
 const STORAGE_KEY = 'scholardoc_custom_terms';
+const DEFAULT_TERM_KEY = 'scholardoc_system_default_term';
 const BROADCAST_CHANNEL = 'scholardoc_terms_sync_channel';
 const CUSTOM_EVENT_NAME = 'scholardoc:terms_updated';
+const DEFAULT_TERM_EVENT_NAME = 'scholardoc:default_term_updated';
 
 const DEFAULT_ACADEMIC_YEARS = [
     '2024-2025',
@@ -65,6 +67,133 @@ export class AcademicYearService {
     }
 
     /**
+     * Gets the system default academic term (Academic Year & Semester)
+     */
+    static getDefaultTerm() {
+        try {
+            const raw = localStorage.getItem(DEFAULT_TERM_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                const ay = parsed?.academicYear ? String(parsed.academicYear).trim() : null;
+                const sem = parsed?.semester ? String(parsed.semester).trim() : null;
+                if (ay && sem && ay !== 'All' && sem !== 'All') {
+                    return { academicYear: ay, semester: sem };
+                }
+            }
+        } catch (_) { }
+
+        // Fallback default
+        return {
+            academicYear: '2024-2025',
+            semester: '1st Semester'
+        };
+    }
+
+    /**
+     * Saves the chosen values as system defaults and synchronizes across all systems:
+     * - localStorage (persists in browser)
+     * - BroadcastChannel & CustomEvent (cross-tab & cross-interface sync)
+     * - Backend REST API /api/academic-term/update (persists on server & mobile OCR sync)
+     * - Supabase system_settings table (persists in database)
+     */
+    static setDefaultTerm(academicYear, semester, { broadcast = true, syncApi = true } = {}) {
+        if (!academicYear || !semester) return null;
+
+        let cleanAy = String(academicYear).trim().replace(/\s*-\s*/g, '-').replace(/\s+/g, '-');
+        let cleanSem = String(semester).trim();
+
+        if (cleanAy === 'All' || cleanAy === 'custom' || cleanSem === 'All' || cleanSem === 'custom') {
+            return null;
+        }
+
+        // Auto-save to custom terms list if not standard
+        if (!DEFAULT_ACADEMIC_YEARS.includes(cleanAy)) {
+            const stored = this.getStoredTerms();
+            if (!stored.academicYears.includes(cleanAy)) {
+                stored.academicYears.push(cleanAy);
+                this.saveStoredTerms(stored);
+            }
+        }
+        if (!DEFAULT_SEMESTERS.includes(cleanSem)) {
+            const stored = this.getStoredTerms();
+            if (!stored.semesters.includes(cleanSem)) {
+                stored.semesters.push(cleanSem);
+                this.saveStoredTerms(stored);
+            }
+        }
+
+        const termData = {
+            academicYear: cleanAy,
+            semester: cleanSem,
+            updated_at: new Date().toISOString()
+        };
+
+        try {
+            localStorage.setItem(DEFAULT_TERM_KEY, JSON.stringify(termData));
+        } catch (e) {
+            console.warn('AcademicYearService: could not set default term in localStorage:', e);
+        }
+
+        if (broadcast) {
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'DEFAULT_TERM_UPDATED', term: termData });
+            }
+            window.dispatchEvent(new CustomEvent(DEFAULT_TERM_EVENT_NAME, { detail: termData }));
+            window.dispatchEvent(new CustomEvent(CUSTOM_EVENT_NAME, { detail: termData }));
+        }
+
+        if (syncApi) {
+            try {
+                fetch('/api/academic-term/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ academicYear: cleanAy, semester: cleanSem })
+                }).catch(() => {});
+            } catch (_) { }
+
+            // Also persist to Supabase system_settings if client exists
+            try {
+                const supabase = window.supabaseClient;
+                if (supabase) {
+                    supabase.from('system_settings').upsert({
+                        key: 'academic_term',
+                        value: {
+                            academic_year: cleanAy,
+                            semester: cleanSem,
+                            updated_at: new Date().toISOString()
+                        }
+                    }).catch(() => {});
+
+                    supabase.from('system_settings').upsert([
+                        { key: 'current_academic_year', value: cleanAy },
+                        { key: 'current_semester', value: cleanSem }
+                    ]).catch(() => {});
+                }
+            } catch (_) { }
+        }
+
+        return termData;
+    }
+
+    /**
+     * Fetches current default academic term from backend or database if available
+     */
+    static async fetchSystemDefaultTerm() {
+        try {
+            const res = await fetch('/api/academic-term/current', { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.academicYear && data.semester) {
+                    this.setDefaultTerm(data.academicYear, data.semester, { broadcast: false, syncApi: false });
+                    return { academicYear: data.academicYear, semester: data.semester };
+                }
+            }
+        } catch (_) { }
+
+        return this.getDefaultTerm();
+    }
+
+    /**
      * Returns all combined, deduplicated, and sorted academic years
      * (Defaults + Custom additions + Distinct values in Supabase)
      */
@@ -76,6 +205,10 @@ export class AcademicYearService {
         stored.academicYears.forEach(y => {
             if (y && String(y).trim()) yearSet.add(String(y).trim());
         });
+
+        // Include default term academic year
+        const def = this.getDefaultTerm();
+        if (def && def.academicYear) yearSet.add(def.academicYear);
 
         // Query distinct values from Supabase tables
         try {
@@ -115,6 +248,10 @@ export class AcademicYearService {
         stored.semesters.forEach(s => {
             if (s && String(s).trim()) semSet.add(String(s).trim());
         });
+
+        // Include default term semester
+        const def = this.getDefaultTerm();
+        if (def && def.semester) semSet.add(def.semester);
 
         // Query distinct values from Supabase tables
         try {
@@ -171,7 +308,7 @@ export class AcademicYearService {
     }
 
     /**
-     * Cross-interface update listener
+     * Cross-interface terms update listener (custom terms or term list changed)
      */
     static onTermsUpdated(callback) {
         if (typeof callback !== 'function') return;
@@ -190,9 +327,35 @@ export class AcademicYearService {
             broadcastChannel.onmessage = (event) => {
                 if (event.data?.type === 'TERMS_UPDATED') {
                     callback(event.data.terms);
+                } else if (event.data?.type === 'DEFAULT_TERM_UPDATED') {
+                    callback(event.data.term);
                 }
             };
         }
     }
-}
 
+    /**
+     * Listener for system default term updates (selected AY and Semester changed)
+     */
+    static onDefaultTermUpdated(callback) {
+        if (typeof callback !== 'function') return;
+
+        window.addEventListener(DEFAULT_TERM_EVENT_NAME, (e) => {
+            callback(e.detail);
+        });
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === DEFAULT_TERM_KEY) {
+                callback(this.getDefaultTerm());
+            }
+        });
+
+        if (broadcastChannel) {
+            broadcastChannel.addEventListener('message', (event) => {
+                if (event.data?.type === 'DEFAULT_TERM_UPDATED') {
+                    callback(event.data.term);
+                }
+            });
+        }
+    }
+}
