@@ -251,6 +251,8 @@ let verifiedForm3List = [];
 let needsReviewList = [];
 
 let activeResolutionItem = null;
+let activeResolutionSource = null;
+let activeResolutionItemKey = null;
 let dbRealtimeChannel = null;
 
 // Helper to map school_students records
@@ -623,7 +625,7 @@ function renderSuperAdminGranteesTable(items) {
         return;
     }
 
-    tbody.innerHTML = items.map((g) => {
+    tbody.innerHTML = items.map((g, idx) => {
         let firstName = g.first_name || g.firstName || '';
         let middleName = g.middle_name || g.middleName || '';
         let lastName = g.last_name || g.lastName || '';
@@ -641,7 +643,7 @@ function renderSuperAdminGranteesTable(items) {
         const batch = resolveGranteeBatch(g);
 
         return `
-            <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
+            <tr class="annex-clickable-row" data-index="${idx}" style="border-bottom: 1px solid var(--border-color); vertical-align: middle;" title="Click to view student details and categorization">
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${firstName}</td>
                 <td style="padding: 10px 14px; font-size: 12px; color: var(--text-primary);">${middleName}</td>
                 <td style="padding: 10px 14px; font-weight: 600; font-size: 12px; color: var(--text-primary);">${lastName}</td>
@@ -654,6 +656,30 @@ function renderSuperAdminGranteesTable(items) {
             </tr>
         `;
     }).join('');
+
+    tbody.querySelectorAll('.annex-clickable-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const idx = parseInt(row.getAttribute('data-index'), 10);
+            const g = items[idx];
+            if (!g) return;
+            const f2Item = verifiedForm2List.find(x => AnnexSyncService.isSameStudent(x, g));
+            if (f2Item) {
+                openStudentDetailsModal(f2Item, 'form2', verifiedForm2List.indexOf(f2Item));
+                return;
+            }
+            const f3Item = verifiedForm3List.find(x => AnnexSyncService.isSameStudent(x, g));
+            if (f3Item) {
+                openStudentDetailsModal(f3Item, 'form3', verifiedForm3List.indexOf(f3Item));
+                return;
+            }
+            const revItem = needsReviewList.find(x => AnnexSyncService.isSameStudent(x, g));
+            if (revItem) {
+                openStudentDetailsModal(revItem, 'review', needsReviewList.indexOf(revItem));
+                return;
+            }
+            openStudentDetailsModal({ grantee: g, classification: 'MATCHED_FORM2', isEnrolled: true }, 'form2', -1);
+        });
+    });
 }
 
 // ── Batch Filter Population & Filtering (Source 1) ─────────────────
@@ -1920,7 +1946,7 @@ function renderForm2Table(items) {
 
     tbody.innerHTML = items.map((item, idx) => {
         const ctrl = String(idx + 1).padStart(5, '0');
-        const grantee = item.grantee;
+        const grantee = item.grantee || {};
         const student = item.matchedStudent || {};
         const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
         let name = VerificationService.normalizeName(rawNameStr);
@@ -1937,9 +1963,10 @@ function renderForm2Table(items) {
         const phone = student.contactNumber || student.phone || 'N/A';
         const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
         const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
+        const itemKey = AnnexSyncService.getUniqueKey(item);
 
         return `
-            <tr>
+            <tr class="annex-clickable-row" data-index="${idx}" data-key="${itemKey}" style="cursor: pointer;" title="Click to view student details and categorization">
                 <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
                 <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">${sa}</span></td>
@@ -1959,6 +1986,16 @@ function renderForm2Table(items) {
             </tr>
         `;
     }).join('');
+
+    tbody.querySelectorAll('.annex-clickable-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const idx = parseInt(row.getAttribute('data-index'), 10);
+            const clickedItem = items[idx];
+            if (clickedItem) {
+                openStudentDetailsModal(clickedItem, 'form2', idx);
+            }
+        });
+    });
 }
 
 // ── 7. Render Form 3 Table (Not Included / Special Status) ──────────
@@ -1973,7 +2010,7 @@ function renderForm3Table(items) {
 
     tbody.innerHTML = items.map((item, idx) => {
         const ctrl = String(idx + 1).padStart(5, '0');
-        const grantee = item.grantee;
+        const grantee = item.grantee || {};
         const student = item.matchedStudent || {};
         const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
         let name = VerificationService.normalizeName(rawNameStr);
@@ -1990,13 +2027,14 @@ function renderForm3Table(items) {
         const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
         const reason = item.specialStatusReason || 'Not enrolled';
         const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
+        const itemKey = AnnexSyncService.getUniqueKey(item);
 
         let badgeStyle = 'background: rgba(255,152,0,0.12); color: #E65100;';
         if (reason === 'Dropped' || reason === 'Waived') badgeStyle = 'background: rgba(244,67,54,0.12); color: #D32F2F;';
         if (reason === 'Graduated') badgeStyle = 'background: rgba(76,175,80,0.12); color: #2E7D32;';
 
         return `
-            <tr>
+            <tr class="annex-clickable-row" data-index="${idx}" data-key="${itemKey}" style="cursor: pointer;" title="Click to view student details and categorization">
                 <td style="font-weight: 700; color: #E65100;">${ctrl}</td>
                 <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(255,143,0,0.08); font-family: monospace; font-size: 11px;">${sa}</span></td>
@@ -2016,6 +2054,16 @@ function renderForm3Table(items) {
             </tr>
         `;
     }).join('');
+
+    tbody.querySelectorAll('.annex-clickable-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const idx = parseInt(row.getAttribute('data-index'), 10);
+            const clickedItem = items[idx];
+            if (clickedItem) {
+                openStudentDetailsModal(clickedItem, 'form3', idx);
+            }
+        });
+    });
 }
 
 // ── 8. Render Needs Review Queue ────────────────────────────────────
@@ -2237,56 +2285,426 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
     renderReviewQueue(needsReviewList);
 }
 
-// ── 10. Resolution Modal Handlers ───────────────────────────────────
+// ── 10. Resolution & Student Details Modal Handlers ──────────────────
 const resModal = document.getElementById('resolution-modal');
 const btnCloseRes = document.getElementById('btn-close-resolution');
 const btnCancelRes = document.getElementById('btn-cancel-resolution');
 const btnConfirmRes = document.getElementById('btn-confirm-resolution');
+const btnClassifyForm3 = document.getElementById('btn-classify-form3');
+const btnActionForm2 = document.getElementById('btn-action-form2');
+const modalTargetLabel = document.getElementById('modal-target-label');
+const modalResolutionTitle = document.getElementById('modal-resolution-title');
 const modalGranteeName = document.getElementById('modal-grantee-name');
+const modalStatusBadge = document.getElementById('modal-status-badge');
+const modalStudentId = document.getElementById('modal-student-id');
+const modalSaNumber = document.getElementById('modal-sa-number');
+const modalProgram = document.getElementById('modal-program');
+const modalYearLevel = document.getElementById('modal-year-level');
+const modalGender = document.getElementById('modal-gender');
+const modalBirthdate = document.getElementById('modal-birthdate');
+const modalBatch = document.getElementById('modal-batch');
+const modalEmail = document.getElementById('modal-email');
+const modalPhone = document.getElementById('modal-phone');
 const modalTargetForm = document.getElementById('modal-target-form');
 const modalForm3ReasonGroup = document.getElementById('modal-form3-reason-group');
 const modalForm3Reason = document.getElementById('modal-form3-reason');
 const modalRemarks = document.getElementById('modal-remarks');
 
-function openResolutionModal(reviewIndex) {
-    activeResolutionItem = reviewIndex;
-    const item = needsReviewList[reviewIndex];
-    if (!item) return;
+function getItemDisplayName(item) {
+    if (!item) return 'Grantee';
+    const g = item.grantee || {};
+    const s = item.matchedStudent || {};
+    const raw = s.fullName || s.full_name || s.name || g.name || g.fullName || '';
+    if (raw && !raw.startsWith(',') && !raw.endsWith(',')) return raw;
+    const l = (g.last_name || g.lastName || s.last_name || s.lastName || '').trim();
+    const f = (g.first_name || g.firstName || s.first_name || s.firstName || '').trim();
+    const m = (g.middle_name || g.middleName || s.middle_name || s.middleName || '').trim();
+    if (l && f) return `${l}, ${f}${m ? ' ' + m.charAt(0).toUpperCase() + '.' : ''}`;
+    return l || f || 'Grantee';
+}
 
-    if (modalGranteeName) modalGranteeName.textContent = item.grantee.name || 'Scholar Grantee';
-    if (modalTargetForm) modalTargetForm.value = 'form3';
-    if (modalForm3ReasonGroup) modalForm3ReasonGroup.style.display = 'block';
-    if (modalForm3Reason) modalForm3Reason.value = item.specialStatusReason || 'Not enrolled';
-    if (modalRemarks) modalRemarks.value = '';
+function refreshFormTables() {
+    const inputF2 = document.getElementById('search-form2');
+    const q2 = inputF2 ? inputF2.value.toLowerCase().trim() : '';
+    const f2List = q2 ? verifiedForm2List.filter(it => {
+        const n = (it.matchedStudent?.fullName || it.grantee?.name || '').toLowerCase();
+        const id = (it.matchedStudent?.studentId || it.grantee?.student_id || '').toLowerCase();
+        const sa = (it.matchedStudent?.saNumber || it.grantee?.saNumber || '').toLowerCase();
+        return n.includes(q2) || id.includes(q2) || sa.includes(q2);
+    }) : verifiedForm2List;
+    renderForm2Table(f2List);
+
+    const inputF3 = document.getElementById('search-form3');
+    const q3 = inputF3 ? inputF3.value.toLowerCase().trim() : '';
+    const f3List = q3 ? verifiedForm3List.filter(it => {
+        const n = (it.matchedStudent?.fullName || it.grantee?.name || '').toLowerCase();
+        const id = (it.matchedStudent?.studentId || it.grantee?.student_id || '').toLowerCase();
+        const sa = (it.matchedStudent?.saNumber || it.grantee?.saNumber || '').toLowerCase();
+        return n.includes(q3) || id.includes(q3) || sa.includes(q3);
+    }) : verifiedForm3List;
+    renderForm3Table(f3List);
+}
+
+function executeClassifyUnderForm3() {
+    const reason = modalForm3Reason ? modalForm3Reason.value : 'Not enrolled';
+    const remarks = modalRemarks ? modalRemarks.value.trim() : '';
+
+    if (activeResolutionSource === 'review') {
+        const revIdx = needsReviewList.findIndex(x => AnnexSyncService.isSameStudent(x, activeResolutionItem) || AnnexSyncService.getUniqueKey(x) === activeResolutionItemKey);
+        resolveReviewItem(revIdx !== -1 ? revIdx : 0, 'form3', reason, remarks);
+        closeResolutionModal();
+        return;
+    }
+
+    const itemKey = activeResolutionItemKey;
+    let item = null;
+
+    // Check if item is in Form 2
+    const f2Idx = verifiedForm2List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || (activeResolutionItem && AnnexSyncService.isSameStudent(x, activeResolutionItem)));
+    if (f2Idx !== -1) {
+        item = verifiedForm2List[f2Idx];
+        verifiedForm2List.splice(f2Idx, 1);
+    } else {
+        const f3Idx = verifiedForm3List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || (activeResolutionItem && AnnexSyncService.isSameStudent(x, activeResolutionItem)));
+        if (f3Idx !== -1) {
+            item = verifiedForm3List[f3Idx];
+        } else if (activeResolutionItem) {
+            item = { ...activeResolutionItem };
+        }
+    }
+
+    if (item) {
+        item.classification = 'INACTIVE_FORM3';
+        item.isEnrolled = false;
+        item.specialStatusReason = reason;
+        item.remarks = remarks || `Categorized: ${reason}`;
+        if (item.matchedStudent) {
+            item.matchedStudent.status = reason;
+        }
+
+        const existingF3 = verifiedForm3List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || AnnexSyncService.isSameStudent(x, item));
+        if (existingF3 !== -1) {
+            verifiedForm3List[existingF3] = item;
+        } else {
+            verifiedForm3List.push(item);
+        }
+
+        // Persist to sync storage & Supabase
+        AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            needsReviewList: needsReviewList,
+            updatedBy: window.currentAdmin?.username || 'Admin',
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
+
+        const displayName = getItemDisplayName(item);
+        try {
+            supabase.from('audit_logs').insert([{
+                userName: window.currentAdmin?.username || 'Admin',
+                role: window.currentAdmin?.role || 'Admin',
+                action: `Classified student ${displayName} under Form 3 (${reason})`,
+                studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
+            }]).then(() => { }).catch(e => console.warn(e));
+
+            AdminNotificationService.notifyRecordUpdate({
+                title: 'Student Classified under Form 3',
+                message: `${displayName} has been classified under Form 3 (Status Reason: ${reason}).`,
+                type: 'warning',
+                metadata: { student: displayName, form: 'form3', reason }
+            }).catch(() => { });
+        } catch (e) {
+            console.warn(e);
+        }
+
+        updateKPIMetrics();
+        refreshFormTables();
+        showToast(`Classified ${displayName} under Form 3 (${reason})`, 'tag');
+    }
+
+    closeResolutionModal();
+}
+
+function executeReclassifyToForm2() {
+    const remarks = modalRemarks ? modalRemarks.value.trim() : '';
+
+    if (activeResolutionSource === 'review') {
+        const revIdx = needsReviewList.findIndex(x => AnnexSyncService.isSameStudent(x, activeResolutionItem) || AnnexSyncService.getUniqueKey(x) === activeResolutionItemKey);
+        resolveReviewItem(revIdx !== -1 ? revIdx : 0, 'form2', 'Enrolled', remarks);
+        closeResolutionModal();
+        return;
+    }
+
+    const itemKey = activeResolutionItemKey;
+    let item = null;
+
+    const f3Idx = verifiedForm3List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || (activeResolutionItem && AnnexSyncService.isSameStudent(x, activeResolutionItem)));
+    if (f3Idx !== -1) {
+        item = verifiedForm3List[f3Idx];
+        verifiedForm3List.splice(f3Idx, 1);
+    } else {
+        const f2Idx = verifiedForm2List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || (activeResolutionItem && AnnexSyncService.isSameStudent(x, activeResolutionItem)));
+        if (f2Idx !== -1) item = verifiedForm2List[f2Idx];
+        else if (activeResolutionItem) item = { ...activeResolutionItem };
+    }
+
+    if (item) {
+        item.classification = 'MATCHED_FORM2';
+        item.isEnrolled = true;
+        delete item.specialStatusReason;
+        item.remarks = remarks;
+        if (item.matchedStudent) {
+            item.matchedStudent.status = 'Enrolled';
+        }
+
+        const existingF2 = verifiedForm2List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || AnnexSyncService.isSameStudent(x, item));
+        if (existingF2 !== -1) {
+            verifiedForm2List[existingF2] = item;
+        } else {
+            verifiedForm2List.push(item);
+        }
+
+        AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            needsReviewList: needsReviewList,
+            updatedBy: window.currentAdmin?.username || 'Admin',
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
+
+        const displayName = getItemDisplayName(item);
+        try {
+            supabase.from('audit_logs').insert([{
+                userName: window.currentAdmin?.username || 'Admin',
+                role: window.currentAdmin?.role || 'Admin',
+                action: `Reclassified student ${displayName} to Form 2 (Enrolled)`,
+                studentId: item.grantee?.student_id || item.matchedStudent?.studentId || 'N/A'
+            }]).then(() => { }).catch(e => console.warn(e));
+
+            AdminNotificationService.notifyRecordUpdate({
+                title: 'Student Reclassified to Form 2',
+                message: `${displayName} has been approved to Annex Form 2 (Enrolled).`,
+                type: 'success',
+                metadata: { student: displayName, form: 'form2' }
+            }).catch(() => { });
+        } catch (e) {
+            console.warn(e);
+        }
+
+        updateKPIMetrics();
+        refreshFormTables();
+        showToast(`Approved ${displayName} to Form 2 (Enrolled)`, 'check-circle');
+    }
+
+    closeResolutionModal();
+}
+
+function openStudentDetailsModal(item, source = 'form2', index = -1) {
+    if (!item) return;
+    activeResolutionSource = source;
+    activeResolutionItem = item;
+    activeResolutionItemKey = AnnexSyncService.getUniqueKey(item);
+
+    const grantee = item.grantee || {};
+    const student = item.matchedStudent || {};
+
+    // 1. Modal Header Title
+    if (modalResolutionTitle) {
+        modalResolutionTitle.textContent = source === 'review'
+            ? 'Manual Grantee Categorization'
+            : 'Student Details & Categorization';
+    }
+
+    // 2. Full Name
+    const rawNameStr = student.fullName || student.full_name || student.name || grantee.name || grantee.fullName || '';
+    let nameObj = VerificationService.normalizeName(rawNameStr);
+    if (!nameObj.lastName && !nameObj.firstName) {
+        const l = (grantee.last_name || grantee.lastName || student.last_name || student.lastName || '').trim();
+        const f = (grantee.first_name || grantee.firstName || student.first_name || student.firstName || '').trim();
+        const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
+        nameObj = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
+    }
+    const displayName = (nameObj.lastName && nameObj.firstName && nameObj.lastName !== 'N/A')
+        ? `${nameObj.lastName}, ${nameObj.firstName}${nameObj.mi ? ' ' + nameObj.mi + '.' : ''}`
+        : (rawNameStr || 'Student Grantee');
+
+    if (modalGranteeName) modalGranteeName.textContent = displayName;
+
+    // 3. Student ID
+    const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || grantee.studentId || 'N/A';
+    if (modalStudentId) modalStudentId.textContent = studentId;
+
+    // 4. TES SA Number
+    const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.tes_application_number || 'N/A';
+    if (modalSaNumber) modalSaNumber.textContent = sa;
+
+    // 5. Degree Program
+    const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
+    if (modalProgram) modalProgram.textContent = degree;
+
+    // 6. Year Level
+    const yearRaw = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
+    const yearFormatted = yearRaw === '1' ? '1st Year' : yearRaw === '2' ? '2nd Year' : yearRaw === '3' ? '3rd Year' : yearRaw === '4' ? '4th Year' : `${yearRaw}th Year`;
+    if (modalYearLevel) modalYearLevel.textContent = yearFormatted;
+
+    // 7. Sex / Gender
+    const rawGender = student.gender || student.sex || grantee.gender || grantee.sex || 'M';
+    const genderFormatted = rawGender.toUpperCase().startsWith('F') ? 'Female' : 'Male';
+    if (modalGender) modalGender.textContent = genderFormatted;
+
+    // 8. Birthdate
+    const bdate = student.birthdate || student.birthday || grantee.birthdate || grantee.birthday || 'N/A';
+    if (modalBirthdate) modalBirthdate.textContent = bdate;
+
+    // 9. Batch
+    const batch = resolveGranteeBatch(grantee);
+    if (modalBatch) modalBatch.textContent = batch || 'Batch 1.2';
+
+    // 10. Email & Phone
+    const email = student.email || student.authEmail || grantee.email || 'N/A';
+    if (modalEmail) modalEmail.textContent = email;
+    const phone = student.contactNumber || student.phone || grantee.phone || grantee.mobile || 'N/A';
+    if (modalPhone) modalPhone.textContent = phone;
+
+    // 11. Status Badge
+    if (modalStatusBadge) {
+        if (source === 'form2') {
+            modalStatusBadge.textContent = 'Form 2 – Enrolled (₱10,000.00)';
+            modalStatusBadge.style.background = 'rgba(16, 185, 129, 0.12)';
+            modalStatusBadge.style.color = '#059669';
+        } else if (source === 'form3') {
+            const r = item.specialStatusReason || 'Not enrolled';
+            modalStatusBadge.textContent = `Form 3 – ${r}`;
+            modalStatusBadge.style.background = 'rgba(255, 152, 0, 0.12)';
+            modalStatusBadge.style.color = '#E65100';
+        } else {
+            modalStatusBadge.textContent = 'Pending Review Queue';
+            modalStatusBadge.style.background = 'rgba(229, 57, 53, 0.12)';
+            modalStatusBadge.style.color = '#D32F2F';
+        }
+    }
+
+    // 12. Controls initial values & Actions visibility
+    const targetFormValue = source === 'form2' ? 'form2' : 'form3';
+    if (modalTargetForm) modalTargetForm.value = targetFormValue;
+
+    if (modalTargetLabel) {
+        if (targetFormValue === 'form2') {
+            modalTargetLabel.textContent = 'Form 2 (Enrolled)';
+            modalTargetLabel.style.color = '#10b981';
+        } else {
+            modalTargetLabel.textContent = 'Form 3 (Not Included)';
+            modalTargetLabel.style.color = '#E65100';
+        }
+    }
+
+    if (modalForm3Reason) {
+        modalForm3Reason.value = item.specialStatusReason || 'Not enrolled';
+    }
+    if (modalRemarks) {
+        modalRemarks.value = item.remarks || '';
+    }
+
+    // Configure action buttons according to source
+    if (source === 'form2') {
+        if (btnClassifyForm3) btnClassifyForm3.style.display = 'inline-flex';
+        if (btnActionForm2) btnActionForm2.style.display = 'none';
+        if (btnConfirmRes) btnConfirmRes.textContent = 'Save Changes';
+    } else if (source === 'form3') {
+        if (btnClassifyForm3) btnClassifyForm3.style.display = 'none';
+        if (btnActionForm2) btnActionForm2.style.display = 'inline-flex';
+        if (btnConfirmRes) btnConfirmRes.textContent = 'Update Form 3';
+    } else {
+        if (btnClassifyForm3) btnClassifyForm3.style.display = 'inline-flex';
+        if (btnActionForm2) btnActionForm2.style.display = 'inline-flex';
+        if (btnConfirmRes) btnConfirmRes.textContent = 'Save & Categorize';
+    }
 
     if (resModal) resModal.style.display = 'flex';
 }
 
+function openResolutionModal(reviewIndex) {
+    const item = needsReviewList[reviewIndex];
+    if (!item) return;
+    openStudentDetailsModal(item, 'review', reviewIndex);
+}
+
 function closeResolutionModal() {
     activeResolutionItem = null;
+    activeResolutionSource = null;
+    activeResolutionItemKey = null;
     if (resModal) resModal.style.display = 'none';
 }
 
 if (btnCloseRes) btnCloseRes.addEventListener('click', closeResolutionModal);
 if (btnCancelRes) btnCancelRes.addEventListener('click', closeResolutionModal);
+if (resModal) {
+    resModal.addEventListener('click', (e) => {
+        if (e.target === resModal) closeResolutionModal();
+    });
+}
 
 if (modalTargetForm) {
     modalTargetForm.addEventListener('change', (e) => {
-        if (modalForm3ReasonGroup) {
-            modalForm3ReasonGroup.style.display = e.target.value === 'form3' ? 'block' : 'none';
+        const val = e.target.value;
+        if (modalTargetLabel) {
+            modalTargetLabel.textContent = val === 'form2' ? 'Form 2 (Enrolled)' : 'Form 3 (Not Included)';
+            modalTargetLabel.style.color = val === 'form2' ? '#10b981' : '#E65100';
+        }
+        if (val === 'form3') {
+            if (btnClassifyForm3) btnClassifyForm3.style.display = 'inline-flex';
+            if (btnActionForm2) btnActionForm2.style.display = 'none';
+        } else {
+            if (btnClassifyForm3) btnClassifyForm3.style.display = 'none';
+            if (btnActionForm2) btnActionForm2.style.display = 'inline-flex';
         }
     });
 }
 
+// Action: Classify student under Form 3
+if (btnClassifyForm3) {
+    btnClassifyForm3.addEventListener('click', () => {
+        executeClassifyUnderForm3();
+    });
+}
+
+// Action: Reclassify student to Form 2 (Enrolled)
+if (btnActionForm2) {
+    btnActionForm2.addEventListener('click', () => {
+        executeReclassifyToForm2();
+    });
+}
+
+// Action: Confirm / Save Changes
 if (btnConfirmRes) {
     btnConfirmRes.addEventListener('click', () => {
-        if (activeResolutionItem === null) return;
-        const targetForm = modalTargetForm ? modalTargetForm.value : 'form3';
-        const reason = modalForm3Reason ? modalForm3Reason.value : 'Not enrolled';
-        const remarks = modalRemarks ? modalRemarks.value.trim() : '';
-
-        resolveReviewItem(activeResolutionItem, targetForm, reason, remarks);
-        closeResolutionModal();
+        const targetForm = modalTargetForm ? modalTargetForm.value : 'form2';
+        if (targetForm === 'form3') {
+            executeClassifyUnderForm3();
+        } else if (activeResolutionSource === 'form3') {
+            executeReclassifyToForm2();
+        } else {
+            // Stay in Form 2, update remarks
+            const itemKey = activeResolutionItemKey;
+            const idx = verifiedForm2List.findIndex(x => AnnexSyncService.getUniqueKey(x) === itemKey || (activeResolutionItem && AnnexSyncService.isSameStudent(x, activeResolutionItem)));
+            if (idx !== -1) {
+                const item = verifiedForm2List[idx];
+                item.remarks = modalRemarks ? modalRemarks.value.trim() : '';
+                AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: needsReviewList,
+                    updatedBy: window.currentAdmin?.username || 'Admin',
+                    academicYear: selectedAcademicYear,
+                    semester: selectedSemester
+                });
+                refreshFormTables();
+                showToast(`Updated details for ${getItemDisplayName(item)}`, 'check-circle');
+            }
+            closeResolutionModal();
+        }
     });
 }
 

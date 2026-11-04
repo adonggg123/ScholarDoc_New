@@ -51,6 +51,19 @@
         border-color: #1E88E5;
         box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.12);
     }
+
+    .annex-clickable-row {
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+
+    .annex-clickable-row:hover {
+        background-color: rgba(15, 50, 96, 0.05) !important;
+    }
+
+    body.dark .annex-clickable-row:hover {
+        background-color: rgba(255, 255, 255, 0.06) !important;
+    }
 </style>
 
 <div class="view-content" style="display: flex; flex-direction: column; gap: 24px; overflow-y: auto;">
@@ -629,64 +642,157 @@
     </div>
 </div>
 
-    <!-- Review Resolution Modal -->
+    <!-- Review Resolution / Student Details Modal -->
     <div id="resolution-modal"
         style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); padding: 20px;">
         <div
-            style="background: var(--surface-color, white); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); display: flex; flex-direction: column; margin: auto;">
+            style="background: var(--surface-color, white); width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.25); display: flex; flex-direction: column; margin: auto; border: 1px solid var(--border-color);">
             <div
                 style="padding: 18px 24px; background: linear-gradient(135deg, #0F3260, #1E88E5); display: flex; justify-content: space-between; align-items: center; color: white;">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Manual Grantee Categorization</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;">
+                        <i class="icon-user-check" style="font-size: 16px;"></i>
+                    </div>
+                    <h3 id="modal-resolution-title" style="margin: 0; font-size: 16px; font-weight: 700;">Student Details & Categorization</h3>
+                </div>
                 <button id="btn-close-resolution"
-                    style="background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                    style="background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s ease;">
                     <i class="icon-x" style="font-size: 16px;"></i>
                 </button>
             </div>
-            <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
-                <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Grantee
-                        Name</label>
-                    <div id="modal-grantee-name" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">
-                        --</div>
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 18px;">
+                <!-- Student Details Summary Card -->
+                <div style="background: rgba(15, 50, 96, 0.03); border: 1px solid var(--border-color); border-radius: 14px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Student Grantee</span>
+                            <div id="modal-grantee-name" style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin-top: 2px;">
+                                --
+                            </div>
+                        </div>
+                        <span id="modal-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: #059669; white-space: nowrap;">
+                            Form 2 Enrolled
+                        </span>
+                    </div>
+
+                    <!-- Details Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; font-size: 12px;">
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Student ID</span>
+                            <span id="modal-student-id" style="font-weight: 700; color: var(--text-primary); font-family: monospace;">--</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">TES Application No.</span>
+                            <span id="modal-sa-number" style="font-weight: 700; color: var(--text-primary); font-family: monospace;">--</span>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Degree Program</span>
+                            <span id="modal-program" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Year Level</span>
+                            <span id="modal-year-level" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Sex / Gender</span>
+                            <span id="modal-gender" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Birthdate</span>
+                            <span id="modal-birthdate" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Batch</span>
+                            <span id="modal-batch" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Email Address</span>
+                            <span id="modal-email" style="font-weight: 600; color: var(--text-primary); word-break: break-all;">--</span>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <span style="color: var(--text-secondary); font-size: 11px; display: block;">Contact Number</span>
+                            <span id="modal-phone" style="font-weight: 600; color: var(--text-primary);">--</span>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Categorize
-                        Target Form</label>
-                    <select id="modal-target-form"
-                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
-                        <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
-                        <option value="form3" selected>Form 3 – Not Included Student (Special Status)</option>
-                    </select>
+
+                <!-- Form Categorization & Status Reason Section -->
+                <div style="background: rgba(15, 50, 96, 0.02); border: 1.5px solid var(--border-color); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                            <i class="icon-tag" style="font-size: 13px; color: var(--primary-color);"></i> Annex 5 Categorization
+                        </span>
+                        <span id="modal-classification-hint" style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">
+                            Target: <strong id="modal-target-label" style="color: var(--primary-color);">Form 2 (Enrolled)</strong>
+                        </span>
+                    </div>
+
+                    <!-- Target Form Selector -->
+                    <div>
+                        <label
+                            style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+                            Categorize Target Form
+                        </label>
+                        <select id="modal-target-form"
+                            style="width: 100%; padding: 10px 14px; border: 1.5px solid var(--border-color); border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--surface-color); color: var(--text-primary); outline: none; transition: border-color 0.2s ease;">
+                            <option value="form2">Form 2 – Enrolled / Active Grantee (Eligible for Billing)</option>
+                            <option value="form3">Form 3 – Not Included Student (Special Status)</option>
+                        </select>
+                    </div>
+
+                    <!-- Status Reason Field (Explicitly required for Form 3) -->
+                    <div id="modal-form3-reason-group">
+                        <label
+                            style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+                            <span>Status Reason <span id="modal-reason-asterisk" style="color: #E65100; font-weight: 800;">*</span></span>
+                            <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary);">CHED Annex 5 Non-Inclusion Code</span>
+                        </label>
+                        <select id="modal-form3-reason"
+                            style="width: 100%; padding: 10px 14px; border: 1.5px solid #FF8F00; border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                            <option value="Not enrolled">Not enrolled in current term</option>
+                            <option value="Dropped">Dropped / Inactive</option>
+                            <option value="Waived">Waived scholarship benefits</option>
+                            <option value="On Leave of Absence (LOA)">On Leave of Absence (LOA)</option>
+                            <option value="Transferee">Transferee to another institution</option>
+                            <option value="Graduated">Graduated / Program completed</option>
+                        </select>
+                        <span style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block;">Select the official status reason to record for this grantee under Annex 5 - Form 3.</span>
+                    </div>
+
+                    <!-- Administrative Remarks -->
+                    <div>
+                        <label
+                            style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+                            Administrative Remarks
+                        </label>
+                        <input type="text" id="modal-remarks" placeholder="Optional notes for CHED billing sheet (e.g. Approved LOA, Transferred)..."
+                            style="width: 100%; padding: 10px 14px; border: 1.5px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
+                    </div>
                 </div>
-                <div id="modal-form3-reason-group">
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Form
-                        3 Status Reason</label>
-                    <select id="modal-form3-reason"
-                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
-                        <option value="Not enrolled">Not enrolled in current term</option>
-                        <option value="Dropped">Dropped / Inactive</option>
-                        <option value="Waived">Waived scholarship benefits</option>
-                        <option value="On Leave of Absence (LOA)">On Leave of Absence (LOA)</option>
-                        <option value="Transferee">Transferee to another institution</option>
-                        <option value="Graduated">Graduated / Program completed</option>
-                    </select>
-                </div>
-                <div>
-                    <label
-                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">Administrative
-                        Remarks</label>
-                    <input type="text" id="modal-remarks" placeholder="Optional notes for CHED billing sheet..."
-                        style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 13px; background: var(--surface-color); color: var(--text-primary); outline: none;">
-                </div>
-                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
-                    <button id="btn-cancel-resolution"
-                        style="background: transparent; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary);">Cancel</button>
-                    <button id="btn-confirm-resolution"
-                        style="background: var(--primary-color); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer;">Save
-                        & Categorize</button>
+
+                <!-- Modal Actions Toolbar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap;">
+                    <button id="btn-cancel-resolution" type="button"
+                        style="background: transparent; border: 1.5px solid var(--border-color); padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--text-secondary); transition: all 0.2s;">
+                        Cancel
+                    </button>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <!-- Action to Reclassify to Form 2 (Enrolled) -->
+                        <button id="btn-action-form2" type="button"
+                            style="display: none; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(16,185,129,0.25); transition: all 0.2s ease;">
+                            <i class="icon-check"></i> Reclassify to Form 2
+                        </button>
+                        <!-- Action to Classify under Form 3 (Special Status) -->
+                        <button id="btn-classify-form3" type="button"
+                            style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
+                            <i class="icon-tag"></i> Classify under Form 3
+                        </button>
+                        <!-- Primary Save Button -->
+                        <button id="btn-confirm-resolution" type="button"
+                            style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 10px 22px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s;">
+                            Save Changes
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
