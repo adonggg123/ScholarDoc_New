@@ -2685,7 +2685,7 @@ const KNOWN_VALID_GMAIL_PASS = 'eoueeoikuorzymkq';
 const GMAIL_USER = KNOWN_VALID_GMAIL_USER;
 const GMAIL_APP_PASSWORD = KNOWN_VALID_GMAIL_PASS;
 const APP_DOWNLOAD_URL = process.env.APP_DOWNLOAD_URL || 'https://scholar-doc-new.vercel.app';
-const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
+const GRANTEE_EMAIL_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0';
 const GRANTEE_RELEASE_PAGE_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0';
 const DIRECT_APK_DOWNLOAD_URL = 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk';
 
@@ -2999,11 +2999,11 @@ function generateGranteeEmailHtml(grantee) {
         <div class="cta-box">
           <h3>Get Started with ScholarDoc Mobile</h3>
           <p>Submit your scholarship documents (Certificate of Registration, School ID, and SA form) and track your stipend disbursement seamlessly on your mobile device.</p>
-          <a href="${grantee.downloadUrl}" class="btn-download" target="_blank">Download ScholarDoc App (v1.0.0 APK)</a>
+          <a href="https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0" class="btn-download" target="_blank">Download ScholarDoc App (v1.0.0)</a>
           <div style="margin-top: 14px; font-size: 11.5px; color: #64748b; line-height: 1.6;">
-            Direct APK download: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk" style="color: #0F3260; font-weight: 700; word-break: break-all;">https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk</a>
+            Download link: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0" style="color: #0F3260; font-weight: 700; word-break: break-all;">https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0</a>
             <br>
-            <span style="color: #475569;">Release notes & details: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0" style="color: #0F3260; text-decoration: underline;">https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0</a></span>
+            <span style="color: #475569;">Direct APK download: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk" style="color: #0F3260; text-decoration: underline; word-break: break-all;">https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk</a></span>
             <br>
             <span style="color: #475569;">Web installation guide: <a href="https://scholar-doc-new.vercel.app/download" style="color: #0F3260; text-decoration: underline;">https://scholar-doc-new.vercel.app/download</a></span>
           </div>
@@ -3079,7 +3079,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
             from: `"ScholarDoc Scholarship Office" <${GMAIL_USER}>`,
             to: targetEmail,
             subject: `[ScholarDoc] Official Notice: You are confirmed as a ${scholarshipName} Grantee - ${fullName}`,
-            text: `Dear ${fullName},\n\nCongratulations! You have been confirmed as an official scholarship grantee for ${scholarshipName}.\n\nStudent ID: ${studentNumber}\nCourse: ${course}\n\nPlease download the ScholarDoc mobile app (v1.0.0) to upload your documents and track your scholarship:\nhttps://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk\n\nGitHub Release: https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0\nWeb Download Guide: https://scholar-doc-new.vercel.app/download\n\nScholarDoc Scholarship Office`,
+            text: `Dear ${fullName},\n\nCongratulations! You have been confirmed as an official scholarship grantee for ${scholarshipName}.\n\nStudent ID: ${studentNumber}\nCourse: ${course}\n\nPlease download the ScholarDoc mobile app (v1.0.0) to upload your documents and track your scholarship:\nhttps://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0\n\nDirect APK Download: https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk\nWeb Download Guide: https://scholar-doc-new.vercel.app/download\n\nScholarDoc Scholarship Office`,
             html
         });
         console.log(`[Gmail SMTP] Email successfully sent to ${targetEmail}! Message ID: ${info.messageId}`);
