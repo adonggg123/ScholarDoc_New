@@ -265,7 +265,7 @@ export class AnnexSyncService {
         needsReviewList,
         updatedBy = 'Admin',
         syncToDb = true,
-        academicYear = '2024-2025',
+        academicYear = '2026-2027',
         semester = '1st Semester'
     }) {
         try {
@@ -379,7 +379,7 @@ export class AnnexSyncService {
     static async saveToSupabase({
         form2List = [],
         form3List = [],
-        academicYear = '2024-2025',
+        academicYear = '2026-2027',
         semester = '1st Semester',
         heiName = 'USTP Oroquieta',
         heiCampus = 'Oroquieta Campus'
@@ -518,7 +518,7 @@ export class AnnexSyncService {
      * Loads verified Form 2 and Form 3 records from Supabase database.
      */
     static async loadFromSupabase({
-        academicYear = '2024-2025',
+        academicYear = '2026-2027',
         semester = '1st Semester',
         fallbackToLatest = true
     } = {}) {

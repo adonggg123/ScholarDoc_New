@@ -69,6 +69,8 @@ function populateBatchFilter() {
     }
 }
 
+let userSelectedAy = false;
+
 async function populateStudentGranteesTerms(forceDefault = false) {
     const filterAyEl = document.getElementById('filter-ay') || filterAy;
     if (!filterAyEl) return;
@@ -77,7 +79,7 @@ async function populateStudentGranteesTerms(forceDefault = false) {
         const defaultTerm = AcademicYearService.getDefaultTerm();
         const semShort = defaultTerm.semester.toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
         const defaultVal = `AY ${defaultTerm.academicYear}, ${semShort}`;
-        const curVal = forceDefault ? defaultVal : (filterAyEl.value || defaultVal);
+        const curVal = (forceDefault || !userSelectedAy) ? defaultVal : (filterAyEl.value || defaultVal);
 
         let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
         years.forEach(y => {
@@ -500,6 +502,15 @@ studentForm.addEventListener('submit', async (e) => {
         const genderClean = inpGender.value;
         const saClean = inpSa.value.trim();
 
+        const existingStudent = (modalMode === 'edit') ? allStudents.find(s => s.uid === currentEditUid) : null;
+        const defaultTerm = AcademicYearService.getDefaultTerm();
+        const studentAY = (existingStudent && (existingStudent.academic_year || existingStudent.academicYear))
+            ? (existingStudent.academic_year || existingStudent.academicYear)
+            : (defaultTerm.academicYear || '2026-2027');
+        const studentSem = (existingStudent && existingStudent.semester)
+            ? existingStudent.semester
+            : (defaultTerm.semester || '1st Semester');
+
         const studentData = {
             fullName: fullNameClean,
             full_name: fullNameClean,
@@ -516,7 +527,10 @@ studentForm.addEventListener('submit', async (e) => {
             familyDetails: familyDetails,
             saNumber: saClean,
             sa_number: saClean,
-            role: 'student'
+            role: 'student',
+            academic_year: studentAY,
+            academicYear: studentAY,
+            semester: studentSem
         };
         if (sYearVal) {
             studentData.scholarYearLevel = sYearVal;
@@ -1120,11 +1134,17 @@ window.approveStudent = async function (uid) {
         }).eq('uid', uid);
         if (error) {
             // If student_grantees record doesn't exist yet, insert it
+            const defaultTerm = AcademicYearService.getDefaultTerm();
+            const ayVal = student?.academic_year || student?.academicYear || defaultTerm.academicYear || '2026-2027';
+            const semVal = student?.semester || defaultTerm.semester || '1st Semester';
             await supabase.from('student_grantees').insert([{
                 uid: uid,
                 student_no: student?.student_no || student?.studentId,
                 studentId: student?.student_no || student?.studentId,
                 fullName: student?.fullName || student?.full_name,
+                academic_year: ayVal,
+                academicYear: ayVal,
+                semester: semVal,
                 status: 'Approved',
                 documents: updatedDocs,
                 createdAt: new Date().toISOString(),
@@ -1431,6 +1451,7 @@ if (filterCourse) filterCourse.addEventListener('change', applyFilters);
 if (filterScholarship) filterScholarship.addEventListener('change', applyFilters);
 if (sortBy) sortBy.addEventListener('change', applyFilters);
 if (filterAy) filterAy.addEventListener('change', () => {
+    userSelectedAy = true;
     if (ayDisplay) ayDisplay.innerText = filterAy.options[filterAy.selectedIndex].text;
     applyFilters();
 });

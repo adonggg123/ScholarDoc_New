@@ -1,4 +1,5 @@
 // js/services/student_sync_service.js
+import { AcademicYearService } from './academic_year_service.js';
 
 /**
  * StudentSyncService
@@ -530,6 +531,10 @@ export class StudentSyncService {
             (f2Match?.id && localTermMap[f2Match.id]) ||
             (gmMatch?.id && localTermMap[gmMatch.id]);
 
+        const defaultTerm = (typeof AcademicYearService !== 'undefined' && AcademicYearService.getDefaultTerm)
+            ? AcademicYearService.getDefaultTerm()
+            : { academicYear: '2026-2027', semester: '1st Semester' };
+
         const resolvedAY = f2Match?.academic_year ||
             f2Match?.academicYear ||
             gmMatch?.academic_year ||
@@ -537,12 +542,14 @@ export class StudentSyncService {
             (cachedTerm && cachedTerm.academicYear) ||
             existing.academic_year ||
             existing.academicYear ||
-            '2024-2025';
+            defaultTerm.academicYear ||
+            '2026-2027';
 
         const resolvedSem = f2Match?.semester ||
             gmMatch?.semester ||
             (cachedTerm && cachedTerm.semester) ||
             existing.semester ||
+            defaultTerm.semester ||
             '1st Semester';
 
         const rawBatch = cachedBatch ||

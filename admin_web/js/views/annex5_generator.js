@@ -129,7 +129,7 @@ function resolveGranteeBatch(record) {
 
 // State
 const initialRegistrarTerm = AcademicYearService.getDefaultTerm();
-let selectedAcademicYear = initialRegistrarTerm.academicYear || '2024-2025';
+let selectedAcademicYear = initialRegistrarTerm.academicYear || '2026-2027';
 let selectedSemester = initialRegistrarTerm.semester || '1st Semester';
 let isPopulatingRegistrarTerms = false;
 
@@ -318,8 +318,8 @@ async function loadInitialData() {
                 }
             }
             return {
-                academicYear: ay || '2024-2025',
-                semester: sem || '1st Semester'
+                academicYear: ay || selectedAcademicYear || '2026-2027',
+                semester: sem || selectedSemester || '1st Semester'
             };
         }
 

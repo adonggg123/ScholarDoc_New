@@ -87,8 +87,8 @@ async function populateDistinctAcademicYears() {
     const selAY = document.getElementById('view-filter-ay');
     if (!selAY) return;
 
-    const defaultTerm = AcademicYearService.getDefaultTerm() || { academicYear: '2024-2025', semester: '1st Semester' };
-    const baseYears = new Set(['2024-2025', '2023-2024', '2022-2023', '2021-2022']);
+    const defaultTerm = AcademicYearService.getDefaultTerm() || { academicYear: '2026-2027', semester: '1st Semester' };
+    const baseYears = new Set(['2026-2027', '2025-2026', '2024-2025', '2023-2024', '2022-2023', '2021-2022']);
     if (defaultTerm.academicYear) {
         baseYears.add(defaultTerm.academicYear.trim());
     }
@@ -108,7 +108,7 @@ async function populateDistinctAcademicYears() {
     }
 
     const sortedYears = Array.from(baseYears).sort().reverse();
-    const currentVal = selAY.value || defaultTerm.academicYear || '2024-2025';
+    const currentVal = selAY.value || defaultTerm.academicYear || '2026-2027';
 
     selAY.innerHTML = sortedYears.map(y => `<option value="${y}">${y}</option>`).join('') +
         `<option value="All">All School Years</option>`;

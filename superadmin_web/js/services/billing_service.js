@@ -409,7 +409,7 @@ export class BillingService {
         if (metadata && (metadata.batch || metadata.academicYear || metadata.semester)) {
             const rawBatch = String(metadata.batch || '1').trim();
             const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
-            const academicYear = metadata.academicYear || '2024-2025';
+            const academicYear = metadata.academicYear || '2026-2027';
             const semester = metadata.semester || '1st Semester';
             const titleVal = `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`;
             let row10 = Array.from(sheetData.childNodes).find(n => n.nodeName === 'row' && n.getAttribute('r') === '10');
@@ -675,7 +675,7 @@ export class BillingService {
         if (metadata && (metadata.batch || metadata.academicYear || metadata.semester)) {
             const rawBatch = String(metadata.batch || '1').trim();
             const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
-            const academicYear = metadata.academicYear || '2024-2025';
+            const academicYear = metadata.academicYear || '2026-2027';
             const semester = metadata.semester || '1st Semester';
             const titleVal = `TES Batch ${cleanBatch} - ${semester} and Academic Year ${academicYear}`;
 
@@ -882,9 +882,9 @@ export class BillingService {
         const cleanBatch = rawBatch.replace(/^batch\s*/i, '').trim() || '1';
 
         // Academic Year & Semester
-        let academicYear = metadata.academicYear || '2024-2025';
+        let academicYear = metadata.academicYear || '2026-2027';
         if (academicYear === 'All' || !academicYear.includes('-')) {
-            academicYear = '2024-2025';
+            academicYear = '2026-2027';
         }
         let semester = metadata.semester || '1st Semester';
         if (semester === 'All') {

@@ -12,9 +12,9 @@ const CUSTOM_EVENT_NAME = 'scholardoc:terms_updated';
 const DEFAULT_TERM_EVENT_NAME = 'scholardoc:default_term_updated';
 
 const DEFAULT_ACADEMIC_YEARS = [
-    '2024-2025',
-    '2025-2026',
     '2026-2027',
+    '2025-2026',
+    '2024-2025',
     '2023-2024',
     '2022-2023',
     '2021-2022'
@@ -84,7 +84,7 @@ export class AcademicYearService {
 
         // Fallback default
         return {
-            academicYear: '2024-2025',
+            academicYear: '2026-2027',
             semester: '1st Semester'
         };
     }

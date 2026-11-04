@@ -124,7 +124,7 @@ let importTermSelectBox = null;
 let importTermValidationHint = null;
 
 const initialDefaultTerm = AcademicYearService.getDefaultTerm();
-let selectedAcademicYear = initialDefaultTerm.academicYear || '2024-2025';
+let selectedAcademicYear = initialDefaultTerm.academicYear || '2026-2027';
 let selectedSemester = initialDefaultTerm.semester || '1st Semester';
 
 function getTableName() {
@@ -3019,7 +3019,7 @@ async function fetchExistingMasterlist() {
                 const matchedF3 = f3Lookup.get(normKey) || f3Lookup.get(nameKey);
                 const cachedTerm = getCachedGranteeTerm({ id: row.id, last_name: ln, first_name: fn, middle_name: mn, name: row.name });
 
-                let ay = row.academic_year || (matchedF2 ? matchedF2.academic_year : null) || (matchedF3 ? matchedF3.academic_year : null) || (cachedTerm ? cachedTerm.academicYear : null) || '2024-2025';
+                let ay = row.academic_year || (matchedF2 ? matchedF2.academic_year : null) || (matchedF3 ? matchedF3.academic_year : null) || (cachedTerm ? cachedTerm.academicYear : null) || selectedAcademicYear || '2026-2027';
                 let sem = row.semester || (matchedF2 ? matchedF2.semester : null) || (matchedF3 ? matchedF3.semester : null) || (cachedTerm ? cachedTerm.semester : null) || '1st Semester';
 
                 const assignedBatch = row.batch || (matchedF2 ? matchedF2.tes_batch : null) || getCachedGranteeBatch({
@@ -3993,7 +3993,7 @@ export function initMasterlistImport() {
     const resolveExportTerm = () => {
         let ay = selectedAcademicYear;
         if (!ay || ay === 'All' || !ay.includes('-')) {
-            ay = '2024-2025';
+            ay = AcademicYearService.getDefaultTerm()?.academicYear || '2026-2027';
         }
         let sem = selectedSemester;
         if (!sem || sem === 'All') {
