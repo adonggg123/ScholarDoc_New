@@ -286,6 +286,56 @@ void main() {
       expect(result2.isValid, isTrue);
     });
 
+    test('Rejects AY 2026-2027 sticker when system is set to AY 2024-2025, 1st Semester', () {
+      const stickerOcrText = '''
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2024-2025', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: stickerOcrText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2026-2027');
+      expect(result.semester, '1st Semester');
+      expect(result.termValidation.isValid, isFalse);
+      expect(result.isValid, isFalse);
+      expect(result.errorMessage, contains('does not match the active school period'));
+    });
+
+    test('Rejects AY 2024-2025 sticker when system is set to AY 2026-2027, 1st Semester', () {
+      const stickerOcrText = '''
+        USTP OROQUIETA
+        1st Semester A.Y. 2024 - 2025
+        RIZALYN P. ALPANTE, LPT
+        Campus Registrar - Designate
+        VALIDATED
+      ''';
+
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      final result = DocumentAIScannerService.parseStickerText(
+        rawText: stickerOcrText,
+        engineUsed: 'Google Document AI',
+        targetTerm: targetTerm,
+      );
+
+      expect(result.stickerFound, isTrue);
+      expect(result.academicYear, '2024-2025');
+      expect(result.semester, '1st Semester');
+      expect(result.termValidation.isValid, isFalse);
+      expect(result.isValid, isFalse);
+      expect(result.errorMessage, contains('expired'));
+    });
+
     test('Prevents false positives on random numbers like Page 1 of 2', () {
       const randomText = 'USTP Student Handbook Page 1 of 2 Rules and Regulations';
       const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
@@ -446,6 +496,91 @@ void main() {
         'JARIOL, JUDE ESIDORE',
       );
       expect(res2.matches, isFalse);
+    });
+
+    test('Dynamic configuration validation: Approves ONLY when detected AY and Semester match configured settings', () {
+      const stickerText2024 = '''
+        USTP OROQUIETA
+        2nd Semester A.Y. 2024 - 2025
+        VALIDATED
+        Campus Registrar
+      ''';
+
+      // Config 1: System configured to 2024-2025, 2nd Semester
+      const config2024 = AcademicTerm(academicYear: '2024-2025', semester: '2nd Semester');
+      final resultApproved = DocumentAIScannerService.parseStickerText(
+        rawText: stickerText2024,
+        engineUsed: 'Document AI OCR',
+        targetTerm: config2024,
+      );
+      expect(resultApproved.isValid, isTrue, reason: 'Must be approved when matching configured 2024-2025 2nd Sem');
+      expect(resultApproved.termValidation.yearMatches, isTrue);
+      expect(resultApproved.termValidation.semesterMatches, isTrue);
+
+      // Config 2: System dynamically configured/advanced to 2026-2027, 1st Semester
+      const config2026 = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+      final resultRejected = DocumentAIScannerService.parseStickerText(
+        rawText: stickerText2024,
+        engineUsed: 'Document AI OCR',
+        targetTerm: config2026,
+      );
+      expect(resultRejected.isValid, isFalse, reason: 'Must be rejected when system requires 2026-2027 1st Sem');
+      expect(resultRejected.termValidation.yearMatches, isFalse);
+      expect(resultRejected.termValidation.semesterMatches, isFalse);
+      expect(resultRejected.termValidation.isFlagged, isTrue);
+
+      // Config 3: System configured to 2024-2025, but 1st Semester (semester mismatch)
+      const config2024Sem1 = AcademicTerm(academicYear: '2024-2025', semester: '1st Semester');
+      final resultSemMismatch = DocumentAIScannerService.parseStickerText(
+        rawText: stickerText2024,
+        engineUsed: 'Document AI OCR',
+        targetTerm: config2024Sem1,
+      );
+      expect(resultSemMismatch.isValid, isFalse);
+      expect(resultSemMismatch.termValidation.yearMatches, isTrue);
+      expect(resultSemMismatch.termValidation.semesterMatches, isFalse);
+      expect(resultSemMismatch.termValidation.statusTitle, contains('Semester Mismatch'));
+
+      // Config 4: System configured to 2025-2026, 2nd Semester (year mismatch)
+      const config2025Sem2 = AcademicTerm(academicYear: '2025-2026', semester: '2nd Semester');
+      final resultYearMismatch = DocumentAIScannerService.parseStickerText(
+        rawText: stickerText2024,
+        engineUsed: 'Document AI OCR',
+        targetTerm: config2025Sem2,
+      );
+      expect(resultYearMismatch.isValid, isFalse);
+      expect(resultYearMismatch.termValidation.yearMatches, isFalse);
+      expect(resultYearMismatch.termValidation.semesterMatches, isTrue);
+    });
+
+    test('Preserves birthdate verification alongside sticker validation', () {
+      const stickerWithDobText = '''
+        USTP OROQUIETA
+        1st Semester A.Y. 2026 - 2027
+        VALIDATED
+        DATE OF BIRTH: 10/24/2003
+      ''';
+      const targetTerm = AcademicTerm(academicYear: '2026-2027', semester: '1st Semester');
+
+      // Matching birthdate
+      final matchingResult = DocumentAIScannerService.parseStickerText(
+        rawText: stickerWithDobText,
+        engineUsed: 'Document AI OCR',
+        targetTerm: targetTerm,
+        expectedBirthdate: '2003-10-24',
+      );
+      expect(matchingResult.isValid, isTrue);
+      expect(matchingResult.birthdateMatches, isTrue);
+
+      // Conflicting birthdate
+      final mismatchResult = DocumentAIScannerService.parseStickerText(
+        rawText: stickerWithDobText,
+        engineUsed: 'Document AI OCR',
+        targetTerm: targetTerm,
+        expectedBirthdate: '2000-01-01',
+      );
+      expect(mismatchResult.isValid, isFalse);
+      expect(mismatchResult.birthdateMatches, isFalse);
     });
   });
 }

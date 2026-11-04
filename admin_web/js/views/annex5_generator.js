@@ -2593,13 +2593,19 @@ function openRegistrarCustomTermModal(defaultFocus = 'ay') {
     if (inpAy) inpAy.value = '';
     if (inpSem) inpSem.value = '';
     modal.classList.remove('hidden');
-    if (defaultFocus === 'sem' && inpSem) inpSem.focus();
-    else if (inpAy) inpAy.focus();
+    modal.style.display = 'flex';
+    setTimeout(() => {
+        if (defaultFocus === 'sem' && inpSem) inpSem.focus();
+        else if (inpAy) inpAy.focus();
+    }, 50);
 }
 
 function closeRegistrarCustomTermModal() {
     const modal = document.getElementById('admin-custom-term-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 async function handleRegistrarTermChange(newAy, newSem) {
@@ -2618,6 +2624,14 @@ async function handleRegistrarTermChange(newAy, newSem) {
 
     if (newAy !== undefined) selectedAcademicYear = newAy;
     if (newSem !== undefined) selectedSemester = newSem;
+
+    if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
+        fetch('/api/academic-term/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
+        }).catch(() => {});
+    }
 
     updateRegistrarActiveTermLabel();
     await loadInitialData();
@@ -2652,6 +2666,13 @@ function setupRegistrarTermListeners() {
         btnRefresh.addEventListener('click', async () => {
             if (iconRefresh) iconRefresh.style.animation = 'spin 0.8s linear infinite';
             try {
+                if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
+                    fetch('/api/academic-term/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
+                    }).catch(() => {});
+                }
                 await loadInitialData();
                 showToast(`Synchronized database for ${selectedAcademicYear} (${selectedSemester})`, 'check-circle');
             } finally {
@@ -2662,12 +2683,34 @@ function setupRegistrarTermListeners() {
         });
     }
 
+    const modalCustomTerm = document.getElementById('admin-custom-term-modal');
+    if (modalCustomTerm) {
+        modalCustomTerm.addEventListener('click', (e) => {
+            if (e.target === modalCustomTerm) closeRegistrarCustomTermModal();
+        });
+    }
+
+    const inpAy = document.getElementById('admin-input-custom-ay');
+    const inpSem = document.getElementById('admin-input-custom-sem');
+    [inpAy, inpSem].forEach(inp => {
+        if (inp) {
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (btnSaveModal) btnSaveModal.click();
+                } else if (e.key === 'Escape') {
+                    closeRegistrarCustomTermModal();
+                }
+            });
+        }
+    });
+
     if (btnSaveModal) {
         btnSaveModal.addEventListener('click', async () => {
-            const inpAy = document.getElementById('admin-input-custom-ay');
-            const inpSem = document.getElementById('admin-input-custom-sem');
-            const ayVal = (inpAy ? inpAy.value : '').trim();
-            const semVal = (inpSem ? inpSem.value : '').trim();
+            const inpAyEl = document.getElementById('admin-input-custom-ay');
+            const inpSemEl = document.getElementById('admin-input-custom-sem');
+            const ayVal = (inpAyEl ? inpAyEl.value : '').trim();
+            const semVal = (inpSemEl ? inpSemEl.value : '').trim();
 
             if (!ayVal && !semVal) {
                 alert('Please enter a valid Academic Year (e.g. 2026-2027) or Semester.');
@@ -2679,21 +2722,20 @@ function setupRegistrarTermListeners() {
 
             if (ayVal) {
                 addedAy = await AcademicYearService.addCustomAcademicYear(ayVal);
+                selectedAcademicYear = addedAy;
             }
             if (semVal) {
                 addedSem = await AcademicYearService.addCustomSemester(semVal);
+                selectedSemester = addedSem;
             }
 
             closeRegistrarCustomTermModal();
             await populateRegistrarTerms();
 
-            if (addedAy) selectedAcademicYear = addedAy;
-            if (addedSem) selectedSemester = addedSem;
-
             const selAy = document.getElementById('admin-filter-ay');
-            if (selAy && addedAy) selAy.value = addedAy;
+            if (selAy && selectedAcademicYear) selAy.value = selectedAcademicYear;
             const selSem = document.getElementById('admin-filter-sem');
-            if (selSem && addedSem) selSem.value = addedSem;
+            if (selSem && selectedSemester) selSem.value = selectedSemester;
 
             updateRegistrarActiveTermLabel();
             showToast(`Custom term saved: ${selectedAcademicYear} • ${selectedSemester}`, 'check-circle');

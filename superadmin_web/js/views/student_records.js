@@ -2,6 +2,7 @@
 import { StudentSyncService } from '../services/student_sync_service.js';
 import { EmailNotificationService } from '../services/email_notification_service.js';
 import { SmsNotificationService } from '../services/sms_notification_service.js';
+import { AcademicYearService } from '../services/academic_year_service.js';
 const supabase = window.supabaseClient;
 
 let allStudents = [];
@@ -68,6 +69,37 @@ function populateBatchFilter() {
     }
 }
 
+async function populateStudentGranteesTerms() {
+    const filterAyEl = document.getElementById('filter-ay') || filterAy;
+    if (!filterAyEl) return;
+    try {
+        const years = await AcademicYearService.getAcademicYears();
+        const curVal = filterAyEl.value || 'AY 2024-2025, 1st Sem';
+
+        let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
+        years.forEach(y => {
+            opts.push(`<option value="AY ${y}, 1st Sem" ${curVal === `AY ${y}, 1st Sem` ? 'selected' : ''}>AY ${y}, 1st Sem</option>`);
+            opts.push(`<option value="AY ${y}, 2nd Sem" ${curVal === `AY ${y}, 2nd Sem` ? 'selected' : ''}>AY ${y}, 2nd Sem</option>`);
+        });
+        filterAyEl.innerHTML = opts.join('');
+        if (opts.some(o => o.includes(`value="${curVal}"`))) {
+            filterAyEl.value = curVal;
+        } else {
+            filterAyEl.value = 'AY 2024-2025, 1st Sem';
+        }
+        const selectedOpt = filterAyEl.options[filterAyEl.selectedIndex];
+        const ayDisp = document.getElementById('ay-display');
+        if (ayDisp && selectedOpt) {
+            ayDisp.innerText = selectedOpt.text;
+        }
+    } catch (_) { }
+}
+
+AcademicYearService.onTermsUpdated(async () => {
+    await populateStudentGranteesTerms();
+    applyFilters();
+});
+
 // Modal Elements
 const modal = document.getElementById('student-modal');
 const closeModalBtn = document.getElementById('close-modal-btn');
@@ -89,6 +121,7 @@ async function loadStudents() {
             if (window.lucide) window.lucide.createIcons();
         }
 
+        await populateStudentGranteesTerms();
         allStudents = await StudentSyncService.loadAndSyncStudents();
         populateBatchFilter();
         applyFilters();
@@ -203,16 +236,17 @@ function applyFilters() {
             const sSem = (s.semester || '').toLowerCase();
             if (!sAy || sAy === 'n/a') {
                 matchAy = true;
-            } else if (ay.includes('2024-2025') && sAy.includes('2024-2025')) {
-                if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
-                else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
-                else if (!ay.includes('Sem')) matchAy = true;
-            } else if (ay.includes('2023-2024') && sAy.includes('2023-2024')) {
-                if (ay.includes('1st') && (sSem.includes('1st') || !sSem)) matchAy = true;
-                else if (ay.includes('2nd') && sSem.includes('2nd')) matchAy = true;
-                else if (!ay.includes('Sem')) matchAy = true;
             } else {
-                matchAy = sAy.includes(ay.toLowerCase());
+                const yearMatch = ay.match(/\d{4}-\d{4}/);
+                const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
+                const matchYear = !filterYear || sAy.includes(filterYear);
+
+                let matchSemester = true;
+                if (ay.toLowerCase().includes('1st') && !sSem.includes('1st') && sSem) matchSemester = false;
+                else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
+                else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
+
+                matchAy = matchYear && matchSemester;
             }
         }
 

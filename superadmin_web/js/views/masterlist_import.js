@@ -3198,6 +3198,15 @@ export function initMasterlistImport() {
         updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester);
         updateStep2TermIndicator(selectedAcademicYear, selectedSemester);
 
+        // Notify server of active academic term selected by Super Admin
+        if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
+            fetch('/api/academic-term/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
+            }).catch(() => {});
+        }
+
         await loadTermData(selectedAcademicYear, selectedSemester);
     };
 
@@ -3214,13 +3223,43 @@ export function initMasterlistImport() {
         if (inputCustomAy) inputCustomAy.value = '';
         if (inputCustomSem) inputCustomSem.value = '';
         modalCustomTerm.classList.remove('hidden');
-        if (defaultFocus === 'sem' && inputCustomSem) inputCustomSem.focus();
-        else if (inputCustomAy) inputCustomAy.focus();
+        modalCustomTerm.style.display = 'flex';
+        setTimeout(() => {
+            if (defaultFocus === 'sem' && inputCustomSem) {
+                inputCustomSem.focus();
+            } else if (inputCustomAy) {
+                inputCustomAy.focus();
+            }
+        }, 50);
     };
 
     const closeSuperAdminCustomTermModal = () => {
-        if (modalCustomTerm) modalCustomTerm.classList.add('hidden');
+        if (modalCustomTerm) {
+            modalCustomTerm.classList.add('hidden');
+            modalCustomTerm.style.display = 'none';
+        }
     };
+
+    if (modalCustomTerm) {
+        modalCustomTerm.addEventListener('click', (e) => {
+            if (e.target === modalCustomTerm) {
+                closeSuperAdminCustomTermModal();
+            }
+        });
+    }
+
+    [inputCustomAy, inputCustomSem].forEach(inp => {
+        if (inp) {
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (btnSaveCustomTerm) btnSaveCustomTerm.click();
+                } else if (e.key === 'Escape') {
+                    closeSuperAdminCustomTermModal();
+                }
+            });
+        }
+    });
 
     if (btnCustomTerm) {
         btnCustomTerm.addEventListener('click', () => openSuperAdminCustomTermModal('ay'));
@@ -3246,21 +3285,20 @@ export function initMasterlistImport() {
 
             if (ayVal) {
                 addedAy = await AcademicYearService.addCustomAcademicYear(ayVal);
+                selectedAcademicYear = addedAy;
             }
             if (semVal) {
                 addedSem = await AcademicYearService.addCustomSemester(semVal);
+                selectedSemester = addedSem;
             }
 
             closeSuperAdminCustomTermModal();
             await populateDistinctAcademicYears();
 
-            if (addedAy) selectedAcademicYear = addedAy;
-            if (addedSem) selectedSemester = addedSem;
-
-            if (headerFilterAcademicYear && addedAy) headerFilterAcademicYear.value = addedAy;
-            if (filterAcademicYear && addedAy) filterAcademicYear.value = addedAy;
-            if (headerFilterSemester && addedSem) headerFilterSemester.value = addedSem;
-            if (filterSemester && addedSem) filterSemester.value = addedSem;
+            if (headerFilterAcademicYear && selectedAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
+            if (filterAcademicYear && selectedAcademicYear) filterAcademicYear.value = selectedAcademicYear;
+            if (headerFilterSemester && selectedSemester) headerFilterSemester.value = selectedSemester;
+            if (filterSemester && selectedSemester) filterSemester.value = selectedSemester;
 
             if (window.showToast) {
                 window.showToast(`Custom term saved: ${selectedAcademicYear} • ${selectedSemester}`, 'check-circle');
@@ -3289,6 +3327,13 @@ export function initMasterlistImport() {
         btnRefreshTerm.addEventListener('click', async () => {
             if (iconRefreshTerm) iconRefreshTerm.classList.add('sync-spin');
             try {
+                if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
+                    fetch('/api/academic-term/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ academicYear: selectedAcademicYear, semester: selectedSemester })
+                    }).catch(() => {});
+                }
                 await fetchExistingMasterlist();
                 await loadTermData(selectedAcademicYear, selectedSemester);
                 if (window.showToast) {

@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/api_config.dart';
 
 /// Represents an academic term (Academic Year and Semester).
 class AcademicTerm {
@@ -85,7 +88,7 @@ class AcademicTermService {
   static const String _prefKeySem = 'active_semester';
 
   /// Default active academic period (e.g., current period for upcoming/active cycle)
-  static const String defaultAcademicYear = '2026-2027';
+  static const String defaultAcademicYear = '2024-2025';
   static const String defaultSemester = '1st Semester';
 
   static AcademicTerm _currentTerm = const AcademicTerm(
@@ -96,8 +99,8 @@ class AcademicTermService {
   /// Returns the current in-memory active academic term.
   static AcademicTerm get currentTerm => _currentTerm;
 
-  /// Initializes the service by loading from local storage and syncing with Supabase.
-  static Future<AcademicTerm> initialize() async {
+  /// Initializes the service by loading from local storage and syncing with system settings.
+  static Future<AcademicTerm> initialize({String? studentUid}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedAy = prefs.getString(_prefKeyAy);
@@ -110,8 +113,8 @@ class AcademicTermService {
         );
       }
 
-      // Optionally sync from Supabase if online
-      await syncFromSupabase();
+      // Automatically sync active academic period across system sources
+      await syncActiveTerm(studentUid: studentUid);
     } catch (e) {
       debugPrint('AcademicTermService.initialize error: $e');
     }
@@ -137,57 +140,158 @@ class AcademicTermService {
     }
   }
 
-  /// Attempts to fetch the current active term from Supabase settings or annex records.
-  static Future<AcademicTerm?> syncFromSupabase() async {
+  /// Alias for backward compatibility.
+  static Future<AcademicTerm?> syncFromSupabase() => syncActiveTerm();
+
+  /// Automatically detects and synchronizes the active academic period across:
+  /// 1. Backend REST API (/api/academic-term/current)
+  /// 2. Supabase system_settings (key: academic_term or current_academic_year & current_semester)
+  /// 3. Student grantee record (if studentUid is provided)
+  /// 4. Supabase annex_form_2 latest active term
+  /// 5. Supabase student_grantees latest configured record
+  /// 6. Cached SharedPreferences
+  /// 7. Default fallback
+  static Future<AcademicTerm> syncActiveTerm({String? studentUid}) async {
+    // 1. Try Backend REST API
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/academic-term/current');
+      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final ay = data['academicYear']?.toString();
+        final sem = data['semester']?.toString();
+        if (ay != null && ay.trim().isNotEmpty && sem != null && sem.trim().isNotEmpty) {
+          await setActiveTerm(academicYear: ay, semester: sem);
+          debugPrint('AcademicTermService: Synced active term from backend API: AY $ay • $sem');
+          return _currentTerm;
+        }
+      }
+    } catch (e) {
+      debugPrint('AcademicTermService backend sync note: $e');
+    }
+
+    // 2. Try Supabase system_settings table
     try {
       final client = Supabase.instance.client;
-
-      // 1. Try system_settings table if available
-      try {
-        final res = await client
-            .from('system_settings')
-            .select('key, value')
-            .inFilter('key', ['current_academic_year', 'current_semester']);
-        if (res.isNotEmpty) {
-          String? ay;
-          String? sem;
-          for (final row in res) {
-            if (row['key'] == 'current_academic_year')
-              ay = row['value']?.toString();
-            if (row['key'] == 'current_semester')
-              sem = row['value']?.toString();
+      final res = await client
+          .from('system_settings')
+          .select('key, value')
+          .inFilter('key', ['academic_term', 'current_academic_year', 'current_semester']);
+      if (res.isNotEmpty) {
+        String? ay;
+        String? sem;
+        for (final row in res) {
+          final k = row['key']?.toString();
+          final v = row['value'];
+          if (k == 'academic_term' && v is Map) {
+            ay = v['academic_year']?.toString() ?? v['academicYear']?.toString();
+            sem = v['semester']?.toString();
+            break;
+          } else if (k == 'academic_term' && v is String) {
+            try {
+              final parsed = jsonDecode(v);
+              if (parsed is Map) {
+                ay = parsed['academic_year']?.toString() ?? parsed['academicYear']?.toString();
+                sem = parsed['semester']?.toString();
+                break;
+              }
+            } catch (_) {}
+          } else if (k == 'current_academic_year') {
+            ay = v?.toString();
+          } else if (k == 'current_semester') {
+            sem = v?.toString();
           }
-          if (ay != null && sem != null) {
+        }
+        if (ay != null && ay.trim().isNotEmpty && sem != null && sem.trim().isNotEmpty) {
+          await setActiveTerm(academicYear: ay, semester: sem);
+          debugPrint('AcademicTermService: Synced active term from system_settings: AY $ay • $sem');
+          return _currentTerm;
+        }
+      }
+    } catch (_) {}
+
+    // 3. Try student_grantees (if studentUid is provided)
+    if (studentUid != null && studentUid.isNotEmpty) {
+      try {
+        final client = Supabase.instance.client;
+        var res = await client
+            .from('student_grantees')
+            .select('academic_year, academicYear, semester')
+            .eq('uid', studentUid)
+            .limit(1);
+        if (res.isEmpty) {
+          res = await client
+              .from('student_grantees')
+              .select('academic_year, academicYear, semester')
+              .eq('student_no', studentUid)
+              .limit(1);
+        }
+        if (res.isNotEmpty) {
+          final ay = res.first['academic_year']?.toString() ?? res.first['academicYear']?.toString();
+          final sem = res.first['semester']?.toString();
+          if (ay != null && ay.trim().isNotEmpty && sem != null && sem.trim().isNotEmpty) {
             await setActiveTerm(academicYear: ay, semester: sem);
+            debugPrint('AcademicTermService: Synced active term from student profile: AY $ay • $sem');
             return _currentTerm;
           }
         }
-      } catch (_) {
-        // Table may not exist yet; fall through
+      } catch (e) {
+        debugPrint('AcademicTermService: student profile query note: $e');
       }
-
-      // 2. Try fetching latest distinct term from annex_form_2
-      try {
-        final res = await client
-            .from('annex_form_2')
-            .select('academic_year, semester')
-            .order('created_at', ascending: false)
-            .limit(1);
-        if (res.isNotEmpty) {
-          final row = res.first;
-          final ay = row['academic_year']?.toString();
-          final sem = row['semester']?.toString();
-          if (ay != null && sem != null) {
-            // If current in-memory is still default, adopt DB value if desired
-            debugPrint(
-              'AcademicTermService: Synced term from annex_form_2: AY $ay, $sem',
-            );
-          }
-        }
-      } catch (_) {}
-    } catch (e) {
-      debugPrint('AcademicTermService.syncFromSupabase error: $e');
     }
+
+    // 4. Try annex_form_2 latest record configured by Super Admin/Registrar
+    try {
+      final client = Supabase.instance.client;
+      final res = await client
+          .from('annex_form_2')
+          .select('academic_year, semester')
+          .order('created_at', ascending: false)
+          .limit(1);
+      if (res.isNotEmpty) {
+        final ay = res.first['academic_year']?.toString();
+        final sem = res.first['semester']?.toString();
+        if (ay != null && ay.trim().isNotEmpty && sem != null && sem.trim().isNotEmpty) {
+          await setActiveTerm(academicYear: ay, semester: sem);
+          debugPrint('AcademicTermService: Synced active term from annex_form_2: AY $ay • $sem');
+          return _currentTerm;
+        }
+      }
+    } catch (_) {}
+
+    // 5. Try student_grantees latest overall record
+    try {
+      final client = Supabase.instance.client;
+      final res = await client
+          .from('student_grantees')
+          .select('academic_year, academicYear, semester')
+          .order('created_at', ascending: false)
+          .limit(1);
+      if (res.isNotEmpty) {
+        final ay = res.first['academic_year']?.toString() ?? res.first['academicYear']?.toString();
+        final sem = res.first['semester']?.toString();
+        if (ay != null && ay.trim().isNotEmpty && sem != null && sem.trim().isNotEmpty) {
+          await setActiveTerm(academicYear: ay, semester: sem);
+          debugPrint('AcademicTermService: Synced active term from latest student_grantees: AY $ay • $sem');
+          return _currentTerm;
+        }
+      }
+    } catch (_) {}
+
+    // 6. SharedPreferences cached value
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedAy = prefs.getString(_prefKeyAy);
+      final savedSem = prefs.getString(_prefKeySem);
+      if (savedAy != null && savedSem != null) {
+        _currentTerm = AcademicTerm(
+          academicYear: normalizeYear(savedAy),
+          semester: normalizeSemester(savedSem),
+        );
+        return _currentTerm;
+      }
+    } catch (_) {}
+
     return _currentTerm;
   }
 

@@ -101,7 +101,8 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
   @override
   void initState() {
     super.initState();
-    AcademicTermService.syncFromSupabase().then((_) {
+    final uid = _authService.currentUser?.id;
+    AcademicTermService.syncActiveTerm(studentUid: uid).then((_) {
       if (mounted) setState(() {});
     });
     _loadSA();
@@ -117,6 +118,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         setState(() {
           _studentFullName = (data['fullName'] ?? data['full_name'] ?? '').toString().trim();
           _studentBirthdate = (data['birthdate'] ?? data['date_of_birth'] ?? '').toString().trim();
+
+          // Sync student's assigned academic term configured by Super Admin/Registrar
+          final profileAy = (data['academicYear'] ?? data['academic_year'] ?? '').toString().trim();
+          final profileSem = (data['semester'] ?? '').toString().trim();
+          if (profileAy.isNotEmpty && profileSem.isNotEmpty) {
+            AcademicTermService.setActiveTerm(
+              academicYear: profileAy,
+              semester: profileSem,
+            );
+          }
+
           final saCandidates = [
             docs['saNumber'],
             docs['sa_number'],
@@ -164,12 +176,17 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
 
   Future<void> _handleUpload() async {
     try {
+      final uid = _authService.currentUser?.id;
+      final activeTerm = await AcademicTermService.syncActiveTerm(studentUid: uid);
+      if (!mounted) return;
+
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => IDCaptureScreen(
             expectedName: _studentFullName,
             expectedBirthdate: _studentBirthdate,
+            targetTerm: activeTerm,
           ),
         ),
       );
@@ -186,7 +203,6 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         _pdfFeedback = null;
       });
 
-      final uid = _authService.currentUser?.id;
       if (uid == null) throw Exception("User not authenticated");
 
       final String storagePath =
@@ -2186,7 +2202,7 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         );
         return;
       }
-      if (_frontNameMatches == false) {
+      if (_frontNameMatches != true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('The name on your school ID does not match your registered profile. Please scan your own valid school ID again.'),
@@ -2196,10 +2212,10 @@ class _UploadWorkflowScreenState extends State<UploadWorkflowScreen> {
         );
         return;
       }
-      if (_stickerValidated == false) {
+      if (_stickerValidated != true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('The academic year or semester on your ID sticker is not current. Please scan the correct ID.'),
+          SnackBar(
+            content: Text('The academic year or semester on your ID sticker does not match the required period (${AcademicTermService.currentTerm.displayString}). Please scan the correct ID.'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),

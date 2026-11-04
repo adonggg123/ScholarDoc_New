@@ -1441,6 +1441,18 @@ if (filterScholarship) filterScholarship.addEventListener('change', applyFilters
 if (sortBy) sortBy.addEventListener('change', applyFilters);
 if (filterAy) filterAy.addEventListener('change', () => {
     if (ayDisplay) ayDisplay.innerText = filterAy.options[filterAy.selectedIndex].text;
+    const val = filterAy.value || '';
+    const yMatch = val.match(/(20\d{2}-20\d{2})/);
+    const sMatch = val.match(/(1st|2nd)\s*Sem/i);
+    if (yMatch && sMatch) {
+        const ay = yMatch[1];
+        const sem = sMatch[1].toLowerCase().includes('1st') ? '1st Semester' : '2nd Semester';
+        fetch('/api/academic-term/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ academicYear: ay, semester: sem })
+        }).catch(() => {});
+    }
     applyFilters();
 });
 if (refreshStudentsBtn) refreshStudentsBtn.addEventListener('click', () => loadStudents());

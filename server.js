@@ -100,8 +100,11 @@ function findFilePath(urlPath) {
     return null;
 }
 
-// Active academic term settings (dynamically updated from system_settings)
-let activeAcademicYear = '2026-2027';
+// Active academic term settings (dynamically updated from system_settings, annex_form_2, or student_grantees)
+const SUPABASE_REST_URL = 'https://ywavesulvkqwpsejprxp.supabase.co/rest/v1';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
+
+let activeAcademicYear = '2024-2025';
 let activeSemester = '1st Semester';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'AIzaSyDKFEf2kVwuCGQQYaeBtsMaeDZiA0sXv_E';
 
@@ -115,10 +118,11 @@ async function syncAcademicTermFromDb() {
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
             'Content-Type': 'application/json'
         };
+        // 1. Try system_settings
         const res = await fetch(`${SUPABASE_REST_URL}/system_settings?key=in.(current_academic_year,current_semester,academic_term)`, { headers });
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data)) {
+            if (Array.isArray(data) && data.length > 0) {
                 for (const row of data) {
                     if (row.key === 'current_academic_year' && row.value) activeAcademicYear = String(row.value).trim();
                     if (row.key === 'current_semester' && row.value) activeSemester = String(row.value).trim();
@@ -127,13 +131,54 @@ async function syncAcademicTermFromDb() {
                         if (row.value.semester) activeSemester = String(row.value.semester).trim();
                     }
                 }
+                console.log(`[Academic Term] Synchronized from system_settings: AY ${activeAcademicYear} • ${activeSemester}`);
+                return;
             }
         }
-    } catch (e) {
-        // Fallback to default
-    }
+    } catch (_) {}
+
+    // 2. Fallback to latest annex_form_2 record configured by Super Admin/Registrar
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        const f2Res = await fetch(`${SUPABASE_REST_URL}/annex_form_2?select=academic_year,semester&order=created_at.desc&limit=1`, { headers });
+        if (f2Res.ok) {
+            const f2Data = await f2Res.json();
+            if (Array.isArray(f2Data) && f2Data.length > 0) {
+                const row = f2Data[0];
+                if (row.academic_year) activeAcademicYear = String(row.academic_year).trim();
+                if (row.semester) activeSemester = String(row.semester).trim();
+                console.log(`[Academic Term] Synchronized from annex_form_2: AY ${activeAcademicYear} • ${activeSemester}`);
+                return;
+            }
+        }
+    } catch (_) {}
+
+    // 3. Fallback to latest student_grantees record
+    try {
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        const sgRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=academic_year,semester&order=created_at.desc&limit=1`, { headers });
+        if (sgRes.ok) {
+            const sgData = await sgRes.json();
+            if (Array.isArray(sgData) && sgData.length > 0) {
+                const row = sgData[0];
+                if (row.academic_year) activeAcademicYear = String(row.academic_year).trim();
+                if (row.semester) activeSemester = String(row.semester).trim();
+                console.log(`[Academic Term] Synchronized from student_grantees: AY ${activeAcademicYear} • ${activeSemester}`);
+                return;
+            }
+        }
+    } catch (_) {}
 }
-setTimeout(syncAcademicTermFromDb, 1500);
+syncAcademicTermFromDb();
+setTimeout(syncAcademicTermFromDb, 3000);
 
 const OCR_SPACE_KEYS = [
     'K88828859988957',
@@ -933,28 +978,27 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
     const targetNormYear = normalizeYear(currentYear);
     const targetNormSem = normalizeSemester(currentSem);
 
-    // Priority 0: Direct check against active/target academic year
-    if (targetNormYear && (cleaned.includes(targetNormYear) || cleaned.includes(targetNormYear.replace('-', ' ')))) {
-        detectedYear = targetNormYear;
-    }
+    const lines = cleaned.split(/[\r\n]+/);
 
     // Priority 1: Lines containing sticker keywords (sem, registrar, valid, ustp)
-    if (!detectedYear) {
-        const lines = cleaned.split(/[\r\n]+/);
-        for (const line of lines) {
-            if (/(?:sem|registrar|valid|ustp|campus)/i.test(line)) {
-                const lineAyMatch = line.match(/(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b/i);
-                if (lineAyMatch) {
-                    const start = parseInt(lineAyMatch[1], 10);
-                    const endStr = lineAyMatch[2];
-                    const end = endStr.length === 2 ? parseInt(lineAyMatch[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
-                    if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
-                        detectedYear = `${start}-${end}`;
-                        break;
-                    }
+    for (const line of lines) {
+        if (/(?:sem|registrar|valid|ustp|campus)/i.test(line)) {
+            const lineAyMatch = line.match(/(?:(?:A\.?\s*[YV]\.?|S\.?\s*[YV]\.?|Academic\s*Year|School\s*Year|AY|SY)\s*[:\.\-]?\s*)?(202[0-9]|203[0-5])\s*[-–—/\\~_\.\s]+\s*(202[0-9]|203[0-5]|\d{2})\b/i);
+            if (lineAyMatch) {
+                const start = parseInt(lineAyMatch[1], 10);
+                const endStr = lineAyMatch[2];
+                const end = endStr.length === 2 ? parseInt(lineAyMatch[1].slice(0, 2) + endStr, 10) : parseInt(endStr, 10);
+                if (end === start + 1 || (end >= 2020 && end <= 2035 && end > start)) {
+                    detectedYear = `${start}-${end}`;
+                    break;
                 }
             }
         }
+    }
+
+    // Priority 2: Direct check against active/target academic year
+    if (!detectedYear && targetNormYear && (cleaned.includes(targetNormYear) || cleaned.includes(targetNormYear.replace('-', ' ')))) {
+        detectedYear = targetNormYear;
     }
 
     // Priority 2: Explicit prefix A.Y. / S.Y. / Academic Year
@@ -1032,7 +1076,6 @@ function parseStickerText(rawText, currentYear = activeAcademicYear, currentSem 
         return null;
     }
 
-    const lines = cleaned.split(/[\r\n]+/);
     for (const line of lines) {
         detectedSem = checkSem(line);
         if (detectedSem) break;
@@ -1166,8 +1209,7 @@ async function getGoogleAccessToken() {
 }
 
 // ── Push Notification & In-App Notification Broadcast Engine ─────────────
-const SUPABASE_REST_URL = 'https://ywavesulvkqwpsejprxp.supabase.co/rest/v1';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk';
+// (SUPABASE_REST_URL and SUPABASE_ANON_KEY declared at top level)
 
 // ── Semaphore SMS Messaging Engine (https://semaphore.co) ───────────────
 const SEMAPHORE_API_URL = 'https://api.semaphore.co/api/v4';

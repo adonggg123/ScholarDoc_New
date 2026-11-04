@@ -19,10 +19,17 @@ import 'document_crop_screen.dart';
 class IDCaptureScreen extends StatefulWidget {
   final String? expectedName;
   final String? expectedBirthdate;
+  final String? requiredAcademicYear;
+  final String? requiredSemester;
+  final AcademicTerm? targetTerm;
+
   const IDCaptureScreen({
     super.key,
     this.expectedName,
     this.expectedBirthdate,
+    this.requiredAcademicYear,
+    this.requiredSemester,
+    this.targetTerm,
   });
 
   @override
@@ -35,6 +42,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   
   String _expectedName = '';
   String _expectedBirthdate = '';
+  late AcademicTerm _requiredTerm;
 
   XFile? _frontImage;
   XFile? _backImage;
@@ -73,7 +81,17 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   @override
   void initState() {
     super.initState();
-    AcademicTermService.initialize();
+    if (widget.targetTerm != null) {
+      _requiredTerm = widget.targetTerm!;
+    } else if (widget.requiredAcademicYear != null && widget.requiredSemester != null) {
+      _requiredTerm = AcademicTerm(
+        academicYear: AcademicTermService.normalizeYear(widget.requiredAcademicYear!),
+        semester: AcademicTermService.normalizeSemester(widget.requiredSemester!),
+      );
+    } else {
+      _requiredTerm = AcademicTermService.currentTerm;
+    }
+
     _signatureController.onDrawStart = () {
       setState(() {});
     };
@@ -83,24 +101,41 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
   Future<void> _initExpectedStudentData() async {
     _expectedName = (widget.expectedName ?? '').trim();
     _expectedBirthdate = (widget.expectedBirthdate ?? '').trim();
-    if (_expectedName.isEmpty || _expectedBirthdate.isEmpty) {
-      try {
-        final uid = _authService.currentUser?.id;
-        if (uid != null) {
-          final profile = await _authService.getStudentProfile(uid);
-          if (profile != null) {
-            if (_expectedName.isEmpty) {
-              _expectedName = (profile['fullName'] ?? profile['full_name'] ?? '').toString().trim();
-            }
-            if (_expectedBirthdate.isEmpty) {
-              _expectedBirthdate = (profile['birthdate'] ?? profile['date_of_birth'] ?? '').toString().trim();
-            }
-            if (mounted) setState(() {});
-          }
+    try {
+      final uid = _authService.currentUser?.id;
+      // Auto-detect and sync required Academic Year & Semester configured in system
+      if (widget.requiredAcademicYear == null) {
+        final syncedTerm = await AcademicTermService.syncActiveTerm(studentUid: uid);
+        if (mounted) {
+          setState(() {
+            _requiredTerm = syncedTerm;
+          });
         }
-      } catch (e) {
-        debugPrint('Error loading expected student data: $e');
       }
+
+      if (uid != null) {
+        final profile = await _authService.getStudentProfile(uid);
+        if (profile != null) {
+          final profileAy = (profile['academicYear'] ?? profile['academic_year'] ?? '').toString().trim();
+          final profileSem = (profile['semester'] ?? '').toString().trim();
+          if (profileAy.isNotEmpty && profileSem.isNotEmpty && widget.requiredAcademicYear == null) {
+            _requiredTerm = AcademicTerm(
+              academicYear: AcademicTermService.normalizeYear(profileAy),
+              semester: AcademicTermService.normalizeSemester(profileSem),
+            );
+          }
+
+          if (_expectedName.isEmpty) {
+            _expectedName = (profile['fullName'] ?? profile['full_name'] ?? '').toString().trim();
+          }
+          if (_expectedBirthdate.isEmpty) {
+            _expectedBirthdate = (profile['birthdate'] ?? profile['date_of_birth'] ?? '').toString().trim();
+          }
+          if (mounted) setState(() {});
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading expected student data: $e');
     }
   }
 
@@ -740,9 +775,10 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
     });
 
     try {
-      // 1. Scan the captured image directly
+      // 1. Scan the captured image directly using required academic period
       var result = await DocumentAIScannerService.scanIdBackSticker(
         bytes,
+        targetTerm: _requiredTerm,
         expectedBirthdate: _expectedBirthdate,
         onProgress: (status) {
           if (mounted) setState(() => _backScanProgressStatus = status);
@@ -757,6 +793,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         final roiBytes = await DocumentAIScannerService.cropUpperStickerROI(bytes);
         final roiResult = await DocumentAIScannerService.scanIdBackSticker(
           roiBytes,
+          targetTerm: _requiredTerm,
           expectedBirthdate: _expectedBirthdate,
         );
 
@@ -784,6 +821,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
             semester: bestSem,
             hasValidationStamp: bestStamp,
             registrarText: bestRegistrar,
+            targetTerm: _requiredTerm,
           ).copyWith(
             birthdate: bestDob,
             birthdateMatches: bestDobMatch,
@@ -1048,15 +1086,15 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
       return;
     }
 
-    if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
+    if (_frontNameResult == null || !_frontNameResult!.isNameMatch) {
       _showWarning('Cannot compile PDF: The name on your school ID does not match your registered profile.');
-      _showNameMismatchDialog(_frontNameResult!);
+      if (_frontNameResult != null) _showNameMismatchDialog(_frontNameResult!);
       return;
     }
 
-    if (_stickerResult != null && (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false)) {
-      _showWarning('Cannot compile PDF: Back ID validation sticker or birthdate verification failed.');
-      _showStickerWarningDialog(_stickerResult!);
+    if (_stickerResult == null || (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false)) {
+      _showWarning('Cannot compile PDF: Back ID validation sticker or birthdate verification failed. Must match ${_requiredTerm.displayString}.');
+      if (_stickerResult != null) _showStickerWarningDialog(_stickerResult!);
       return;
     }
 
@@ -1239,7 +1277,11 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         _showBlurWarningDialog(isFront: true, quality: _frontQuality!);
         return;
       }
-      if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
+      if (_frontNameResult == null) {
+        _showWarning('Please wait for OCR name verification to complete or tap Retry Scan.');
+        return;
+      }
+      if (!_frontNameResult!.isNameMatch) {
         _showWarning('The name on your school ID does not match your registered profile. Please scan your own valid school ID again.');
         _showNameMismatchDialog(_frontNameResult!);
         return;
@@ -1259,13 +1301,15 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
         _showBlurWarningDialog(isFront: false, quality: _backQuality!);
         return;
       }
-      if (_stickerResult != null) {
-        final bool isBirthdateValid = _stickerResult!.birthdateMatches != false;
-        if (!_stickerResult!.isValid || !isBirthdateValid) {
-          _showWarning('Cannot proceed: The ID validation sticker or birthdate does not match current records.');
-          _showStickerWarningDialog(_stickerResult!);
-          return;
-        }
+      if (_stickerResult == null) {
+        _showWarning('Please wait for the OCR scan to verify the validation sticker on your ID or tap Retry Scan.');
+        return;
+      }
+      final bool isBirthdateValid = _stickerResult!.birthdateMatches != false;
+      if (!_stickerResult!.isValid || !isBirthdateValid) {
+        _showWarning('Cannot proceed: The ID validation sticker or birthdate does not match current requirements (${_requiredTerm.displayString}).');
+        _showStickerWarningDialog(_stickerResult!);
+        return;
       }
     }
     if (_currentStep == 2 && _signatureController.isEmpty) {
@@ -2442,8 +2486,8 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
 
   Widget _buildReviewStepWidget() {
     final bool hasBlurry = _frontQuality?.isBlurry == true || _backQuality?.isBlurry == true;
-    final bool hasNameMismatch = _frontNameResult != null && !_frontNameResult!.isNameMatch;
-    final bool hasInvalidSticker = _stickerResult != null && (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false);
+    final bool hasNameMismatch = _frontNameResult == null || !_frontNameResult!.isNameMatch;
+    final bool hasInvalidSticker = _stickerResult == null || (!_stickerResult!.isValid || _stickerResult!.birthdateMatches == false);
     final bool isBlocked = hasBlurry || hasNameMismatch || hasInvalidSticker || _isScanningSticker || _isScanningFrontName;
 
     return SingleChildScrollView(
@@ -2488,13 +2532,17 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Submission Blocked: Front ID Name Mismatch',
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
+                        Text(
+                          _frontNameResult == null
+                              ? 'Submission Blocked: Front ID Name Unverified'
+                              : 'Submission Blocked: Front ID Name Mismatch',
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'The name on your school ID does not match your registered profile. Please retake or adjust crop.',
+                          _frontNameResult == null
+                              ? 'The name on your school ID has not been verified against your profile. Please complete front ID scan.'
+                              : 'The name on your school ID does not match your registered profile. Please retake or adjust crop.',
                           style: TextStyle(fontSize: 11, color: context.textPri, height: 1.3),
                         ),
                       ],
@@ -2571,12 +2619,16 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Submission Blocked: ${_stickerResult!.termValidation.statusTitle}',
+                          _stickerResult != null
+                              ? 'Submission Blocked: ${_stickerResult!.termValidation.statusTitle}'
+                              : 'Submission Blocked: Back ID Sticker Not Verified',
                           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.error),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _stickerResult!.termValidation.message,
+                          _stickerResult != null
+                              ? _stickerResult!.termValidation.message
+                              : 'Please scan the back of your ID so the validation sticker for ${_requiredTerm.displayString} can be verified.',
                           style: TextStyle(fontSize: 11, color: context.textPri, height: 1.3),
                         ),
                       ],
@@ -3010,7 +3062,7 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         );
                         return;
                       }
-                      if (_frontNameResult != null && !_frontNameResult!.isNameMatch) {
+                      if (_frontNameResult == null || !_frontNameResult!.isNameMatch) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Cannot submit: The name on your school ID does not match your registered profile.'),
@@ -3019,17 +3071,14 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         );
                         return;
                       }
-                      if (_stickerResult != null) {
-                        final bool isBirthdateValid = _stickerResult!.birthdateMatches != false;
-                        if (!_stickerResult!.isValid || !isBirthdateValid) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Cannot submit: Back ID validation sticker or birthdate mismatch.'),
-                              backgroundColor: AppTheme.error,
-                            ),
-                          );
-                          return;
-                        }
+                      if (_stickerResult == null || !_stickerResult!.isValid || _stickerResult!.birthdateMatches == false) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Cannot submit: Back ID validation sticker or birthdate mismatch. Must match ${_requiredTerm.displayString}.'),
+                            backgroundColor: AppTheme.error,
+                          ),
+                        );
+                        return;
                       }
                       final frontBytes = _frontProcessedBytes ?? (_frontImage != null ? await _frontImage!.readAsBytes() : null);
                       final backBytes = _backProcessedBytes ?? (_backImage != null ? await _backImage!.readAsBytes() : null);
@@ -3039,9 +3088,9 @@ class _IDCaptureScreenState extends State<IDCaptureScreen> {
                         'frontBytes': frontBytes,
                         'backBytes': backBytes,
                         'stickerResult': _stickerResult,
-                        'academicYear': _stickerResult?.academicYear ?? AcademicTermService.currentTerm.academicYear,
-                        'semester': _stickerResult?.semester ?? AcademicTermService.currentTerm.semester,
-                        'stickerValidated': _stickerResult?.isValid == true,
+                        'academicYear': _stickerResult?.academicYear ?? _requiredTerm.academicYear,
+                        'semester': _stickerResult?.semester ?? _requiredTerm.semester,
+                        'stickerValidated': _stickerResult?.isValid == true && _stickerResult?.birthdateMatches != false,
                         'frontNameMatches': _frontNameResult?.isNameMatch == true,
                         'frontExtractedName': _frontNameResult?.extractedName,
                         'backBirthdate': _stickerResult?.birthdate,
