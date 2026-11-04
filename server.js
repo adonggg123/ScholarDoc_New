@@ -5690,16 +5690,9 @@ async function pollNewGranteesAndMessage() {
 }
 
 async function startGranteeMessagingWatcher() {
-    console.log('[Grantee Messaging Watcher] Automated grantee email & SMS notification watcher daemon started.');
-
-    function scheduleMessagingPoll() {
-        pollNewGranteesAndMessage().finally(() => {
-            const delay = consecutiveGranteePollErrors > 0 ? 15000 : 4000;
-            setTimeout(scheduleMessagingPoll, delay);
-        });
-    }
-
-    scheduleMessagingPoll();
+    // Automatic grantee email/SMS sending is disabled.
+    // Grantees receive email notifications only when the Super Admin clicks the Send Email button.
+    console.log('[Grantee Messaging Watcher] Automatic email sending is disabled. Grantees receive emails only when Super Admin clicks Send Email.');
 }
 
 // Backward compatibility aliases
@@ -5749,9 +5742,9 @@ if (require.main === module) {
         // Pre-warm Gmail SMTP TLS connection pool for instant Email OTP delivery
         warmUpOtpTransports();
 
-        // Start background watcher daemons
+        // Start background watcher daemons (SMS student notifications only)
         startNotificationSmsWatcher();
-        startGranteeMessagingWatcher();
+        // Automatic grantee email watcher disabled - emails are sent only when Super Admin clicks Send Email button
     });
 }
 

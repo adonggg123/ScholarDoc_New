@@ -581,24 +581,7 @@ studentForm.addEventListener('submit', async (e) => {
                 ipAddress: 'Web Browser'
             }]);
 
-            const targetEmail = (studentData.email_address || studentData.email || '').trim();
-            if (targetEmail && targetEmail.includes('@')) {
-                EmailNotificationService.notifyGrantee(studentData.uid || studentData.studentId, {
-                    email: targetEmail,
-                    fullName: studentData.fullName,
-                    studentNo: studentData.studentId,
-                    course: studentData.course,
-                    scholarshipName: studentData.scholarship_name,
-                    saNumber: studentData.saNumber
-                }).then(eRes => {
-                    console.log('[GranteeNotification] Automated notification dispatched:', eRes);
-                }).catch(eErr => {
-                    console.warn('[GranteeNotification] Automated notification failed:', eErr);
-                });
-                alert(`${studentData.fullName} has been added as a confirmed scholar grantee.\n\nAn automated email notification with the ScholarDoc download link has been dispatched to ${targetEmail}.`);
-            } else {
-                alert(`${studentData.fullName} has been added successfully.`);
-            }
+            alert(`${studentData.fullName} has been added successfully.`);
         }
         else if (modalMode === 'edit') {
             studentData.updatedAt = new Date().toISOString();
