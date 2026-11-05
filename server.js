@@ -79,6 +79,15 @@ function findFilePath(urlPath) {
         return directPath;
     }
 
+    // 2b. Universal assets directory fallback
+    if (urlPath.includes('/assets/')) {
+        const assetRelative = urlPath.substring(urlPath.indexOf('/assets/'));
+        const rootAssetPath = path.join(ROOT, assetRelative);
+        if (fs.existsSync(rootAssetPath) && fs.statSync(rootAssetPath).isFile()) {
+            return rootAssetPath;
+        }
+    }
+
     // 3. Fallback to superadmin_web
     const superAdminPath = path.join(ROOT, 'superadmin_web', urlPath);
     if (fs.existsSync(superAdminPath) && fs.statSync(superAdminPath).isFile()) {
@@ -110,15 +119,89 @@ const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'AIzaSyDKFEf2kVwuCGQQYaeBts
 
 const https = require('https');
 
+// Helper functions for reading and saving system settings (academic term + appearance + carousel banners)
+function getSystemSettings() {
+    const settingsPath = path.join(__dirname, 'system_settings.json');
+    const defaultSettings = {
+        academicYear: activeAcademicYear,
+        semester: activeSemester,
+        updated_at: new Date().toISOString(),
+        appearance: {
+            themeMode: 'light',
+            systemDefaultMode: 'light',
+            highContrast: false,
+            allowUserOverride: true,
+            banners: [
+                {
+                    id: 'banner_1',
+                    imageUrl: 'assets/Slide_image1.jpg',
+                    order: 1,
+                    active: true,
+                    createdAt: '2026-11-05T00:00:00.000Z'
+                },
+                {
+                    id: 'banner_2',
+                    imageUrl: 'assets/Slide_image2.jpg',
+                    order: 2,
+                    active: true,
+                    createdAt: '2026-11-05T00:00:00.000Z'
+                },
+                {
+                    id: 'banner_3',
+                    imageUrl: 'assets/slide_image3.jpg',
+                    order: 3,
+                    active: true,
+                    createdAt: '2026-11-05T00:00:00.000Z'
+                }
+            ]
+        }
+    };
+
+    if (fs.existsSync(settingsPath)) {
+        try {
+            const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+            const merged = { ...defaultSettings, ...raw };
+            if (!merged.appearance) {
+                merged.appearance = defaultSettings.appearance;
+            } else if (!Array.isArray(merged.appearance.banners)) {
+                merged.appearance.banners = defaultSettings.appearance.banners;
+            }
+            return merged;
+        } catch (e) {
+            console.warn('[System Settings] Read error, using defaults:', e.message);
+        }
+    }
+    return defaultSettings;
+}
+
+function saveSystemSettings(updates = {}) {
+    const current = getSystemSettings();
+    const merged = {
+        ...current,
+        ...updates,
+        updated_at: new Date().toISOString()
+    };
+    if (updates.appearance) {
+        merged.appearance = {
+            ...current.appearance,
+            ...updates.appearance
+        };
+    }
+    const settingsPath = path.join(__dirname, 'system_settings.json');
+    try {
+        fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf8');
+    } catch (e) {
+        console.error('[System Settings] Failed to save system_settings.json:', e.message);
+    }
+    return merged;
+}
+
 // Load cached system settings from local disk if available
 try {
-    const settingsPath = path.join(__dirname, 'system_settings.json');
-    if (fs.existsSync(settingsPath)) {
-        const localSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (localSettings.academicYear) activeAcademicYear = String(localSettings.academicYear).trim();
-        if (localSettings.semester) activeSemester = String(localSettings.semester).trim();
-        console.log(`[Academic Term] Initialized from local system_settings.json: AY ${activeAcademicYear} • ${activeSemester}`);
-    }
+    const localSettings = getSystemSettings();
+    if (localSettings.academicYear) activeAcademicYear = String(localSettings.academicYear).trim();
+    if (localSettings.semester) activeSemester = String(localSettings.semester).trim();
+    console.log(`[Academic Term] Initialized from local system_settings.json: AY ${activeAcademicYear} • ${activeSemester}`);
 } catch (e) {
     console.warn('[Academic Term] Could not read local system_settings.json:', e.message);
 }
@@ -3153,7 +3236,7 @@ async function sendSingleGranteeEmail(grantee, { force = false } = {}) {
 const server = http.createServer(async (req, res) => {
     // Enable CORS for all incoming requests
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
@@ -4571,13 +4654,12 @@ const server = http.createServer(async (req, res) => {
                 if (academicYear) activeAcademicYear = String(academicYear).trim();
                 if (semester) activeSemester = String(semester).trim();
 
-                // Persist to local disk system_settings.json
+                // Persist to local disk system_settings.json preserving appearance
                 try {
-                    fs.writeFileSync(path.join(__dirname, 'system_settings.json'), JSON.stringify({
+                    saveSystemSettings({
                         academicYear: activeAcademicYear,
-                        semester: activeSemester,
-                        updated_at: new Date().toISOString()
-                    }, null, 2));
+                        semester: activeSemester
+                    });
                 } catch (fsErr) {
                     console.warn('[Academic Term] Could not save system_settings.json:', fsErr.message);
                 }
@@ -4618,6 +4700,295 @@ const server = http.createServer(async (req, res) => {
         });
         return;
     }
+
+    // ── API: Get Appearance & Banners Configuration ───────────────────────
+    if (urlPath === '/api/appearance' && req.method === 'GET') {
+        const settings = getSystemSettings();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            appearance: settings.appearance,
+            banners: settings.appearance.banners
+        }));
+        return;
+    }
+
+    // ── API: Update Appearance Preferences (Dark Mode, Defaults) ───────────
+    if (urlPath === '/api/appearance' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const settings = getSystemSettings();
+                settings.appearance = {
+                    ...settings.appearance,
+                    ...payload
+                };
+                const updated = saveSystemSettings(settings);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    appearance: updated.appearance
+                }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: List Carousel Banners ─────────────────────────────────────────
+    if (urlPath === '/api/banners' && req.method === 'GET') {
+        const settings = getSystemSettings();
+        const isOnlyActive = req.url.includes('active=true');
+        const banners = isOnlyActive
+            ? (settings.appearance.banners || []).filter(b => b.active !== false)
+            : (settings.appearance.banners || []);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            banners
+        }));
+        return;
+    }
+
+    // ── API: Create/Upload Carousel Banner (Only Image, No Text) ───────────
+    if (urlPath === '/api/banners' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                const base64Image = payload.image;
+                if (!base64Image) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'No image provided. Please upload a banner image.' }));
+                    return;
+                }
+
+                const matches = base64Image.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+                let ext = 'jpg';
+                let buffer;
+                if (matches) {
+                    ext = matches[1].toLowerCase() === 'jpeg' ? 'jpg' : matches[1].toLowerCase();
+                    buffer = Buffer.from(matches[2], 'base64');
+                } else {
+                    buffer = Buffer.from(base64Image, 'base64');
+                }
+
+                const bannerDir = path.join(ROOT, 'assets', 'banners');
+                if (!fs.existsSync(bannerDir)) fs.mkdirSync(bannerDir, { recursive: true });
+                const studentBannerDir = path.join(ROOT, 'student_web', 'assets', 'banners');
+                if (!fs.existsSync(studentBannerDir)) fs.mkdirSync(studentBannerDir, { recursive: true });
+                const superAdminBannerDir = path.join(ROOT, 'superadmin_web', 'assets', 'banners');
+                if (!fs.existsSync(superAdminBannerDir)) fs.mkdirSync(superAdminBannerDir, { recursive: true });
+
+                const bannerId = 'banner_' + Date.now();
+                const filename = `${bannerId}.${ext}`;
+                fs.writeFileSync(path.join(bannerDir, filename), buffer);
+                try { fs.writeFileSync(path.join(studentBannerDir, filename), buffer); } catch (_) {}
+                try { fs.writeFileSync(path.join(superAdminBannerDir, filename), buffer); } catch (_) {}
+
+                const bannerUrl = `/assets/banners/${filename}`;
+                const settings = getSystemSettings();
+                const newBanner = {
+                    id: bannerId,
+                    imageUrl: bannerUrl,
+                    order: (settings.appearance.banners?.length || 0) + 1,
+                    active: payload.active !== undefined ? Boolean(payload.active) : true,
+                    createdAt: new Date().toISOString()
+                };
+
+                settings.appearance.banners.push(newBanner);
+                const saved = saveSystemSettings(settings);
+
+                res.writeHead(201, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    banner: newBanner,
+                    banners: saved.appearance.banners
+                }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Update Existing Carousel Banner (Replace Image / Status / Order)
+    if ((urlPath === '/api/banners/update' || (urlPath.startsWith('/api/banners/') && req.method === 'PUT')) && (req.method === 'POST' || req.method === 'PUT')) {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                let id = payload.id;
+                if (!id && urlPath.startsWith('/api/banners/')) {
+                    id = urlPath.replace('/api/banners/', '').split('/')[0];
+                }
+                if (!id) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Banner ID is required.' }));
+                    return;
+                }
+
+                const settings = getSystemSettings();
+                const banner = settings.appearance.banners.find(b => b.id === id);
+                if (!banner) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Banner not found.' }));
+                    return;
+                }
+
+                // Replace image if provided
+                if (payload.image) {
+                    const matches = payload.image.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+                    let ext = 'jpg';
+                    let buffer;
+                    if (matches) {
+                        ext = matches[1].toLowerCase() === 'jpeg' ? 'jpg' : matches[1].toLowerCase();
+                        buffer = Buffer.from(matches[2], 'base64');
+                    } else {
+                        buffer = Buffer.from(payload.image, 'base64');
+                    }
+
+                    const bannerDir = path.join(ROOT, 'assets', 'banners');
+                    if (!fs.existsSync(bannerDir)) fs.mkdirSync(bannerDir, { recursive: true });
+                    const studentBannerDir = path.join(ROOT, 'student_web', 'assets', 'banners');
+                    if (!fs.existsSync(studentBannerDir)) fs.mkdirSync(studentBannerDir, { recursive: true });
+                    const superAdminBannerDir = path.join(ROOT, 'superadmin_web', 'assets', 'banners');
+                    if (!fs.existsSync(superAdminBannerDir)) fs.mkdirSync(superAdminBannerDir, { recursive: true });
+
+                    const filename = `${id}_${Date.now()}.${ext}`;
+                    fs.writeFileSync(path.join(bannerDir, filename), buffer);
+                    try { fs.writeFileSync(path.join(studentBannerDir, filename), buffer); } catch (_) {}
+                    try { fs.writeFileSync(path.join(superAdminBannerDir, filename), buffer); } catch (_) {}
+                    banner.imageUrl = `/assets/banners/${filename}`;
+                }
+
+                if (payload.active !== undefined) {
+                    banner.active = Boolean(payload.active);
+                }
+                if (payload.order !== undefined) {
+                    banner.order = Number(payload.order);
+                }
+                banner.updatedAt = new Date().toISOString();
+
+                const saved = saveSystemSettings(settings);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    banner,
+                    banners: saved.appearance.banners
+                }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Delete Carousel Banner ─────────────────────────────────────────
+    if ((urlPath === '/api/banners/delete' || (urlPath.startsWith('/api/banners/') && req.method === 'DELETE')) && (req.method === 'POST' || req.method === 'DELETE')) {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const payload = JSON.parse(body || '{}');
+                let id = payload.id;
+                if (!id && urlPath.startsWith('/api/banners/')) {
+                    id = urlPath.replace('/api/banners/', '').split('/')[0];
+                }
+                if (!id) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Banner ID is required.' }));
+                    return;
+                }
+
+                const settings = getSystemSettings();
+                const idx = settings.appearance.banners.findIndex(b => b.id === id);
+                if (idx === -1) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Banner not found.' }));
+                    return;
+                }
+
+                settings.appearance.banners.splice(idx, 1);
+                // Re-sequence remaining banners
+                settings.appearance.banners.forEach((b, i) => b.order = i + 1);
+
+                const saved = saveSystemSettings(settings);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    banners: saved.appearance.banners
+                }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Reorder Carousel Banners ──────────────────────────────────────
+    if (urlPath === '/api/banners/reorder' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { order } = JSON.parse(body || '{}');
+                if (!Array.isArray(order)) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Order must be an array of banner IDs.' }));
+                    return;
+                }
+                const settings = getSystemSettings();
+                const map = new Map();
+                (settings.appearance.banners || []).forEach(b => map.set(b.id, b));
+                const reordered = [];
+                order.forEach((id, idx) => {
+                    if (map.has(id)) {
+                        const b = map.get(id);
+                        b.order = idx + 1;
+                        reordered.push(b);
+                        map.delete(id);
+                    }
+                });
+                map.forEach(b => {
+                    b.order = reordered.length + 1;
+                    reordered.push(b);
+                });
+                settings.appearance.banners = reordered;
+                const saved = saveSystemSettings(settings);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, banners: saved.appearance.banners }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Reset Banners to System Defaults ──────────────────────────────
+    if (urlPath === '/api/banners/reset' && req.method === 'POST') {
+        const settings = getSystemSettings();
+        settings.appearance.banners = [
+            { id: 'banner_1', imageUrl: 'assets/Slide_image1.jpg', order: 1, active: true, createdAt: new Date().toISOString() },
+            { id: 'banner_2', imageUrl: 'assets/Slide_image2.jpg', order: 2, active: true, createdAt: new Date().toISOString() },
+            { id: 'banner_3', imageUrl: 'assets/slide_image3.jpg', order: 3, active: true, createdAt: new Date().toISOString() }
+        ];
+        const saved = saveSystemSettings(settings);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, banners: saved.appearance.banners }));
+        return;
+    }
+
 
     // ── API: Send Grantee Notification via Gmail SMTP & Semaphore SMS ────
     if (urlPath === '/api/send-grantee-notification' && req.method === 'POST') {
@@ -5781,6 +6152,8 @@ Object.assign(vercelHandler, {
     pollNewGranteesAndSendEmail,
     startGranteeMessagingWatcher,
     startGranteeEmailWatcher,
+    getSystemSettings,
+    saveSystemSettings,
     server
 });
 

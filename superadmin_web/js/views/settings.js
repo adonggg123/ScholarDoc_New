@@ -640,6 +640,37 @@ function setupListeners() {
     }
 
     // Semaphore Test SMS button listener
+        // Dark mode toggle in Settings
+    const setDarkmodeCb = document.getElementById('set-darkmode');
+    if (setDarkmodeCb) {
+        setDarkmodeCb.checked = document.body.classList.contains('dark') || localStorage.getItem('theme') === 'dark';
+        setDarkmodeCb.addEventListener('change', () => {
+            const isDark = setDarkmodeCb.checked;
+            const theme = isDark ? 'dark' : 'light';
+            document.body.classList.toggle('dark', isDark);
+            localStorage.setItem('theme', theme);
+            const topbarIcon = document.getElementById('theme-toggle-icon');
+            if (topbarIcon) topbarIcon.className = isDark ? 'icon-sun' : 'icon-moon';
+            window.dispatchEvent(new CustomEvent('themechanged', { detail: { theme } }));
+            fetch('/api/appearance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ themeMode: theme })
+            }).catch(() => {});
+            showToast('Switched to ' + (isDark ? 'Dark' : 'Light') + ' mode');
+        });
+    }
+
+    // Quick jump to Appearance Management
+    const quickAppearance = document.getElementById('btn-quick-appearance');
+    if (quickAppearance) {
+        quickAppearance.addEventListener('click', () => {
+            if (typeof window.navigateToView === 'function') {
+                window.navigateToView('appearance');
+            }
+        });
+    }
+
     const btnTestSms = document.getElementById('sms-test-btn');
     if (btnTestSms) {
         btnTestSms.addEventListener('click', handleSendTestSms);

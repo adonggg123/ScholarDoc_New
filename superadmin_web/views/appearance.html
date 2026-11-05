@@ -1,0 +1,560 @@
+<style>
+.appearance-tab-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-color);
+    padding: 6px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.appearance-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 20px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    outline: none;
+    position: relative;
+}
+
+.appearance-tab-btn:hover:not(.active) {
+    color: var(--text-primary);
+    background: rgba(15, 50, 96, 0.05);
+}
+
+.appearance-tab-btn.active {
+    background: linear-gradient(135deg, #0A1E3F 0%, #1E355A 100%);
+    color: #FFFFFF !important;
+    border-color: rgba(212, 175, 55, 0.35);
+    box-shadow: 0 4px 12px rgba(10, 30, 63, 0.22);
+}
+
+.appearance-tab-btn.active i {
+    color: #D4AF37 !important;
+}
+
+body.dark .appearance-tab-btn.active {
+    background: linear-gradient(135deg, #1E355A 0%, #0F3260 100%);
+    color: #FFFFFF !important;
+    border-color: rgba(212, 175, 55, 0.5);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.appearance-tab-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    line-height: 1.2;
+    transition: all 0.2s ease;
+}
+
+.appearance-tab-btn:not(.active) .appearance-tab-badge {
+    background: rgba(15, 50, 96, 0.08);
+    color: var(--text-secondary);
+}
+
+body.dark .appearance-tab-btn:not(.active) .appearance-tab-badge {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+}
+
+.appearance-tab-pane {
+    display: none;
+    flex-direction: column;
+    gap: 24px;
+    animation: tabFadeIn 0.22s ease-out;
+}
+
+.appearance-tab-pane.active {
+    display: flex;
+}
+
+@keyframes tabFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
+
+<div class="view-content" style="display: flex; flex-direction: column; gap: 24px; padding-bottom: 70px;">
+    <!-- Top Header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0A1E3F, #1E355A, #D4AF37); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(10,30,63,0.25);">
+                    <i class="icon-palette" style="color: white; font-size: 19px;"></i>
+                </div>
+                <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: var(--primary-color); letter-spacing: -0.5px;">Appearance Settings</h2>
+            </div>
+            <p style="margin: 0; color: var(--text-secondary); font-size: 13px; font-weight: 500;">
+                Manage carousel banners and dark mode visual theme controls across ScholarDoc.
+            </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="active-theme-pill" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; background: rgba(15, 50, 96, 0.08); color: var(--primary-color); border: 1px solid var(--border-color);">
+                <i class="icon-sun" id="active-theme-pill-icon" style="font-size: 14px;"></i>
+                <span id="active-theme-pill-text">Light Theme</span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Tab Switch Navigation Buttons -->
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+        <div class="appearance-tab-bar" role="tablist" aria-label="Appearance Management Tabs">
+            <button type="button" class="appearance-tab-btn active" id="tab-btn-carousel" role="tab" aria-selected="true" aria-controls="tab-content-carousel">
+                <i class="icon-image" style="font-size: 15px;"></i>
+                <span>Banner Carousel</span>
+                <span class="appearance-tab-badge" id="tab-carousel-badge">3 Active</span>
+            </button>
+            <button type="button" class="appearance-tab-btn" id="tab-btn-darkmode" role="tab" aria-selected="false" aria-controls="tab-content-darkmode">
+                <i class="icon-moon" id="tab-darkmode-icon" style="font-size: 15px;"></i>
+                <span>Dark Mode</span>
+                <span class="appearance-tab-badge" id="tab-darkmode-badge">Light</span>
+            </button>
+        </div>
+        <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">
+            Select a tab to configure carousel imagery or interface lighting.
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: BANNER CAROUSEL MANAGEMENT                                         -->
+    <!-- ========================================================================= -->
+    <div id="tab-content-carousel" class="appearance-tab-pane active" role="tabpanel" aria-labelledby="tab-btn-carousel">
+        
+        <!-- Live Interactive Carousel Simulator Card -->
+        <div class="card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center; color: var(--primary-color);">
+                        <i class="icon-eye" style="font-size: 17px;"></i>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">Live Carousel Simulator</h4>
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">Real-time preview matching student dashboard and mobile screen proportions.</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" id="btn-toggle-carousel-play" class="icon-btn" title="Pause / Play Auto-Rotation" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">
+                        <i class="icon-pause" id="carousel-play-icon" style="font-size: 14px;"></i>
+                    </button>
+                    <button type="button" id="btn-preview-prev" class="icon-btn" title="Previous Slide" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">
+                        <i class="icon-chevron-left" style="font-size: 16px;"></i>
+                    </button>
+                    <span id="preview-slide-indicator" style="font-size: 12px; font-weight: 700; color: var(--text-primary); min-width: 50px; text-align: center;">1 / 3</span>
+                    <button type="button" id="btn-preview-next" class="icon-btn" title="Next Slide" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">
+                        <i class="icon-chevron-right" style="font-size: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Preview Carousel Viewport -->
+            <div style="position: relative; width: 100%; max-width: 960px; margin: 0 auto; height: 230px; border-radius: 18px; overflow: hidden; background: #0F172A; box-shadow: 0 10px 28px rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.08);">
+                <div id="preview-carousel-track" style="display: flex; height: 100%; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform;">
+                    <!-- Injected dynamically via appearance.js -->
+                </div>
+
+                <!-- Gradient Corner Watermark / Badge -->
+                <div style="position: absolute; top: 12px; left: 14px; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(8px); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; gap: 6px; z-index: 10;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px #10B981;"></span>
+                    <span style="font-size: 10.5px; font-weight: 800; color: white; letter-spacing: 0.3px; text-transform: uppercase;">Active Simulator</span>
+                </div>
+
+                <!-- Preview Dots Navigation -->
+                <div id="preview-carousel-dots" style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 7px; padding: 5px 12px; background: rgba(0,0,0,0.45); border-radius: 20px; backdrop-filter: blur(8px); z-index: 10;">
+                    <!-- Injected dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Banner List / Management Grid Card -->
+        <div class="card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 20px;">
+                <div>
+                    <h4 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary);">Uploaded Carousel Banners</h4>
+                    <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">
+                        Reorder slides, toggle visibility, replace images, or delete banners from the carousel list.
+                    </p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="banners-active-count-label" style="font-size: 12px; font-weight: 700; color: #10B981; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 5px 12px; border-radius: 12px;">
+                        3 of 3 Active
+                    </span>
+                    <button type="button" id="btn-reset-default-banners" class="btn" style="padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,0.03); color: var(--text-secondary); border: 1px solid var(--border-color); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="icon-rotate-ccw" style="font-size: 13px;"></i>
+                        <span>Reset Defaults</span>
+                    </button>
+                    <button type="button" id="btn-open-create-banner" class="btn btn-primary" style="padding: 8px 16px; border-radius: 10px; font-size: 12.5px; font-weight: 700; background: linear-gradient(135deg, #0A1E3F 0%, #1E355A 100%); color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(10,30,63,0.25);">
+                        <i class="icon-plus-circle" style="font-size: 15px;"></i>
+                        <span>Upload New Banner</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Banners Grid Container -->
+            <div id="banners-grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px;">
+                <!-- Injected dynamically via appearance.js -->
+            </div>
+
+            <!-- Empty State (if all banners removed) -->
+            <div id="banners-empty-state" class="hidden" style="text-align: center; padding: 48px 20px; border: 2px dashed var(--border-color); border-radius: 14px; background: rgba(0,0,0,0.01);">
+                <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(15, 50, 96, 0.08); display: inline-flex; align-items: center; justify-content: center; color: var(--primary-color); margin-bottom: 12px;">
+                    <i class="icon-image" style="font-size: 26px;"></i>
+                </div>
+                <h4 style="margin: 0 0 4px 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">No Carousel Banners Found</h4>
+                <p style="margin: 0 0 16px 0; font-size: 12.5px; color: var(--text-secondary); max-width: 400px; margin-left: auto; margin-right: auto;">
+                    There are no banners currently configured. Upload an image to start showing hero visuals to your scholars.
+                </p>
+                <button type="button" id="btn-empty-add-banner" class="btn btn-primary" style="padding: 9px 18px; border-radius: 10px; font-size: 12.5px; font-weight: 700; background: var(--primary-color); color: white; border: none; cursor: pointer;">
+                    Upload First Banner
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: DARK MODE MANAGEMENT                                               -->
+    <!-- ========================================================================= -->
+    <div id="tab-content-darkmode" class="appearance-tab-pane" role="tabpanel" aria-labelledby="tab-btn-darkmode">
+        <div class="card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); display: flex; align-items: center; justify-content: center; color: #3B82F6;">
+                        <i class="icon-moon" style="font-size: 17px;"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-primary);">Dark Mode Management</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 12.5px; color: var(--text-secondary);">
+                            Configure interface display styles for your Super Admin portal and system-wide default behavior.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mode Radio Grid (3 Options: Light, Dark, System Auto) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-bottom: 24px;">
+                <!-- Option 1: Light Mode -->
+                <div class="theme-choice-card" data-mode="light" id="card-mode-light" style="border: 2px solid var(--border-color); border-radius: 14px; padding: 18px; cursor: pointer; transition: all 0.2s; position: relative; background: var(--surface-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245, 158, 11, 0.12); display: flex; align-items: center; justify-content: center; color: #D97706;">
+                            <i class="icon-sun" style="font-size: 20px;"></i>
+                        </div>
+                        <div class="theme-radio-indicator" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+                            <span class="theme-radio-dot" style="width: 10px; height: 10px; border-radius: 50%; background: var(--primary-color); display: none;"></span>
+                        </div>
+                    </div>
+                    <h4 style="margin: 0 0 4px 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">Light Mode</h4>
+                    <p style="margin: 0 0 14px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
+                        Crisp daylight palette with USTP Doc Blue (#0F3260) and high-clarity white background surfaces.
+                    </p>
+                    <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px; display: flex; gap: 6px; align-items: center;">
+                        <span style="width: 14px; height: 14px; border-radius: 4px; background: #0F3260;"></span>
+                        <span style="width: 28px; height: 6px; border-radius: 3px; background: #E5E7EB;"></span>
+                        <span style="width: 18px; height: 6px; border-radius: 3px; background: #D4AF37; margin-left: auto;"></span>
+                    </div>
+                </div>
+
+                <!-- Option 2: Dark Mode -->
+                <div class="theme-choice-card" data-mode="dark" id="card-mode-dark" style="border: 2px solid var(--border-color); border-radius: 14px; padding: 18px; cursor: pointer; transition: all 0.2s; position: relative; background: var(--surface-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(59, 130, 246, 0.12); display: flex; align-items: center; justify-content: center; color: #3B82F6;">
+                            <i class="icon-moon" style="font-size: 20px;"></i>
+                        </div>
+                        <div class="theme-radio-indicator" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+                            <span class="theme-radio-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #3B82F6; display: none;"></span>
+                        </div>
+                    </div>
+                    <h4 style="margin: 0 0 4px 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">Dark Mode</h4>
+                    <p style="margin: 0 0 14px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
+                        Modern Slate Dark palette (#0B0F19) and dark surfaces designed for reduced glare and eye strain.
+                    </p>
+                    <div style="background: #0B0F19; border: 1px solid #1E293B; border-radius: 8px; padding: 8px; display: flex; gap: 6px; align-items: center;">
+                        <span style="width: 14px; height: 14px; border-radius: 4px; background: #3B82F6;"></span>
+                        <span style="width: 28px; height: 6px; border-radius: 3px; background: #334155;"></span>
+                        <span style="width: 18px; height: 6px; border-radius: 3px; background: #10B981; margin-left: auto;"></span>
+                    </div>
+                </div>
+
+                <!-- Option 3: Match System -->
+                <div class="theme-choice-card" data-mode="system" id="card-mode-system" style="border: 2px solid var(--border-color); border-radius: 14px; padding: 18px; cursor: pointer; transition: all 0.2s; position: relative; background: var(--surface-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); display: flex; align-items: center; justify-content: center; color: #10B981;">
+                            <i class="icon-monitor" style="font-size: 20px;"></i>
+                        </div>
+                        <div class="theme-radio-indicator" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+                            <span class="theme-radio-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; display: none;"></span>
+                        </div>
+                    </div>
+                    <h4 style="margin: 0 0 4px 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">Sync Device (Auto)</h4>
+                    <p style="margin: 0 0 14px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
+                        Follows your operating system preferences dynamically (switches to dark mode when system theme changes).
+                    </p>
+                    <div style="background: linear-gradient(90deg, #F9FAFB 50%, #0B0F19 50%); border: 1px solid #94A3B8; border-radius: 8px; padding: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: #0F3260;"></span>
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: #3B82F6;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instant Live Portal Toggle -->
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 12px; background: rgba(0,0,0,0.02); margin-bottom: 18px;">
+                <div>
+                    <span style="display: block; font-size: 14px; font-weight: 700; color: var(--text-primary);">Instant Portal Dark Mode Toggle</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">Directly switch between Light and Slate Dark mode on this Super Admin console without reloading.</span>
+                </div>
+                <button type="button" class="sch-switch-btn" id="btn-toggle-instant-darkmode" role="switch" aria-checked="false">
+                    <span class="sch-switch-knob"></span>
+                </button>
+            </div>
+
+            <!-- Global Default & Override Policies -->
+            <div style="display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                    <div>
+                        <span style="display: block; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">Set as System-Wide Default Mode</span>
+                        <span style="font-size: 11.5px; color: var(--text-secondary);">Initial theme mode served to students and visitors accessing the ScholarDoc web portals.</span>
+                    </div>
+                    <select id="select-system-default-theme" style="padding: 7px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 12.5px; background: var(--surface-color); color: var(--text-primary); font-family: inherit; font-weight: 600; outline: none; cursor: pointer;">
+                        <option value="light">Light Mode (Default)</option>
+                        <option value="dark">Slate Dark Mode</option>
+                        <option value="system">Auto Match Device</option>
+                    </select>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 0;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" id="row-allow-override">
+                    <div>
+                        <span style="display: block; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">Allow Student Portal Theme Override</span>
+                        <span style="font-size: 11.5px; color: var(--text-secondary);">Grantees can independently toggle their own light/dark preference in their student portal.</span>
+                    </div>
+                    <button type="button" class="sch-switch-btn active" id="btn-toggle-allow-override" role="switch" aria-checked="true">
+                        <span class="sch-switch-knob"></span>
+                    </button>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 0;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" id="row-high-contrast">
+                    <div>
+                        <span style="display: block; font-size: 13.5px; font-weight: 700; color: var(--text-primary);">High-Contrast Card Borders</span>
+                        <span style="font-size: 11.5px; color: var(--text-secondary);">Enhances container borders and element outlines in dark mode for maximum accessibility.</span>
+                    </div>
+                    <button type="button" class="sch-switch-btn" id="btn-toggle-high-contrast" role="switch" aria-checked="false">
+                        <span class="sch-switch-knob"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Action Save Button -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" id="btn-save-appearance" class="btn btn-primary" style="padding: 11px 24px; border-radius: 10px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #0A1E3F 0%, #1E355A 100%); color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(10,30,63,0.25); transition: all 0.2s;">
+                    <i class="icon-save" style="font-size: 16px;"></i>
+                    <span>Save Appearance Preferences</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Theme Preview Sandbox -->
+        <div class="card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.05); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(15, 50, 96, 0.08); display: flex; align-items: center; justify-content: center; color: var(--primary-color);">
+                    <i class="icon-sliders" style="font-size: 16px;"></i>
+                </div>
+                <div>
+                    <h4 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">UI Theme Sandbox Preview</h4>
+                    <div style="font-size: 11.5px; color: var(--text-secondary);">Interactive preview showing how buttons, tags, text, and inputs render in the active theme.</div>
+                </div>
+            </div>
+
+            <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-primary" style="padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; background: var(--primary-color); color: white; border: none;">Primary Button</button>
+                    <button type="button" class="btn" style="padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,0.04); color: var(--text-primary); border: 1px solid var(--border-color);">Surface Button</button>
+                    <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(16, 185, 129, 0.12); color: #10B981;">Active Grantee</span>
+                    <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(245, 158, 11, 0.12); color: #F59E0B;">Pending Approval</span>
+                    <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(239, 68, 68, 0.12); color: #EF4444;">Action Required</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <input type="text" placeholder="Sample Input field text..." readonly style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 12px; background: var(--background-color); color: var(--text-primary); outline: none;">
+                    <div style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 12px; background: var(--background-color); color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
+                        <span>Read-only Display</span>
+                        <strong style="color: var(--text-primary);">₱10,000.00</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODALS                                                                    -->
+<!-- ========================================================================= -->
+
+<!-- 1. Upload / Replace Banner Modal (Pure Image Upload, No Text) -->
+<div id="modal-banner-upload" class="modal-backdrop hidden" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); transition: opacity 0.25s ease;">
+    <div class="card" style="width: 90%; max-width: 540px; padding: 26px; border-radius: 20px; box-shadow: 0 24px 48px rgba(0,0,0,0.25); background: var(--surface-color); border: 1px solid var(--border-color); position: relative;">
+        <!-- Close Button -->
+        <button type="button" id="btn-close-upload-modal" class="icon-btn" style="position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(0,0,0,0.05); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <i class="icon-x" style="font-size: 16px;"></i>
+        </button>
+
+        <!-- Header -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px;">
+            <div id="modal-banner-avatar" style="width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #0A1E3F, #1E355A); color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(10,30,63,0.2);">
+                <i class="icon-image" style="font-size: 20px;"></i>
+            </div>
+            <div>
+                <h3 id="modal-banner-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-primary);">Upload Carousel Banner</h3>
+                <p id="modal-banner-subtitle" style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">Upload an image for the rotating carousel. No text input is required.</p>
+            </div>
+        </div>
+
+        <!-- Hidden input for file selection -->
+        <input type="file" id="input-banner-file" accept="image/png, image/jpeg, image/jpg, image/webp" style="display: none;">
+
+        <!-- Dropzone / Image Picker Area -->
+        <div id="banner-dropzone" style="border: 2px dashed var(--border-color); border-radius: 14px; padding: 24px 16px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.015); margin-bottom: 16px;">
+            <div id="dropzone-empty-view">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(15, 50, 96, 0.08); display: inline-flex; align-items: center; justify-content: center; color: var(--primary-color); margin-bottom: 10px;">
+                    <i class="icon-upload-cloud" style="font-size: 24px;"></i>
+                </div>
+                <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Click to select or drag and drop image</div>
+                <div style="font-size: 11.5px; color: var(--text-secondary);">Supports PNG, JPG, JPEG, WEBP (Max 8MB)</div>
+                <div style="font-size: 11px; color: var(--primary-color); font-weight: 600; margin-top: 8px;">Recommended ratio: ~16:9 or 21:9 landscape</div>
+            </div>
+
+            <!-- Preview View (visible once file is picked) -->
+            <div id="dropzone-preview-view" class="hidden" style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                <div style="position: relative; width: 100%; height: 180px; border-radius: 10px; overflow: hidden; background: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <img id="img-upload-preview" src="" alt="Selected Banner Preview" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); padding: 3px 8px; border-radius: 6px; font-size: 10.5px; color: white; font-weight: 600;">
+                        <span id="preview-file-size">0 KB</span>
+                    </div>
+                </div>
+                <button type="button" id="btn-change-image" style="background: none; border: none; color: var(--primary-color); font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                    <i class="icon-refresh-cw" style="font-size: 12px;"></i> Choose Different Image
+                </button>
+            </div>
+        </div>
+
+        <!-- Banner Active Setting -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(0,0,0,0.02); margin-bottom: 20px;">
+            <div>
+                <span style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: block;">Active on Carousel</span>
+                <span style="font-size: 11.5px; color: var(--text-secondary);">Visible immediately to scholars on web and mobile.</span>
+            </div>
+            <button type="button" class="sch-switch-btn active" id="btn-modal-banner-active" role="switch" aria-checked="true">
+                <span class="sch-switch-knob"></span>
+            </button>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" id="btn-cancel-banner-upload" class="btn" style="padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 12.5px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); cursor: pointer;">
+                Cancel
+            </button>
+            <button type="button" id="btn-confirm-banner-upload" class="btn btn-primary" style="padding: 10px 22px; border-radius: 10px; font-weight: 700; font-size: 12.5px; background: linear-gradient(135deg, #0A1E3F 0%, #1E355A 100%); color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(10,30,63,0.25);">
+                <i class="icon-upload" style="font-size: 14px;"></i>
+                <span id="btn-confirm-banner-text">Upload Banner</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 2. Delete Confirmation Modal -->
+<div id="modal-banner-delete" class="modal-backdrop hidden" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+    <div class="card" style="width: 90%; max-width: 440px; padding: 24px; border-radius: 18px; box-shadow: 0 20px 40px rgba(0,0,0,0.25); background: var(--surface-color); border: 1px solid var(--border-color); text-align: center;">
+        <div style="width: 50px; height: 50px; border-radius: 14px; background: rgba(239, 68, 68, 0.1); color: #EF4444; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+            <i class="icon-trash-2" style="font-size: 24px;"></i>
+        </div>
+        <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 800; color: var(--text-primary);">Delete Carousel Banner?</h3>
+        <p style="margin: 0 0 16px 0; font-size: 12.5px; color: var(--text-secondary); line-height: 1.4;">
+            Are you sure you want to permanently remove this banner from the carousel? It will no longer appear on student dashboards.
+        </p>
+        <div style="width: 100%; height: 110px; border-radius: 10px; overflow: hidden; background: #000; margin-bottom: 20px;">
+            <img id="delete-banner-thumbnail" src="" alt="Banner to delete" style="width: 100%; height: 100%; object-fit: cover;">
+        </div>
+        <div style="display: flex; justify-content: center; gap: 10px;">
+            <button type="button" id="btn-cancel-delete" class="btn" style="padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 12.5px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); cursor: pointer;">
+                Cancel
+            </button>
+            <button type="button" id="btn-confirm-delete" class="btn" style="padding: 10px 22px; border-radius: 10px; font-weight: 700; font-size: 12.5px; background: #EF4444; color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(239,68,68,0.25);">
+                <i class="icon-trash-2" style="font-size: 14px;"></i>
+                <span>Delete Banner</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .theme-choice-card:hover {
+        border-color: var(--primary-color) !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+    }
+    .theme-choice-card.selected {
+        border-color: var(--primary-color) !important;
+        background: rgba(15, 50, 96, 0.03) !important;
+    }
+    body.dark .theme-choice-card.selected {
+        border-color: #3B82F6 !important;
+        background: rgba(59, 130, 246, 0.08) !important;
+    }
+    .theme-choice-card.selected .theme-radio-dot {
+        display: block !important;
+    }
+    .theme-choice-card.selected .theme-radio-indicator {
+        border-color: var(--primary-color) !important;
+    }
+    body.dark .theme-choice-card.selected .theme-radio-indicator {
+        border-color: #3B82F6 !important;
+    }
+    .banner-card {
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        background: var(--surface-color);
+        overflow: hidden;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+    }
+    .banner-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        border-color: rgba(15, 50, 96, 0.3);
+    }
+    #preview-carousel-dots .preview-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: white;
+        opacity: 0.35;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    #preview-carousel-dots .preview-dot.active {
+        opacity: 1;
+        width: 18px;
+        border-radius: 4px;
+    }
+</style>

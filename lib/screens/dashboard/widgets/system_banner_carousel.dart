@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../config/api_config.dart';
 import '../../../theme/app_theme.dart';
 
 class _CarouselSlide {
@@ -21,7 +24,7 @@ class _ScholarDocCarouselState extends State<ScholarDocCarousel> {
   int _currentPage = 0;
   Timer? _timer;
 
-  final List<_CarouselSlide> _slides = const [
+  List<_CarouselSlide> _slides = const [
     _CarouselSlide(backgroundImagePath: 'assets/Slide_image1.jpg'),
     _CarouselSlide(backgroundImagePath: 'assets/Slide_image2.jpg'),
     _CarouselSlide(backgroundImagePath: 'assets/Slide_image3.jpg'),
@@ -32,12 +35,51 @@ class _ScholarDocCarouselState extends State<ScholarDocCarousel> {
     super.initState();
     _pageController = PageController(viewportFraction: 0.93, initialPage: 0);
     _startTimer();
+    _fetchRemoteBanners();
+  }
+
+  Future<void> _fetchRemoteBanners() async {
+    try {
+      final candidates = await ApiConfig.resolveFastCandidates();
+      for (final candidate in candidates) {
+        try {
+          final uri = Uri.parse('$candidate/api/banners?active=true');
+          final res = await http.get(uri).timeout(const Duration(seconds: 4));
+          if (res.statusCode == 200) {
+            final data = jsonDecode(res.body);
+            if (data is Map && data['banners'] is List) {
+              final list = data['banners'] as List;
+              if (list.isNotEmpty && mounted) {
+                final newSlides = <_CarouselSlide>[];
+                for (final item in list) {
+                  if (item is Map && item['imageUrl'] != null) {
+                    var imgUrl = item['imageUrl'].toString();
+                    if (imgUrl.startsWith('/')) {
+                      imgUrl = '$candidate$imgUrl';
+                    }
+                    newSlides.add(_CarouselSlide(backgroundImagePath: imgUrl));
+                  }
+                }
+                if (newSlides.isNotEmpty && mounted) {
+                  setState(() {
+                    _slides = newSlides;
+                  });
+                  _startTimer();
+                  return;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   void _startTimer() {
     _timer?.cancel();
+    if (_slides.length <= 1) return;
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (_pageController.hasClients) {
+      if (_pageController.hasClients && _slides.isNotEmpty) {
         final nextPage = (_currentPage + 1) % _slides.length;
         _pageController.animateToPage(
           nextPage,

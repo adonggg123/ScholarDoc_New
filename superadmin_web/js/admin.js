@@ -139,6 +139,7 @@ const topbarTitle = document.getElementById('topbar-title');
 const topbarIcon = document.getElementById('topbar-icon');
 const navItems = document.querySelectorAll('.nav-item[data-view]');
 const validationMenuBtn = document.getElementById('validation-menu-btn');
+const settingsMenuBtn = document.getElementById('settings-menu-btn');
 const syncBtn = document.getElementById('sync-btn');
 const syncStatus = document.getElementById('sync-status');
 const profilePill = document.getElementById('profile-pill');
@@ -157,6 +158,7 @@ const viewTitles = {
     'audit_logs': 'Activity Logs',
     'reports': 'Reports & Analytics',
     'settings': 'System Settings',
+    'appearance': 'Appearance Settings',
     'masterlist_import': 'New Grantees Import',
     'annex5_generator': 'CHED Annex 5 TES Generator'
 };
@@ -172,6 +174,7 @@ const viewIcons = {
     'audit_logs': 'icon-history',
     'reports': 'icon-bar-chart-4',
     'settings': 'icon-settings',
+    'appearance': 'icon-palette',
     'masterlist_import': 'icon-upload-cloud',
     'annex5_generator': 'icon-file-spreadsheet'
 };
@@ -374,6 +377,12 @@ window.navigateToView = function(viewName, tabName) {
         targetNav.classList.add('active');
         
         // Expand the validation sub-menu if targeting a validation sub-screen
+        if (viewName === 'settings' || viewName === 'appearance') {
+            const setMenu = document.getElementById('settings-menu-btn');
+            if (setMenu && !setMenu.classList.contains('expanded')) {
+                setMenu.click();
+            }
+        }
         if (viewName === 'sa_verification' || viewName === 'id_validation') {
             const valMenu = document.getElementById('validation-menu-btn');
             if (valMenu && !valMenu.classList.contains('expanded')) {
@@ -1283,6 +1292,17 @@ if (validationMenuBtn) {
         const icon = validationMenuBtn.querySelector('.icon-chevron-down');
         if (icon) {
             icon.style.transform = validationMenuBtn.classList.contains('expanded') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+    });
+}
+
+
+if (settingsMenuBtn) {
+    settingsMenuBtn.addEventListener('click', () => {
+        settingsMenuBtn.classList.toggle('expanded');
+        const icon = settingsMenuBtn.querySelector('.icon-chevron-down');
+        if (icon) {
+            icon.style.transform = settingsMenuBtn.classList.contains('expanded') ? 'rotate(180deg)' : 'rotate(0deg)';
         }
     });
 }

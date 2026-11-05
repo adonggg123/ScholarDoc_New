@@ -144,27 +144,68 @@ renderCalendar();
 
 // ─── Carousel Banner ───
 let currentSlide = 0;
-const totalSlides = 3;
+let totalSlides = 3;
 const track = document.getElementById('carousel-track');
-const dots = document.querySelectorAll('.carousel-dot');
+const dotsContainer = document.getElementById('carousel-dots');
 
 function goToSlide(index) {
-    currentSlide = index;
-    if (track) track.style.transform = `translateX(-${index * 100}%)`;
+    if (totalSlides <= 0) return;
+    currentSlide = (index + totalSlides) % totalSlides;
+    if (track) track.style.transform = `translateX(-${currentSlide * 100}%)`;
+    const dots = document.querySelectorAll('.carousel-dot');
     dots.forEach((dot, i) => {
-        dot.style.opacity = i === index ? '1' : '0.4';
-        dot.classList.toggle('active', i === index);
+        dot.style.opacity = i === currentSlide ? '1' : '0.4';
+        dot.classList.toggle('active', i === currentSlide);
     });
 }
 
-dots.forEach(dot => {
-    dot.addEventListener('click', () => goToSlide(parseInt(dot.dataset.index)));
-});
+function wireUpDots() {
+    const dots = document.querySelectorAll('.carousel-dot');
+    dots.forEach(dot => {
+        dot.addEventListener('click', () => goToSlide(parseInt(dot.dataset.index, 10)));
+    });
+}
+
+wireUpDots();
 
 // Auto-advance carousel
 setInterval(() => {
-    goToSlide((currentSlide + 1) % totalSlides);
+    if (totalSlides > 1) {
+        goToSlide((currentSlide + 1) % totalSlides);
+    }
 }, 5000);
+
+// Dynamic Banners Synchronization from Super Admin Appearance
+async function syncDynamicBanners() {
+    try {
+        const res = await fetch('/api/banners?active=true');
+        if (!res.ok) return;
+        const data = await res.json();
+        const banners = data.banners;
+        if (!Array.isArray(banners) || banners.length === 0) return;
+
+        totalSlides = banners.length;
+        if (track) {
+            track.innerHTML = banners.map((b, idx) => `
+                <div style="min-width: 100%; height: 100%; position: relative; overflow: hidden; flex-shrink: 0; background: #000;">
+                    <img src="${b.imageUrl}" alt="Banner ${idx + 1}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0;" onerror="this.onerror=null; this.src='assets/Slide_image1.jpg';">
+                </div>
+            `).join('');
+        }
+
+        if (dotsContainer) {
+            dotsContainer.innerHTML = banners.map((_, idx) => `
+                <div class="carousel-dot ${idx === 0 ? 'active' : ''}" data-index="${idx}" style="width: 8px; height: 8px; border-radius: 50%; background: white; opacity: ${idx === 0 ? '1' : '0.4'}; cursor: pointer; transition: all 0.3s;"></div>
+            `).join('');
+            wireUpDots();
+        }
+
+        currentSlide = 0;
+        goToSlide(0);
+    } catch (_) { }
+}
+
+syncDynamicBanners();
 
 // ─── Announcements Feed ───
 async function loadAnnouncements() {

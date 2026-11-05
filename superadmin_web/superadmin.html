@@ -84,9 +84,19 @@
             <div class="sidebar-bottom-section" style="margin-top: auto; padding-top: 8px;">
                 <hr id="sidebar-divider" style="border-top: 1px solid #1f2937; margin: 8px 0 12px 0; width: 100%;">
 
-                <a href="#" class="nav-item" data-view="settings" style="width: 100%;">
+                <!-- Expandable Settings Menu -->
+                <div class="nav-item expandable" id="settings-menu-btn" style="cursor: pointer;">
                     <i class="icon-settings"></i> Settings
-                </a>
+                    <i class="icon-chevron-down" style="margin-left: auto; font-size: 0.9rem; transition: transform 0.2s;"></i>
+                </div>
+                <div class="nav-sub-menu" id="settings-sub-menu">
+                    <a href="#" class="nav-item" data-view="settings">
+                        <i class="icon-sliders"></i> General Settings
+                    </a>
+                    <a href="#" class="nav-item" data-view="appearance">
+                        <i class="icon-palette"></i> Appearance
+                    </a>
+                </div>
             </div>
         </nav>
     </aside>

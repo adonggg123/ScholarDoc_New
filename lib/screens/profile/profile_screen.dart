@@ -20,6 +20,7 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   final _personalFormKey = GlobalKey<FormState>();
@@ -1080,7 +1081,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        // Straight edges instead of curved corners
         border: Border(
           bottom: BorderSide(color: Color(0xFFFBC02D), width: 3.0),
         ),
@@ -1088,8 +1089,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Top Action Bar
               Row(
@@ -1205,113 +1207,136 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ],
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
 
-              // Avatar + Upload Photo Trigger
-              GestureDetector(
-                onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3.5),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFFFBC02D),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFBC02D).withOpacity(0.28),
-                            blurRadius: 18,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.primaryColor,
-                          shape: BoxShape.circle,
-                        ),
-                        child: _buildAvatarWidget(),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 2,
-                      right: 2,
-                      child: Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFBC02D),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFF0F3260),
-                            width: 2,
-                          ),
-                        ),
-                        child: _isUploadingPhoto
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.primaryColor,
-                                ),
-                              )
-                            : const Icon(
-                                LucideIcons.camera,
-                                size: 14,
-                                color: AppTheme.primaryColor,
+              // Profile Identity Row: Avatar on the left, Name and Course beside it
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Avatar with Camera Trigger
+                  GestureDetector(
+                    onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3.0),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFFBC02D),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFBC02D).withOpacity(0.28),
+                                blurRadius: 14,
+                                spreadRadius: 1,
                               ),
-                      ),
+                            ],
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(2.5),
+                            decoration: const BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: _buildAvatarWidget(size: 76),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBC02D),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF0F3260),
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.28),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: _isUploadingPhoto
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  )
+                                : const Icon(
+                                    LucideIcons.camera,
+                                    size: 13,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // Name and Course details
+                  Expanded(
+                    child: _isProfileLoading
+                        ? const Align(
+                            alignment: Alignment.centerLeft,
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFFBC02D),
+                                strokeWidth: 2.2,
+                              ),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                displayName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                  height: 1.22,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                '$displayCourse • $displayYear',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 12),
-
-              if (_isProfileLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFFBC02D),
-                      strokeWidth: 2.5,
-                    ),
-                  ),
-                )
-              else ...[
-                Text(
-                  displayName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$displayCourse • $displayYear',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 12),
+              if (!_isProfileLoading) ...[
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (studentId.isNotEmpty)
                       InkWell(
@@ -3032,13 +3057,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   // AVATAR UPLOAD, DATE PICKER & LOGOUT DIALOG
   // ─────────────────────────────────────────────────────────────────────────
 
-  Widget _buildAvatarWidget() {
+  Widget _buildAvatarWidget({double size = 76}) {
     final String? url = _profilePictureUrl;
+    final double iconSize = size * 0.48;
     if (url != null && url.isNotEmpty) {
       return ClipOval(
         child: SizedBox(
-          width: 92,
-          height: 92,
+          width: size,
+          height: size,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -3048,9 +3074,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 errorBuilder: (_, _, _) => Container(
                   color: const Color(0xFF1A4F9E),
                   alignment: Alignment.center,
-                  child: const Icon(
+                  child: Icon(
                     LucideIcons.user,
-                    size: 44,
+                    size: iconSize,
                     color: Colors.white,
                   ),
                 ),
@@ -3059,10 +3085,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Container(
                   color: Colors.black45,
                   alignment: Alignment.center,
-                  child: const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
+                  child: SizedBox(
+                    width: size * 0.32,
+                    height: size * 0.32,
+                    child: const CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2.5,
                     ),
@@ -3074,18 +3100,18 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
     return CircleAvatar(
-      radius: 46,
+      radius: size / 2,
       backgroundColor: AppTheme.primaryColor.withOpacity(0.6),
       child: _isUploadingPhoto
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
+          ? SizedBox(
+              width: size * 0.32,
+              height: size * 0.32,
+              child: const CircularProgressIndicator(
                 color: Colors.white,
                 strokeWidth: 2.5,
               ),
             )
-          : const Icon(LucideIcons.user, size: 44, color: Colors.white),
+          : Icon(LucideIcons.user, size: iconSize, color: Colors.white),
     );
   }
 
