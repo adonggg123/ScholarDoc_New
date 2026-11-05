@@ -341,7 +341,7 @@ function updateKPIMetrics(f2List, f3List) {
     const badgeF3 = document.getElementById('view-badge-f3-count');
 
     if (elF2Count) elF2Count.textContent = f2Count.toLocaleString();
-    if (elF2Amt) elF2Amt.textContent = `₱${f2TotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    if (elF2Amt) elF2Amt.textContent = `\u20B1${f2TotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     if (elF3Count) elF3Count.textContent = f3Count.toLocaleString();
     if (elTotal) elTotal.textContent = totalCount.toLocaleString();
 
@@ -428,9 +428,9 @@ function renderForm2Table(rows) {
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
                 <td style="text-align: center;"><span style="padding: 2px 8px; border-radius: 10px; background: rgba(0,0,0,0.05); font-weight: 600; font-size: 11px;">${batch}</span></td>
-                <td style="font-weight: 600; color: #2E7D32; text-align: right;">₱${tesAmt}</td>
-                <td style="text-align: right; color: var(--text-secondary);">${pwdAmt === '0.00' ? '-' : `₱${pwdAmt}`}</td>
-                <td style="font-weight: 700; color: #2E7D32; text-align: right;">₱${totalAmt}</td>
+                <td style="font-weight: 600; color: #2E7D32; text-align: right;">\u20B1${tesAmt}</td>
+                <td style="text-align: right; color: var(--text-secondary);">${pwdAmt === '0.00' ? '-' : `\u20B1${pwdAmt}`}</td>
+                <td style="font-weight: 700; color: #2E7D32; text-align: right;">\u20B1${totalAmt}</td>
             </tr>
         `;
     }).join('');

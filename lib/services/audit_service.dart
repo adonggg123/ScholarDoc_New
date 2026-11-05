@@ -37,14 +37,21 @@ class AuditService {
         }
       }
 
-      await _supabase.from('audit_logs').insert({
+      final payload = <String, dynamic>{
         'action': action,
         'userName': userName,
         'role': role,
         'studentId': studentId ?? 'N/A',
         'ipAddress': platformInfo,
-        // timestamp is handled by the DB
-      });
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      // Also set adminName for backward compatibility with legacy views
+      if (role.toLowerCase().contains('admin')) {
+        payload['adminName'] = userName;
+      }
+
+      await _supabase.from('audit_logs').insert(payload);
     } catch (e) {
       debugPrint('Failed to log audit activity: $e');
     }

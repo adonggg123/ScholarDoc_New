@@ -113,7 +113,8 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
               final query = _searchQuery.toLowerCase();
               docs = docs.where((data) {
                 final String action = (data['action'] ?? '').toLowerCase();
-                final String name = (data['adminName'] ?? '').toLowerCase();
+                final String name =
+                    (data['userName'] ?? data['adminName'] ?? '').toLowerCase();
                 final String studentId = (data['studentId'] ?? '')
                     .toLowerCase();
                 return action.contains(query) ||
@@ -421,7 +422,8 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     bool isMobile,
   ) {
     final String action = data['action'] ?? 'Performed Action';
-    final String userName = data['adminName'] ?? 'Unknown User';
+    final String userName =
+        data['userName'] ?? data['adminName'] ?? 'Unknown User';
     final String role = data['role'] ?? 'Admin';
     final String studentId = data['studentId'] ?? 'N/A';
     final String platform = data['ipAddress'] ?? 'Unknown Device';
@@ -438,7 +440,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     String timeStr = 'Just now';
     if (timestamp != null) {
       try {
-        final dateTime = DateTime.parse(timestamp.toString());
+        final dateTime = DateTime.parse(timestamp.toString()).toLocal();
         timeStr = DateFormat('MMM d, h:mm a').format(dateTime);
         final diff = DateTime.now().difference(dateTime);
         if (diff.inMinutes < 1) {

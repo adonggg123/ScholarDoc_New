@@ -93,6 +93,23 @@ function applyFilters() {
 }
 
 // ── Render Master Table ─────────────────────────────────────────────
+
+function formatYearlyIncome(val) {
+    if (val === null || val === undefined) return 'N/A';
+    let s = String(val).trim();
+    if (!s || s === 'N/A' || s === 'null' || s === 'undefined') return 'N/A';
+    // If it's the old dummy 120,000 default, treat as not yet entered by student (N/A)
+    if (s.includes('120,000') || s === '120000') return 'N/A';
+    // Clean any mojibake or existing currency symbols
+    s = s.replace(/^(?:[\u00e2\u201a\u00b1\u00e2,\u00b1\u20b1\u20a0-\u20cf₱$]|PHP|Php|php|\s)+/g, '').trim();
+    if (!s) return 'N/A';
+    const num = parseFloat(s.replace(/,/g, ''));
+    if (!isNaN(num) && s.match(/^[\d,]+(\.\d+)?$/)) {
+        return '\u20B1' + num.toLocaleString('en-US');
+    }
+    return '\u20B1' + s;
+}
+
 function renderMasterTable(students) {
     const body = document.getElementById('rpt-master-body');
     if (!body) return;
@@ -189,7 +206,7 @@ function renderMasterTable(students) {
                 <td style="padding: 14px; font-size: 13px;">${s.father_occupation || family.fatherEduStatus || 'N/A'}</td>
                 <td style="padding: 14px; font-size: 13px;">${motherName}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.mother_occupation || family.motherEduStatus || 'N/A'}</td>
-                <td style="padding: 14px; font-size: 13px;">${family.yearlyIncome || 'N/A'}</td>
+                <td style="padding: 14px; font-size: 13px;">${formatYearlyIncome(family.yearlyIncome)}</td>
                 <td style="padding: 14px; font-size: 13px;">${religion}</td>
                 <td style="padding: 14px; font-size: 13px;">${family.tribe || 'N/A'}</td>
             </tr>

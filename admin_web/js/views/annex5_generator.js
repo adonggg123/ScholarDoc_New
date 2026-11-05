@@ -1930,7 +1930,7 @@ function updateKPIMetrics() {
     const statF3Count = document.getElementById('stat-form3-count');
 
     if (statF2Count) statF2Count.textContent = `${f2Count} Enrolled Grantees`;
-    if (statF2Amt) statF2Amt.textContent = `₱${f2TotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
+    if (statF2Amt) statF2Amt.textContent = `\u20B1${f2TotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
     if (statF3Count) statF3Count.textContent = `${f3Count} Not Included Grantees`;
 }
 
@@ -1980,9 +1980,9 @@ function renderForm2Table(items) {
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
                 <td style="text-align: center;"><span class="badge-batch-pill">${resolveGranteeBatch(grantee)}</span></td>
-                <td style="font-weight: 600; color: #2E7D32;">₱10,000.00</td>
-                <td style="text-align: center; color: var(--text-secondary);">₱0.00</td>
-                <td style="font-weight: 700; color: #2E7D32;">₱10,000.00</td>
+                <td style="font-weight: 600; color: #2E7D32;">\u20B110,000.00</td>
+                <td style="text-align: center; color: var(--text-secondary);">\u20B10.00</td>
+                <td style="font-weight: 700; color: #2E7D32;">\u20B110,000.00</td>
             </tr>
         `;
     }).join('');
@@ -2571,7 +2571,7 @@ function openStudentDetailsModal(item, source = 'form2', index = -1) {
     // 11. Status Badge
     if (modalStatusBadge) {
         if (source === 'form2') {
-            modalStatusBadge.textContent = 'Form 2 – Enrolled (₱10,000.00)';
+            modalStatusBadge.textContent = 'Form 2 – Enrolled (\u20B110,000.00)';
             modalStatusBadge.style.background = 'rgba(16, 185, 129, 0.12)';
             modalStatusBadge.style.color = '#059669';
         } else if (source === 'form3') {

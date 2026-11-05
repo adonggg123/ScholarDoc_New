@@ -963,7 +963,12 @@ class AuthService {
 
         final String displayName =
             studentData['full_name'] ?? studentData['fullName'] ?? 'Student';
-        debugPrint('AuthService: Step 3 SUCCESS - Found student: $displayName');
+        final String resolvedStudentNo = (studentData['student_no'] ??
+                studentData['studentId'] ??
+                trimmedId)
+            .toString()
+            .trim();
+        debugPrint('AuthService: Step 3 SUCCESS - Found student: $displayName ($resolvedStudentNo)');
 
         // Log Activity safely
         try {
@@ -971,7 +976,7 @@ class AuthService {
             action: 'Logged in using Student ID',
             userName: displayName,
             role: 'Student',
-            studentId: trimmedId,
+            studentId: resolvedStudentNo,
           );
         } catch (_) {}
 

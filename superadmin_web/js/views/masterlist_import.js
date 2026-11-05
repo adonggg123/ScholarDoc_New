@@ -361,7 +361,7 @@ function updateStep1TargetTermBadge(ay = selectedAcademicYear, sem = selectedSem
     if (termBadgeText) {
         const ayText = (!ay || ay === 'All') ? 'All School Years' : `A.Y. ${ay}`;
         const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
-        termBadgeText.textContent = `${ayText} â€¢ ${semText}`;
+        termBadgeText.textContent = `${ayText} \u2022 ${semText}`;
     }
 }
 
@@ -370,7 +370,7 @@ function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemes
     if (termIndicatorText) {
         const ayText = (!ay || ay === 'All') ? 'All School Years' : `${ay}`;
         const semText = (!sem || sem === 'All') ? 'All Semesters' : sem;
-        termIndicatorText.textContent = `Filtered by: ${ayText} â€¢ ${semText}`;
+        termIndicatorText.textContent = `Filtered by: ${ayText} \u2022 ${semText}`;
     }
 }
 
@@ -1453,7 +1453,7 @@ async function saveRecordsToDatabase() {
             await window.supabaseClient.from('notifications').insert([{
                 studentId: 'admin',
                 title: 'Record Update: New Grantees Masterlist Uploaded',
-                message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedSemester || '1st Sem'}). Records are ready for Registrar Annex 5 TES Billing review.`,
+                message: `Super Admin uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} \u2022 ${selectedSemester || '1st Sem'}). Records are ready for Registrar Annex 5 TES Billing review.`,
                 type: 'success',
                 isRead: false,
                 timestamp: new Date().toISOString()
@@ -1465,7 +1465,7 @@ async function saveRecordsToDatabase() {
             if (window.SuperAdminNotificationService) {
                 await window.SuperAdminNotificationService.notifySubmission({
                     title: 'New Grantees Masterlist Uploaded',
-                    message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} â€¢ ${selectedSemester || '1st Sem'}). Registrar notified for Annex 5 review.`,
+                    message: `Successfully uploaded and saved ${validToInsert.length} new scholarship grantees (${selectedAcademicYear || 'A.Y. 2024-2025'} \u2022 ${selectedSemester || '1st Sem'}). Registrar notified for Annex 5 review.`,
                     type: 'success',
                     metadata: { count: validToInsert.length, academicYear: selectedAcademicYear, semester: selectedSemester }
                 });
@@ -1838,10 +1838,10 @@ function exportSchoolStudentsCSV() {
         'Religion',
         'Mobile Number',
         'Email Address',
-        'Fatherâ€™s Full Name',
-        'Fatherâ€™s Occupation',
-        'Motherâ€™s Full Name',
-        'Motherâ€™s Occupation',
+        "Father's Full Name",
+        "Father's Occupation",
+        "Mother's Full Name",
+        "Mother's Occupation",
         'Status'
     ];
 
@@ -1937,10 +1937,10 @@ function downloadSchoolStudentTemplate() {
         'Religion',
         'Mobile Number',
         'Email Address',
-        'Fatherâ€™s Full Name',
-        'Fatherâ€™s Occupation',
-        'Motherâ€™s Full Name',
-        'Motherâ€™s Occupation'
+        "Father's Full Name",
+        "Father's Occupation",
+        "Mother's Full Name",
+        "Mother's Occupation"
     ];
 
     const sampleData = [
@@ -2640,7 +2640,7 @@ function updateAnnexKPIs() {
     const countF3 = document.getElementById('sa-stat-form3-count');
 
     if (countF2) countF2.textContent = `${f2Count} Enrolled Grantees`;
-    if (amtF2) amtF2.textContent = `â‚±${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
+    if (amtF2) amtF2.textContent = `\u20B1${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
     if (countF3) countF3.textContent = `${f3Count} Not Included Grantees`;
 }
 
@@ -2695,9 +2695,9 @@ function renderAnnexForm2Table(items) {
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
                 <td style="text-align: center;">${grantee.batch || '1'}</td>
-                <td style="font-weight: 600; color: #2E7D32;">â‚±10,000.00</td>
-                <td style="text-align: center; color: var(--text-secondary);">â‚±0.00</td>
-                <td style="font-weight: 700; color: #2E7D32;">â‚±10,000.00</td>
+                <td style="font-weight: 600; color: #2E7D32;">\u20B110,000.00</td>
+                <td style="text-align: center; color: var(--text-secondary);">\u20B10.00</td>
+                <td style="font-weight: 700; color: #2E7D32;">\u20B110,000.00</td>
             </tr>
         `;
     }).join('');
@@ -2835,7 +2835,7 @@ function renderAnnexReviewQueue(items) {
                     <div>
                         <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">${granteeName}</h4>
                         <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-secondary);">
-                            ID: <strong>${granteeId}</strong> â€¢ Program: <strong>${granteeProg}</strong> â€¢ Batch: <strong>${grantee.batch || '1'}</strong>
+                            ID: <strong>${granteeId}</strong> \u2022 Program: <strong>${granteeProg}</strong> \u2022 Batch: <strong>${grantee.batch || '1'}</strong>
                         </p>
                     </div>
                     <span style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; background: rgba(229,57,53,0.1); color: #D32F2F;">

@@ -673,7 +673,7 @@ export class StudentSyncService {
                 fatherEduStatus: fatherEdu,
                 motherName: motherName,
                 motherEduStatus: motherEdu,
-                yearlyIncome: existingFam.yearlyIncome || 'â‚±120,000',
+                yearlyIncome: (existingFam.yearlyIncome && !existingFam.yearlyIncome.includes('â') && !existingFam.yearlyIncome.includes('120,000')) ? existingFam.yearlyIncome : null,
                 religion: religion,
                 tribe: existingFam.tribe || 'N/A',
                 saNumber: saNumber,
