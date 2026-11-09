@@ -27,6 +27,42 @@ export class AnnexSyncService {
     static isSavingToDb = false;
 
     /**
+     * Extracts authentic submitted SA number avoiding the truthy 'N/A' trap.
+     */
+    static extractAuthenticSaNumber(...objects) {
+        for (const obj of objects) {
+            if (!obj) continue;
+            if (typeof obj === 'string') {
+                const s = obj.trim();
+                if (s && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                    return s;
+                }
+                continue;
+            }
+            const candidates = [
+                obj.saNumber,
+                obj.sa_number,
+                obj.tes_application_number,
+                obj.documents?.saNumber,
+                obj.documents?.sa_number,
+                obj.documents?.atmExtractedSaNumber,
+                obj.documents?.atm_extracted_sa_number,
+                obj.atmExtractedSaNumber,
+                obj.familyDetails?.saNumber
+            ];
+            for (const c of candidates) {
+                if (c !== undefined && c !== null) {
+                    const s = String(c).trim();
+                    if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                        return s;
+                    }
+                }
+            }
+        }
+        return 'N/A';
+    }
+
+    /**
      * Extracts a stable, unique key for a grantee or verification item.
      * Prioritizes semantic student identifiers (Student ID, SA Number, Full Name)
      * over database row UUIDs so records from different tables or import runs
@@ -400,14 +436,15 @@ export class AnnexSyncService {
                 const name = this.parseNameParts(item);
 
                 const studentNo = student.studentId || student.studentNo || grantee.student_id || grantee.studentNo || null;
-                const saNo = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.sa_number || 'N/A';
+                const saNo = this.extractAuthenticSaNumber(student, grantee);
                 const gender = (student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M';
                 const bdate = student.birthdate || student.dateOfBirth || student.birthday || '01/01/2000';
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
                 const yr = String(student.year || student.yearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
                 const email = student.email || student.emailAddress || 'N/A';
                 const phone = student.mobileNumber || student.phone || student.contactNumber || grantee.phone || 'N/A';
-                const rawB = String(grantee.batch || '1.1').replace(/[^0-9.]/g, '') || '1.1';
+                const batchCandidate = grantee.batch || grantee.tes_batch || student.batch || student.documents?.batch || '1.2';
+                const rawB = String(batchCandidate).replace(/[^0-9.]/g, '') || '1.2';
                 const batch = (rawB === '1') ? '1.1' : rawB;
 
                 return {
@@ -443,7 +480,7 @@ export class AnnexSyncService {
                 const name = this.parseNameParts(item);
 
                 const studentNo = student.studentId || student.studentNo || grantee.student_id || grantee.studentNo || null;
-                const saNo = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.sa_number || 'N/A';
+                const saNo = this.extractAuthenticSaNumber(student, grantee);
                 const gender = (student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M';
                 const bdate = student.birthdate || student.dateOfBirth || student.birthday || '01/01/2000';
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
@@ -550,78 +587,113 @@ export class AnnexSyncService {
             }
 
             if (!errF2 && !errF3) {
-                const form2List = (f2Data || []).map(row => ({
-                    classification: 'MATCHED_FORM2',
-                    isEnrolled: true,
-                    academic_year: row.academic_year,
-                    semester: row.semester,
-                    grantee: {
-                        id: row.id,
-                        student_id: row.student_number,
-                        name: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
-                        last_name: row.last_name,
-                        first_name: row.given_name,
-                        middle_name: row.middle_initial,
-                        course: row.degree_program,
-                        year: row.year_level,
-                        batch: row.tes_batch,
-                        saNumber: row.tes_application_number,
-                        academic_year: row.academic_year,
-                        semester: row.semester
-                    },
-                    matchedStudent: {
-                        studentId: row.student_number,
-                        fullName: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
-                        lastName: row.last_name,
-                        firstName: row.given_name,
-                        mi: row.middle_initial,
-                        gender: row.sex_at_birth,
-                        birthdate: row.birthdate,
-                        course: row.degree_program,
-                        year: row.year_level,
-                        email: row.email_address,
-                        phone: row.phone_number,
-                        saNumber: row.tes_application_number,
-                        academic_year: row.academic_year,
-                        semester: row.semester
+                // Enrich with submitted SA numbers from student_grantees
+                const studentGranteesMap = new Map();
+                try {
+                    const { data: sgData } = await supabase
+                        .from('student_grantees')
+                        .select('id, uid, student_no, studentId, full_name, fullName, sa_number, saNumber, documents, familyDetails');
+                    if (sgData && sgData.length > 0) {
+                        sgData.forEach(sg => {
+                            const sNo = String(sg.student_no || sg.studentId || '').trim();
+                            const sName = String(sg.full_name || sg.fullName || '').trim().toLowerCase();
+                            if (sNo) studentGranteesMap.set(sNo, sg);
+                            if (sName) studentGranteesMap.set(sName, sg);
+                        });
                     }
-                }));
+                } catch (errSg) {
+                    console.warn('AnnexSyncService.loadFromSupabase: Could not fetch student_grantees for enrichment:', errSg);
+                }
 
-                const form3List = (f3Data || []).map(row => ({
-                    classification: 'INACTIVE_FORM3',
-                    isEnrolled: false,
-                    specialStatusReason: row.status,
-                    remarks: row.remarks,
-                    academic_year: row.academic_year,
-                    semester: row.semester,
-                    grantee: {
-                        id: row.id,
-                        student_id: row.student_number,
-                        name: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
-                        last_name: row.last_name,
-                        first_name: row.given_name,
-                        middle_name: row.middle_initial,
-                        course: row.degree_program,
-                        year: row.year_level,
-                        saNumber: row.tes_application_number,
+                const resolveSa = (row) => {
+                    const sNo = String(row.student_number || '').trim();
+                    const sName = `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim().toLowerCase();
+                    const sg = studentGranteesMap.get(sNo) || studentGranteesMap.get(sName);
+                    return AnnexSyncService.extractAuthenticSaNumber(row.tes_application_number, sg);
+                };
+
+                const form2List = (f2Data || []).map(row => {
+                    const saNum = resolveSa(row);
+                    return {
+                        classification: 'MATCHED_FORM2',
+                        isEnrolled: true,
                         academic_year: row.academic_year,
-                        semester: row.semester
-                    },
-                    matchedStudent: {
-                        studentId: row.student_number,
-                        fullName: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
-                        lastName: row.last_name,
-                        firstName: row.given_name,
-                        mi: row.middle_initial,
-                        gender: row.sex_at_birth,
-                        birthdate: row.birthdate,
-                        course: row.degree_program,
-                        year: row.year_level,
-                        saNumber: row.tes_application_number,
+                        semester: row.semester,
+                        grantee: {
+                            id: row.id,
+                            student_id: row.student_number,
+                            name: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
+                            last_name: row.last_name,
+                            first_name: row.given_name,
+                            middle_name: row.middle_initial,
+                            course: row.degree_program,
+                            year: row.year_level,
+                            batch: row.tes_batch,
+                            saNumber: saNum,
+                            sa_number: saNum,
+                            academic_year: row.academic_year,
+                            semester: row.semester
+                        },
+                        matchedStudent: {
+                            studentId: row.student_number,
+                            fullName: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
+                            lastName: row.last_name,
+                            firstName: row.given_name,
+                            mi: row.middle_initial,
+                            gender: row.sex_at_birth,
+                            birthdate: row.birthdate,
+                            course: row.degree_program,
+                            year: row.year_level,
+                            email: row.email_address,
+                            phone: row.phone_number,
+                            saNumber: saNum,
+                            sa_number: saNum,
+                            academic_year: row.academic_year,
+                            semester: row.semester
+                        }
+                    };
+                });
+
+                const form3List = (f3Data || []).map(row => {
+                    const saNum = resolveSa(row);
+                    return {
+                        classification: 'INACTIVE_FORM3',
+                        isEnrolled: false,
+                        specialStatusReason: row.status,
+                        remarks: row.remarks,
                         academic_year: row.academic_year,
-                        semester: row.semester
-                    }
-                }));
+                        semester: row.semester,
+                        grantee: {
+                            id: row.id,
+                            student_id: row.student_number,
+                            name: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
+                            last_name: row.last_name,
+                            first_name: row.given_name,
+                            middle_name: row.middle_initial,
+                            course: row.degree_program,
+                            year: row.year_level,
+                            saNumber: saNum,
+                            sa_number: saNum,
+                            academic_year: row.academic_year,
+                            semester: row.semester
+                        },
+                        matchedStudent: {
+                            studentId: row.student_number,
+                            fullName: `${row.last_name}, ${row.given_name} ${row.middle_initial || ''}`.trim(),
+                            lastName: row.last_name,
+                            firstName: row.given_name,
+                            mi: row.middle_initial,
+                            gender: row.sex_at_birth,
+                            birthdate: row.birthdate,
+                            course: row.degree_program,
+                            year: row.year_level,
+                            saNumber: saNum,
+                            sa_number: saNum,
+                            academic_year: row.academic_year,
+                            semester: row.semester
+                        }
+                    };
+                });
 
                 const deduplicated = this.deduplicateLists(form2List, form3List, []);
                 return {

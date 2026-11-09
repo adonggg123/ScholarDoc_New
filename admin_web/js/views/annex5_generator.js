@@ -104,6 +104,8 @@ function getCachedGranteeBatch(record) {
     try {
         const cache = JSON.parse(localStorage.getItem('scholardoc_grantee_batches') || '{}');
         if (record && record.id && cache[record.id]) return cache[record.id];
+        const sNo = record?.studentId || record?.student_id || record?.student_no || record?.studentNo;
+        if (sNo && cache[String(sNo).trim()]) return cache[String(sNo).trim()];
         const ln = (record?.lastName || record?.last_name || '').toLowerCase().trim();
         const fn = (record?.firstName || record?.first_name || '').toLowerCase().trim();
         const mn = (record?.middleName || record?.middle_name || '').toLowerCase().trim();
@@ -116,7 +118,7 @@ function getCachedGranteeBatch(record) {
 }
 
 function resolveGranteeBatch(record) {
-    let rawB = record?.batch || getCachedGranteeBatch(record) || 'Batch 1.1';
+    let rawB = record?.batch || record?.tes_batch || (record?.documents && record?.documents.batch) || getCachedGranteeBatch(record) || 'Batch 1.2';
     rawB = String(rawB).trim();
     if (rawB === '1' || rawB.toLowerCase() === 'batch 1') {
         return 'Batch 1.1';
@@ -262,11 +264,35 @@ function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
     const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
     const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
 
+    const saCandidates = [
+        s.saNumber,
+        s.sa_number,
+        s.tes_application_number,
+        matchedSt?.saNumber,
+        matchedSt?.sa_number,
+        matchedSt?.documents?.saNumber,
+        matchedSt?.documents?.atmExtractedSaNumber,
+        matchedSt?.familyDetails?.saNumber
+    ];
+    let resolvedSa = 'N/A';
+    for (const c of saCandidates) {
+        if (c !== undefined && c !== null) {
+            const str = String(c).trim();
+            if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                resolvedSa = str;
+                break;
+            }
+        }
+    }
+
     return {
         id: s.id,
         uid: s.student_no || s.id,
         studentNo: s.student_no || '',
         studentId: s.student_no || '',
+        saNumber: resolvedSa,
+        sa_number: resolvedSa,
+        tes_application_number: resolvedSa,
         fullName: s.full_name || '',
         name: s.full_name || '',
         programName: s.program_name || '',
@@ -397,9 +423,9 @@ async function loadInitialData() {
         }
         let errSchool = null;
 
-        // Optional profile enrichment from students table
+        // Optional profile enrichment from student_grantees table
         let { data: studentsDbData } = await supabase
-            .from('students')
+            .from('student_grantees')
             .select('*');
 
         const studentProfileMap = new Map();
@@ -408,6 +434,8 @@ async function loadInitialData() {
             const sName = String(st.full_name || st.fullName || '').trim().toLowerCase();
             if (sNo) studentProfileMap.set(sNo, st);
             if (sName) studentProfileMap.set(sName, st);
+            if (st.uid) studentProfileMap.set(String(st.uid).trim(), st);
+            if (st.id) studentProfileMap.set(String(st.id).trim(), st);
         });
 
         if (!errSchool && schoolDbData && schoolDbData.length > 0) {
@@ -1206,7 +1234,7 @@ if (btnClearFile) {
             .order('created_at', { ascending: false });
 
         let { data: fallbackStudents } = await supabase
-            .from('students')
+            .from('student_grantees')
             .select('*');
 
         const studentProfileMap = new Map();
@@ -1215,6 +1243,8 @@ if (btnClearFile) {
             const sName = String(st.full_name || st.fullName || '').trim().toLowerCase();
             if (sNo) studentProfileMap.set(sNo, st);
             if (sName) studentProfileMap.set(sName, st);
+            if (st.uid) studentProfileMap.set(String(st.uid).trim(), st);
+            if (st.id) studentProfileMap.set(String(st.id).trim(), st);
         });
 
         if (dbStudents && dbStudents.length > 0) {
@@ -1956,7 +1986,26 @@ function renderForm2Table(items) {
             const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
             name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
         }
-        const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
+        const saCandidates = [
+            student.saNumber,
+            student.sa_number,
+            student.documents?.saNumber,
+            student.documents?.atmExtractedSaNumber,
+            student.familyDetails?.saNumber,
+            grantee.saNumber,
+            grantee.sa_number,
+            grantee.tes_application_number
+        ];
+        let sa = 'N/A';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const s = String(c).trim();
+                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                    sa = s;
+                    break;
+                }
+            }
+        }
         const bdate = student.birthdate || student.birthday || '01/01/2000';
         const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const email = student.email || student.authEmail || 'N/A';
@@ -1979,7 +2028,7 @@ function renderForm2Table(items) {
                 <td style="text-align: center;">${year}</td>
                 <td><span style="font-size: 11px; color: var(--text-secondary);">${email}</span></td>
                 <td><span style="font-size: 11px;">${phone}</span></td>
-                <td style="text-align: center;"><span class="badge-batch-pill">${resolveGranteeBatch(grantee)}</span></td>
+                <td style="text-align: center;"><span class="badge-batch-pill">${String(grantee.batch || grantee.tes_batch || resolveGranteeBatch(grantee) || '1.2').replace(/^batch\s*/i, '').trim()}</span></td>
                 <td style="font-weight: 600; color: #2E7D32;">\u20B110,000.00</td>
                 <td style="text-align: center; color: var(--text-secondary);">\u20B10.00</td>
                 <td style="font-weight: 700; color: #2E7D32;">\u20B110,000.00</td>
@@ -2020,7 +2069,26 @@ function renderForm3Table(items) {
             const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
             name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
         }
-        const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || 'N/A';
+        const saCandidates = [
+            student.saNumber,
+            student.sa_number,
+            student.documents?.saNumber,
+            student.documents?.atmExtractedSaNumber,
+            student.familyDetails?.saNumber,
+            grantee.saNumber,
+            grantee.sa_number,
+            grantee.tes_application_number
+        ];
+        let sa = 'N/A';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const s = String(c).trim();
+                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                    sa = s;
+                    break;
+                }
+            }
+        }
         const bdate = student.birthdate || student.birthday || '01/01/2000';
         const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
@@ -2537,7 +2605,26 @@ function openStudentDetailsModal(item, source = 'form2', index = -1) {
     if (modalStudentId) modalStudentId.textContent = studentId;
 
     // 4. TES SA Number
-    const sa = student.saNumber || student.familyDetails?.saNumber || grantee.saNumber || grantee.tes_application_number || 'N/A';
+    const saCandidates = [
+        student.saNumber,
+        student.sa_number,
+        student.documents?.saNumber,
+        student.documents?.atmExtractedSaNumber,
+        student.familyDetails?.saNumber,
+        grantee.saNumber,
+        grantee.sa_number,
+        grantee.tes_application_number
+    ];
+    let sa = 'N/A';
+    for (const c of saCandidates) {
+        if (c !== undefined && c !== null) {
+            const str = String(c).trim();
+            if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                sa = str;
+                break;
+            }
+        }
+    }
     if (modalSaNumber) modalSaNumber.textContent = sa;
 
     // 5. Degree Program

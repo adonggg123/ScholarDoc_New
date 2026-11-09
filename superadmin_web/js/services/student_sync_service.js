@@ -477,8 +477,6 @@ export class StudentSyncService {
             }
         }
 
-        const scholarshipName = f2Match?.scholarship_name || ss.scholarship_name || existing.scholarship_name || existing.scholarshipProgram || 'CHED TES';
-
         // Dynamically compute status based on actual submission and admin validation
         const hasSubmitted = this.hasStudentSubmitted(existing, f2Match, ss);
         const status = this.computeDynamicStatus(existing, f2Match, ss, activeDeadline);
@@ -531,6 +529,31 @@ export class StudentSyncService {
             (f2Match?.id && localTermMap[f2Match.id]) ||
             (gmMatch?.id && localTermMap[gmMatch.id]);
 
+        // Check localStorage grantee scholarships mapping if available
+        let localScholarshipMap = {};
+        try {
+            localScholarshipMap = JSON.parse(localStorage.getItem('scholardoc_grantee_scholarships') || '{}');
+        } catch (_) { }
+
+        const cachedScholarship = (sNo && localScholarshipMap[sNo]) ||
+            (saNum && localScholarshipMap[saNum]) ||
+            (exId && localScholarshipMap[exId]) ||
+            (normFullName && localScholarshipMap[normFullName]) ||
+            (f2Match?.id && localScholarshipMap[f2Match.id]) ||
+            (gmMatch?.id && localScholarshipMap[gmMatch.id]);
+
+        const rawSchol = existing.scholarship_name || existing.scholarshipProgram || cachedScholarship || f2Match?.scholarship_name || ss.scholarship_name || 'CHED TES';
+        const scholarshipName = String(rawSchol).trim();
+
+        if (scholarshipName) {
+            if (sNo) localScholarshipMap[sNo] = scholarshipName;
+            if (normFullName) localScholarshipMap[normFullName] = scholarshipName;
+            if (exId) localScholarshipMap[exId] = scholarshipName;
+            try {
+                localStorage.setItem('scholardoc_grantee_scholarships', JSON.stringify(localScholarshipMap));
+            } catch (_) { }
+        }
+
         const defaultTerm = (typeof AcademicYearService !== 'undefined' && AcademicYearService.getDefaultTerm)
             ? AcademicYearService.getDefaultTerm()
             : { academicYear: '2026-2027', semester: '1st Semester' };
@@ -552,25 +575,38 @@ export class StudentSyncService {
             defaultTerm.semester ||
             '1st Semester';
 
-        const rawBatch = cachedBatch ||
-            f2Match?.tes_batch ||
+        // Prioritize authentic database records (Form 2 tes_batch, student_grantees documents.batch) over stale local cache!
+        const rawBatch = f2Match?.tes_batch ||
             f2Match?.batch ||
-            gmMatch?.batch ||
+            existingDocs.batch ||
             existing.batch ||
             existing.tes_batch ||
+            gmMatch?.batch ||
+            cachedBatch ||
             ss.batch ||
             ss.tes_batch ||
-            existingDocs.batch ||
-            'Batch 1.1';
+            'Batch 1.2';
 
-        let batch = String(rawBatch || 'Batch 1.1').trim();
+        let batch = String(rawBatch || 'Batch 1.2').trim();
         // Upgrade legacy '1' or 'Batch 1' to 'Batch 1.1'
         if (batch === '1' || batch.toLowerCase() === 'batch 1') {
             batch = 'Batch 1.1';
         } else if (!batch.toLowerCase().startsWith('batch')) {
             batch = `Batch ${batch}`;
         } else if (!batch) {
-            batch = 'Batch 1.1';
+            batch = 'Batch 1.2';
+        }
+
+        // Heal stale cache immediately with the authentic batch
+        if (batch) {
+            if (sNo) localBatchMap[sNo] = batch;
+            if (normFullName) localBatchMap[normFullName] = batch;
+            if (exId) localBatchMap[exId] = batch;
+            if (f2Match?.id) localBatchMap[f2Match.id] = batch;
+            if (gmMatch?.id) localBatchMap[gmMatch.id] = batch;
+            try {
+                localStorage.setItem('scholardoc_grantee_batches', JSON.stringify(localBatchMap));
+            } catch (_) { }
         }
 
         const fatherName = ss.father_full_name || existing.father_full_name || existing.familyDetails?.fatherName || 'N/A';
@@ -598,6 +634,7 @@ export class StudentSyncService {
 
         const documents = {
             ...existingDocs,
+            batch: batch,
             saVerificationStatus: saVerificationStatus,
             idValidationStatus: idValidationStatus,
             saNumber: saNumber
@@ -870,10 +907,11 @@ export class StudentSyncService {
                         email_sent_at: null
                     });
                 } else if (existingSg) {
-                    // Update database record if status or term differs from dynamic computed record
+                    // Update database record if status, batch, or term differs from dynamic computed record
                     const needsStatusSync = existingSg.status !== normalized.status ||
                         existingSg.saVerificationStatus !== normalized.saVerificationStatus ||
                         existingSg.idValidationStatus !== normalized.idValidationStatus ||
+                        (existingSg.documents?.batch !== normalized.batch) ||
                         (normalized.academic_year && existingSg.academic_year !== normalized.academic_year) ||
                         (normalized.semester && existingSg.semester !== normalized.semester);
 
@@ -891,6 +929,7 @@ export class StudentSyncService {
                             semester: normalized.semester,
                             documents: {
                                 ...(existingSg.documents || {}),
+                                batch: normalized.batch,
                                 saVerificationStatus: normalized.saVerificationStatus,
                                 idValidationStatus: normalized.idValidationStatus,
                                 saNumber: normalized.saNumber

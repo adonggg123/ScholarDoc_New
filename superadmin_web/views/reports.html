@@ -140,6 +140,21 @@
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <i class="icon-filter"
                         style="color: var(--text-secondary); font-size: 16px; margin-right: 4px;"></i>
+                    <select id="rpt-filter-batch"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option value="All">All Batches</option>
+                    </select>
+                    <select id="rpt-filter-course"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit; max-width: 240px;">
+                        <option value="All">All Courses/Programs</option>
+                    </select>
+                    <select id="rpt-filter-status"
+                        style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
+                        <option value="All">All Statuses</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Pending">Pending</option>
+                        <option value="No Submission Yet">No Submission Yet</option>
+                    </select>
                     <select id="rpt-filter-scholarship"
                         style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 12px; background: transparent; cursor: pointer; font-family: inherit;">
                         <option>All Scholarships</option>
@@ -216,6 +231,9 @@
                                     Scholarship</th>
                                 <th
                                     style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+                                    Batch</th>
+                                <th
+                                    style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
                                     Scholar Year</th>
                                 <th
                                     style="padding: 14px; font-weight: 700; font-size: 13px; color: var(--text-primary);">
@@ -251,7 +269,7 @@
                         </thead>
                         <tbody id="rpt-master-body">
                             <tr>
-                                <td colspan="22"
+                                <td colspan="23"
                                     style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading
                                     students...</td>
                             </tr>

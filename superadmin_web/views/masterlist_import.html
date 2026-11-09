@@ -420,12 +420,21 @@
                     <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">
                         Duplicates (Skipped)</div>
                 </div>
+                <div id="summary-conflicts-container" style="text-align: center;">
+                    <div id="summary-conflicts" style="font-size: 20px; font-weight: 800; color: #ef4444;">0</div>
+                    <div style="font-size: 11px; color: #fca5a5; font-weight: 600; text-transform: uppercase;">
+                        Scholarship Conflicts</div>
+                </div>
                 <div style="text-align: center;">
                     <div id="summary-errors" style="font-size: 20px; font-weight: 800; color: #f87171;">0</div>
                     <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Errors
                     </div>
                 </div>
             </div>
+        </div>
+        <div id="import-conflict-alert" class="hidden" style="margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            <i class="icon-alert-triangle" style="color: #ef4444; font-size: 16px;"></i>
+            <span id="import-conflict-alert-text">Warning: Students already registered under another scholarship were detected and flagged.</span>
         </div>
     </div>
 
@@ -537,45 +546,79 @@
                 </div>
             </div>
 
-            <!-- Batch Selection Field (Required before import) -->
-            <div id="import-batch-selection-container" class="batch-select-box">
-                <label for="select-import-batch"
-                    style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; margin: 0;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="icon-layers" style="color: var(--primary-color); font-size: 15px;"></i>
-                        Target Batch <span style="color: #ef4444; font-size: 14px;">*</span>
-                    </span>
-                    <span id="batch-required-badge"
+            <!-- Target Scholarship Program & Batch Selection Card (Required before importing) -->
+            <div id="import-scholarship-batch-container" class="batch-select-box">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                    <label style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; margin: 0;">
+                        <i class="icon-award" style="color: var(--primary-color); font-size: 15px;"></i>
+                        Target Scholarship &amp; Batch <span style="color: #ef4444; font-size: 14px;">*</span>
+                    </label>
+                    <span id="scholarship-required-badge"
                         style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444;">Required</span>
-                </label>
-                <div style="position: relative;">
-                    <select id="select-import-batch" class="input-clean"
-                        style="width: 100%; height: 42px; padding: 0 36px 0 14px; font-size: 13px; font-weight: 600; border-radius: 12px; border: 1.5px solid var(--border-color); background: var(--surface-color); color: var(--text-primary); cursor: pointer; appearance: none; -webkit-appearance: none; transition: all 0.2s ease;">
-                        <option value="" disabled selected>-- Select Batch (e.g. Batch 1.1) --</option>
-                        <option value="Batch 1.1">Batch 1.1</option>
-                        <option value="Batch 1.2">Batch 1.2</option>
-                        <option value="Batch 1.3">Batch 1.3</option>
-                        <option value="Batch 1.4">Batch 1.4</option>
-                        <option value="Batch 1.5">Batch 1.5</option>
-                        <option value="Batch 2.1">Batch 2.1</option>
-                        <option value="Batch 2.2">Batch 2.2</option>
-                        <option value="Batch 2.3">Batch 2.3</option>
-                        <option value="Batch 3.1">Batch 3.1</option>
-                        <option value="Batch 3.2">Batch 3.2</option>
-                        <option value="custom">+ Enter Custom Batch...</option>
-                    </select>
-                    <i class="icon-chevron-down"
-                        style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #64748b; font-size: 14px;"></i>
                 </div>
 
-                <!-- Custom Batch Input (shown when "custom" is selected) -->
-                <div id="custom-batch-container" class="hidden" style="margin-top: 2px;">
-                    <input type="text" id="custom-batch-input" class="input-clean"
-                        placeholder="Type batch name (e.g. Batch 1.6)"
-                        style="width: 100%; height: 40px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--primary-color); background: var(--surface-color); color: var(--text-primary);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <!-- Scholarship Program Selection -->
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Scholarship Program</span>
+                        <div style="position: relative;">
+                            <select id="select-import-scholarship" class="input-clean"
+                                style="width: 100%; height: 42px; padding: 0 36px 0 14px; font-size: 13px; font-weight: 600; border-radius: 12px; border: 1.5px solid var(--border-color); background: var(--surface-color); color: var(--text-primary); cursor: pointer; appearance: none; -webkit-appearance: none; transition: all 0.2s ease;">
+                                <option value="" disabled selected>-- Select Scholarship Program * --</option>
+                                <option value="CHED TES">CHED TES (Tertiary Education Subsidy)</option>
+                                <option value="TES">TES</option>
+                                <option value="TDP">TDP (Tulong Dunong Program)</option>
+                                <option value="STUFAP">STUFAP (Student Financial Assistance Program)</option>
+                                <option value="custom">+ Enter Custom Scholarship...</option>
+                            </select>
+                            <i class="icon-chevron-down"
+                                style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #64748b; font-size: 14px;"></i>
+                        </div>
+                        <!-- Custom Scholarship Input -->
+                        <div id="custom-import-scholarship-container" class="hidden" style="margin-top: 2px;">
+                            <input type="text" id="custom-import-scholarship-input" class="input-clean"
+                                placeholder="Type Scholarship Program (e.g. DBP Rise, Santeh...)"
+                                style="width: 100%; height: 40px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--primary-color); background: var(--surface-color); color: var(--text-primary);">
+                        </div>
+                    </div>
+
+                    <!-- Batch Selection -->
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Batch</span>
+                        <div style="position: relative;">
+                            <select id="select-import-batch" class="input-clean"
+                                style="width: 100%; height: 42px; padding: 0 36px 0 14px; font-size: 13px; font-weight: 600; border-radius: 12px; border: 1.5px solid var(--border-color); background: var(--surface-color); color: var(--text-primary); cursor: pointer; appearance: none; -webkit-appearance: none; transition: all 0.2s ease;">
+                                <option value="" disabled selected>-- Select Batch (e.g. Batch 1.1) --</option>
+                                <option value="Batch 1.1">Batch 1.1</option>
+                                <option value="Batch 1.2">Batch 1.2</option>
+                                <option value="Batch 1.3">Batch 1.3</option>
+                                <option value="Batch 1.4">Batch 1.4</option>
+                                <option value="Batch 1.5">Batch 1.5</option>
+                                <option value="Batch 2.1">Batch 2.1</option>
+                                <option value="Batch 2.2">Batch 2.2</option>
+                                <option value="Batch 2.3">Batch 2.3</option>
+                                <option value="Batch 3.1">Batch 3.1</option>
+                                <option value="Batch 3.2">Batch 3.2</option>
+                                <option value="custom">+ Enter Custom Batch...</option>
+                            </select>
+                            <i class="icon-chevron-down"
+                                style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #64748b; font-size: 14px;"></i>
+                        </div>
+                        <!-- Custom Batch Input (shown when "custom" is selected) -->
+                        <div id="custom-batch-container" class="hidden" style="margin-top: 2px;">
+                            <input type="text" id="custom-batch-input" class="input-clean"
+                                placeholder="Type batch name (e.g. Batch 1.6)"
+                                style="width: 100%; height: 40px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--primary-color); background: var(--surface-color); color: var(--text-primary);">
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Batch Selection Validation Hint -->
+                <!-- Validation Hints -->
+                <div id="import-scholarship-validation-hint" class="hidden"
+                    style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #ef4444; margin-top: 2px;">
+                    <i class="icon-alert-circle" style="font-size: 14px;"></i>
+                    <span>Please select a Scholarship Program before importing new grantees.</span>
+                </div>
                 <div id="batch-validation-hint" class="hidden"
                     style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #ef4444; margin-top: 2px;">
                     <i class="icon-alert-circle" style="font-size: 14px;"></i>

@@ -1,7 +1,9 @@
 // js/views/sa_verification.js
 import { SmsNotificationService } from '../services/sms_notification_service.js';
+import { StudentSyncService } from '../services/student_sync_service.js';
 const supabase = window.supabaseClient;
 
+let allImportedStudents = [];
 let saStudents = [];
 let filteredSaStudents = [];
 let selectedIndex = 0;
@@ -51,19 +53,32 @@ async function loadSaQueue() {
     }
 
     try {
-        let res = await supabase
-            .from('student_grantees')
-            .select('*')
-            .order('created_at', { ascending: false });
+        let data = [];
+        if (typeof StudentSyncService !== 'undefined' && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+            try {
+                data = await StudentSyncService.loadAndSyncStudents();
+            } catch (syncErr) {
+                console.warn('StudentSyncService error in SA Verification, falling back to direct query:', syncErr);
+            }
+        }
 
-        if (res.error) {
-            res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
+        if (!Array.isArray(data) || data.length === 0) {
+            let res = await supabase
+                .from('student_grantees')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (res.error) {
+                res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
+            }
+            if (res.error) {
+                res = await supabase.from('student_grantees').select('*');
+            }
+            if (res.error) throw res.error;
+            data = res.data || [];
         }
-        if (res.error) {
-            res = await supabase.from('student_grantees').select('*');
-        }
-        if (res.error) throw res.error;
-        const data = res.data;
+
+        allImportedStudents = data || [];
 
         // Filter students who have submitted SA number, ATM card, or deposit slip
         saStudents = (data || []).filter(s => hasSaSubmission(s));
@@ -165,6 +180,31 @@ function updateKpis() {
     setKpi('kpi-sa-duplicates', duplicates);
 }
 
+// ── Helper: Resolve Authentic Batch ──────────────────────────────────
+function resolveStudentBatch(record) {
+    if (!record) return '';
+    let raw = '';
+    if (typeof record === 'string') {
+        raw = record;
+    } else {
+        raw = record.batch ||
+            record.tes_batch ||
+            record.batch_name ||
+            (record.documents && (record.documents.batch || record.documents.tes_batch)) ||
+            '';
+    }
+    if (raw === undefined || raw === null) return '';
+    let b = String(raw).trim();
+    if (!b || b.toLowerCase() === 'null' || b.toLowerCase() === 'undefined') return '';
+    if (b === '1' || b.toLowerCase() === 'batch 1') {
+        return 'Batch 1.1';
+    }
+    if (!b.toLowerCase().startsWith('batch')) {
+        return `Batch ${b}`;
+    }
+    return b.replace(/^batch\s*/i, 'Batch ');
+}
+
 // ── Dynamic Batch Filter ─────────────────────────────────────────────
 function populateSaBatchFilter() {
     const filterBatchEl = document.getElementById('sa-filter-batch');
@@ -173,20 +213,24 @@ function populateSaBatchFilter() {
     const currentVal = filterBatchEl.value || 'All';
     const batchSet = new Set();
 
+    // Dynamically retrieve batches from all imported grantee records
+    if (Array.isArray(allImportedStudents) && allImportedStudents.length > 0) {
+        allImportedStudents.forEach(s => {
+            const b = resolveStudentBatch(s);
+            if (b) batchSet.add(b);
+        });
+    }
+
+    // Also include any batches found on queue applicants
     saStudents.forEach(s => {
-        const raw = s.batch || s.tes_batch || s.batch_name;
-        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-            let b = String(raw).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') {
-                b = 'Batch 1.1';
-            } else if (!b.toLowerCase().startsWith('batch')) {
-                b = `Batch ${b}`;
-            }
-            batchSet.add(b);
-        }
+        const b = resolveStudentBatch(s);
+        if (b) batchSet.add(b);
     });
 
-    ['Batch 1.1', 'Batch 1.2', 'Batch 1.3', 'Batch 1.4', 'Batch 1.5', 'Batch 2.1', 'Batch 2.2', 'Batch 2.3', 'Batch 3.1', 'Batch 3.2'].forEach(b => batchSet.add(b));
+    // Fallback if no records found yet
+    if (batchSet.size === 0) {
+        batchSet.add('Batch 1.2');
+    }
 
     const sortedBatches = Array.from(batchSet).sort((a, b) => {
         return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
@@ -200,6 +244,8 @@ function populateSaBatchFilter() {
     filterBatchEl.innerHTML = optionsHtml;
     if (sortedBatches.includes(currentVal) || currentVal === 'All') {
         filterBatchEl.value = currentVal;
+    } else {
+        filterBatchEl.value = 'All';
     }
 }
 
@@ -227,12 +273,7 @@ function filterSaQueue() {
         // Batch Match
         let matchBatch = batchFilter === 'All';
         if (!matchBatch) {
-            let studentBatch = String(s.batch || s.tes_batch || s.batch_name || '').trim();
-            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
-                studentBatch = 'Batch 1.1';
-            } else if (studentBatch && !studentBatch.toLowerCase().startsWith('batch')) {
-                studentBatch = `Batch ${studentBatch}`;
-            }
+            const studentBatch = resolveStudentBatch(s);
             const selectedBatch = batchFilter.trim();
             const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
             const selNorm = selectedBatch.toLowerCase().replace(/^batch\s*/i, '');
@@ -375,12 +416,9 @@ function renderQueue() {
             `;
         }
 
-        const rawBatch = s.batch || s.tes_batch || s.batch_name;
+        const b = resolveStudentBatch(s);
         let batchBadgeHtml = '';
-        if (rawBatch) {
-            let b = String(rawBatch).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
-            else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+        if (b) {
             batchBadgeHtml = `<span style="font-size: 10px; color: #1E3A8A; font-weight: 700; background: rgba(30, 58, 138, 0.08); padding: 1px 6px; border-radius: 4px;">${b}</span>`;
         }
 
@@ -658,11 +696,8 @@ function renderPanel() {
                         ${course} - ${year}
                     </span>
                     ${(() => {
-                        const raw = s.batch || s.tes_batch || s.batch_name;
-                        if (!raw) return '';
-                        let b = String(raw).trim();
-                        if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
-                        else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+                        const b = resolveStudentBatch(s);
+                        if (!b) return '';
                         return `
                             <span style="padding: 3px 10px; background: rgba(30, 58, 138, 0.1); border-radius: 20px; color: #1E3A8A; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-layers" style="font-size: 11px;"></i> ${b}

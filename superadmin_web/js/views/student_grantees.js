@@ -26,6 +26,24 @@ const filterAy = document.getElementById('filter-ay');
 const ayDisplay = document.getElementById('ay-display');
 const refreshStudentsBtn = document.getElementById('refresh-students-btn');
 
+function resolveGranteeBatch(record) {
+    if (!record) return 'Batch 1.2';
+    let rawB = '';
+    if (typeof record === 'string') {
+        rawB = record;
+    } else {
+        rawB = record.batch || record.tes_batch || record.batch_name || (record.documents && record.documents.batch) || 'Batch 1.2';
+    }
+    rawB = String(rawB || 'Batch 1.2').trim();
+    if (rawB === '1' || rawB.toLowerCase() === 'batch 1') {
+        return 'Batch 1.1';
+    }
+    if (!rawB.toLowerCase().startsWith('batch')) {
+        return `Batch ${rawB}`;
+    }
+    return rawB;
+}
+
 function populateBatchFilter() {
     const filterBatchEl = document.getElementById('filter-batch') || filterBatch;
     if (!filterBatchEl) return;
@@ -35,16 +53,8 @@ function populateBatchFilter() {
     // Collect all batches found in allStudents
     const batchSet = new Set();
     allStudents.forEach(s => {
-        const raw = s.batch || s.tes_batch;
-        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-            let b = String(raw).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') {
-                b = 'Batch 1.1';
-            } else if (!b.toLowerCase().startsWith('batch')) {
-                b = `Batch ${b}`;
-            }
-            batchSet.add(b);
-        }
+        const b = resolveGranteeBatch(s);
+        if (b) batchSet.add(b);
     });
 
     if (batchSet.size === 0) {
@@ -188,7 +198,8 @@ function applyFilters() {
         const id = (s.student_no || s.studentId || '').toLowerCase();
         const email = (s.email_address || s.email || '').toLowerCase();
         const prog = (s.program_name || s.course || '').toLowerCase();
-        const matchSearch = !search || name.includes(search) || id.includes(search) || email.includes(search) || prog.includes(search);
+        const saStr = String(s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.atmExtractedSaNumber || s.familyDetails?.saNumber || '').toLowerCase();
+        const matchSearch = !search || name.includes(search) || id.includes(search) || email.includes(search) || prog.includes(search) || saStr.includes(search);
 
         const currentStatus = (s.status || '').toLowerCase();
         let matchStatus = status === 'All';
@@ -209,12 +220,7 @@ function applyFilters() {
 
         let matchBatch = batch === 'All';
         if (!matchBatch) {
-            let studentBatch = (s.batch || s.tes_batch || 'Batch 1.1').toString().trim();
-            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
-                studentBatch = 'Batch 1.1';
-            } else if (!studentBatch.toLowerCase().startsWith('batch')) {
-                studentBatch = `Batch ${studentBatch}`;
-            }
+            const studentBatch = resolveGranteeBatch(s);
             const selectedBatch = batch.trim();
             const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
             const selNorm = selectedBatch.toLowerCase().replace(/^batch\s*/i, '');
@@ -336,6 +342,24 @@ function renderTable() {
         const isNotified = Boolean(s.email_sent_at || s.emailSentAt);
         const isSmsSent = Boolean(s.sms_sent_at || s.smsSentAt || s.sms_status === 'sent');
 
+        const saCandidates = [
+            s.saNumber,
+            s.sa_number,
+            s.documents?.saNumber,
+            s.documents?.atmExtractedSaNumber,
+            s.familyDetails?.saNumber
+        ];
+        let saDisplay = 'N/A';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const str = String(c).trim();
+                if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                    saDisplay = str;
+                    break;
+                }
+            }
+        }
+
         const rowId = s.uid || s.id || s.student_no || s.studentId;
         return `
             <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
@@ -351,12 +375,12 @@ function renderTable() {
                 <td style="padding: 12px; font-size: 13px;">
                     <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; white-space: nowrap;">
                         <i class="icon-layers" style="font-size: 12px;"></i>
-                        ${s.batch || 'Batch 1.1'}
+                        ${resolveGranteeBatch(s)}
                     </span>
                 </td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.scholarYearLevel || '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 12px;">${getStatusBadge(s.status)}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${s.saNumber || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${saDisplay}</td>
                 <td style="padding: 12px; font-size: 13px; color: var(--text-secondary);">${birthdate}</td>
                 <td style="padding: 12px 20px;">
                     <div style="display: flex; gap: 8px;">
@@ -702,7 +726,23 @@ function showStudentModal(student) {
     const religion = student.religion || fam.religion || 'N/A';
     const age = student.age || 'N/A';
     const scholarshipName = student.scholarship_name || student.scholarshipProgram || student.scholarshipName || 'CHED TES';
-    const saNumber = student.sa_number || student.saNumber || fam.saNumber || 'N/A';
+    const saCandidates = [
+        student.saNumber,
+        student.sa_number,
+        student.documents?.saNumber,
+        student.documents?.atmExtractedSaNumber,
+        fam.saNumber
+    ];
+    let saNumber = 'N/A';
+    for (const c of saCandidates) {
+        if (c !== undefined && c !== null) {
+            const str = String(c).trim();
+            if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                saNumber = str;
+                break;
+            }
+        }
+    }
 
     // Resolve payouts without dummy fallbacks - distinguish between 0 payouts (set) vs unentered (null/empty)
     const rawPayouts = student.payoutsReceived ?? fam.payoutsReceived ?? student.payouts_received ?? fam.payouts_received ?? student.payouts;
@@ -799,7 +839,7 @@ function showStudentModal(student) {
                         Year ${yearLevel}
                     </span>
                     <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 4px 10px; border-radius: 8px;">
-                        <i class="icon-layers" style="font-size: 12px;"></i> ${student.batch || student.tes_batch || student.batch_name || 'Batch 1.1'}
+                        <i class="icon-layers" style="font-size: 12px;"></i> ${resolveGranteeBatch(student)}
                     </span>
                 </div>
             </div>
@@ -888,7 +928,7 @@ function showStudentModal(student) {
                         <div>
                             <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 3px;">Batch</span>
                             <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: #1E40AF; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 3px 9px; border-radius: 6px;">
-                                <i class="icon-layers" style="font-size: 13px;"></i> ${student.batch || 'Batch 1.1'}
+                                <i class="icon-layers" style="font-size: 13px;"></i> ${resolveGranteeBatch(student)}
                             </span>
                         </div>
                         <div>
@@ -1069,10 +1109,7 @@ window.editStudent = function (uid) {
     inpYear.value = student.year || '1st Year';
     inpGender.value = student.gender || 'Male';
     if (inpBatch) {
-        let bVal = student.batch || student.tes_batch || 'Batch 1.1';
-        if (bVal === '1' || bVal.toLowerCase() === 'batch 1') bVal = 'Batch 1.1';
-        else if (!bVal.toLowerCase().startsWith('batch')) bVal = `Batch ${bVal}`;
-        inpBatch.value = bVal;
+        inpBatch.value = resolveGranteeBatch(student);
     }
     inpSa.value = student.saNumber || fam.saNumber || '';
     inpScholarYear.value = student.scholarYearLevel || fam.scholarYearLevel || fam.yearBecameScholar || '';

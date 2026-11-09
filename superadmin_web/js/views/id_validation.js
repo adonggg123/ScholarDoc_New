@@ -1,11 +1,49 @@
 // js/views/id_validation.js
 import { SmsNotificationService } from '../services/sms_notification_service.js';
+import { StudentSyncService } from '../services/student_sync_service.js';
 const supabase = window.supabaseClient;
 
+let allImportedStudents = [];
 let idStudents = [];
 let filteredIdStudents = [];
 let selectedIndex = 0;
 let isUpdating = false;
+
+// ── Helper: Resolve Authentic Batch ──────────────────────────────────
+function resolveStudentBatch(record) {
+    if (!record) return '';
+    let raw = '';
+    if (typeof record === 'string') {
+        raw = record;
+    } else {
+        raw = record.batch ||
+            record.tes_batch ||
+            record.batch_name ||
+            (record.documents && (record.documents.batch || record.documents.tes_batch)) ||
+            '';
+    }
+    if (raw === undefined || raw === null) return '';
+    let b = String(raw).trim();
+    if (!b || b.toLowerCase() === 'null' || b.toLowerCase() === 'undefined') return '';
+    if (b === '1' || b.toLowerCase() === 'batch 1') {
+        return 'Batch 1.1';
+    }
+    if (!b.toLowerCase().startsWith('batch')) {
+        return `Batch ${b}`;
+    }
+    return b.replace(/^batch\s*/i, 'Batch ');
+}
+
+function hasIdSubmission(s) {
+    if (!s) return false;
+    const hasPdf = !!(s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url)));
+    const hasFront = !!(s.idFrontUrl || s.id_front_url || (s.documents && (s.documents.idFrontUrl || s.documents.id_front_url)));
+    const hasBack = !!(s.idBackUrl || s.id_back_url || (s.documents && (s.documents.idBackUrl || s.documents.id_back_url)));
+    const hasCor = !!(s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url)));
+    const idStatus = s.documents?.idValidationStatus || s.documents?.id_validation_status || s.idValidationStatus || s.id_validation_status;
+    const hasStatus = idStatus && String(idStatus).toLowerCase() !== 'no submission yet' && String(idStatus).toLowerCase() !== 'null';
+    return hasPdf || hasFront || hasBack || hasCor || hasStatus;
+}
 
 // ── Load Data ───────────────────────────────────────────────────────
 async function loadIdQueue() {
@@ -15,28 +53,35 @@ async function loadIdQueue() {
     }
 
     try {
-        let res = await supabase
-            .from('student_grantees')
-            .select('*')
-            .order('created_at', { ascending: false });
+        let data = [];
+        if (typeof StudentSyncService !== 'undefined' && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+            try {
+                data = await StudentSyncService.loadAndSyncStudents();
+            } catch (syncErr) {
+                console.warn('StudentSyncService error in ID Validation, falling back to direct query:', syncErr);
+            }
+        }
 
-        if (res.error) {
-            res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
+        if (!Array.isArray(data) || data.length === 0) {
+            let res = await supabase
+                .from('student_grantees')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (res.error) {
+                res = await supabase.from('student_grantees').select('*').order('createdAt', { ascending: false });
+            }
+            if (res.error) {
+                res = await supabase.from('student_grantees').select('*');
+            }
+            if (res.error) throw res.error;
+            data = res.data || [];
         }
-        if (res.error) {
-            res = await supabase.from('student_grantees').select('*');
-        }
-        if (res.error) throw res.error;
-        const data = res.data;
+
+        allImportedStudents = data || [];
 
         // Filter students who have submitted documents
-        idStudents = (data || []).filter(s => {
-            const hasPdf = s.submissionPdfUrl || s.submission_pdf_url || (s.documents && (s.documents.submissionPdfUrl || s.documents.submission_pdf_url));
-            const hasFront = s.idFrontUrl || s.id_front_url || (s.documents && (s.documents.idFrontUrl || s.documents.id_front_url));
-            const hasBack = s.idBackUrl || s.id_back_url || (s.documents && (s.documents.idBackUrl || s.documents.id_back_url));
-            const hasCor = s.corUrl || s.cor_url || (s.documents && (s.documents.corUrl || s.documents.cor_url));
-            return hasPdf || hasFront || hasBack || hasCor;
-        });
+        idStudents = (data || []).filter(s => hasIdSubmission(s));
 
         // Update KPI summary cards
         updateKpis();
@@ -115,20 +160,24 @@ function populateIdBatchFilter() {
     const currentVal = filterBatchEl.value || 'All';
     const batchSet = new Set();
 
+    // Dynamically retrieve batches from all imported grantee records
+    if (Array.isArray(allImportedStudents) && allImportedStudents.length > 0) {
+        allImportedStudents.forEach(s => {
+            const b = resolveStudentBatch(s);
+            if (b) batchSet.add(b);
+        });
+    }
+
+    // Also include any batches found on queue applicants
     idStudents.forEach(s => {
-        const raw = s.batch || s.tes_batch || s.batch_name;
-        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-            let b = String(raw).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') {
-                b = 'Batch 1.1';
-            } else if (!b.toLowerCase().startsWith('batch')) {
-                b = `Batch ${b}`;
-            }
-            batchSet.add(b);
-        }
+        const b = resolveStudentBatch(s);
+        if (b) batchSet.add(b);
     });
 
-    ['Batch 1.1', 'Batch 1.2', 'Batch 1.3', 'Batch 1.4', 'Batch 1.5', 'Batch 2.1', 'Batch 2.2', 'Batch 2.3', 'Batch 3.1', 'Batch 3.2'].forEach(b => batchSet.add(b));
+    // Fallback if no records found yet
+    if (batchSet.size === 0) {
+        batchSet.add('Batch 1.2');
+    }
 
     const sortedBatches = Array.from(batchSet).sort((a, b) => {
         return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
@@ -142,6 +191,8 @@ function populateIdBatchFilter() {
     filterBatchEl.innerHTML = optionsHtml;
     if (sortedBatches.includes(currentVal) || currentVal === 'All') {
         filterBatchEl.value = currentVal;
+    } else {
+        filterBatchEl.value = 'All';
     }
 }
 
@@ -173,12 +224,7 @@ function filterIdQueue() {
         // Batch Match
         let matchBatch = batchFilter === 'All';
         if (!matchBatch) {
-            let studentBatch = String(s.batch || s.tes_batch || s.batch_name || '').trim();
-            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
-                studentBatch = 'Batch 1.1';
-            } else if (studentBatch && !studentBatch.toLowerCase().startsWith('batch')) {
-                studentBatch = `Batch ${studentBatch}`;
-            }
+            const studentBatch = resolveStudentBatch(s);
             const selectedBatch = batchFilter.trim();
             const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
             const selNorm = selectedBatch.toLowerCase().replace(/^batch\s*/i, '');
@@ -342,12 +388,9 @@ function renderQueue() {
             docBadgesHtml += `<span style="font-size: 9px; font-weight: 700; color: #059669; background: rgba(5, 150, 105, 0.08); padding: 1px 5px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px;"><i class="icon-file-check" style="font-size: 9px;"></i> COR</span>`;
         }
 
-        const rawBatch = s.batch || s.tes_batch || s.batch_name;
+        const b = resolveStudentBatch(s);
         let batchBadgeHtml = '';
-        if (rawBatch) {
-            let b = String(rawBatch).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
-            else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+        if (b) {
             batchBadgeHtml = `<span style="font-size: 10px; color: #1E3A8A; font-weight: 700; background: rgba(30, 58, 138, 0.08); padding: 1px 6px; border-radius: 4px;">${b}</span>`;
         }
 
@@ -682,11 +725,8 @@ function renderPanel() {
                         ${course} - ${year}
                     </span>
                     ${(() => {
-            const raw = s.batch || s.tes_batch || s.batch_name;
-            if (!raw) return '';
-            let b = String(raw).trim();
-            if (b === '1' || b.toLowerCase() === 'batch 1') b = 'Batch 1.1';
-            else if (!b.toLowerCase().startsWith('batch')) b = `Batch ${b}`;
+            const b = resolveStudentBatch(s);
+            if (!b) return '';
             return `
                             <span style="padding: 3px 10px; background: rgba(30, 58, 138, 0.1); border-radius: 20px; color: #1E3A8A; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
                                 <i class="icon-layers" style="font-size: 11px;"></i> ${b}

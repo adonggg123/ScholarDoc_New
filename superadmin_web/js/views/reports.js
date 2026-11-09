@@ -20,43 +20,104 @@ window.switchReportTab = function (tabName) {
 async function loadAllData() {
     const body = document.getElementById('rpt-master-body');
     if (body && allStudents.length === 0) {
-        body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i><div>Loading student master list records...</div></td></tr>`;
+        body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i><div>Loading student master list records...</div></td></tr>`;
         if (window.lucide) window.lucide.createIcons();
     }
     try {
         allStudents = await StudentSyncService.loadAndSyncStudents();
-        renderMasterTable(allStudents);
+        populateAllFilters(allStudents);
+        applyFilters();
         buildCharts(allStudents);
-        populateScholarshipFilter(allStudents);
     } catch (e) {
         console.error('Error loading students for reports:', e);
-        if (body) body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data: ${e.message || e}</td></tr>`;
+        if (body) body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data: ${e.message || e}</td></tr>`;
     }
 }
 
-// ── Populate Scholarship Filter ─────────────────────────────────────
+// ── Populate Filter Options ─────────────────────────────────────────
+function populateBatchFilter(students) {
+    const sel = document.getElementById('rpt-filter-batch');
+    if (!sel) return;
+    const currentVal = sel.value || 'All';
+    const batchSet = new Set();
+
+    students.forEach(s => {
+        const raw = s.batch || s.tes_batch || s.batch_name || (s.documents && s.documents.batch);
+        if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+            let b = String(raw).trim();
+            if (b === '1' || b.toLowerCase() === 'batch 1') {
+                b = 'Batch 1.1';
+            } else if (!b.toLowerCase().startsWith('batch')) {
+                b = `Batch ${b}`;
+            }
+            batchSet.add(b);
+        }
+    });
+
+    if (batchSet.size === 0) {
+        batchSet.add('Batch 1.2');
+    }
+
+    const sortedBatches = Array.from(batchSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+    let optionsHtml = '<option value="All">All Batches</option>';
+    sortedBatches.forEach(b => {
+        optionsHtml += `<option value="${b}" ${b === currentVal ? 'selected' : ''}>${b}</option>`;
+    });
+    sel.innerHTML = optionsHtml;
+}
+
+function populateCourseFilter(students) {
+    const sel = document.getElementById('rpt-filter-course');
+    if (!sel) return;
+    const currentVal = sel.value || 'All';
+    const courseSet = new Set();
+
+    students.forEach(s => {
+        const c = s.program_name || s.course;
+        if (c && String(c).trim() && String(c).trim().toUpperCase() !== 'N/A') {
+            courseSet.add(String(c).trim());
+        }
+    });
+
+    const sortedCourses = Array.from(courseSet).sort((a, b) => a.localeCompare(b));
+    let optionsHtml = '<option value="All">All Courses/Programs</option>';
+    sortedCourses.forEach(c => {
+        optionsHtml += `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`;
+    });
+    sel.innerHTML = optionsHtml;
+}
+
 function populateScholarshipFilter(students) {
+    const sel = document.getElementById('rpt-filter-scholarship');
+    if (!sel) return;
+    const currentVal = sel.value || 'All Scholarships';
     const set = new Set();
     students.forEach(s => {
         const name = s.scholarship_name || s.scholarshipProgram || s.scholarshipName;
-        if (name) set.add(name);
+        if (name && String(name).trim()) set.add(String(name).trim());
     });
-    const sel = document.getElementById('rpt-filter-scholarship');
-    if (!sel) return;
-    sel.innerHTML = '<option>All Scholarships</option>';
-    set.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
+    let optionsHtml = '<option value="All Scholarships">All Scholarships</option>';
+    Array.from(set).sort().forEach(name => {
+        optionsHtml += `<option value="${name}" ${name === currentVal ? 'selected' : ''}>${name}</option>`;
     });
+    sel.innerHTML = optionsHtml;
+}
+
+function populateAllFilters(students) {
+    populateBatchFilter(students);
+    populateCourseFilter(students);
+    populateScholarshipFilter(students);
 }
 
 // ── Filter Logic ────────────────────────────────────────────────────
 function getFilteredStudents() {
     const query = (document.getElementById('rpt-search')?.value || '').toLowerCase().trim();
-    const gender = document.getElementById('rpt-filter-gender')?.value || 'All Genders';
+    const batchFilter = document.getElementById('rpt-filter-batch')?.value || 'All';
+    const courseFilter = document.getElementById('rpt-filter-course')?.value || 'All';
+    const statusFilter = document.getElementById('rpt-filter-status')?.value || 'All';
     const scholarship = document.getElementById('rpt-filter-scholarship')?.value || 'All Scholarships';
+    const gender = document.getElementById('rpt-filter-gender')?.value || 'All Genders';
     const year = document.getElementById('rpt-filter-year')?.value || 'All Year Levels';
     const fatherEdu = document.getElementById('rpt-filter-father')?.value || 'All (Father)';
     const motherEdu = document.getElementById('rpt-filter-mother')?.value || 'All (Mother)';
@@ -68,22 +129,66 @@ function getFilteredStudents() {
         const email = (s.email_address || s.email || '').toLowerCase();
         const program = (s.program_name || s.course || '').toLowerCase();
 
+        // 1. Search Query
         const matchSearch = !query || name.includes(query) || id.includes(query) || email.includes(query) || program.includes(query);
-        const matchGender = gender === 'All Genders' || (s.gender || '').toLowerCase() === gender.toLowerCase();
-        
+
+        // 2. Batch Match
+        let matchBatch = batchFilter === 'All';
+        if (!matchBatch) {
+            let studentBatch = String(s.batch || s.tes_batch || s.batch_name || (s.documents && s.documents.batch) || '').trim();
+            if (studentBatch === '1' || studentBatch.toLowerCase() === 'batch 1') {
+                studentBatch = 'Batch 1.1';
+            } else if (studentBatch && !studentBatch.toLowerCase().startsWith('batch')) {
+                studentBatch = `Batch ${studentBatch}`;
+            }
+            const sNorm = studentBatch.toLowerCase().replace(/^batch\s*/i, '');
+            const selNorm = batchFilter.toLowerCase().replace(/^batch\s*/i, '');
+            matchBatch = studentBatch.toLowerCase() === batchFilter.toLowerCase() || (sNorm && sNorm === selNorm);
+        }
+
+        // 3. Course/Program Match
+        let matchCourse = courseFilter === 'All' || courseFilter === 'All Courses' || courseFilter === 'All Courses/Programs';
+        if (!matchCourse) {
+            const sCourse = (s.program_name || s.course || '').trim().toLowerCase();
+            const selCourse = courseFilter.trim().toLowerCase();
+            matchCourse = sCourse === selCourse || sCourse.includes(selCourse);
+        }
+
+        // 4. Status Match: Approved, Pending, No Submission Yet
+        let matchStatus = statusFilter === 'All' || statusFilter === 'All Statuses';
+        if (!matchStatus) {
+            const st = String(s.status || '').trim().toLowerCase();
+            if (statusFilter === 'Approved') {
+                matchStatus = st === 'approved' || st === 'verified';
+            } else if (statusFilter === 'Pending') {
+                matchStatus = st === 'pending';
+            } else if (statusFilter === 'No Submission Yet') {
+                matchStatus = st === 'no submission yet' || !st || st === 'null' || st === 'undefined';
+            } else {
+                matchStatus = st === statusFilter.toLowerCase();
+            }
+        }
+
+        // 5. Scholarship Match
         const sSchol = (s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES').toLowerCase();
         const matchScholarship = scholarship === 'All Scholarships' || sSchol.includes(scholarship.toLowerCase());
-        
+
+        // 6. Gender Match
+        const matchGender = gender === 'All Genders' || (s.gender || '').toLowerCase() === gender.toLowerCase();
+
+        // 7. Year Level Match
         const sYear = String(s.year_level || s.year || s.scholarYearLevel || '');
         const matchYear = year === 'All Year Levels' || sYear === year || sYear.toLowerCase().includes(year.toLowerCase()) || (year.charAt(0) === sYear.charAt(0));
 
+        // 8. Father's Education Match
         const sFatherEdu = (s.father_occupation || family.fatherEduStatus || '').toLowerCase();
         const matchFather = fatherEdu === 'All (Father)' || !fatherEdu || sFatherEdu.includes(fatherEdu.toLowerCase());
 
+        // 9. Mother's Education Match
         const sMotherEdu = (s.mother_occupation || family.motherEduStatus || '').toLowerCase();
         const matchMother = motherEdu === 'All (Mother)' || !motherEdu || sMotherEdu.includes(motherEdu.toLowerCase());
 
-        return matchSearch && matchGender && matchScholarship && matchYear && matchFather && matchMother;
+        return matchSearch && matchBatch && matchCourse && matchStatus && matchScholarship && matchGender && matchYear && matchFather && matchMother;
     });
 }
 
@@ -114,7 +219,7 @@ function renderMasterTable(students) {
     const body = document.getElementById('rpt-master-body');
     if (!body) return;
     if (students.length === 0) {
-        body.innerHTML = `<tr><td colspan="22" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-users" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>No students match filters.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-users" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>No students match filters.</td></tr>`;
         if (window.lucide) window.lucide.createIcons();
         return;
     }
@@ -196,6 +301,7 @@ function renderMasterTable(students) {
                 <td style="padding: 14px; font-size: 13px;">${program}</td>
                 <td style="padding: 14px; font-size: 13px;">${yr} - ${s.section || ''}</td>
                 <td style="padding: 14px; font-size: 13px;">${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || 'CHED TES'}</td>
+                <td style="padding: 14px; font-size: 13px;"><span style="display: inline-block; padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-weight: 600; font-size: 11px; color: var(--primary-color);">${s.batch || (s.documents && s.documents.batch) || 'Batch 1.2'}</span></td>
                 <td style="padding: 14px; font-size: 13px;">${scholarYear ? scholarYear : '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 14px; font-size: 13px;">${rawPayouts !== null ? rawPayouts : '<span style="color: var(--text-secondary); font-style: italic; font-size: 12px;">Not specified</span>'}</td>
                 <td style="padding: 14px; font-size: 13px;">${phone}</td>
@@ -420,7 +526,7 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
     }
 
     // Build CSV
-    const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
+    const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Batch', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
     const rows = studentsToExport.map(s => {
         let nameParts = { last: '', first: '', mi: '' };
         const fn = (s.full_name || s.fullName || '').trim();
@@ -460,6 +566,24 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
                     : ((fam.payouts_received !== null && fam.payouts_received !== undefined && String(fam.payouts_received).trim() !== '')
                         ? fam.payouts_received
                         : '')));
+        const saCandidates = [
+            s.saNumber,
+            s.sa_number,
+            s.documents?.saNumber,
+            s.documents?.atmExtractedSaNumber,
+            fam.saNumber
+        ];
+        let saReportVal = '';
+        for (const c of saCandidates) {
+            if (c !== undefined && c !== null) {
+                const str = String(c).trim();
+                if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                    saReportVal = str;
+                    break;
+                }
+            }
+        }
+
         return [
             nameParts.last,
             nameParts.first,
@@ -469,10 +593,11 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
             s.year_level || s.year || '',
             s.gender || '',
             s.scholarship_name || s.scholarshipProgram || s.scholarshipName || '',
+            s.batch || 'Batch 1.1',
             s.status || 'Pending',
             rawSy || '',
             rawPayouts !== null && rawPayouts !== undefined ? rawPayouts : '',
-            s.saNumber || fam.saNumber || '',
+            saReportVal,
             fam.fatherEduStatus || '',
             fam.motherEduStatus || ''
         ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
@@ -522,11 +647,11 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
             <table>
                 <thead>
                     <tr>
-                        <th>Name</th><th>Student ID</th><th>Course</th><th>Year Level</th><th>Scholar Year</th><th>Payouts</th><th>Scholarship</th><th>Status</th>
+                        <th>Name</th><th>Student ID</th><th>Course</th><th>Year Level</th><th>Scholar Year</th><th>Payouts</th><th>Scholarship</th><th>Batch</th><th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${allStudents.map(s => {
+                    ${(selectedStudentIds.size > 0 ? allStudents.filter(s => selectedStudentIds.has(s.uid || s.id)) : getFilteredStudents()).map(s => {
                         const fam = s.familyDetails || {};
                         const sy = s.scholarYearLevel || s.yearBecameScholar || s.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || fam.year_became_scholar || 'Not specified';
                         const py = (s.payoutsReceived !== null && s.payoutsReceived !== undefined && String(s.payoutsReceived).trim() !== '') ? s.payoutsReceived : (fam.payoutsReceived ?? s.payouts_received ?? fam.payouts_received ?? 'Not specified');
@@ -539,6 +664,7 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
                             <td>${sy}</td>
                             <td>${py}</td>
                             <td>${s.scholarship_name || s.scholarshipProgram || s.scholarshipName || ''}</td>
+                            <td>${s.batch || 'Batch 1.1'}</td>
                             <td>${s.status || 'Pending'}</td>
                         </tr>
                         `;
@@ -557,12 +683,15 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
 });
 
 // ── Event Listeners ─────────────────────────────────────────────────
-document.getElementById('rpt-search').addEventListener('input', applyFilters);
-document.getElementById('rpt-filter-gender').addEventListener('change', applyFilters);
-document.getElementById('rpt-filter-scholarship').addEventListener('change', applyFilters);
-document.getElementById('rpt-filter-year').addEventListener('change', applyFilters);
-document.getElementById('rpt-filter-father').addEventListener('change', applyFilters);
-document.getElementById('rpt-filter-mother').addEventListener('change', applyFilters);
+document.getElementById('rpt-search')?.addEventListener('input', applyFilters);
+document.getElementById('rpt-filter-batch')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-course')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-status')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-scholarship')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-gender')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-year')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-father')?.addEventListener('change', applyFilters);
+document.getElementById('rpt-filter-mother')?.addEventListener('change', applyFilters);
 
 document.getElementById('throughput-timeframe').addEventListener('change', () => {
     buildThroughputChart(allStudents);
