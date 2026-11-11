@@ -87,30 +87,6 @@ async function populateStudentGranteesTerms(forceDefault = false) {
         const semShort = defaultTerm.semester.toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
         let defaultVal = `AY ${defaultTerm.academicYear}, ${semShort}`;
 
-        if (!userSelectedAy && Array.isArray(allStudents) && allStudents.length > 0) {
-            const matchesTerm = (val) => {
-                const ym = val.match(/\d{4}-\d{4}/);
-                const fy = ym ? ym[0].toLowerCase() : '';
-                const want2nd = val.toLowerCase().includes('2nd');
-                return allStudents.some(s => {
-                    const sAy = String(s.academic_year || s.academicYear || '').toLowerCase();
-                    const sSem = String(s.semester || '').toLowerCase();
-                    if (!sAy || sAy === 'n/a') return true;
-                    const yOk = !fy || sAy.includes(fy);
-                    const semOk = want2nd ? sSem.includes('2nd') : (!sSem || sSem.includes('1st'));
-                    return yOk && semOk;
-                });
-            };
-            if (!matchesTerm(defaultVal)) {
-                const firstWithAy = allStudents.find(s => /^\d{4}-\d{4}$/.test(String(s.academic_year || s.academicYear || '').trim()));
-                if (firstWithAy) {
-                    const fAy = String(firstWithAy.academic_year || firstWithAy.academicYear).trim();
-                    const fSem = String(firstWithAy.semester || '').toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
-                    defaultVal = `AY ${fAy}, ${fSem}`;
-                }
-            }
-        }
-
         const curVal = (forceDefault || !userSelectedAy) ? defaultVal : (filterAyEl.value || defaultVal);
 
         let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
@@ -275,22 +251,18 @@ function applyFilters() {
         const ay = filterAy ? filterAy.value : 'All';
         let matchAy = ay === 'All';
         if (!matchAy) {
-            const sAy = (s.academic_year || s.academicYear || '').toLowerCase();
-            const sSem = (s.semester || '').toLowerCase();
-            if (!sAy || sAy === 'n/a') {
-                matchAy = true;
-            } else {
-                const yearMatch = ay.match(/\d{4}-\d{4}/);
-                const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
-                const matchYear = !filterYear || sAy.includes(filterYear);
+            const sAy = (s.academic_year || s.academicYear || '').toLowerCase().trim();
+            const sSem = (s.semester || '').toLowerCase().trim();
+            const yearMatch = ay.match(/\d{4}-\d{4}/);
+            const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
+            const matchYear = !filterYear || (Boolean(sAy) && sAy.includes(filterYear));
 
-                let matchSemester = true;
-                if (ay.toLowerCase().includes('1st') && !sSem.includes('1st') && sSem) matchSemester = false;
-                else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
-                else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
+            let matchSemester = true;
+            if (ay.toLowerCase().includes('1st') && !sSem.includes('1st')) matchSemester = false;
+            else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
+            else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
 
-                matchAy = matchYear && matchSemester;
-            }
+            matchAy = matchYear && matchSemester;
         }
 
         return matchSearch && matchStatus && matchBatch && matchCourse && matchSchol && matchAy;

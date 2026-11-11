@@ -3626,47 +3626,137 @@ async function fetchAllSchoolStudents(supabaseClient) {
     return allStudents;
 }
 
-function autoHealSchoolStudentTerms(allDbStudents) {
-    if (!allDbStudents || allDbStudents.length === 0) return;
+async function autoHealSchoolStudentTerms(allDbStudents) {
     try {
+        if (!allDbStudents || allDbStudents.length === 0) {
+            localStorage.removeItem('scholardoc_school_term_students');
+            localStorage.removeItem('scholardoc_school_terms_registry');
+            localStorage.removeItem('scholardoc_school_student_terms');
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('scholardoc_school_records_')) {
+                    try { localStorage.removeItem(k); } catch (_) { }
+                }
+            });
+            return;
+        }
+
         let termMap = {};
+        let registry = {};
         try { termMap = JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}'); } catch (_) { }
+        try { registry = JSON.parse(localStorage.getItem('scholardoc_school_terms_registry') || '{}'); } catch (_) { }
+
+        let minCreatedMs = Infinity;
+        allDbStudents.forEach(s => {
+            if (s.created_at) {
+                const ms = new Date(s.created_at).getTime();
+                if (!isNaN(ms) && ms < minCreatedMs) minCreatedMs = ms;
+            }
+        });
+        if (!isFinite(minCreatedMs)) minCreatedMs = 0;
+        else minCreatedMs = Math.max(0, minCreatedMs - 60000);
+
+        const validLoggedTerms = new Set();
+        let fetchedLogsOk = false;
+
+        try {
+            const { data: logs, error: logErr } = await window.supabaseClient
+                .from('audit_logs')
+                .select('action, timestamp')
+                .ilike('action', '%school_students database%')
+                .order('timestamp', { ascending: false })
+                .limit(50);
+            if (!logErr && Array.isArray(logs)) {
+                fetchedLogsOk = true;
+                logs.forEach(l => {
+                    const ts = l.timestamp ? new Date(l.timestamp).getTime() : Infinity;
+                    if (ts >= minCreatedMs) {
+                        const m = String(l.action || '').match(/\(([^•\)]+)\s*•\s*([^\)]+)\)/);
+                        if (m) {
+                            validLoggedTerms.add(`${m[1].trim()}_${m[2].trim()}`);
+                        }
+                    }
+                });
+            }
+        } catch (_) { }
+
+        try {
+            const { data: notifs, error: notifErr } = await window.supabaseClient
+                .from('notifications')
+                .select('title, message, timestamp')
+                .ilike('message', '%school student records (%')
+                .order('timestamp', { ascending: false })
+                .limit(50);
+            if (!notifErr && Array.isArray(notifs)) {
+                fetchedLogsOk = true;
+                notifs.forEach(n => {
+                    const ts = n.timestamp ? new Date(n.timestamp).getTime() : Infinity;
+                    if (ts >= minCreatedMs) {
+                        const m = String(n.message || '').match(/\(([^•\)]+)\s*•\s*([^\)]+)\)/);
+                        if (m) {
+                            validLoggedTerms.add(`${m[1].trim()}_${m[2].trim()}`);
+                        }
+                    }
+                });
+            }
+        } catch (_) { }
+
+        Object.entries(registry).forEach(([tKey, meta]) => {
+            if (meta && meta.explicitlyUploadedAt) {
+                const upMs = new Date(meta.explicitlyUploadedAt).getTime();
+                if (!isNaN(upMs) && upMs >= minCreatedMs) {
+                    validLoggedTerms.add(tKey);
+                }
+            }
+        });
 
         let needSave = false;
-        if (!termMap['2026-2027_1st Semester'] || termMap['2026-2027_1st Semester'].length < 1600) {
-            const firstSemStudents = allDbStudents.filter(s => !s.created_at || s.created_at < '2026-11-10T05:28:00Z');
-            const targetFirstSem = firstSemStudents.length > 0 ? firstSemStudents : allDbStudents;
-            if (targetFirstSem.length > 0) {
-                termMap['2026-2027_1st Semester'] = targetFirstSem.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
-                needSave = true;
+
+        if (fetchedLogsOk || minCreatedMs > 0) {
+            const allCandidateKeys = new Set([
+                ...Object.keys(termMap),
+                ...Object.keys(registry)
+            ]);
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('scholardoc_school_records_')) {
+                    allCandidateKeys.add(k.replace('scholardoc_school_records_', ''));
+                }
+            });
+
+            for (const tKey of allCandidateKeys) {
+                if (!validLoggedTerms.has(tKey)) {
+                    delete termMap[tKey];
+                    delete registry[tKey];
+                    try { localStorage.removeItem(`scholardoc_school_records_${tKey}`); } catch (_) { }
+                    needSave = true;
+                }
             }
         }
 
-        if (!termMap['2026-2027_2nd Semester'] || termMap['2026-2027_2nd Semester'].length < 1500) {
-            const secondSemStudents = allDbStudents.filter(s => (s.updated_at && s.updated_at >= '2026-11-10T05:28:00Z') || (s.created_at && s.created_at >= '2026-11-10T05:28:00Z'));
-            if (secondSemStudents.length > 0) {
-                termMap['2026-2027_2nd Semester'] = secondSemStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+        if (validLoggedTerms.size === 1) {
+            const onlyTermKey = Array.from(validLoggedTerms)[0];
+            if (!termMap[onlyTermKey] || termMap[onlyTermKey].length === 0) {
+                termMap[onlyTermKey] = allDbStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
                 needSave = true;
             }
         }
 
         if (needSave) {
             localStorage.setItem('scholardoc_school_term_students', JSON.stringify(termMap));
-            const studentTermsCache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+            localStorage.setItem('scholardoc_school_terms_registry', JSON.stringify(registry));
+
+            const rebuiltStudentTermsCache = {};
             Object.entries(termMap).forEach(([tKey, sNos]) => {
                 const parts = tKey.split('_');
                 const tAy = parts[0];
                 const tSem = parts.slice(1).join('_');
-                sNos.forEach(sNo => {
-                    let existing = studentTermsCache[sNo];
-                    let list = Array.isArray(existing) ? existing : (existing && existing.academicYear ? [existing] : []);
-                    if (!list.some(t => t.academicYear === tAy && t.semester === tSem)) {
-                        list.push({ academicYear: tAy, semester: tSem });
+                (sNos || []).forEach(sNo => {
+                    if (!rebuiltStudentTermsCache[sNo]) rebuiltStudentTermsCache[sNo] = [];
+                    if (!rebuiltStudentTermsCache[sNo].some(t => t.academicYear === tAy && t.semester === tSem)) {
+                        rebuiltStudentTermsCache[sNo].push({ academicYear: tAy, semester: tSem });
                     }
-                    studentTermsCache[sNo] = list;
                 });
             });
-            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(studentTermsCache));
+            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(rebuiltStudentTermsCache));
         }
     } catch (e) {
         console.warn('Error during autoHealSchoolStudentTerms:', e);
@@ -3685,11 +3775,14 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
 
     try {
         const termStudentsMap = JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
-        if (termStudentsMap && termStudentsMap[termKey]) {
-            const studentSet = new Set(termStudentsMap[termKey]);
-            if (sNo && studentSet.has(sNo)) return true;
-            if (sName && studentSet.has(sName)) return true;
-            if (sId && studentSet.has(sId)) return true;
+        if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
+            if (termStudentsMap && Array.isArray(termStudentsMap[termKey])) {
+                const studentSet = new Set(termStudentsMap[termKey]);
+                if (sNo && studentSet.has(sNo)) return true;
+                if (sName && studentSet.has(sName)) return true;
+                if (sId && studentSet.has(sId)) return true;
+                return false;
+            }
             return false;
         }
     } catch (_) { }
@@ -3776,9 +3869,7 @@ function getSchoolStudentTerm(s, studentProfileMap = new Map(), targetAy = selec
 async function loadSchoolStudentsAndVerify(grantees) {
     try {
         let dbStudents = await fetchAllSchoolStudents(window.supabaseClient);
-        if (dbStudents && dbStudents.length > 0) {
-            autoHealSchoolStudentTerms(dbStudents);
-        }
+        await autoHealSchoolStudentTerms(dbStudents);
 
         let { data: fallbackStudents } = await window.supabaseClient
             .from('student_grantees')

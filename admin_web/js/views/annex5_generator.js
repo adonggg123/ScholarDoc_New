@@ -440,6 +440,39 @@ async function idbGetSchoolTermRecords(termKey) {
     }
 }
 
+async function idbDeleteSchoolTermRecords(termKey) {
+    if (!termKey) return false;
+    try {
+        const db = await openSchoolDB();
+        if (!db) return false;
+        return new Promise((resolve) => {
+            const tx = db.transaction(SCHOOL_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(SCHOOL_STORE_NAME);
+            store.delete(termKey);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        });
+    } catch (_) {
+        return false;
+    }
+}
+
+async function idbClearAllSchoolTermRecords() {
+    try {
+        const db = await openSchoolDB();
+        if (!db) return false;
+        return new Promise((resolve) => {
+            const tx = db.transaction(SCHOOL_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(SCHOOL_STORE_NAME);
+            store.clear();
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        });
+    } catch (_) {
+        return false;
+    }
+}
+
 function getSchoolTermStudentsMap() {
     try {
         return JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
@@ -456,39 +489,124 @@ function getSchoolTermsRegistry() {
     }
 }
 
-// Auto-seed historical term assignments from existing database timestamps if not yet initialized
-function autoHealSchoolStudentTerms(allDbStudents) {
-    if (!allDbStudents || allDbStudents.length === 0) return;
+// Reconcile local term caches with authoritative Supabase state so deleted or un-uploaded terms stay empty
+async function autoHealSchoolStudentTerms(allDbStudents) {
     try {
+        if (!allDbStudents || allDbStudents.length === 0) {
+            localStorage.removeItem('scholardoc_school_term_students');
+            localStorage.removeItem('scholardoc_school_terms_registry');
+            localStorage.removeItem('scholardoc_school_student_terms');
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('scholardoc_school_records_')) {
+                    try { localStorage.removeItem(k); } catch (_) { }
+                }
+            });
+            await idbClearAllSchoolTermRecords();
+            return;
+        }
+
         const termMap = getSchoolTermStudentsMap();
         const registry = getSchoolTermsRegistry();
 
+        let minCreatedMs = Infinity;
+        allDbStudents.forEach(s => {
+            if (s.created_at) {
+                const ms = new Date(s.created_at).getTime();
+                if (!isNaN(ms) && ms < minCreatedMs) minCreatedMs = ms;
+            }
+        });
+        if (!isFinite(minCreatedMs)) minCreatedMs = 0;
+        else minCreatedMs = Math.max(0, minCreatedMs - 60000);
+
+        const validLoggedTerms = new Set();
+        let fetchedLogsOk = false;
+
+        try {
+            const { data: logs, error: logErr } = await supabase
+                .from('audit_logs')
+                .select('action, timestamp')
+                .ilike('action', '%school_students database%')
+                .order('timestamp', { ascending: false })
+                .limit(50);
+            if (!logErr && Array.isArray(logs)) {
+                fetchedLogsOk = true;
+                logs.forEach(l => {
+                    const ts = l.timestamp ? new Date(l.timestamp).getTime() : Infinity;
+                    if (ts >= minCreatedMs) {
+                        const m = String(l.action || '').match(/\(([^•\)]+)\s*•\s*([^\)]+)\)/);
+                        if (m) {
+                            validLoggedTerms.add(`${m[1].trim()}_${m[2].trim()}`);
+                        }
+                    }
+                });
+            }
+        } catch (_) { }
+
+        try {
+            const { data: notifs, error: notifErr } = await supabase
+                .from('notifications')
+                .select('title, message, timestamp')
+                .ilike('message', '%school student records (%')
+                .order('timestamp', { ascending: false })
+                .limit(50);
+            if (!notifErr && Array.isArray(notifs)) {
+                fetchedLogsOk = true;
+                notifs.forEach(n => {
+                    const ts = n.timestamp ? new Date(n.timestamp).getTime() : Infinity;
+                    if (ts >= minCreatedMs) {
+                        const m = String(n.message || '').match(/\(([^•\)]+)\s*•\s*([^\)]+)\)/);
+                        if (m) {
+                            validLoggedTerms.add(`${m[1].trim()}_${m[2].trim()}`);
+                        }
+                    }
+                });
+            }
+        } catch (_) { }
+
+        Object.entries(registry).forEach(([tKey, meta]) => {
+            if (meta && meta.explicitlyUploadedAt) {
+                const upMs = new Date(meta.explicitlyUploadedAt).getTime();
+                if (!isNaN(upMs) && upMs >= minCreatedMs) {
+                    validLoggedTerms.add(tKey);
+                }
+            }
+        });
+
         let needSave = false;
-        if (!termMap['2026-2027_1st Semester'] || termMap['2026-2027_1st Semester'].length < 1600) {
-            // Students uploaded during 1st Semester (created before 2nd sem upload: 05:28:00 UTC, or all DB students as baseline)
-            const firstSemStudents = allDbStudents.filter(s => !s.created_at || s.created_at < '2026-11-10T05:28:00Z');
-            const targetFirstSem = firstSemStudents.length > 0 ? firstSemStudents : allDbStudents;
-            if (targetFirstSem.length > 0) {
-                termMap['2026-2027_1st Semester'] = targetFirstSem.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
-                registry['2026-2027_1st Semester'] = {
-                    academicYear: '2026-2027',
-                    semester: '1st Semester',
-                    count: termMap['2026-2027_1st Semester'].length,
-                    updatedAt: new Date().toISOString()
-                };
-                needSave = true;
+
+        if (fetchedLogsOk || minCreatedMs > 0) {
+            const allCandidateKeys = new Set([
+                ...Object.keys(termMap),
+                ...Object.keys(registry)
+            ]);
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('scholardoc_school_records_')) {
+                    allCandidateKeys.add(k.replace('scholardoc_school_records_', ''));
+                }
+            });
+
+            for (const tKey of allCandidateKeys) {
+                if (!validLoggedTerms.has(tKey)) {
+                    delete termMap[tKey];
+                    delete registry[tKey];
+                    try { localStorage.removeItem(`scholardoc_school_records_${tKey}`); } catch (_) { }
+                    await idbDeleteSchoolTermRecords(tKey);
+                    needSave = true;
+                }
             }
         }
 
-        if (!termMap['2026-2027_2nd Semester'] || termMap['2026-2027_2nd Semester'].length < 1500) {
-            // Students uploaded during 2nd Semester (touched at or after 05:28:00 UTC)
-            const secondSemStudents = allDbStudents.filter(s => (s.updated_at && s.updated_at >= '2026-11-10T05:28:00Z') || (s.created_at && s.created_at >= '2026-11-10T05:28:00Z'));
-            if (secondSemStudents.length > 0) {
-                termMap['2026-2027_2nd Semester'] = secondSemStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
-                registry['2026-2027_2nd Semester'] = {
-                    academicYear: '2026-2027',
-                    semester: '2nd Semester',
-                    count: termMap['2026-2027_2nd Semester'].length,
+        if (validLoggedTerms.size === 1) {
+            const onlyTermKey = Array.from(validLoggedTerms)[0];
+            if (!termMap[onlyTermKey] || termMap[onlyTermKey].length === 0) {
+                const parts = onlyTermKey.split('_');
+                const tAy = parts[0];
+                const tSem = parts.slice(1).join('_');
+                termMap[onlyTermKey] = allDbStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+                registry[onlyTermKey] = {
+                    academicYear: tAy,
+                    semester: tSem,
+                    count: termMap[onlyTermKey].length,
                     updatedAt: new Date().toISOString()
                 };
                 needSave = true;
@@ -499,22 +617,19 @@ function autoHealSchoolStudentTerms(allDbStudents) {
             localStorage.setItem('scholardoc_school_term_students', JSON.stringify(termMap));
             localStorage.setItem('scholardoc_school_terms_registry', JSON.stringify(registry));
 
-            // Populate multi-term list in scholardoc_school_student_terms
-            const studentTermsCache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+            const rebuiltStudentTermsCache = {};
             Object.entries(termMap).forEach(([tKey, sNos]) => {
                 const parts = tKey.split('_');
                 const tAy = parts[0];
                 const tSem = parts.slice(1).join('_');
-                sNos.forEach(sNo => {
-                    let existing = studentTermsCache[sNo];
-                    let list = Array.isArray(existing) ? existing : (existing && existing.academicYear ? [existing] : []);
-                    if (!list.some(t => t.academicYear === tAy && t.semester === tSem)) {
-                        list.push({ academicYear: tAy, semester: tSem });
+                (sNos || []).forEach(sNo => {
+                    if (!rebuiltStudentTermsCache[sNo]) rebuiltStudentTermsCache[sNo] = [];
+                    if (!rebuiltStudentTermsCache[sNo].some(t => t.academicYear === tAy && t.semester === tSem)) {
+                        rebuiltStudentTermsCache[sNo].push({ academicYear: tAy, semester: tSem });
                     }
-                    studentTermsCache[sNo] = list;
                 });
             });
-            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(studentTermsCache));
+            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(rebuiltStudentTermsCache));
         }
     } catch (e) {
         console.warn('Error during autoHealSchoolStudentTerms:', e);
@@ -526,6 +641,7 @@ function saveSchoolStudentTerms(records, ay, sem) {
     if (!records || records.length === 0 || !ay || !sem) return;
     try {
         const termKey = `${ay}_${sem}`;
+        const nowIso = new Date().toISOString();
 
         // 1. Save list of student numbers belonging to this term
         const termStudentsMap = getSchoolTermStudentsMap();
@@ -563,7 +679,8 @@ function saveSchoolStudentTerms(records, ay, sem) {
             academicYear: ay,
             semester: sem,
             count: records.length,
-            updatedAt: new Date().toISOString()
+            updatedAt: nowIso,
+            explicitlyUploadedAt: nowIso
         };
         localStorage.setItem('scholardoc_school_terms_registry', JSON.stringify(registry));
 
@@ -590,11 +707,15 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
 
     // 1. Direct lookup in term-students mapping
     const termStudentsMap = getSchoolTermStudentsMap();
-    if (termStudentsMap && termStudentsMap[termKey]) {
-        const studentSet = new Set(termStudentsMap[termKey]);
-        if (sNo && studentSet.has(sNo)) return true;
-        if (sName && studentSet.has(sName)) return true;
-        if (sId && studentSet.has(sId)) return true;
+    if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
+        if (termStudentsMap && Array.isArray(termStudentsMap[termKey])) {
+            const studentSet = new Set(termStudentsMap[termKey]);
+            if (sNo && studentSet.has(sNo)) return true;
+            if (sName && studentSet.has(sName)) return true;
+            if (sId && studentSet.has(sId)) return true;
+            return false;
+        }
+        // If no school student records have been uploaded for this specific term, remain strictly empty
         return false;
     }
 
@@ -767,10 +888,8 @@ async function loadInitialData() {
         const schoolDbData = await fetchAllSchoolStudents();
         let errSchool = null;
 
-        // Auto-heal / populate term students map if not yet populated
-        if (schoolDbData && schoolDbData.length > 0) {
-            autoHealSchoolStudentTerms(schoolDbData);
-        }
+        // Reconcile local term students map with authoritative Supabase state
+        await autoHealSchoolStudentTerms(schoolDbData);
 
         // Optional profile enrichment from student_grantees table
         let { data: studentsDbData } = await supabase
@@ -788,10 +907,15 @@ async function loadInitialData() {
         });
 
         if (!errSchool && schoolDbData && schoolDbData.length > 0) {
-            // First check if an exact term snapshot exists in IndexedDB or localStorage
+            // Only load a term snapshot if this academic year & semester has uploaded school student records
             const termKey = `${selectedAcademicYear}_${selectedSemester}`;
+            const termStudentsMap = getSchoolTermStudentsMap();
+            const hasUploadedTermRecords = selectedAcademicYear !== 'All' &&
+                selectedSemester !== 'All' &&
+                Array.isArray(termStudentsMap[termKey]) &&
+                termStudentsMap[termKey].length > 0;
             let termSnapshot = null;
-            if (selectedAcademicYear !== 'All' && selectedSemester !== 'All') {
+            if (hasUploadedTermRecords) {
                 try {
                     const rawSnap = localStorage.getItem(`scholardoc_school_records_${termKey}`);
                     if (rawSnap) termSnapshot = JSON.parse(rawSnap);
@@ -1679,17 +1803,15 @@ if (btnClearFile) {
         });
 
         if (dbStudents && dbStudents.length > 0) {
-            const mappedSchool = dbStudents.map(s => {
-                const mapped = mapSchoolStudentRecord(s, studentProfileMap);
-                const term = getSchoolStudentTerm(s, studentProfileMap);
-                mapped.academicYear = term.academicYear;
-                mapped.semester = term.semester;
-                return mapped;
+            await autoHealSchoolStudentTerms(dbStudents);
+            const filteredSchool = dbStudents.filter(s => {
+                return isSchoolStudentInTerm(s, selectedAcademicYear, selectedSemester, studentProfileMap);
             });
-            rawSchoolStudents = mappedSchool.filter(s => {
-                const matchAy = !selectedAcademicYear || selectedAcademicYear === 'All' || s.academicYear === selectedAcademicYear;
-                const matchSem = !selectedSemester || selectedSemester === 'All' || s.semester === selectedSemester;
-                return matchAy && matchSem;
+            rawSchoolStudents = filteredSchool.map(s => {
+                const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                mapped.academicYear = selectedAcademicYear !== 'All' ? selectedAcademicYear : (s.academic_year || '2026-2027');
+                mapped.semester = selectedSemester !== 'All' ? selectedSemester : (s.semester || '1st Semester');
+                return mapped;
             });
         } else {
             // When table is empty or deleted in Supabase, show strictly empty list
@@ -1801,9 +1923,9 @@ async function handleSchoolFile(file, explicitTerm) {
                     storedCount += batch.length;
                 }
 
-                // Sync matching student_grantees with the selected academic year & semester
+                // Sync matching student_grantees with the selected academic year & semester only if not already assigned
                 try {
-                    const { data: sgList } = await supabase.from('student_grantees').select('id, student_no, full_name, last_name');
+                    const { data: sgList } = await supabase.from('student_grantees').select('id, student_no, full_name, last_name, academic_year, semester');
                     if (sgList && sgList.length > 0) {
                         const sgUpdates = [];
                         rawSchoolStudents.forEach(st => {
@@ -1814,7 +1936,7 @@ async function handleSchoolFile(file, explicitTerm) {
                                 if (stName && String(sg.full_name || '').toLowerCase().trim() === stName) return true;
                                 return false;
                             });
-                            if (match) {
+                            if (match && (!match.academic_year || !match.semester)) {
                                 sgUpdates.push(supabase.from('student_grantees').update({
                                     academic_year: chosenTerm.academicYear,
                                     academicYear: chosenTerm.academicYear,
