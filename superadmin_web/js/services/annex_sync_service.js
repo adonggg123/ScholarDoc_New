@@ -551,17 +551,33 @@ export class AnnexSyncService {
 
     /**
      * Persists verified Form 2 and Form 3 records directly to the Supabase database.
+     * Supports both object parameter and positional arguments (form2List, form3List, updatedBy, academicYear, semester).
      */
-    static async saveToSupabase({
-        form2List = [],
-        form3List = [],
-        academicYear = '2026-2027',
-        semester = '1st Semester',
-        heiName = 'USTP Oroquieta',
-        heiCampus = 'Oroquieta Campus',
-        allowEmptyForm2 = false,
-        allowEmptyForm3 = false
-    } = {}) {
+    static async saveToSupabase(arg1 = {}, arg2 = [], arg3 = '', arg4 = '2026-2027', arg5 = '1st Semester') {
+        let form2List = [];
+        let form3List = [];
+        let academicYear = '2026-2027';
+        let semester = '1st Semester';
+        let heiName = 'USTP Oroquieta';
+        let heiCampus = 'Oroquieta Campus';
+        let allowEmptyForm2 = false;
+        let allowEmptyForm3 = false;
+
+        if (Array.isArray(arg1)) {
+            form2List = arg1;
+            form3List = Array.isArray(arg2) ? arg2 : [];
+            academicYear = arg4 || '2026-2027';
+            semester = arg5 || '1st Semester';
+        } else if (arg1 && typeof arg1 === 'object') {
+            form2List = arg1.form2List || [];
+            form3List = arg1.form3List || [];
+            academicYear = arg1.academicYear || '2026-2027';
+            semester = arg1.semester || '1st Semester';
+            heiName = arg1.heiName || 'USTP Oroquieta';
+            heiCampus = arg1.heiCampus || 'Oroquieta Campus';
+            allowEmptyForm2 = Boolean(arg1.allowEmptyForm2);
+            allowEmptyForm3 = Boolean(arg1.allowEmptyForm3);
+        }
         const supabase = window.supabaseClient;
         if (!supabase) {
             console.warn('AnnexSyncService.saveToSupabase: Supabase client is not available.');

@@ -2321,6 +2321,9 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
         }
 
         // Render extracted records with duplicate indicators and update badges
+        if (selectedTerm.academicYear) selectedAcademicYear = selectedTerm.academicYear;
+        if (selectedTerm.semester) selectedSemester = selectedTerm.semester;
+        if (selectedScholarship) selectedScholarshipProgram = selectedScholarship;
         updateStep1TargetTermBadge(selectedTerm.academicYear, selectedTerm.semester);
         updateStep2TermIndicator(selectedTerm.academicYear, selectedTerm.semester);
         populateBatchFilter();
@@ -2338,7 +2341,10 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
             batch: m.batch || selectedBatch,
             student_id: m.studentId || m.student_id || '',
             course: m.course || 'BSIT',
-            year: '1'
+            year: '1',
+            academic_year: selectedTerm.academicYear,
+            semester: selectedTerm.semester,
+            scholarship_type: selectedScholarship
         }));
         await loadSchoolStudentsAndVerify(granteesForVerification);
 
@@ -3826,7 +3832,10 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     batch: m.batch || 'Batch 1',
                     student_id: m.student_id || m.studentId || '',
                     course: m.course || 'BSIT',
-                    year: m.year || '1'
+                    year: m.year || '1',
+                    academic_year: m.academic_year || m.academicYear || selectedAcademicYear,
+                    semester: m.semester || selectedSemester,
+                    scholarship_type: m.scholarship_type || m.scholarshipType || selectedScholarshipProgram || 'TES'
                 }));
             } else {
                 grantees = [];

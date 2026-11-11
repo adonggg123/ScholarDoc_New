@@ -755,7 +755,21 @@ export class StudentSyncService {
      * If records are deleted in Supabase, they are immediately reflected/gone.
      * Returns the normalized array of student grantees.
      */
+    static _activeSyncPromise = null;
+
     static async loadAndSyncStudents() {
+        if (this._activeSyncPromise) {
+            return this._activeSyncPromise;
+        }
+        this._activeSyncPromise = this._executeLoadAndSyncStudents();
+        try {
+            return await this._activeSyncPromise;
+        } finally {
+            this._activeSyncPromise = null;
+        }
+    }
+
+    static async _executeLoadAndSyncStudents() {
         const supabase = window.supabaseClient;
         if (!supabase) {
             console.warn('StudentSyncService: Supabase client unavailable.');
@@ -854,12 +868,15 @@ export class StudentSyncService {
             //     are never re-inserted from stale cache or orphaned tables upon refresh.
             let syncedF2Ids = new Set();
             let syncedSgIds = new Set();
+            let syncedStudentKeys = new Set();
             try {
                 if (typeof localStorage !== 'undefined') {
                     const rawF2Ids = JSON.parse(localStorage.getItem('scholardoc_synced_f2_ids') || '[]');
                     const rawSgIds = JSON.parse(localStorage.getItem('scholardoc_synced_sg_ids') || '[]');
+                    const rawStKeys = JSON.parse(localStorage.getItem('scholardoc_synced_student_keys') || '[]');
                     if (Array.isArray(rawF2Ids)) syncedF2Ids = new Set(rawF2Ids.map(String));
                     if (Array.isArray(rawSgIds)) syncedSgIds = new Set(rawSgIds.map(String));
+                    if (Array.isArray(rawStKeys)) syncedStudentKeys = new Set(rawStKeys.map(String));
                 }
             } catch (_) { }
 
@@ -868,8 +885,18 @@ export class StudentSyncService {
                     if (typeof localStorage !== 'undefined') {
                         localStorage.setItem('scholardoc_synced_f2_ids', JSON.stringify(Array.from(syncedF2Ids)));
                         localStorage.setItem('scholardoc_synced_sg_ids', JSON.stringify(Array.from(syncedSgIds)));
+                        localStorage.setItem('scholardoc_synced_student_keys', JSON.stringify(Array.from(syncedStudentKeys)));
                     }
                 } catch (_) { }
+            };
+
+            const getRecordKey = (rec) => {
+                if (!rec) return '';
+                const sNo = this.clean(rec.student_number || rec.student_no || rec.studentId || rec.studentNo);
+                if (sNo && sNo !== 'na') return `no_${sNo}`;
+                const p = this.parseName(rec.full_name || rec.fullName || rec.name, rec.last_name || rec.lastName, rec.given_name || rec.first_name || rec.firstName);
+                if (p.last && p.first) return `name_${p.last}_${p.first}`;
+                return '';
             };
 
             const removeDeletedFromLocalAnnexCache = (deletedRecords = []) => {
@@ -905,6 +932,157 @@ export class StudentSyncService {
                 } catch (_) { }
             };
 
+            // 3d. Reconcile any verified Form 2 records from local AnnexSyncService storage or active masterlist
+            //     that have not yet been persisted to annex_form_2 in Supabase (ONLY when masterlist has active records
+            //     and the record was not previously synced & deleted).
+            const missingF2ToPersist = [];
+            if (newGranteesList.length > 0) {
+                try {
+                    const localPayloads = [];
+                    if (typeof localStorage !== 'undefined') {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const k = typeof localStorage.key === 'function' ? localStorage.key(i) : null;
+                            if (k && (k === 'scholardoc_annex5_verified_data' || k.startsWith('scholardoc_annex5_verified_data_'))) {
+                                try {
+                                    const parsed = JSON.parse(localStorage.getItem(k) || 'null');
+                                    if (parsed && Array.isArray(parsed.form2List) && parsed.form2List.length > 0) {
+                                        localPayloads.push(parsed);
+                                    }
+                                } catch (_) { }
+                            }
+                        }
+                    }
+
+                    for (const payload of localPayloads) {
+                        const pAy = payload.academicYear || '2026-2027';
+                        const pSem = payload.semester || '1st Semester';
+                        for (let idx = 0; idx < payload.form2List.length; idx++) {
+                            const item = payload.form2List[idx];
+                            if (!item) continue;
+                            const g = item.grantee || item;
+                            const s = item.matchedStudent || {};
+                            const itemAy = item.academic_year || g.academic_year || s.academic_year || pAy;
+                            const itemSem = item.semester || g.semester || s.semester || pSem;
+
+                            const rawCandSa = s.saNumber || s.sa_number || g.saNumber || g.sa_number || g.tes_application_number || '';
+                            const cleanCandSa = !this.isPlaceholderSa(rawCandSa) ? String(rawCandSa).trim() : 'N/A';
+                            const candidateF2 = {
+                                control_number: String(form2List.length + missingF2ToPersist.length + 1).padStart(5, '0'),
+                                student_number: s.studentId || s.student_no || s.studentNo || g.student_id || g.studentNo || null,
+                                tes_application_number: cleanCandSa,
+                                last_name: s.lastName || s.last_name || g.last_name || g.lastName || 'N/A',
+                                given_name: s.firstName || s.first_name || g.first_name || g.firstName || 'N/A',
+                                middle_initial: s.mi || g.middle_name || g.middleName || '',
+                                sex_at_birth: String(s.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+                                birthdate: s.birthdate || s.dateOfBirth || '01/01/2000',
+                                degree_program: s.course || s.program_name || s.programName || g.course || 'BSIT',
+                                year_level: String(s.year || s.year_level || g.year || '1').replace(/[^0-9]/g, '') || '1',
+                                email_address: s.email || s.email_address || 'N/A',
+                                phone_number: s.phone || s.contactNumber || s.mobile_number || g.phone || 'N/A',
+                                tes_batch: String(g.batch || g.tes_batch || s.batch || '1.2').replace(/[^0-9.]/g, '') || '1.2',
+                                tes_amount: 10000.00,
+                                pwd_amount: 0.00,
+                                total_amount: 10000.00,
+                                academic_year: itemAy,
+                                semester: itemSem,
+                                hei_name: 'USTP Oroquieta',
+                                hei_campus: 'Oroquieta Campus',
+                                updated_at: new Date().toISOString()
+                            };
+
+                            const rKey = getRecordKey(candidateF2);
+                            if (rKey && syncedStudentKeys.has(rKey) && !sgList.some(sg => this.isMatch(sg, candidateF2))) {
+                                continue;
+                            }
+
+                            const alreadyInF2 = form2List.some(existing =>
+                                this.isMatch(existing, candidateF2) &&
+                                (!existing.academic_year || existing.academic_year === itemAy) &&
+                                (!existing.semester || existing.semester === itemSem)
+                            );
+                            const inMasterlist = newGranteesList.some(gm => this.isMatch(gm, candidateF2));
+                            if (!alreadyInF2 && inMasterlist) {
+                                form2List.push(candidateF2);
+                                missingF2ToPersist.push(candidateF2);
+                            }
+                        }
+                    }
+                } catch (localErr) {
+                    console.warn('StudentSyncService: Could not check local Form 2 storage:', localErr);
+                }
+            }
+
+            if (form2List.length === 0 && newGranteesList.length > 0 && schoolStudents.length > 0) {
+                try {
+                    let f3List = [];
+                    try {
+                        const f3Res = await supabase.from('annex_form_3').select('*');
+                        if (f3Res && Array.isArray(f3Res.data)) f3List = f3Res.data;
+                    } catch (_) { }
+
+                    const defaultTerm = (typeof AcademicYearService !== 'undefined' && AcademicYearService.getDefaultTerm)
+                        ? AcademicYearService.getDefaultTerm()
+                        : { academicYear: '2026-2027', semester: '1st Semester' };
+
+                    const autoClaimedSs = new Set();
+                    newGranteesList.forEach((gm, idx) => {
+                        const inF3 = f3List.some(f3 => this.isMatch(f3, gm));
+                        if (inF3) return;
+                        const ssMatch = this.findBestStudentMatch(gm, schoolStudents, autoClaimedSs);
+                        if (!ssMatch) return;
+
+                        const parsed = this.parseName(ssMatch.full_name || gm.name, gm.last_name, gm.first_name);
+                        const candidateF2 = {
+                            control_number: String(idx + 1).padStart(5, '0'),
+                            student_number: ssMatch.student_no || ssMatch.studentId || null,
+                            tes_application_number: 'N/A',
+                            last_name: (gm.last_name || parsed.last || 'N/A').toUpperCase(),
+                            given_name: (gm.first_name || parsed.first || 'N/A').toUpperCase(),
+                            middle_initial: gm.middle_name ? String(gm.middle_name).trim().charAt(0).toUpperCase() : (parsed.mi || ''),
+                            sex_at_birth: String(ssMatch.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+                            birthdate: ssMatch.date_of_birth || ssMatch.birthdate || '01/01/2000',
+                            degree_program: ssMatch.program_name || ssMatch.course || 'BSIT',
+                            year_level: String(ssMatch.year_level || ssMatch.year || '1').replace(/[^0-9]/g, '') || '1',
+                            email_address: ssMatch.email_address || ssMatch.email || 'N/A',
+                            phone_number: ssMatch.mobile_number || ssMatch.contactNumber || 'N/A',
+                            tes_batch: String(gm.batch || '1.2').replace(/[^0-9.]/g, '') || '1.2',
+                            tes_amount: 10000.00,
+                            pwd_amount: 0.00,
+                            total_amount: 10000.00,
+                            academic_year: gm.academic_year || defaultTerm.academicYear || '2026-2027',
+                            semester: gm.semester || defaultTerm.semester || '1st Semester',
+                            hei_name: 'USTP Oroquieta',
+                            hei_campus: 'Oroquieta Campus',
+                            updated_at: new Date().toISOString()
+                        };
+                        const rKey = getRecordKey(candidateF2);
+                        if (rKey && syncedStudentKeys.has(rKey) && !sgList.some(sg => this.isMatch(sg, candidateF2))) {
+                            return;
+                        }
+                        form2List.push(candidateF2);
+                        missingF2ToPersist.push(candidateF2);
+                    });
+                } catch (reconcileErr) {
+                    console.warn('StudentSyncService: Error auto-reconciling Form 2 from masterlist:', reconcileErr);
+                }
+            }
+
+            if (missingF2ToPersist.length > 0) {
+                try {
+                    const { data: f2InsData, error: f2InsErr } = await supabase.from('annex_form_2').insert(missingF2ToPersist).select();
+                    if (!f2InsErr && Array.isArray(f2InsData)) {
+                        f2InsData.forEach((insertedRow, i) => {
+                            if (missingF2ToPersist[i] && insertedRow.id) {
+                                missingF2ToPersist[i].id = insertedRow.id;
+                            }
+                        });
+                        console.log(`StudentSyncService: Persisted ${missingF2ToPersist.length} Form 2 record(s) to annex_form_2 in Supabase.`);
+                    }
+                } catch (e) {
+                    console.warn('StudentSyncService: Could not persist missing Form 2 records:', e);
+                }
+            }
+
             // If annex_form_2 is completely empty in Supabase, clean up any stale synced student_grantees and local cache
             if (!Array.isArray(form2List) || form2List.length === 0) {
                 try {
@@ -935,6 +1113,7 @@ export class StudentSyncService {
                     const remainingSg = sgList.filter(sg => !orphanSgToDelete.includes(sg));
                     syncedF2Ids.clear();
                     syncedSgIds.clear();
+                    syncedStudentKeys.clear();
                     saveSyncedIds();
                     if (remainingSg.length > 0) {
                         return remainingSg.map(sg => {
@@ -946,6 +1125,7 @@ export class StudentSyncService {
                 }
                 syncedF2Ids.clear();
                 syncedSgIds.clear();
+                syncedStudentKeys.clear();
                 saveSyncedIds();
                 console.log('StudentSyncService: No Form 2 data and no existing student_grantees. Returning empty list.');
                 return [];
@@ -958,6 +1138,8 @@ export class StudentSyncService {
             const claimedSchoolStudentNosByTerm = new Map();
             const claimedSgIds = new Set();
 
+            const pendingSyncF2Ids = [];
+            const pendingSyncStudentKeys = [];
             const result = [];
             for (const f2 of form2List) {
                 const termKey = `${f2.academic_year || 'default'}_${f2.semester || 'default'}`;
@@ -975,12 +1157,8 @@ export class StudentSyncService {
 
                 // Check if this Form 2 record was previously synced to student_grantees and then deleted in Supabase
                 const f2IdStr = f2.id ? String(f2.id) : '';
-                const f2CreatedMs = f2.created_at ? new Date(f2.created_at).getTime() : 0;
-                const f2AgeMs = f2CreatedMs ? (Date.now() - f2CreatedMs) : 0;
-                const wasPreviouslySyncedAndDeleted = !existingSg && (
-                    (f2IdStr && syncedF2Ids.has(f2IdStr)) ||
-                    (f2AgeMs > 60000)
-                );
+                const f2CreatedAgeMs = f2.created_at ? (Date.now() - new Date(f2.created_at).getTime()) : Infinity;
+                const wasPreviouslySyncedAndDeleted = !existingSg && f2CreatedAgeMs > 15000 && Boolean(f2IdStr && syncedF2Ids.has(f2IdStr));
 
                 if (wasPreviouslySyncedAndDeleted) {
                     deletedF2Rows.push(f2);
@@ -992,13 +1170,13 @@ export class StudentSyncService {
                     ? newGranteesList.find(gm => this.isMatch(gm, f2) || (ssMatch && this.isMatch(gm, ssMatch)))
                     : null;
                 const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, gmMatch, existingSg || {}, activeDeadline);
-
-                if (f2IdStr) syncedF2Ids.add(f2IdStr);
+                const rKey = getRecordKey(normalized);
 
                 if (!existingSg) {
                     const newUid = normalized.uid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
                     normalized.uid = newUid;
-                    if (newUid) syncedSgIds.add(String(newUid));
+                    if (f2IdStr) pendingSyncF2Ids.push(f2IdStr);
+                    if (rKey) pendingSyncStudentKeys.push(rKey);
                     toInsert.push({
                         uid: newUid,
                         student_no: normalized.student_no,
@@ -1042,6 +1220,8 @@ export class StudentSyncService {
                         email_sent_at: null
                     });
                 } else if (existingSg) {
+                    if (f2IdStr) syncedF2Ids.add(f2IdStr);
+                    if (rKey) syncedStudentKeys.add(rKey);
                     if (existingSg.id) syncedSgIds.add(String(existingSg.id));
                     if (existingSg.uid) syncedSgIds.add(String(existingSg.uid));
                     // Update database record if status, batch, SA number, or term differs from dynamic computed record
@@ -1147,6 +1327,8 @@ export class StudentSyncService {
                     if (insErr) {
                         console.warn('StudentSyncService: Could not insert missing grantees into student_grantees:', insErr);
                     } else {
+                        pendingSyncF2Ids.forEach(id => syncedF2Ids.add(id));
+                        pendingSyncStudentKeys.forEach(k => syncedStudentKeys.add(k));
                         if (Array.isArray(insertedData)) {
                             insertedData.forEach(row => {
                                 if (row.id) syncedSgIds.add(String(row.id));
