@@ -356,7 +356,7 @@ export class StudentSyncService {
             return true;
         }
 
-        // 3. Meaningful student-provided SA Number (distinct from default 'N/A' placeholder)
+        // 3. Meaningful student-provided SA Number (distinct from default 'N/A' or seeded placeholder)
         const saCandidates = [
             docs.saNumber,
             docs.sa_number,
@@ -367,12 +367,9 @@ export class StudentSyncService {
         ];
         let sa = '';
         for (const c of saCandidates) {
-            if (c !== undefined && c !== null) {
-                const str = String(c).trim();
-                if (str !== '' && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null') {
-                    sa = str;
-                    break;
-                }
+            if (!this.isPlaceholderSa(c)) {
+                sa = String(c).trim();
+                break;
             }
         }
         if (sa) {
@@ -390,6 +387,32 @@ export class StudentSyncService {
             }
         }
 
+        return false;
+    }
+
+    static isPlaceholderSa(val) {
+        if (val === undefined || val === null) return true;
+        const s = String(val).trim();
+        if (!s) return true;
+        const upper = s.toUpperCase();
+        if (
+            upper === 'N/A' ||
+            upper === 'NA' ||
+            upper === 'NONE' ||
+            upper === 'NULL' ||
+            upper === 'UNDEFINED' ||
+            upper === 'PENDING' ||
+            upper === 'UNASSIGNED' ||
+            upper === 'NOT SPECIFIED' ||
+            upper === 'NOT SUBMITTED YET' ||
+            upper === '-' ||
+            upper === '--'
+        ) {
+            return true;
+        }
+        if (/^\d{4}-TES-\d+$/i.test(s) || /^TES-\d+$/i.test(s)) {
+            return true;
+        }
         return false;
     }
 
@@ -458,22 +481,19 @@ export class StudentSyncService {
 
         const existingDocs = existing.documents || {};
         const saCandidates = [
-            f2Match?.tes_application_number,
             existingDocs.saNumber,
             existingDocs.sa_number,
             existingDocs.atmExtractedSaNumber,
             existing.sa_number,
             existing.saNumber,
-            existing.familyDetails?.saNumber
+            existing.familyDetails?.saNumber,
+            f2Match?.tes_application_number
         ];
         let saNumber = 'N/A';
         for (const c of saCandidates) {
-            if (c !== undefined && c !== null) {
-                const s = String(c).trim();
-                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
-                    saNumber = s;
-                    break;
-                }
+            if (!this.isPlaceholderSa(c)) {
+                saNumber = String(c).trim();
+                break;
             }
         }
 
@@ -871,10 +891,12 @@ export class StudentSyncService {
                         const itemAy = item.academic_year || g.academic_year || s.academic_year || pAy;
                         const itemSem = item.semester || g.semester || s.semester || pSem;
 
+                        const rawCandSa = s.saNumber || s.sa_number || g.saNumber || g.sa_number || g.tes_application_number || '';
+                        const cleanCandSa = !this.isPlaceholderSa(rawCandSa) ? String(rawCandSa).trim() : 'N/A';
                         const candidateF2 = {
                             control_number: String(form2List.length + missingF2ToPersist.length + 1).padStart(5, '0'),
                             student_number: s.studentId || s.student_no || s.studentNo || g.student_id || g.studentNo || null,
-                            tes_application_number: s.saNumber || s.sa_number || g.saNumber || g.sa_number || g.tes_application_number || 'N/A',
+                            tes_application_number: cleanCandSa,
                             last_name: s.lastName || s.last_name || g.last_name || g.lastName || 'N/A',
                             given_name: s.firstName || s.first_name || g.first_name || g.firstName || 'N/A',
                             middle_initial: s.mi || g.middle_name || g.middleName || '',
@@ -934,10 +956,12 @@ export class StudentSyncService {
                         if (!ssMatch) return;
 
                         const parsed = this.parseName(ssMatch.full_name || gm.name, gm.last_name, gm.first_name);
+                        const rawGmSa = gm.tes_application_number || gm.sa_number || '';
+                        const cleanGmSa = !this.isPlaceholderSa(rawGmSa) ? String(rawGmSa).trim() : 'N/A';
                         const candidateF2 = {
                             control_number: String(idx + 1).padStart(5, '0'),
                             student_number: ssMatch.student_no || ssMatch.studentId || null,
-                            tes_application_number: gm.tes_application_number || gm.sa_number || 'N/A',
+                            tes_application_number: cleanGmSa,
                             last_name: (gm.last_name || parsed.last || 'N/A').toUpperCase(),
                             given_name: (gm.first_name || parsed.first || 'N/A').toUpperCase(),
                             middle_initial: gm.middle_name ? String(gm.middle_name).trim().charAt(0).toUpperCase() : (parsed.mi || ''),
@@ -1061,10 +1085,13 @@ export class StudentSyncService {
                     });
                 } else if (existingSg) {
                     // Update database record if status, batch, SA number, or term differs from dynamic computed record
+                    const existingCleanSa = !this.isPlaceholderSa(existingSg.saNumber || existingSg.sa_number)
+                        ? String(existingSg.saNumber || existingSg.sa_number).trim()
+                        : 'N/A';
                     const needsStatusSync = existingSg.status !== normalized.status ||
                         existingSg.saVerificationStatus !== normalized.saVerificationStatus ||
                         existingSg.idValidationStatus !== normalized.idValidationStatus ||
-                        (normalized.saNumber && normalized.saNumber !== 'N/A' && existingSg.saNumber !== normalized.saNumber) ||
+                        existingCleanSa !== normalized.saNumber ||
                         (existingSg.documents?.batch !== normalized.batch) ||
                         (normalized.academic_year && existingSg.academic_year !== normalized.academic_year) ||
                         (normalized.semester && existingSg.semester !== normalized.semester);

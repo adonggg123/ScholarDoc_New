@@ -37,14 +37,44 @@ export class AnnexSyncService {
     }
 
     /**
-     * Extracts authentic submitted SA number avoiding the truthy 'N/A' trap.
+     * Checks whether a candidate SA value is empty or a placeholder/seeded dummy value.
+     */
+    static isPlaceholderSa(val) {
+        if (val === undefined || val === null) return true;
+        const s = String(val).trim();
+        if (!s) return true;
+        const upper = s.toUpperCase();
+        if (
+            upper === 'N/A' ||
+            upper === 'NA' ||
+            upper === 'NONE' ||
+            upper === 'NULL' ||
+            upper === 'UNDEFINED' ||
+            upper === 'PENDING' ||
+            upper === 'UNASSIGNED' ||
+            upper === 'NOT SPECIFIED' ||
+            upper === 'NOT SUBMITTED YET' ||
+            upper === '-' ||
+            upper === '--'
+        ) {
+            return true;
+        }
+        // Filter out seeded/dummy TES application numbers (e.g., 2023-TES-001, TES-001)
+        if (/^\d{4}-TES-\d+$/i.test(s) || /^TES-\d+$/i.test(s)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Extracts authentic student-submitted SA number. Returns 'N/A' when none is submitted.
      */
     static extractAuthenticSaNumber(...objects) {
         for (const obj of objects) {
             if (!obj) continue;
             if (typeof obj === 'string') {
                 const s = obj.trim();
-                if (s && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
+                if (!this.isPlaceholderSa(s)) {
                     return s;
                 }
                 continue;
@@ -61,11 +91,8 @@ export class AnnexSyncService {
                 obj.familyDetails?.saNumber
             ];
             for (const c of candidates) {
-                if (c !== undefined && c !== null) {
-                    const s = String(c).trim();
-                    if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
-                        return s;
-                    }
+                if (!this.isPlaceholderSa(c)) {
+                    return String(c).trim();
                 }
             }
         }
@@ -264,6 +291,13 @@ export class AnnexSyncService {
             if (!isDuplicate) {
                 if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
+                const cleanSa = this.extractAuthenticSaNumber(itemCopy.matchedStudent, itemCopy.grantee);
+                if (itemCopy.grantee) {
+                    itemCopy.grantee = { ...itemCopy.grantee, saNumber: cleanSa, sa_number: cleanSa, tes_application_number: cleanSa };
+                }
+                if (itemCopy.matchedStudent) {
+                    itemCopy.matchedStudent = { ...itemCopy.matchedStudent, saNumber: cleanSa, sa_number: cleanSa, tes_application_number: cleanSa };
+                }
                 itemCopy.classification = 'MATCHED_FORM2';
                 itemCopy.isEnrolled = true;
                 cleanForm2.push(itemCopy);
@@ -282,6 +316,13 @@ export class AnnexSyncService {
             if (!isDuplicate) {
                 if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
+                const cleanSa = this.extractAuthenticSaNumber(itemCopy.matchedStudent, itemCopy.grantee);
+                if (itemCopy.grantee) {
+                    itemCopy.grantee = { ...itemCopy.grantee, saNumber: cleanSa, sa_number: cleanSa, tes_application_number: cleanSa };
+                }
+                if (itemCopy.matchedStudent) {
+                    itemCopy.matchedStudent = { ...itemCopy.matchedStudent, saNumber: cleanSa, sa_number: cleanSa, tes_application_number: cleanSa };
+                }
                 itemCopy.classification = 'INACTIVE_FORM3';
                 itemCopy.isEnrolled = false;
                 itemCopy.specialStatusReason = itemCopy.specialStatusReason || 'Not enrolled';
@@ -556,6 +597,11 @@ export class AnnexSyncService {
                         const sName = String(sg.full_name || sg.fullName || '').trim().toLowerCase();
                         if (sNo) existingSgMap.set(sNo, sg);
                         if (sName) existingSgMap.set(sName, sg);
+                        if (sName.includes(',')) {
+                            const [l, rest] = sName.split(',').map(p => p.trim());
+                            const f = (rest || '').split(/\s+/)[0] || '';
+                            if (l && f) existingSgMap.set(`${l}|${f}`, sg);
+                        }
                     });
                 }
             } catch (_) { }
@@ -569,11 +615,15 @@ export class AnnexSyncService {
 
                 const studentNo = student.studentId || student.studentNo || grantee.student_id || grantee.studentNo || null;
                 const sNoKey = String(studentNo || '').trim();
-                const nKey = `${String(name.lastName || '').trim().toLowerCase()}|${String(name.firstName || '').trim().toLowerCase()}`;
+                const firstWord = String(name.firstName || '').trim().toLowerCase().split(/\s+/)[0] || '';
+                const nKey = `${String(name.lastName || '').trim().toLowerCase()}|${ String(name.firstName || '').trim().toLowerCase() }`;
+                const nShortKey = `${String(name.lastName || '').trim().toLowerCase()}|${firstWord}`;
                 const prevF2Row = existingF2Map.get(sNoKey) || existingF2Map.get(nKey);
-                const prevSgRow = existingSgMap.get(sNoKey);
+                const prevSgRow = existingSgMap.get(sNoKey) || existingSgMap.get(nKey) || existingSgMap.get(nShortKey);
 
-                const saNo = this.extractAuthenticSaNumber(student, grantee, prevF2Row, prevSgRow);
+                const saNo = prevSgRow
+                    ? this.extractAuthenticSaNumber(prevSgRow)
+                    : this.extractAuthenticSaNumber(student, grantee, prevF2Row);
                 const gender = (student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M';
                 const bdate = student.birthdate || student.dateOfBirth || student.birthday || '01/01/2000';
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
@@ -617,7 +667,14 @@ export class AnnexSyncService {
                 const name = this.parseNameParts(item);
 
                 const studentNo = student.studentId || student.studentNo || grantee.student_id || grantee.studentNo || null;
-                const saNo = this.extractAuthenticSaNumber(student, grantee);
+                const sNoKey = String(studentNo || '').trim();
+                const firstWord = String(name.firstName || '').trim().toLowerCase().split(/\s+/)[0] || '';
+                const nKey = `${String(name.lastName || '').trim().toLowerCase()}|${String(name.firstName || '').trim().toLowerCase()}`;
+                const nShortKey = `${String(name.lastName || '').trim().toLowerCase()}|${firstWord}`;
+                const prevSgRow = existingSgMap.get(sNoKey) || existingSgMap.get(nKey) || existingSgMap.get(nShortKey);
+                const saNo = prevSgRow
+                    ? this.extractAuthenticSaNumber(prevSgRow)
+                    : this.extractAuthenticSaNumber(student, grantee);
                 const gender = (student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M';
                 const bdate = student.birthdate || student.dateOfBirth || student.birthday || '01/01/2000';
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
@@ -740,6 +797,11 @@ export class AnnexSyncService {
                             const sName = String(sg.full_name || sg.fullName || '').trim().toLowerCase();
                             if (sNo) studentGranteesMap.set(sNo, sg);
                             if (sName) studentGranteesMap.set(sName, sg);
+                            if (sName.includes(',')) {
+                                const [l, rest] = sName.split(',').map(p => p.trim());
+                                const f = (rest || '').split(/\s+/)[0] || '';
+                                if (l && f) studentGranteesMap.set(`${l}|${f}`, sg);
+                            }
                         });
                     }
                 } catch (errSg) {
@@ -749,8 +811,13 @@ export class AnnexSyncService {
                 const resolveSa = (row) => {
                     const sNo = String(row.student_number || '').trim();
                     const sName = `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim().toLowerCase();
-                    const sg = studentGranteesMap.get(sNo) || studentGranteesMap.get(sName);
-                    return AnnexSyncService.extractAuthenticSaNumber(row.tes_application_number, sg);
+                    const firstWord = String(row.given_name || '').trim().toLowerCase().split(/\s+/)[0] || '';
+                    const nShortKey = `${String(row.last_name || '').trim().toLowerCase()}|${firstWord}`;
+                    const sg = studentGranteesMap.get(sNo) || studentGranteesMap.get(sName) || studentGranteesMap.get(nShortKey);
+                    if (sg) {
+                        return AnnexSyncService.extractAuthenticSaNumber(sg);
+                    }
+                    return AnnexSyncService.extractAuthenticSaNumber(row.tes_application_number);
                 };
 
                 const form2List = (f2Data || []).map(row => {

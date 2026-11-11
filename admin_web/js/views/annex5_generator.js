@@ -311,26 +311,8 @@ function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
     const motherFullName = (s.mother_full_name || s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').trim();
     const motherOccupation = (s.mother_occupation || s.motherOccupation || s.motherEduStatus || family.motherOccupation || family.motherEduStatus || '').trim();
 
-    const saCandidates = [
-        s.saNumber,
-        s.sa_number,
-        s.tes_application_number,
-        matchedSt?.saNumber,
-        matchedSt?.sa_number,
-        matchedSt?.documents?.saNumber,
-        matchedSt?.documents?.atmExtractedSaNumber,
-        matchedSt?.familyDetails?.saNumber
-    ];
-    let resolvedSa = 'N/A';
-    for (const c of saCandidates) {
-        if (c !== undefined && c !== null) {
-            const str = String(c).trim();
-            if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
-                resolvedSa = str;
-                break;
-            }
-        }
-    }
+    // Extract authentic student-submitted SA number ('N/A' by default until submitted by student)
+    const resolvedSa = matchedSt ? AnnexSyncService.extractAuthenticSaNumber(matchedSt) : 'N/A';
 
     const resolvedFullName = s.full_name || s.fullName || s.name || (s.last_name || s.first_name ? [s.last_name, s.first_name, s.middle_name].filter(Boolean).join(', ') : '');
     const resolvedProgram = s.program_name || s.programName || s.course || s.program || '';
@@ -2482,26 +2464,7 @@ function renderForm2Table(items) {
             const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
             name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
         }
-        const saCandidates = [
-            student.saNumber,
-            student.sa_number,
-            student.documents?.saNumber,
-            student.documents?.atmExtractedSaNumber,
-            student.familyDetails?.saNumber,
-            grantee.saNumber,
-            grantee.sa_number,
-            grantee.tes_application_number
-        ];
-        let sa = 'N/A';
-        for (const c of saCandidates) {
-            if (c !== undefined && c !== null) {
-                const s = String(c).trim();
-                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
-                    sa = s;
-                    break;
-                }
-            }
-        }
+        const sa = AnnexSyncService.extractAuthenticSaNumber(student, grantee);
         const bdate = student.birthdate || student.birthday || '01/01/2000';
         const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const email = student.email || student.authEmail || 'N/A';
@@ -2565,26 +2528,7 @@ function renderForm3Table(items) {
             const m = (grantee.middle_name || grantee.middleName || student.middle_name || student.middleName || '').trim();
             name = { lastName: l || 'N/A', firstName: f || 'N/A', mi: m ? m.charAt(0).toUpperCase() : '' };
         }
-        const saCandidates = [
-            student.saNumber,
-            student.sa_number,
-            student.documents?.saNumber,
-            student.documents?.atmExtractedSaNumber,
-            student.familyDetails?.saNumber,
-            grantee.saNumber,
-            grantee.sa_number,
-            grantee.tes_application_number
-        ];
-        let sa = 'N/A';
-        for (const c of saCandidates) {
-            if (c !== undefined && c !== null) {
-                const s = String(c).trim();
-                if (s !== '' && s.toUpperCase() !== 'N/A' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') {
-                    sa = s;
-                    break;
-                }
-            }
-        }
+        const sa = AnnexSyncService.extractAuthenticSaNumber(student, grantee);
         const bdate = student.birthdate || student.birthday || '01/01/2000';
         const year = String(student.year || student.scholarYearLevel || student.year_level || grantee.year || grantee.year_level || '1').replace(/[^0-9]/g, '') || '1';
         const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
@@ -3101,26 +3045,7 @@ function openStudentDetailsModal(item, source = 'form2', index = -1) {
     if (modalStudentId) modalStudentId.textContent = studentId;
 
     // 4. TES SA Number
-    const saCandidates = [
-        student.saNumber,
-        student.sa_number,
-        student.documents?.saNumber,
-        student.documents?.atmExtractedSaNumber,
-        student.familyDetails?.saNumber,
-        grantee.saNumber,
-        grantee.sa_number,
-        grantee.tes_application_number
-    ];
-    let sa = 'N/A';
-    for (const c of saCandidates) {
-        if (c !== undefined && c !== null) {
-            const str = String(c).trim();
-            if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
-                sa = str;
-                break;
-            }
-        }
-    }
+    const sa = AnnexSyncService.extractAuthenticSaNumber(student, grantee);
     if (modalSaNumber) modalSaNumber.textContent = sa;
 
     // 5. Degree Program
