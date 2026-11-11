@@ -674,10 +674,10 @@
 
         <!-- Extraction Results Card -->
         <div class="card table-container"
-            style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 0; padding: 0; align-self: flex-start; max-height: 480px; min-height: 420px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); overflow: hidden;">
+            style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 0; padding: 0; align-self: flex-start; max-height: 520px; min-height: 420px; border-radius: 24px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.06); border: 1px solid var(--border-color); background: var(--surface-color); overflow: hidden;">
             <div
                 style="padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid var(--border-color); background: var(--surface-color); z-index: 11;">
-                <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <div class="step-badge">2</div>
                     <h3
                         style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
@@ -685,28 +685,42 @@
                     <select id="filter-batch" class="hidden glass-filter">
                         <option value="All Batches">All Batches</option>
                     </select>
+                    <!-- Duplicates Indicator Badge -->
+                    <div id="badge-masterlist-duplicates" class="hidden"
+                        style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: #dc2626; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 10px; border-radius: 20px;">
+                        <i class="icon-alert-circle" style="font-size: 13px;"></i>
+                        <span id="count-masterlist-duplicates">0</span> Duplicates Detected
+                    </div>
                 </div>
-                <div id="step2-term-indicator"
-                    style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px;">
-                    <i class="icon-filter" style="font-size: 12px; color: var(--primary-color);"></i>
-                    <span id="step2-term-text">Filtered by: 2026-2027 • 1st Semester</span>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <button id="btn-move-all-duplicates" class="hidden"
+                        title="Move all detected duplicate records to Student Exist table"
+                        style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 6px 14px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;">
+                        <i class="icon-arrow-right" style="font-size: 12px;"></i> Move All Duplicates to Student Exist
+                    </button>
+                    <div id="step2-term-indicator"
+                        style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="icon-filter" style="font-size: 12px; color: var(--primary-color);"></i>
+                        <span id="step2-term-text">Filtered by: 2026-2027 • 1st Semester</span>
+                    </div>
                 </div>
             </div>
 
             <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: var(--surface-color);">
                 <table class="import-table"
-                    style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 650px; text-align: left;">
+                    style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 720px; text-align: left;">
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Middle Name</th>
                             <th>Last Name</th>
                             <th>Batch</th>
+                            <th style="text-align: center; width: 140px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="extracted-table-body">
                         <tr>
-                            <td colspan="4"
+                            <td colspan="5"
                                 style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                                     <div style="position: relative;">
@@ -846,6 +860,10 @@
                     <i class="icon-file-text"></i> Annex 5 - Form 3 (Not Included Students)
                     <span id="sa-badge-form3-count" class="annex-tab-badge">0</span>
                 </button>
+                <button id="sa-tab-btn-exist" class="annex-tab-btn">
+                    <i class="icon-user-x" style="color: #ef4444;"></i> Student Exist (Duplicates)
+                    <span id="sa-badge-exist-count" class="annex-tab-badge" style="background: rgba(239, 68, 68, 0.15); color: #dc2626;">0</span>
+                </button>
             </div>
             <!-- Right: Consolidated Export to Excel Action -->
             <div style="display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 14px;">
@@ -939,12 +957,15 @@
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <div
                         style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(255,143,0,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #E65100;">
-                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not
-                            Included Grantees</span>
+                        <i class="icon-user-x" style="font-size: 14px;"></i> <span id="sa-stat-form3-count">0 Not Included</span>
                     </div>
                     <button id="sa-btn-export-form3-top" title="Export Annex 5 - Form 3 (Not Included Grantees) (.xlsx)"
                         style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
                         <i class="icon-file-text" style="font-size: 15px;"></i> Export to Excel (.xlsx)
+                    </button>
+                    <button id="sa-btn-clear-form3-data" title="Clear all records from Annex Form 3 table"
+                        style="background: rgba(148, 163, 184, 0.12); color: #64748b; border: 1px solid var(--border-color); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+                        <i class="icon-trash-2" style="font-size: 14px;"></i> Clear Data
                     </button>
                 </div>
             </div>
@@ -952,7 +973,7 @@
             <!-- Form 3 Table -->
             <div class="annex-table-wrap"
                 style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
-                <table class="annex-table">
+                <table class="annex-table" id="sa-table-form3">
                     <thead>
                         <tr>
                             <th style="width: 70px;">Control No.</th>
@@ -965,7 +986,7 @@
                             <th>Birthdate</th>
                             <th>Degree Program</th>
                             <th>Year Level</th>
-                            <th>Status Reason</th>
+                            <th>Status/Reason of Ineligibility</th>
                             <th>Remarks</th>
                         </tr>
                     </thead>
@@ -973,6 +994,65 @@
                         <tr>
                             <td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">
                                 Loading Form 3 records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 3: Student Exist (Duplicates) Content -->
+        <div id="sa-tab-pane-exist" style="display: none; padding: 20px 24px;">
+            <!-- Student Exist Control Bar -->
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
+                <div
+                    style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 450px; position: relative;">
+                    <i class="icon-search"
+                        style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #dc2626; font-size: 15px;"></i>
+                    <input type="text" id="sa-search-exist"
+                        placeholder="Search duplicate grantees by name, ID, or reason..."
+                        style="width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border-color); border-radius: 12px; outline: none; background: rgba(0,0,0,0.01); font-size: 12px;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div
+                        style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(239,68,68,0.1); border-radius: 20px; font-size: 12px; font-weight: 700; color: #dc2626;">
+                        <i class="icon-alert-circle" style="font-size: 14px;"></i> <span id="sa-stat-exist-count">0 Duplicate Grantees</span>
+                    </div>
+                    <button id="sa-btn-export-exist-top" title="Export Student Exist duplicates to Excel (.xlsx)"
+                        style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(239,68,68,0.25); transition: all 0.2s ease;">
+                        <i class="icon-file-text" style="font-size: 15px;"></i> Export to Excel (.xlsx)
+                    </button>
+                    <button id="sa-btn-clear-exist" title="Clear all duplicate records in Student Exist"
+                        style="background: rgba(148, 163, 184, 0.12); color: #64748b; border: 1px solid var(--border-color); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+                        <i class="icon-trash-2" style="font-size: 14px;"></i> Clear Data
+                    </button>
+                </div>
+            </div>
+
+            <!-- Student Exist Table -->
+            <div class="annex-table-wrap"
+                style="border: 1px solid var(--border-color); border-radius: 12px; overflow-x: auto;">
+                <table class="annex-table" id="sa-table-exist">
+                    <thead>
+                        <tr>
+                            <th style="width: 45px;">#</th>
+                            <th>Student ID</th>
+                            <th>Student Name</th>
+                            <th>Course</th>
+                            <th>Batch</th>
+                            <th>Exist / Duplicate Reason</th>
+                            <th style="text-align: center; width: 160px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sa-tbody-exist">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                                    <i class="icon-user-check" style="font-size: 34px; color: #cbd5e1;"></i>
+                                    <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">No duplicate records in Student Exist</span>
+                                    <span style="font-size: 12px; color: var(--text-secondary); max-width: 320px; line-height: 1.4;">Use the "Move" action in the New Grantees Master List above to place duplicate students here.</span>
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

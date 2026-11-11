@@ -75,10 +75,42 @@ async function populateStudentGranteesTerms(forceDefault = false) {
     const filterAyEl = document.getElementById('filter-ay') || filterAy;
     if (!filterAyEl) return;
     try {
-        const years = await AcademicYearService.getAcademicYears();
+        const baseYears = await AcademicYearService.getAcademicYears();
+        const yearSet = new Set(baseYears || []);
+        (allStudents || []).forEach(s => {
+            const sAy = String(s.academic_year || s.academicYear || '').trim();
+            if (/^\d{4}-\d{4}$/.test(sAy)) yearSet.add(sAy);
+        });
+        const years = Array.from(yearSet);
+
         const defaultTerm = AcademicYearService.getDefaultTerm();
         const semShort = defaultTerm.semester.toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
-        const defaultVal = `AY ${defaultTerm.academicYear}, ${semShort}`;
+        let defaultVal = `AY ${defaultTerm.academicYear}, ${semShort}`;
+
+        if (!userSelectedAy && Array.isArray(allStudents) && allStudents.length > 0) {
+            const matchesTerm = (val) => {
+                const ym = val.match(/\d{4}-\d{4}/);
+                const fy = ym ? ym[0].toLowerCase() : '';
+                const want2nd = val.toLowerCase().includes('2nd');
+                return allStudents.some(s => {
+                    const sAy = String(s.academic_year || s.academicYear || '').toLowerCase();
+                    const sSem = String(s.semester || '').toLowerCase();
+                    if (!sAy || sAy === 'n/a') return true;
+                    const yOk = !fy || sAy.includes(fy);
+                    const semOk = want2nd ? sSem.includes('2nd') : (!sSem || sSem.includes('1st'));
+                    return yOk && semOk;
+                });
+            };
+            if (!matchesTerm(defaultVal)) {
+                const firstWithAy = allStudents.find(s => /^\d{4}-\d{4}$/.test(String(s.academic_year || s.academicYear || '').trim()));
+                if (firstWithAy) {
+                    const fAy = String(firstWithAy.academic_year || firstWithAy.academicYear).trim();
+                    const fSem = String(firstWithAy.semester || '').toLowerCase().includes('2nd') ? '2nd Sem' : '1st Sem';
+                    defaultVal = `AY ${fAy}, ${fSem}`;
+                }
+            }
+        }
+
         const curVal = (forceDefault || !userSelectedAy) ? defaultVal : (filterAyEl.value || defaultVal);
 
         let opts = [`<option value="All" ${curVal === 'All' ? 'selected' : ''}>All Academic Years</option>`];
@@ -131,8 +163,8 @@ async function loadStudents() {
             if (window.lucide) window.lucide.createIcons();
         }
 
-        await populateStudentGranteesTerms();
         allStudents = await StudentSyncService.loadAndSyncStudents();
+        await populateStudentGranteesTerms();
         populateBatchFilter();
         applyFilters();
 
@@ -1530,6 +1562,7 @@ function setupRealtimeStudentSubscription() {
 }
 
 // Init
+window.addEventListener('scholardoc_annex5_sync_event', () => loadStudents());
 loadStudents();
 setupRealtimeStudentSubscription();
 

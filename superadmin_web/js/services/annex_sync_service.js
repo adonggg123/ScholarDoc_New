@@ -27,6 +27,16 @@ export class AnnexSyncService {
     static isSavingToDb = false;
 
     /**
+     * Generates a term-specific storage key to ensure complete data isolation between academic periods.
+     */
+    static getStorageKey(academicYear, semester) {
+        if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+            return `${STORAGE_KEY}_${academicYear}_${semester}`;
+        }
+        return STORAGE_KEY;
+    }
+
+    /**
      * Extracts authentic submitted SA number avoiding the truthy 'N/A' trap.
      */
     static extractAuthenticSaNumber(...objects) {
@@ -237,13 +247,15 @@ export class AnnexSyncService {
     /**
      * Strictly deduplicates records across Form 2, Form 3, and Needs Review Queue.
      * Prevents any record from appearing in multiple lists simultaneously.
+     * Also excludes any student who exists in the Student Exist list or is flagged duplicate.
      * Uses dual-layer protection: unique key matching and deep isSameStudent comparison.
      */
-    static deduplicateLists(form2List = [], form3List = [], needsReviewList = []) {
+    static deduplicateLists(form2List = [], form3List = [], needsReviewList = [], studentExistList = []) {
         const seenKeys = new Set();
         const cleanForm2 = [];
         const cleanForm3 = [];
         const cleanReview = [];
+        const existList = Array.isArray(studentExistList) ? studentExistList : [];
 
         // 1. Form 2: Included / Enrolled Grantees
         for (const item of (form2List || [])) {
@@ -259,9 +271,14 @@ export class AnnexSyncService {
         }
 
         // 2. Form 3: Not Included Grantees (Special statuses: Not enrolled, Dropped, Waived, LOA, Transferee, Graduated)
+        // Students that already exist (in Student Exist or flagged duplicate) must NOT be filled into Form 3
         for (const item of (form3List || [])) {
             const key = this.getUniqueKey(item);
-            const isDuplicate = (key && seenKeys.has(key)) || cleanForm2.some(existing => this.isSameStudent(existing, item)) || cleanForm3.some(existing => this.isSameStudent(existing, item));
+            const isDuplicate = (key && seenKeys.has(key)) ||
+                cleanForm2.some(existing => this.isSameStudent(existing, item)) ||
+                cleanForm3.some(existing => this.isSameStudent(existing, item)) ||
+                existList.some(existing => this.isSameStudent(existing, item)) ||
+                item.isDuplicate === true || item.grantee?.isDuplicate === true || item.matchedStudent?.isDuplicate === true;
             if (!isDuplicate) {
                 if (key) seenKeys.add(key);
                 const itemCopy = { ...item };
@@ -298,6 +315,7 @@ export class AnnexSyncService {
     static saveVerifiedData({
         form2List,
         form3List,
+        studentExistList = [],
         needsReviewList,
         updatedBy = 'Admin',
         syncToDb = true,
@@ -305,7 +323,10 @@ export class AnnexSyncService {
         semester = '1st Semester'
     }) {
         try {
-            const deduplicated = this.deduplicateLists(form2List, form3List, needsReviewList);
+            if ((!studentExistList || studentExistList.length === 0) && academicYear && semester) {
+                studentExistList = this.getStudentExistData(academicYear, semester) || [];
+            }
+            const deduplicated = this.deduplicateLists(form2List, form3List, needsReviewList, studentExistList);
             const totalCount = deduplicated.form2List.length + deduplicated.form3List.length + deduplicated.needsReviewList.length;
 
             const payload = {
@@ -316,13 +337,24 @@ export class AnnexSyncService {
                 semester: semester,
                 form2Count: deduplicated.form2List.length,
                 form3Count: deduplicated.form3List.length,
+                existCount: (studentExistList || []).length,
                 reviewCount: deduplicated.needsReviewList.length,
                 form2List: deduplicated.form2List,
                 form3List: deduplicated.form3List,
+                studentExistList: studentExistList || [],
                 needsReviewList: deduplicated.needsReviewList
             };
 
+            // Save under both term-specific storage key and general active key
+            const termStorageKey = this.getStorageKey(academicYear, semester);
+            localStorage.setItem(termStorageKey, JSON.stringify(payload));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+            if (academicYear && semester) {
+                try {
+                    localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(studentExistList || []));
+                } catch (_) {}
+            }
 
             // Broadcast via BroadcastChannel
             if (broadcastChannel) {
@@ -336,8 +368,8 @@ export class AnnexSyncService {
             // Broadcast via in-window CustomEvent
             window.dispatchEvent(new CustomEvent(CUSTOM_EVENT_NAME, { detail: payload }));
 
-            // Automatically sync to Supabase in the background
-            if (syncToDb && (deduplicated.form2List.length > 0 || deduplicated.form3List.length > 0)) {
+            // Automatically sync to Supabase when non-empty verified lists exist for a concrete term
+            if (syncToDb && (deduplicated.form2List.length > 0 || deduplicated.form3List.length > 0) && academicYear && academicYear !== 'All' && semester && semester !== 'All') {
                 this.saveToSupabase({
                     form2List: deduplicated.form2List,
                     form3List: deduplicated.form3List,
@@ -354,11 +386,29 @@ export class AnnexSyncService {
     }
 
     /**
-     * Retrieves the latest verified data from storage.
+     * Retrieves verified data from storage, partitioned strictly by academic year and semester.
      */
-    static getVerifiedData() {
+    static getVerifiedData(academicYear, semester) {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
+            let raw = null;
+            if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+                raw = localStorage.getItem(this.getStorageKey(academicYear, semester));
+            }
+            if (!raw) {
+                const generalRaw = localStorage.getItem(STORAGE_KEY);
+                if (generalRaw) {
+                    try {
+                        const parsedGeneral = JSON.parse(generalRaw);
+                        if (parsedGeneral) {
+                            const matchAy = !academicYear || academicYear === 'All' || parsedGeneral.academicYear === academicYear;
+                            const matchSem = !semester || semester === 'All' || parsedGeneral.semester === semester;
+                            if (matchAy && matchSem) {
+                                raw = generalRaw;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
             if (!raw) return null;
 
             const parsed = JSON.parse(raw);
@@ -395,10 +445,13 @@ export class AnnexSyncService {
 
             // Ensure deduplication on read
             const deduplicated = this.deduplicateLists(validF2, validF3, validRev);
+            const existList = Array.isArray(parsed.studentExistList) ? parsed.studentExistList : [];
 
             return {
                 ...parsed,
                 ...deduplicated,
+                studentExistList: existList,
+                existCount: existList.length,
                 form2Count: deduplicated.form2List.length,
                 form3Count: deduplicated.form3List.length,
                 reviewCount: deduplicated.needsReviewList.length
@@ -406,6 +459,52 @@ export class AnnexSyncService {
         } catch (e) {
             console.warn('Error reading Annex 5 verified sync data:', e);
             return null;
+        }
+    }
+
+    /**
+     * Retrieves student exist duplicate records for a given term without leaking other terms.
+     */
+    static getStudentExistData(academicYear, semester) {
+        try {
+            if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+                const termRaw = localStorage.getItem(`scholardoc_student_exist_${academicYear}_${semester}`);
+                if (termRaw) {
+                    const parsed = JSON.parse(termRaw);
+                    if (Array.isArray(parsed)) return parsed;
+                }
+                return [];
+            }
+            const general = this.getVerifiedData(academicYear, semester);
+            if (general && Array.isArray(general.studentExistList)) {
+                return general.studentExistList;
+            }
+        } catch (_) {}
+        return [];
+    }
+
+    /**
+     * Saves student exist duplicate records for a given term.
+     */
+    static saveStudentExistData(list, academicYear = '2026-2027', semester = '1st Semester') {
+        try {
+            const arr = Array.isArray(list) ? list : [];
+            if (academicYear && semester) {
+                localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(arr));
+            }
+            const current = this.getVerifiedData() || {};
+            this.saveVerifiedData({
+                form2List: current.form2List || [],
+                form3List: current.form3List || [],
+                studentExistList: arr,
+                needsReviewList: current.needsReviewList || [],
+                updatedBy: 'Super Admin',
+                syncToDb: false,
+                academicYear,
+                semester
+            });
+        } catch (e) {
+            console.warn('Error saving student exist data:', e);
         }
     }
 
@@ -418,7 +517,9 @@ export class AnnexSyncService {
         academicYear = '2026-2027',
         semester = '1st Semester',
         heiName = 'USTP Oroquieta',
-        heiCampus = 'Oroquieta Campus'
+        heiCampus = 'Oroquieta Campus',
+        allowEmptyForm2 = false,
+        allowEmptyForm3 = false
     } = {}) {
         const supabase = window.supabaseClient;
         if (!supabase) {
@@ -428,6 +529,37 @@ export class AnnexSyncService {
 
         this.isSavingToDb = true;
         try {
+            // Preserve authentic SA numbers and batches already stored in annex_form_2 or student_grantees
+            const existingF2Map = new Map();
+            const existingSgMap = new Map();
+            try {
+                const { data: prevF2 } = await supabase
+                    .from('annex_form_2')
+                    .select('student_number, last_name, given_name, tes_application_number, tes_batch')
+                    .match({ academic_year: academicYear, semester: semester });
+                if (Array.isArray(prevF2)) {
+                    prevF2.forEach(r => {
+                        const sNo = String(r.student_number || '').trim();
+                        const nKey = `${String(r.last_name || '').trim().toLowerCase()}|${String(r.given_name || '').trim().toLowerCase()}`;
+                        if (sNo) existingF2Map.set(sNo, r);
+                        if (nKey !== '|') existingF2Map.set(nKey, r);
+                    });
+                }
+            } catch (_) { }
+            try {
+                const { data: prevSg } = await supabase
+                    .from('student_grantees')
+                    .select('student_no, studentId, full_name, fullName, sa_number, saNumber, documents, familyDetails');
+                if (Array.isArray(prevSg)) {
+                    prevSg.forEach(sg => {
+                        const sNo = String(sg.student_no || sg.studentId || '').trim();
+                        const sName = String(sg.full_name || sg.fullName || '').trim().toLowerCase();
+                        if (sNo) existingSgMap.set(sNo, sg);
+                        if (sName) existingSgMap.set(sName, sg);
+                    });
+                }
+            } catch (_) { }
+
             // 1. Prepare Form 2 Rows (Enrolled Grantees)
             const f2Rows = (form2List || []).map((item, idx) => {
                 const ctrl = String(idx + 1).padStart(5, '0');
@@ -436,14 +568,19 @@ export class AnnexSyncService {
                 const name = this.parseNameParts(item);
 
                 const studentNo = student.studentId || student.studentNo || grantee.student_id || grantee.studentNo || null;
-                const saNo = this.extractAuthenticSaNumber(student, grantee);
+                const sNoKey = String(studentNo || '').trim();
+                const nKey = `${String(name.lastName || '').trim().toLowerCase()}|${String(name.firstName || '').trim().toLowerCase()}`;
+                const prevF2Row = existingF2Map.get(sNoKey) || existingF2Map.get(nKey);
+                const prevSgRow = existingSgMap.get(sNoKey);
+
+                const saNo = this.extractAuthenticSaNumber(student, grantee, prevF2Row, prevSgRow);
                 const gender = (student.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M';
                 const bdate = student.birthdate || student.dateOfBirth || student.birthday || '01/01/2000';
                 const degree = student.course || student.programName || grantee.course || 'BSIT';
                 const yr = String(student.year || student.yearLevel || grantee.year || '1').replace(/[^0-9]/g, '') || '1';
                 const email = student.email || student.emailAddress || 'N/A';
                 const phone = student.mobileNumber || student.phone || student.contactNumber || grantee.phone || 'N/A';
-                const batchCandidate = grantee.batch || grantee.tes_batch || student.batch || student.documents?.batch || '1.2';
+                const batchCandidate = grantee.batch || grantee.tes_batch || student.batch || student.documents?.batch || prevF2Row?.tes_batch || prevSgRow?.documents?.batch || '1.2';
                 const rawB = String(batchCandidate).replace(/[^0-9.]/g, '') || '1.2';
                 const batch = (rawB === '1') ? '1.1' : rawB;
 
@@ -509,30 +646,34 @@ export class AnnexSyncService {
                 };
             });
 
-            // 3. Sync Form 2 to Supabase: always clear previous for this AY/Sem, and insert new if any
-            await supabase.from('annex_form_2').delete().match({ academic_year: academicYear, semester: semester });
-            if (f2Rows.length > 0) {
-                const batchSize = 100;
-                for (let i = 0; i < f2Rows.length; i += batchSize) {
-                    const chunk = f2Rows.slice(i, i + batchSize);
-                    const { error: errF2 } = await supabase.from('annex_form_2').insert(chunk);
-                    if (errF2) {
-                        console.error('AnnexSyncService: Error inserting to annex_form_2:', errF2);
-                        throw errF2;
+            // 3. Sync Form 2 to Supabase: replace records for this AY/Sem only when non-empty (or explicitly allowed)
+            if (f2Rows.length > 0 || allowEmptyForm2) {
+                await supabase.from('annex_form_2').delete().match({ academic_year: academicYear, semester: semester });
+                if (f2Rows.length > 0) {
+                    const batchSize = 100;
+                    for (let i = 0; i < f2Rows.length; i += batchSize) {
+                        const chunk = f2Rows.slice(i, i + batchSize);
+                        const { error: errF2 } = await supabase.from('annex_form_2').insert(chunk);
+                        if (errF2) {
+                            console.error('AnnexSyncService: Error inserting to annex_form_2:', errF2);
+                            throw errF2;
+                        }
                     }
                 }
             }
 
-            // 4. Sync Form 3 to Supabase: always clear previous for this AY/Sem, and insert new if any
-            await supabase.from('annex_form_3').delete().match({ academic_year: academicYear, semester: semester });
-            if (f3Rows.length > 0) {
-                const batchSize = 100;
-                for (let i = 0; i < f3Rows.length; i += batchSize) {
-                    const chunk = f3Rows.slice(i, i + batchSize);
-                    const { error: errF3 } = await supabase.from('annex_form_3').insert(chunk);
-                    if (errF3) {
-                        console.error('AnnexSyncService: Error inserting to annex_form_3:', errF3);
-                        throw errF3;
+            // 4. Sync Form 3 to Supabase: replace records for this AY/Sem only when non-empty (or explicitly allowed)
+            if (f3Rows.length > 0 || allowEmptyForm3) {
+                await supabase.from('annex_form_3').delete().match({ academic_year: academicYear, semester: semester });
+                if (f3Rows.length > 0) {
+                    const batchSize = 100;
+                    for (let i = 0; i < f3Rows.length; i += batchSize) {
+                        const chunk = f3Rows.slice(i, i + batchSize);
+                        const { error: errF3 } = await supabase.from('annex_form_3').insert(chunk);
+                        if (errF3) {
+                            console.error('AnnexSyncService: Error inserting to annex_form_3:', errF3);
+                            throw errF3;
+                        }
                     }
                 }
             }
@@ -552,12 +693,12 @@ export class AnnexSyncService {
     }
 
     /**
-     * Loads verified Form 2 and Form 3 records from Supabase database.
+     * Loads verified Form 2 and Form 3 records from Supabase database strictly isolated by term.
      */
     static async loadFromSupabase({
         academicYear = '2026-2027',
         semester = '1st Semester',
-        fallbackToLatest = true
+        fallbackToLatest = false
     } = {}) {
         const supabase = window.supabaseClient;
         if (!supabase) return null;
@@ -578,8 +719,8 @@ export class AnnexSyncService {
             let { data: f2Data, error: errF2 } = await qF2;
             let { data: f3Data, error: errF3 } = await qF3;
 
-            // Fallback: If no records found for specified AY/Sem, check if any records exist in annex_form_2 / annex_form_3
-            if (fallbackToLatest && (!f2Data || f2Data.length === 0) && (!f3Data || f3Data.length === 0)) {
+            // Only fallback to other terms if explicitly requested and no specific term was selected
+            if (fallbackToLatest && (!academicYear || academicYear === 'All') && (!semester || semester === 'All') && (!f2Data || f2Data.length === 0) && (!f3Data || f3Data.length === 0)) {
                 const resF2 = await supabase.from('annex_form_2').select('*').order('control_number', { ascending: true });
                 const resF3 = await supabase.from('annex_form_3').select('*').order('control_number', { ascending: true });
                 if (resF2.data && resF2.data.length > 0) f2Data = resF2.data;
@@ -695,7 +836,8 @@ export class AnnexSyncService {
                     };
                 });
 
-                const deduplicated = this.deduplicateLists(form2List, form3List, []);
+                const existList = this.getStudentExistData(academicYear, semester) || [];
+                const deduplicated = this.deduplicateLists(form2List, form3List, [], existList);
                 return {
                     form2List: deduplicated.form2List,
                     form3List: deduplicated.form3List,
@@ -759,14 +901,20 @@ export class AnnexSyncService {
     }
 
     /**
-     * Clears all verified sync data from local storage and optionally from Supabase.
+     * Clears verified sync data from local storage and optionally from Supabase for a given term.
      */
-    static async clearVerifiedData({ clearSupabase = false } = {}) {
+    static async clearVerifiedData({ clearSupabase = false, academicYear, semester } = {}) {
         try {
-            localStorage.removeItem(STORAGE_KEY);
+            if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+                localStorage.removeItem(this.getStorageKey(academicYear, semester));
+            } else {
+                localStorage.removeItem(STORAGE_KEY);
+            }
             const payload = {
                 timestamp: Date.now(),
                 updatedBy: 'System',
+                academicYear: academicYear,
+                semester: semester,
                 totalCount: 0,
                 form2Count: 0,
                 form3Count: 0,
@@ -781,8 +929,13 @@ export class AnnexSyncService {
             window.dispatchEvent(new CustomEvent(CUSTOM_EVENT_NAME, { detail: payload }));
 
             if (clearSupabase && window.supabaseClient) {
-                await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-                await window.supabaseClient.from('annex_form_3').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+                    await window.supabaseClient.from('annex_form_2').delete().match({ academic_year: academicYear, semester: semester });
+                    await window.supabaseClient.from('annex_form_3').delete().match({ academic_year: academicYear, semester: semester });
+                } else {
+                    await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    await window.supabaseClient.from('annex_form_3').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                }
             }
         } catch (e) {
             console.error('Error clearing sync data:', e);

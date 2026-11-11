@@ -256,13 +256,60 @@ let activeResolutionItem = null;
 let activeResolutionSource = null;
 let activeResolutionItemKey = null;
 let dbRealtimeChannel = null;
+let isImportingSchoolStudents = false;
+
+// Helper: Paginated fetch for all school_students records without 1000 limit cap
+async function fetchAllSchoolStudents() {
+    let all = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+    while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        try {
+            const { data, error } = await supabase
+                .from('school_students')
+                .select('*')
+                .order('student_no', { ascending: true })
+                .range(from, to);
+            if (error || !data || data.length === 0) {
+                hasMore = false;
+            } else {
+                all = all.concat(data);
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+        } catch (e) {
+            console.warn('Error fetching paginated school_students:', e);
+            hasMore = false;
+        }
+    }
+    return all;
+}
 
 // Helper to map school_students records
 function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
-    const sNo = String(s.student_no || s.studentId || '').trim();
-    const sName = String(s.full_name || s.fullName || '').trim().toLowerCase();
+    const sNo = String(s.student_no || s.studentNo || s.studentId || s.student_id || '').trim();
+    const sName = String(s.full_name || s.fullName || s.name || '').trim().toLowerCase();
     const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
     const scholarship = s.scholarship_name || s.scholarship || (matchedSt ? (matchedSt.scholarship_name || matchedSt.scholarshipProgram || matchedSt.scholarshipName) : null) || 'TES';
+
+    const rawDob = s.date_of_birth || s.dateOfBirth || s.birthdate || s.dob || s.birthday || '';
+    const formattedDob = rawDob ? (parseAndFormatDate(rawDob) || rawDob) : '';
+    let ageVal = s.age;
+    if (!ageVal || ageVal === 'N/A' || isNaN(ageVal)) {
+        ageVal = formattedDob ? calculateAge(formattedDob) : '';
+    }
+
+    const family = s.familyDetails || {};
+    const fatherFullName = (s.father_full_name || s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').trim();
+    const fatherOccupation = (s.father_occupation || s.fatherOccupation || s.fatherEduStatus || family.fatherOccupation || family.fatherEduStatus || '').trim();
+    const motherFullName = (s.mother_full_name || s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').trim();
+    const motherOccupation = (s.mother_occupation || s.motherOccupation || s.motherEduStatus || family.motherOccupation || family.motherEduStatus || '').trim();
 
     const saCandidates = [
         s.saNumber,
@@ -285,37 +332,370 @@ function mapSchoolStudentRecord(s, studentProfileMap = new Map()) {
         }
     }
 
+    const resolvedFullName = s.full_name || s.fullName || s.name || (s.last_name || s.first_name ? [s.last_name, s.first_name, s.middle_name].filter(Boolean).join(', ') : '');
+    const resolvedProgram = s.program_name || s.programName || s.course || s.program || '';
+    const resolvedYear = s.year_level || s.yearLevel || s.year || '';
+    const resolvedCivilStatus = (s.civil_status || s.civilStatus || family.civilStatus || '').trim() || 'Single';
+    const resolvedReligion = (s.religion || family.religion || '').trim();
+    const resolvedMobile = (s.mobile_number || s.mobileNumber || s.phone || s.contactNumber || '').trim();
+    const resolvedEmail = (s.email_address || s.emailAddress || s.email || s.authEmail || '').trim();
+
     return {
         id: s.id,
-        uid: s.student_no || s.id,
-        studentNo: s.student_no || '',
-        studentId: s.student_no || '',
+        uid: s.student_no || s.studentNo || s.studentId || s.student_id || s.id || Math.random().toString(36).substring(2),
+        studentNo: sNo,
+        studentId: sNo,
         saNumber: resolvedSa,
         sa_number: resolvedSa,
         tes_application_number: resolvedSa,
-        fullName: s.full_name || '',
-        name: s.full_name || '',
-        programName: s.program_name || '',
-        course: s.program_name || '',
-        yearLevel: s.year_level || '',
-        year: s.year_level || '',
-        dateOfBirth: s.date_of_birth || '',
-        birthdate: s.date_of_birth || '',
-        age: s.age || '',
-        gender: s.gender || '',
-        civilStatus: s.civil_status || 'Single',
-        religion: s.religion || '',
-        mobileNumber: s.mobile_number || '',
-        phone: s.mobile_number || '',
-        emailAddress: s.email_address || '',
-        email: s.email_address || '',
-        fatherFullName: s.father_full_name || '',
-        fatherOccupation: s.father_occupation || '',
-        motherFullName: s.mother_full_name || '',
-        motherOccupation: s.mother_occupation || '',
+        fullName: resolvedFullName,
+        name: resolvedFullName,
+        first_name: s.first_name || s.firstName || '',
+        last_name: s.last_name || s.lastName || '',
+        middle_name: s.middle_name || s.middleName || '',
+        programName: resolvedProgram,
+        course: resolvedProgram,
+        yearLevel: resolvedYear,
+        year: resolvedYear,
+        dateOfBirth: formattedDob || rawDob,
+        birthdate: formattedDob || rawDob,
+        dob: formattedDob || rawDob,
+        age: ageVal,
+        gender: (s.gender || s.sex || '').trim(),
+        civilStatus: resolvedCivilStatus,
+        maritalStatus: resolvedCivilStatus,
+        religion: resolvedReligion,
+        mobileNumber: resolvedMobile,
+        phone: resolvedMobile,
+        contactNumber: resolvedMobile,
+        emailAddress: resolvedEmail,
+        email: resolvedEmail,
+        authEmail: resolvedEmail,
+        fatherFullName: fatherFullName,
+        fatherName: fatherFullName,
+        fatherOccupation: fatherOccupation,
+        fatherEduStatus: fatherOccupation,
+        motherFullName: motherFullName,
+        motherName: motherFullName,
+        motherOccupation: motherOccupation,
+        motherEduStatus: motherOccupation,
+        familyDetails: {
+            fatherFullName: fatherFullName,
+            fatherName: fatherFullName,
+            fatherOccupation: fatherOccupation,
+            fatherEduStatus: fatherOccupation,
+            motherFullName: motherFullName,
+            motherName: motherFullName,
+            motherOccupation: motherOccupation,
+            motherEduStatus: motherOccupation,
+            religion: resolvedReligion,
+            civilStatus: resolvedCivilStatus
+        },
         scholarship: scholarship,
         scholarshipName: scholarship,
-        status: (matchedSt && matchedSt.status) || 'Enrolled'
+        status: (matchedSt && matchedSt.status) || s.status || 'Enrolled'
+    };
+}
+
+// ── IndexedDB & Storage Helpers for School Student Records ──────────────
+const SCHOOL_DB_NAME = 'ScholarDocSchoolDB';
+const SCHOOL_DB_VERSION = 1;
+const SCHOOL_STORE_NAME = 'school_term_records';
+
+function openSchoolDB() {
+    return new Promise((resolve) => {
+        if (!window.indexedDB) {
+            resolve(null);
+            return;
+        }
+        try {
+            const req = indexedDB.open(SCHOOL_DB_NAME, SCHOOL_DB_VERSION);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(SCHOOL_STORE_NAME)) {
+                    db.createObjectStore(SCHOOL_STORE_NAME, { keyPath: 'termKey' });
+                }
+            };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = () => resolve(null);
+        } catch (_) {
+            resolve(null);
+        }
+    });
+}
+
+async function idbSaveSchoolTermRecords(termKey, records) {
+    if (!termKey || !records || records.length === 0) return false;
+    try {
+        const db = await openSchoolDB();
+        if (!db) return false;
+        return new Promise((resolve) => {
+            const tx = db.transaction(SCHOOL_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(SCHOOL_STORE_NAME);
+            store.put({ termKey, records, count: records.length, updatedAt: new Date().toISOString() });
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        });
+    } catch (_) {
+        return false;
+    }
+}
+
+async function idbGetSchoolTermRecords(termKey) {
+    if (!termKey) return null;
+    try {
+        const db = await openSchoolDB();
+        if (!db) return null;
+        return new Promise((resolve) => {
+            const tx = db.transaction(SCHOOL_STORE_NAME, 'readonly');
+            const store = tx.objectStore(SCHOOL_STORE_NAME);
+            const req = store.get(termKey);
+            req.onsuccess = () => resolve(req.result ? req.result.records : null);
+            req.onerror = () => resolve(null);
+        });
+    } catch (_) {
+        return null;
+    }
+}
+
+function getSchoolTermStudentsMap() {
+    try {
+        return JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
+    } catch (_) {
+        return {};
+    }
+}
+
+function getSchoolTermsRegistry() {
+    try {
+        return JSON.parse(localStorage.getItem('scholardoc_school_terms_registry') || '{}');
+    } catch (_) {
+        return {};
+    }
+}
+
+// Auto-seed historical term assignments from existing database timestamps if not yet initialized
+function autoHealSchoolStudentTerms(allDbStudents) {
+    if (!allDbStudents || allDbStudents.length === 0) return;
+    try {
+        const termMap = getSchoolTermStudentsMap();
+        const registry = getSchoolTermsRegistry();
+
+        let needSave = false;
+        if (!termMap['2026-2027_1st Semester'] || termMap['2026-2027_1st Semester'].length < 1600) {
+            // Students uploaded during 1st Semester (created before 2nd sem upload: 05:28:00 UTC, or all DB students as baseline)
+            const firstSemStudents = allDbStudents.filter(s => !s.created_at || s.created_at < '2026-11-10T05:28:00Z');
+            const targetFirstSem = firstSemStudents.length > 0 ? firstSemStudents : allDbStudents;
+            if (targetFirstSem.length > 0) {
+                termMap['2026-2027_1st Semester'] = targetFirstSem.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+                registry['2026-2027_1st Semester'] = {
+                    academicYear: '2026-2027',
+                    semester: '1st Semester',
+                    count: termMap['2026-2027_1st Semester'].length,
+                    updatedAt: new Date().toISOString()
+                };
+                needSave = true;
+            }
+        }
+
+        if (!termMap['2026-2027_2nd Semester'] || termMap['2026-2027_2nd Semester'].length < 1500) {
+            // Students uploaded during 2nd Semester (touched at or after 05:28:00 UTC)
+            const secondSemStudents = allDbStudents.filter(s => (s.updated_at && s.updated_at >= '2026-11-10T05:28:00Z') || (s.created_at && s.created_at >= '2026-11-10T05:28:00Z'));
+            if (secondSemStudents.length > 0) {
+                termMap['2026-2027_2nd Semester'] = secondSemStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+                registry['2026-2027_2nd Semester'] = {
+                    academicYear: '2026-2027',
+                    semester: '2nd Semester',
+                    count: termMap['2026-2027_2nd Semester'].length,
+                    updatedAt: new Date().toISOString()
+                };
+                needSave = true;
+            }
+        }
+
+        if (needSave) {
+            localStorage.setItem('scholardoc_school_term_students', JSON.stringify(termMap));
+            localStorage.setItem('scholardoc_school_terms_registry', JSON.stringify(registry));
+
+            // Populate multi-term list in scholardoc_school_student_terms
+            const studentTermsCache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+            Object.entries(termMap).forEach(([tKey, sNos]) => {
+                const parts = tKey.split('_');
+                const tAy = parts[0];
+                const tSem = parts.slice(1).join('_');
+                sNos.forEach(sNo => {
+                    let existing = studentTermsCache[sNo];
+                    let list = Array.isArray(existing) ? existing : (existing && existing.academicYear ? [existing] : []);
+                    if (!list.some(t => t.academicYear === tAy && t.semester === tSem)) {
+                        list.push({ academicYear: tAy, semester: tSem });
+                    }
+                    studentTermsCache[sNo] = list;
+                });
+            });
+            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(studentTermsCache));
+        }
+    } catch (e) {
+        console.warn('Error during autoHealSchoolStudentTerms:', e);
+    }
+}
+
+// Helper to save school student term assignments in persistent storage without overwriting other terms
+function saveSchoolStudentTerms(records, ay, sem) {
+    if (!records || records.length === 0 || !ay || !sem) return;
+    try {
+        const termKey = `${ay}_${sem}`;
+
+        // 1. Save list of student numbers belonging to this term
+        const termStudentsMap = getSchoolTermStudentsMap();
+        const studentNos = records.map(r => String(r.studentNo || r.studentId || r.student_no || '').trim()).filter(Boolean);
+        termStudentsMap[termKey] = Array.from(new Set(studentNos));
+        localStorage.setItem('scholardoc_school_term_students', JSON.stringify(termStudentsMap));
+
+        // 2. Add this term to each student's multi-term list in scholardoc_school_student_terms (never overwrite!)
+        const studentTermsCache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+        const termVal = { academicYear: ay, semester: sem };
+        records.forEach(r => {
+            const sNo = String(r.studentNo || r.studentId || r.student_no || '').trim();
+            const sName = String(r.fullName || r.full_name || '').toLowerCase().trim();
+            const sId = r.id ? String(r.id).trim() : null;
+
+            const addTerm = (key) => {
+                if (!key) return;
+                let existing = studentTermsCache[key];
+                let list = Array.isArray(existing) ? existing : (existing && existing.academicYear ? [existing] : []);
+                if (!list.some(t => t.academicYear === ay && t.semester === sem)) {
+                    list.push(termVal);
+                }
+                studentTermsCache[key] = list;
+            };
+
+            addTerm(sNo);
+            addTerm(sName);
+            addTerm(sId);
+        });
+        localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(studentTermsCache));
+
+        // 3. Register the uploaded term metadata
+        const registry = getSchoolTermsRegistry();
+        registry[termKey] = {
+            academicYear: ay,
+            semester: sem,
+            count: records.length,
+            updatedAt: new Date().toISOString()
+        };
+        localStorage.setItem('scholardoc_school_terms_registry', JSON.stringify(registry));
+
+        // 4. Save parsed records snapshot in IndexedDB & localStorage
+        idbSaveSchoolTermRecords(termKey, records);
+        try {
+            localStorage.setItem(`scholardoc_school_records_${termKey}`, JSON.stringify(records));
+        } catch (_) { }
+    } catch (e) {
+        console.warn('Error saving school student terms cache:', e);
+    }
+}
+
+// Determines whether a student belongs to a specific academic year and semester
+function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new Map()) {
+    if (!targetAy || targetAy === 'All') {
+        if (!targetSem || targetSem === 'All') return true;
+    }
+
+    const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
+    const sName = String(s.full_name || s.fullName || s.name || '').toLowerCase().trim();
+    const sId = s.id ? String(s.id).trim() : null;
+    const termKey = `${targetAy}_${targetSem}`;
+
+    // 1. Direct lookup in term-students mapping
+    const termStudentsMap = getSchoolTermStudentsMap();
+    if (termStudentsMap && termStudentsMap[termKey]) {
+        const studentSet = new Set(termStudentsMap[termKey]);
+        if (sNo && studentSet.has(sNo)) return true;
+        if (sName && studentSet.has(sName)) return true;
+        if (sId && studentSet.has(sId)) return true;
+        return false;
+    }
+
+    // 2. Multi-term list check in scholardoc_school_student_terms
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+        const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
+        if (Array.isArray(entry)) {
+            const hasMatch = entry.some(t => {
+                const matchAy = !targetAy || targetAy === 'All' || t.academicYear === targetAy;
+                const matchSem = !targetSem || targetSem === 'All' || t.semester === targetSem;
+                return matchAy && matchSem;
+            });
+            if (hasMatch) return true;
+        } else if (entry && entry.academicYear && entry.semester) {
+            const matchAy = !targetAy || targetAy === 'All' || entry.academicYear === targetAy;
+            const matchSem = !targetSem || targetSem === 'All' || entry.semester === targetSem;
+            if (matchAy && matchSem) return true;
+        }
+    } catch (_) { }
+
+    // 3. Matched profile in student_grantees
+    const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+    if (matchedSt) {
+        const ay = matchedSt.academic_year || matchedSt.academicYear;
+        const sem = matchedSt.semester;
+        if (ay && sem) {
+            const matchAy = !targetAy || targetAy === 'All' || ay === targetAy;
+            const matchSem = !targetSem || targetSem === 'All' || sem === targetSem;
+            if (matchAy && matchSem) return true;
+        }
+    }
+
+    // 4. Direct property on student object
+    const objAy = s.academicYear || s.academic_year;
+    const objSem = s.semester;
+    if (objAy && objSem) {
+        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
+        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
+        return matchAy && matchSem;
+    }
+
+    return false;
+}
+
+// Helper to get a school student's academic term
+function getSchoolStudentTerm(s, studentProfileMap = new Map(), targetAy = selectedAcademicYear, targetSem = selectedSemester) {
+    if (targetAy && targetSem && targetAy !== 'All' && targetSem !== 'All') {
+        if (isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap)) {
+            return { academicYear: targetAy, semester: targetSem };
+        }
+    }
+
+    const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
+    const sName = String(s.full_name || s.fullName || '').toLowerCase().trim();
+    const sId = s.id ? String(s.id).trim() : null;
+
+    let ay = s.academic_year || s.academicYear;
+    let sem = s.semester;
+    if (ay && sem) return { academicYear: ay, semester: sem };
+
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+        const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
+        if (Array.isArray(entry) && entry.length > 0) {
+            const activeMatch = entry.find(t => (!targetAy || targetAy === 'All' || t.academicYear === targetAy) && (!targetSem || targetSem === 'All' || t.semester === targetSem));
+            if (activeMatch) return activeMatch;
+            return entry[0];
+        } else if (entry && entry.academicYear && entry.semester) {
+            return { academicYear: entry.academicYear, semester: entry.semester };
+        }
+    } catch (_) { }
+
+    const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+    if (matchedSt) {
+        ay = matchedSt.academic_year || matchedSt.academicYear;
+        sem = matchedSt.semester;
+        if (ay && sem) return { academicYear: ay, semester: sem };
+    }
+
+    return {
+        academicYear: targetAy && targetAy !== 'All' ? targetAy : '2026-2027',
+        semester: targetSem && targetSem !== 'All' ? targetSem : '1st Semester'
     };
 }
 
@@ -402,26 +782,13 @@ async function loadInitialData() {
         }
 
         // 2. Fetch Default School Student Records (strictly from school_students)
-        let schoolDbData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-        while (hasMore) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
-            const { data, error } = await supabase
-                .from('school_students')
-                .select('*')
-                .range(from, to);
-            if (error || !data || data.length === 0) {
-                hasMore = false;
-            } else {
-                schoolDbData = schoolDbData.concat(data);
-                if (data.length < pageSize) hasMore = false;
-                else page++;
-            }
-        }
+        const schoolDbData = await fetchAllSchoolStudents();
         let errSchool = null;
+
+        // Auto-heal / populate term students map if not yet populated
+        if (schoolDbData && schoolDbData.length > 0) {
+            autoHealSchoolStudentTerms(schoolDbData);
+        }
 
         // Optional profile enrichment from student_grantees table
         let { data: studentsDbData } = await supabase
@@ -439,7 +806,76 @@ async function loadInitialData() {
         });
 
         if (!errSchool && schoolDbData && schoolDbData.length > 0) {
-            rawSchoolStudents = schoolDbData.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+            // First check if an exact term snapshot exists in IndexedDB or localStorage
+            const termKey = `${selectedAcademicYear}_${selectedSemester}`;
+            let termSnapshot = null;
+            if (selectedAcademicYear !== 'All' && selectedSemester !== 'All') {
+                try {
+                    const rawSnap = localStorage.getItem(`scholardoc_school_records_${termKey}`);
+                    if (rawSnap) termSnapshot = JSON.parse(rawSnap);
+                } catch (_) { }
+                if (!termSnapshot) {
+                    termSnapshot = await idbGetSchoolTermRecords(termKey);
+                }
+            }
+
+            if (termSnapshot && Array.isArray(termSnapshot) && termSnapshot.length > 0) {
+                // Validate termSnapshot: If records have missing studentNo AND missing fullName, discard corrupted snapshot
+                const corruptCount = termSnapshot.filter(s => {
+                    const no = String(s.studentNo || s.student_no || s.studentId || '').trim();
+                    const name = String(s.fullName || s.full_name || s.name || '').trim();
+                    return !no && !name;
+                }).length;
+
+                if (corruptCount > 0) {
+                    console.warn(`[SchoolStudents] Discarding corrupted local snapshot (${corruptCount} corrupt items) for ${termKey}`);
+                    try { localStorage.removeItem(`scholardoc_school_records_${termKey}`); } catch (_) { }
+                    termSnapshot = null;
+                }
+            }
+
+            if (termSnapshot && Array.isArray(termSnapshot) && termSnapshot.length > 0) {
+                // Also build lookup for schoolDbData to merge any Supabase records with local snapshot
+                const dbMap = new Map();
+                (schoolDbData || []).forEach(dbSt => {
+                    const dbNo = String(dbSt.student_no || dbSt.studentNo || dbSt.studentId || '').trim();
+                    if (dbNo) dbMap.set(dbNo, dbSt);
+                    const dbName = String(dbSt.full_name || dbSt.fullName || '').trim().toLowerCase();
+                    if (dbName) dbMap.set(dbName, dbSt);
+                });
+
+                rawSchoolStudents = termSnapshot.map(s => {
+                    const sNo = String(s.studentNo || s.student_no || s.studentId || '').trim();
+                    const sName = String(s.fullName || s.full_name || s.name || '').trim().toLowerCase();
+                    const fromDb = dbMap.get(sNo) || dbMap.get(sName);
+                    // Authoritative database fields must NEVER be overwritten by empty or missing snapshot fields
+                    let merged = s;
+                    if (fromDb) {
+                        merged = { ...s };
+                        Object.keys(fromDb).forEach(k => {
+                            if (fromDb[k] !== undefined && fromDb[k] !== null && fromDb[k] !== '') {
+                                merged[k] = fromDb[k];
+                            }
+                        });
+                    }
+                    const mapped = mapSchoolStudentRecord(merged, studentProfileMap);
+                    mapped.academicYear = selectedAcademicYear;
+                    mapped.semester = selectedSemester;
+                    return mapped;
+                });
+            } else {
+                // Filter school students using multi-term membership
+                const filteredSchool = schoolDbData.filter(s => {
+                    return isSchoolStudentInTerm(s, selectedAcademicYear, selectedSemester, studentProfileMap);
+                });
+
+                rawSchoolStudents = filteredSchool.map(s => {
+                    const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                    mapped.academicYear = selectedAcademicYear !== 'All' ? selectedAcademicYear : (s.academic_year || '2026-2027');
+                    mapped.semester = selectedSemester !== 'All' ? selectedSemester : (s.semester || '1st Semester');
+                    return mapped;
+                });
+            }
         } else {
             // When table is empty or deleted in Supabase, show strictly empty list
             rawSchoolStudents = [];
@@ -455,10 +891,16 @@ async function loadInitialData() {
             if (dbSync && dbSync.fromDb) {
                 if ((!dbSync.form2List || dbSync.form2List.length === 0) && (!dbSync.form3List || dbSync.form3List.length === 0)) {
                     // Database tables annex_form_2 and annex_form_3 are empty for this term
-                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
-                    verifiedForm2List = [];
-                    verifiedForm3List = [];
-                    needsReviewList = [];
+                    const cachedTerm = AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
+                    if (cachedTerm && ((cachedTerm.form2List && cachedTerm.form2List.length > 0) || (cachedTerm.form3List && cachedTerm.form3List.length > 0))) {
+                        verifiedForm2List = cachedTerm.form2List || [];
+                        verifiedForm3List = cachedTerm.form3List || [];
+                        needsReviewList = cachedTerm.needsReviewList || [];
+                    } else {
+                        verifiedForm2List = [];
+                        verifiedForm3List = [];
+                        needsReviewList = [];
+                    }
                 } else {
                     verifiedForm2List = dbSync.form2List || [];
                     verifiedForm3List = dbSync.form3List || [];
@@ -525,9 +967,18 @@ function setupDatabaseRealtimeListeners() {
     dbRealtimeChannel
         // 1. Listen for school_students changes
         .on('postgres_changes', { event: '*', schema: 'public', table: 'school_students' }, async (payload) => {
+            if (isImportingSchoolStudents) return;
             console.log('[Realtime] school_students change event:', payload.eventType);
-            const { data } = await supabase.from('school_students').select('*').order('created_at', { ascending: false });
-            rawSchoolStudents = (data || []).map(s => mapSchoolStudentRecord(s));
+            const data = await fetchAllSchoolStudents();
+            const filteredSchool = (data || []).filter(s => {
+                return isSchoolStudentInTerm(s, selectedAcademicYear, selectedSemester);
+            });
+            rawSchoolStudents = filteredSchool.map(s => {
+                const mapped = mapSchoolStudentRecord(s);
+                mapped.academicYear = selectedAcademicYear !== 'All' ? selectedAcademicYear : (s.academic_year || '2026-2027');
+                mapped.semester = selectedSemester !== 'All' ? selectedSemester : (s.semester || '1st Semester');
+                return mapped;
+            });
             updateSourceCounts();
             renderSchoolStudentsTable(rawSchoolStudents);
             runCrossVerification();
@@ -898,25 +1349,26 @@ function renderSchoolStudentsTable(students) {
     if (!tbody) return;
 
     if (!students || students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        const termDesc = (selectedAcademicYear && selectedSemester && selectedAcademicYear !== 'All' && selectedSemester !== 'All')
+            ? ` for A.Y. ${selectedAcademicYear} (${selectedSemester})`
+            : '';
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found${termDesc}.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = students.map((s) => {
         const family = s.familyDetails || {};
-        const uid = s.uid || s.studentNo || s.studentId || s.student_id || s.id || Math.random().toString(36).substring(2);
+        const uid = s.uid || s.studentNo || s.studentId || s.student_no || s.student_id || s.id || Math.random().toString(36).substring(2);
         const isChecked = selectedSchoolStudentIds.has(uid) ? 'checked' : '';
 
         // 1. Student No.
-        const studentNo = s.studentNo || s.studentId || s.student_id || 'N/A';
+        const studentNo = s.studentNo || s.studentId || s.student_no || s.student_id || 'N/A';
 
         // 2. Full Name
-        let fullName = s.fullName || '';
+        let fullName = s.fullName || s.full_name || s.name || '';
         if (!fullName) {
             if (s.last_name || s.first_name) {
                 fullName = [s.last_name, s.first_name, s.middle_name].filter(Boolean).join(', ');
-            } else if (s.name) {
-                fullName = s.name;
             } else {
                 fullName = 'N/A';
             }
@@ -926,13 +1378,13 @@ function renderSchoolStudentsTable(students) {
         const scholarship = s.scholarship || s.scholarshipName || s.scholarship_name || 'TES';
 
         // 3. Program Name
-        const programName = s.programName || s.program || s.course || 'N/A';
+        const programName = s.programName || s.program_name || s.program || s.course || 'N/A';
 
         // 4. Year Level
-        const yearLevel = s.yearLevel || s.year || 'N/A';
+        const yearLevel = s.yearLevel || s.year_level || s.year || 'N/A';
 
         // 5. Date of Birth
-        const rawDob = s.dateOfBirth || s.birthdate || s.birthday || s.dob || '';
+        const rawDob = s.dateOfBirth || s.date_of_birth || s.birthdate || s.birthday || s.dob || '';
         const dob = rawDob ? (parseAndFormatDate(rawDob) || rawDob) : 'N/A';
 
         // 6. Age
@@ -945,28 +1397,28 @@ function renderSchoolStudentsTable(students) {
         const gender = (s.gender || s.sex || '').trim() || 'N/A';
 
         // 8. Civil Status
-        const civilStatus = (s.civilStatus || s.maritalStatus || family.civilStatus || '').trim() || 'Single';
+        const civilStatus = (s.civilStatus || s.civil_status || s.maritalStatus || family.civilStatus || '').trim() || 'Single';
 
         // 9. Religion
         const religion = (s.religion || family.religion || '').trim() || 'N/A';
 
         // 10. Mobile Number
-        const mobileNumber = (s.mobileNumber || s.contactNumber || s.phone || '').trim() || 'N/A';
+        const mobileNumber = (s.mobileNumber || s.mobile_number || s.contactNumber || s.phone || '').trim() || 'N/A';
 
         // 11. Email Address
-        const emailAddress = (s.emailAddress || s.email || s.authEmail || '').trim() || 'N/A';
+        const emailAddress = (s.emailAddress || s.email_address || s.email || s.authEmail || '').trim() || 'N/A';
 
         // 12. Father's Full Name
-        const fatherFullName = (s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').trim() || 'N/A';
+        const fatherFullName = (s.fatherFullName || s.father_full_name || s.fatherName || family.fatherFullName || family.fatherName || '').trim() || 'N/A';
 
         // 13. Father's Occupation
-        const fatherOccupation = (s.fatherOccupation || s.fatherEduStatus || family.fatherOccupation || family.fatherEduStatus || '').trim() || 'N/A';
+        const fatherOccupation = (s.fatherOccupation || s.father_occupation || s.fatherEduStatus || family.fatherOccupation || family.fatherEduStatus || '').trim() || 'N/A';
 
         // 14. Mother's Full Name
-        const motherFullName = (s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').trim() || 'N/A';
+        const motherFullName = (s.motherFullName || s.mother_full_name || s.motherName || family.motherFullName || family.motherName || '').trim() || 'N/A';
 
         // 15. Mother's Occupation
-        const motherOccupation = (s.motherOccupation || s.motherEduStatus || family.motherOccupation || family.motherEduStatus || '').trim() || 'N/A';
+        const motherOccupation = (s.motherOccupation || s.mother_occupation || s.motherEduStatus || family.motherOccupation || family.motherEduStatus || '').trim() || 'N/A';
 
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
@@ -1013,15 +1465,15 @@ if (searchSchoolStudents) {
         }
         const filtered = rawSchoolStudents.filter(s => {
             const family = s.familyDetails || {};
-            const studentNo = (s.studentNo || s.studentId || s.student_id || '').toLowerCase();
-            const name = (s.fullName || `${s.last_name || ''} ${s.first_name || ''}`).toLowerCase();
+            const studentNo = (s.studentNo || s.studentId || s.student_no || s.student_id || '').toLowerCase();
+            const name = (s.fullName || s.full_name || s.name || `${s.last_name || ''} ${s.first_name || ''}`).toLowerCase();
             const schol = (s.scholarship || s.scholarshipName || s.scholarship_name || '').toLowerCase();
-            const prog = (s.programName || s.program || s.course || '').toLowerCase();
-            const email = (s.emailAddress || s.email || '').toLowerCase();
-            const father = (s.fatherFullName || s.fatherName || family.fatherFullName || family.fatherName || '').toLowerCase();
-            const mother = (s.motherFullName || s.motherName || family.motherFullName || family.motherName || '').toLowerCase();
+            const prog = (s.programName || s.program_name || s.program || s.course || '').toLowerCase();
+            const email = (s.emailAddress || s.email_address || s.email || s.authEmail || '').toLowerCase();
+            const father = (s.fatherFullName || s.father_full_name || s.fatherName || family.fatherFullName || family.fatherName || '').toLowerCase();
+            const mother = (s.motherFullName || s.mother_full_name || s.motherName || family.motherFullName || family.motherName || '').toLowerCase();
             const religion = (s.religion || family.religion || '').toLowerCase();
-            const dob = (s.dateOfBirth || s.birthdate || '').toLowerCase();
+            const dob = (s.dateOfBirth || s.date_of_birth || s.birthdate || '').toLowerCase();
             return studentNo.includes(q) || name.includes(q) || schol.includes(q) || prog.includes(q) || email.includes(q) || father.includes(q) || mother.includes(q) || religion.includes(q) || dob.includes(q);
         });
         renderSchoolStudentsTable(filtered);
@@ -1227,11 +1679,8 @@ if (btnClearFile) {
         if (uploadPrompt) uploadPrompt.style.display = 'flex';
         if (fileInfo) fileInfo.style.display = 'none';
 
-        // Revert to database students (strictly from school_students)
-        let { data: dbStudents } = await supabase
-            .from('school_students')
-            .select('*')
-            .order('created_at', { ascending: false });
+        // Revert to database students (strictly from school_students) with pagination
+        let dbStudents = await fetchAllSchoolStudents();
 
         let { data: fallbackStudents } = await supabase
             .from('student_grantees')
@@ -1248,7 +1697,18 @@ if (btnClearFile) {
         });
 
         if (dbStudents && dbStudents.length > 0) {
-            rawSchoolStudents = dbStudents.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+            const mappedSchool = dbStudents.map(s => {
+                const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                const term = getSchoolStudentTerm(s, studentProfileMap);
+                mapped.academicYear = term.academicYear;
+                mapped.semester = term.semester;
+                return mapped;
+            });
+            rawSchoolStudents = mappedSchool.filter(s => {
+                const matchAy = !selectedAcademicYear || selectedAcademicYear === 'All' || s.academicYear === selectedAcademicYear;
+                const matchSem = !selectedSemester || selectedSemester === 'All' || s.semester === selectedSemester;
+                return matchAy && matchSem;
+            });
         } else {
             // When table is empty or deleted in Supabase, show strictly empty list
             rawSchoolStudents = [];
@@ -1283,10 +1743,14 @@ async function handleSchoolFile(file, explicitTerm) {
     if (uploadPrompt) uploadPrompt.style.display = 'none';
     if (fileInfo) fileInfo.style.display = 'flex';
 
+    isImportingSchoolStudents = true;
     try {
         const parsedStudents = await parseSchoolExcelOrCsv(file);
 
         if (parsedStudents.length > 0) {
+            // Save term association in persistent cache
+            saveSchoolStudentTerms(parsedStudents, chosenTerm.academicYear, chosenTerm.semester);
+
             rawSchoolStudents = parsedStudents.map(s => ({
                 ...s,
                 academicYear: chosenTerm.academicYear,
@@ -1296,15 +1760,28 @@ async function handleSchoolFile(file, explicitTerm) {
             renderSchoolStudentsTable(rawSchoolStudents);
             runCrossVerification();
 
-            // Prepare records for database table 'school_students'
-            const dbRecords = parsedStudents.map(s => {
+            // Prepare records for database table 'school_students' with deduplication by student_no
+            const seenStudentNos = new Set();
+            const dbRecords = [];
+            parsedStudents.forEach(s => {
+                const sNo = String(s.studentNo || s.studentId || '').trim();
+                const fName = s.fullName || `${s.last_name || ''} ${s.first_name || ''}`.trim() || 'Unknown';
+                if (!sNo || seenStudentNos.has(sNo) || !fName || fName === 'Unknown') return;
+                seenStudentNos.add(sNo);
+
                 const ageNum = parseInt(s.age, 10);
-                return {
-                    student_no: s.studentNo || s.studentId || null,
-                    full_name: s.fullName || `${s.last_name || ''} ${s.first_name || ''}`.trim() || 'Unknown',
+                let dob = s.dateOfBirth || s.birthdate || null;
+                if (dob) {
+                    const match = String(dob).trim().match(/^\d{4}-\d{2}-\d{2}$/);
+                    dob = match ? match[0] : null;
+                }
+
+                dbRecords.push({
+                    student_no: sNo,
+                    full_name: fName,
                     program_name: s.programName || s.course || null,
                     year_level: s.yearLevel || s.year || null,
-                    date_of_birth: s.dateOfBirth || s.birthdate || null,
+                    date_of_birth: dob,
                     age: !isNaN(ageNum) ? ageNum : null,
                     gender: s.gender || null,
                     civil_status: s.civilStatus || 'Single',
@@ -1315,12 +1792,9 @@ async function handleSchoolFile(file, explicitTerm) {
                     father_occupation: s.fatherOccupation || null,
                     mother_full_name: s.motherFullName || null,
                     mother_occupation: s.motherOccupation || null,
-                    academic_year: chosenTerm.academicYear,
-                    semester: chosenTerm.semester,
-                    scholarship_name: s.scholarship || s.scholarshipName || 'TES',
                     updated_at: new Date().toISOString()
-                };
-            }).filter(r => r.full_name && r.full_name !== 'Unknown');
+                });
+            });
 
             try {
                 // Upsert in batches of 100
@@ -1333,20 +1807,13 @@ async function handleSchoolFile(file, explicitTerm) {
                         .upsert(batch, { onConflict: 'student_no' });
 
                     if (upsertErr) {
-                        console.warn('Upsert on school_students failed, falling back without scholarship_name or insert:', upsertErr);
-                        // If column is missing on school_students table, strip it out gracefully
-                        const strippedBatch = batch.map(({ scholarship_name, academic_year, semester, ...rest }) => rest);
-                        const { error: retryErr } = await supabase
+                        console.warn('Upsert on school_students failed, attempting fallback insert:', upsertErr);
+                        const { error: insertErr } = await supabase
                             .from('school_students')
-                            .upsert(strippedBatch, { onConflict: 'student_no' });
-                        if (retryErr) {
-                            const { error: insertErr } = await supabase
-                                .from('school_students')
-                                .insert(strippedBatch);
-                            if (insertErr) {
-                                console.error('Insert error to school_students:', insertErr);
-                                throw insertErr;
-                            }
+                            .insert(batch);
+                        if (insertErr) {
+                            console.error('Insert error to school_students:', insertErr);
+                            throw insertErr;
                         }
                     }
                     storedCount += batch.length;
@@ -1379,6 +1846,33 @@ async function handleSchoolFile(file, explicitTerm) {
                         }
                     }
                 } catch (_) { }
+
+                // Fetch fresh complete records from school_students to guarantee exact count & state
+                const freshDbStudents = await fetchAllSchoolStudents();
+                if (freshDbStudents && freshDbStudents.length > 0) {
+                    let { data: sgData } = await supabase.from('student_grantees').select('*');
+                    const studentProfileMap = new Map();
+                    (sgData || []).forEach(st => {
+                        const sNo = String(st.student_no || st.studentId || '').trim();
+                        const sName = String(st.full_name || st.fullName || '').trim().toLowerCase();
+                        if (sNo) studentProfileMap.set(sNo, st);
+                        if (sName) studentProfileMap.set(sName, st);
+                        if (st.uid) studentProfileMap.set(String(st.uid).trim(), st);
+                        if (st.id) studentProfileMap.set(String(st.id).trim(), st);
+                    });
+                    const filteredSchool = freshDbStudents.filter(s => {
+                        return isSchoolStudentInTerm(s, chosenTerm.academicYear, chosenTerm.semester, studentProfileMap);
+                    });
+                    rawSchoolStudents = filteredSchool.map(s => {
+                        const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                        mapped.academicYear = chosenTerm.academicYear;
+                        mapped.semester = chosenTerm.semester;
+                        return mapped;
+                    });
+                    updateSourceCounts();
+                    renderSchoolStudentsTable(rawSchoolStudents);
+                    runCrossVerification();
+                }
 
                 // Log in audit_logs
                 try {
@@ -1425,6 +1919,8 @@ async function handleSchoolFile(file, explicitTerm) {
     } catch (err) {
         console.error('File parsing error:', err);
         alert('Error parsing school student file: ' + err.message);
+    } finally {
+        isImportingSchoolStudents = false;
     }
 }
 
@@ -1476,11 +1972,11 @@ async function parseSchoolExcelOrCsv(file) {
                                 }
                             }
                             // 3. Student Identification
-                            else if (col.includes('student no') || col.includes('student id') || col.includes('student number') || col.includes('id number') || col.includes('control no') || col === 'id' || col === 'student_no' || col === 'student_id') {
+                            else if (col === 'no' || col === 'no.' || col === '#' || col.includes('student no') || col.includes('stud no') || col.includes('student id') || col.includes('student number') || col.includes('id number') || col.includes('id no') || col.includes('control no') || col === 'id' || col === 'student_no' || col === 'student_id') {
                                 colMap.studentNo = idx;
                             }
                             // 4. Student Name (strictly non-parent)
-                            else if (col.includes('full name') || col.includes('student name') || col === 'name' || col === 'student' || col === 'student_name') {
+                            else if (col.includes('full name') || col.includes('student name') || col.includes('name of student') || col === 'name' || col === 'student' || col === 'student_name') {
                                 colMap.fullName = idx;
                             }
                             else if (col.includes('last name') || col.includes('lastname') || col.includes('surname') || col === 'lname') {
@@ -1823,7 +2319,7 @@ function runCrossVerification(forceFresh = false) {
         verifiedForm2List = [];
         verifiedForm3List = [];
         needsReviewList = [];
-        AnnexSyncService.clearVerifiedData({ clearSupabase: false });
+        AnnexSyncService.clearVerifiedData({ clearSupabase: false, academicYear: selectedAcademicYear, semester: selectedSemester });
         updateKPIMetrics();
         renderForm2Table(verifiedForm2List);
         renderForm3Table(verifiedForm3List);
@@ -1834,7 +2330,7 @@ function runCrossVerification(forceFresh = false) {
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
     // Check if we have previously verified/resolved data from Admin Review Queue or Database (bypassed if forceFresh)
-    const savedSync = forceFresh ? null : AnnexSyncService.getVerifiedData();
+    const savedSync = forceFresh ? null : AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
     if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
         const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
         const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -1912,13 +2408,13 @@ function runCrossVerification(forceFresh = false) {
         needsReviewList = deduped.needsReviewList;
     }
 
-    // Persist and broadcast in-memory state without auto-upserting back to Supabase
+    // Persist and broadcast verified Form 2 / Form 3 state to Supabase so Student Grantees stays in sync
     AnnexSyncService.saveVerifiedData({
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
         updatedBy: window.currentAdmin?.username || 'Admin',
-        syncToDb: false,
+        syncToDb: (verifiedForm2List.length > 0 || verifiedForm3List.length > 0),
         academicYear: selectedAcademicYear,
         semester: selectedSemester
     });
@@ -3194,7 +3690,12 @@ function showToast(message, icon = 'check-circle') {
 
 // Live sync subscription
 AnnexSyncService.onSync((synced) => {
-    if (synced && Array.isArray(synced.form2List) && Array.isArray(synced.form3List)) {
+    if (!synced) return;
+    // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
+    if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && synced.academicYear !== selectedAcademicYear) return;
+    if (synced.semester && selectedSemester && selectedSemester !== 'All' && synced.semester !== selectedSemester) return;
+
+    if (Array.isArray(synced.form2List) && Array.isArray(synced.form3List)) {
         verifiedForm2List = synced.form2List;
         verifiedForm3List = synced.form3List;
         needsReviewList = synced.needsReviewList || [];
@@ -3333,6 +3834,15 @@ async function handleRegistrarTermChange(newAy, newSem) {
         AcademicYearService.setDefaultTerm(selectedAcademicYear, selectedSemester);
     }
 
+    // Reset file upload dropzone UI for the selected term
+    uploadedSchoolFile = null;
+    const fileInput = document.getElementById('school-file-input');
+    const uploadPrompt = document.getElementById('school-upload-prompt');
+    const fileInfo = document.getElementById('school-file-info');
+    if (fileInput) fileInput.value = '';
+    if (uploadPrompt) uploadPrompt.style.display = 'flex';
+    if (fileInfo) fileInfo.style.display = 'none';
+
     updateRegistrarActiveTermLabel();
     await loadInitialData();
 }
@@ -3401,7 +3911,7 @@ function setupRegistrarTermListeners() {
                     customSchoolAyContainer.classList.add('hidden');
                     customSchoolAyContainer.style.display = 'none';
                 }
-                if (val && val !== 'All') {
+                if (val) {
                     handleRegistrarTermChange(val, undefined);
                 }
             }
@@ -3461,7 +3971,7 @@ function setupRegistrarTermListeners() {
                     customSchoolSemContainer.classList.add('hidden');
                     customSchoolSemContainer.style.display = 'none';
                 }
-                if (val && val !== 'All') {
+                if (val) {
                     handleRegistrarTermChange(undefined, val);
                 }
             }

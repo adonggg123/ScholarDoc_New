@@ -798,6 +798,7 @@ export class StudentSyncService {
                 const { data, error } = await supabase
                     .from('school_students')
                     .select('*')
+                    .order('student_no', { ascending: true })
                     .range(from, to);
                 if (error || !data || data.length === 0) {
                     ssHasMore = false;
@@ -829,6 +830,152 @@ export class StudentSyncService {
                 }
             } catch (_) { }
 
+            // 3c. Reconcile any verified Form 2 records from local AnnexSyncService storage or active masterlist
+            //     that have not yet been persisted to annex_form_2 in Supabase
+            const missingF2ToPersist = [];
+            try {
+                const localPayloads = [];
+                if (typeof localStorage !== 'undefined') {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = typeof localStorage.key === 'function' ? localStorage.key(i) : null;
+                        if (k && (k === 'scholardoc_annex5_verified_data' || k.startsWith('scholardoc_annex5_verified_data_'))) {
+                            try {
+                                const parsed = JSON.parse(localStorage.getItem(k) || 'null');
+                                if (parsed && Array.isArray(parsed.form2List) && parsed.form2List.length > 0) {
+                                    localPayloads.push(parsed);
+                                }
+                            } catch (_) { }
+                        }
+                    }
+                    if (localPayloads.length === 0) {
+                        const directRaw = localStorage.getItem('scholardoc_annex5_verified_data');
+                        if (directRaw) {
+                            try {
+                                const parsed = JSON.parse(directRaw);
+                                if (parsed && Array.isArray(parsed.form2List) && parsed.form2List.length > 0) {
+                                    localPayloads.push(parsed);
+                                }
+                            } catch (_) { }
+                        }
+                    }
+                }
+
+                for (const payload of localPayloads) {
+                    const pAy = payload.academicYear || '2026-2027';
+                    const pSem = payload.semester || '1st Semester';
+                    for (let idx = 0; idx < payload.form2List.length; idx++) {
+                        const item = payload.form2List[idx];
+                        if (!item) continue;
+                        const g = item.grantee || item;
+                        const s = item.matchedStudent || {};
+                        const itemAy = item.academic_year || g.academic_year || s.academic_year || pAy;
+                        const itemSem = item.semester || g.semester || s.semester || pSem;
+
+                        const candidateF2 = {
+                            control_number: String(form2List.length + missingF2ToPersist.length + 1).padStart(5, '0'),
+                            student_number: s.studentId || s.student_no || s.studentNo || g.student_id || g.studentNo || null,
+                            tes_application_number: s.saNumber || s.sa_number || g.saNumber || g.sa_number || g.tes_application_number || 'N/A',
+                            last_name: s.lastName || s.last_name || g.last_name || g.lastName || 'N/A',
+                            given_name: s.firstName || s.first_name || g.first_name || g.firstName || 'N/A',
+                            middle_initial: s.mi || g.middle_name || g.middleName || '',
+                            sex_at_birth: String(s.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+                            birthdate: s.birthdate || s.dateOfBirth || '01/01/2000',
+                            degree_program: s.course || s.program_name || s.programName || g.course || 'BSIT',
+                            year_level: String(s.year || s.year_level || g.year || '1').replace(/[^0-9]/g, '') || '1',
+                            email_address: s.email || s.email_address || 'N/A',
+                            phone_number: s.phone || s.contactNumber || s.mobile_number || g.phone || 'N/A',
+                            tes_batch: String(g.batch || g.tes_batch || s.batch || '1.2').replace(/[^0-9.]/g, '') || '1.2',
+                            tes_amount: 10000.00,
+                            pwd_amount: 0.00,
+                            total_amount: 10000.00,
+                            academic_year: itemAy,
+                            semester: itemSem,
+                            hei_name: 'USTP Oroquieta',
+                            hei_campus: 'Oroquieta Campus',
+                            updated_at: new Date().toISOString()
+                        };
+
+                        // Only include if not already in form2List for this term and (if masterlist exists) matches a valid masterlist grantee
+                        const alreadyInF2 = form2List.some(existing =>
+                            this.isMatch(existing, candidateF2) &&
+                            (!existing.academic_year || existing.academic_year === itemAy) &&
+                            (!existing.semester || existing.semester === itemSem)
+                        );
+                        const inMasterlist = newGranteesList.length === 0 || newGranteesList.some(gm => this.isMatch(gm, candidateF2));
+                        if (!alreadyInF2 && inMasterlist) {
+                            form2List.push(candidateF2);
+                            missingF2ToPersist.push(candidateF2);
+                        }
+                    }
+                }
+            } catch (localErr) {
+                console.warn('StudentSyncService: Could not check local Form 2 storage:', localErr);
+            }
+
+            // 3d. If form2List is still empty while new_grantees_masterlist and school_students have records,
+            //     automatically match enrolled masterlist grantees into Form 2
+            if (form2List.length === 0 && newGranteesList.length > 0 && schoolStudents.length > 0) {
+                try {
+                    let f3List = [];
+                    try {
+                        const f3Res = await supabase.from('annex_form_3').select('*');
+                        if (f3Res && Array.isArray(f3Res.data)) f3List = f3Res.data;
+                    } catch (_) { }
+
+                    const defaultTerm = (typeof AcademicYearService !== 'undefined' && AcademicYearService.getDefaultTerm)
+                        ? AcademicYearService.getDefaultTerm()
+                        : { academicYear: '2026-2027', semester: '1st Semester' };
+
+                    const autoClaimedSs = new Set();
+                    newGranteesList.forEach((gm, idx) => {
+                        const inF3 = f3List.some(f3 => this.isMatch(f3, gm));
+                        if (inF3) return;
+                        const ssMatch = this.findBestStudentMatch(gm, schoolStudents, autoClaimedSs);
+                        if (!ssMatch) return;
+
+                        const parsed = this.parseName(ssMatch.full_name || gm.name, gm.last_name, gm.first_name);
+                        const candidateF2 = {
+                            control_number: String(idx + 1).padStart(5, '0'),
+                            student_number: ssMatch.student_no || ssMatch.studentId || null,
+                            tes_application_number: gm.tes_application_number || gm.sa_number || 'N/A',
+                            last_name: (gm.last_name || parsed.last || 'N/A').toUpperCase(),
+                            given_name: (gm.first_name || parsed.first || 'N/A').toUpperCase(),
+                            middle_initial: gm.middle_name ? String(gm.middle_name).trim().charAt(0).toUpperCase() : (parsed.mi || ''),
+                            sex_at_birth: String(ssMatch.gender || 'M').toUpperCase().startsWith('F') ? 'F' : 'M',
+                            birthdate: ssMatch.date_of_birth || ssMatch.birthdate || '01/01/2000',
+                            degree_program: ssMatch.program_name || ssMatch.course || 'BSIT',
+                            year_level: String(ssMatch.year_level || ssMatch.year || '1').replace(/[^0-9]/g, '') || '1',
+                            email_address: ssMatch.email_address || ssMatch.email || 'N/A',
+                            phone_number: ssMatch.mobile_number || ssMatch.contactNumber || 'N/A',
+                            tes_batch: String(gm.batch || '1.2').replace(/[^0-9.]/g, '') || '1.2',
+                            tes_amount: 10000.00,
+                            pwd_amount: 0.00,
+                            total_amount: 10000.00,
+                            academic_year: gm.academic_year || defaultTerm.academicYear || '2026-2027',
+                            semester: gm.semester || defaultTerm.semester || '1st Semester',
+                            hei_name: 'USTP Oroquieta',
+                            hei_campus: 'Oroquieta Campus',
+                            updated_at: new Date().toISOString()
+                        };
+                        form2List.push(candidateF2);
+                        missingF2ToPersist.push(candidateF2);
+                    });
+                } catch (reconcileErr) {
+                    console.warn('StudentSyncService: Error auto-reconciling Form 2 from masterlist:', reconcileErr);
+                }
+            }
+
+            if (missingF2ToPersist.length > 0) {
+                try {
+                    const { error: f2InsErr } = await supabase.from('annex_form_2').insert(missingF2ToPersist);
+                    if (!f2InsErr) {
+                        console.log(`StudentSyncService: Persisted ${missingF2ToPersist.length} Form 2 record(s) to annex_form_2 in Supabase.`);
+                    }
+                } catch (e) {
+                    console.warn('StudentSyncService: Could not persist missing Form 2 records:', e);
+                }
+            }
+
             // If annex_form_2 is completely empty, fallback to student_grantees records if available
             if (!Array.isArray(form2List) || form2List.length === 0) {
                 if (Array.isArray(sgList) && sgList.length > 0) {
@@ -846,12 +993,18 @@ export class StudentSyncService {
             // 4. For each Form 2 record, select its student data from school_students
             const toInsert = [];
             const toUpdate = [];
-            const claimedSchoolStudentNos = new Set();
+            const claimedSchoolStudentNosByTerm = new Map();
             const claimedSgIds = new Set();
 
             const result = form2List.map(f2 => {
+                const termKey = `${f2.academic_year || 'default'}_${f2.semester || 'default'}`;
+                if (!claimedSchoolStudentNosByTerm.has(termKey)) {
+                    claimedSchoolStudentNosByTerm.set(termKey, new Set());
+                }
+                const termClaimedSet = claimedSchoolStudentNosByTerm.get(termKey);
+
                 const ssMatch = Array.isArray(schoolStudents)
-                    ? this.findBestStudentMatch(f2, schoolStudents, claimedSchoolStudentNos)
+                    ? this.findBestStudentMatch(f2, schoolStudents, termClaimedSet)
                     : null;
                 const existingSg = Array.isArray(sgList)
                     ? this.findBestExistingSgMatch(f2, ssMatch, sgList, claimedSgIds)
@@ -907,10 +1060,11 @@ export class StudentSyncService {
                         email_sent_at: null
                     });
                 } else if (existingSg) {
-                    // Update database record if status, batch, or term differs from dynamic computed record
+                    // Update database record if status, batch, SA number, or term differs from dynamic computed record
                     const needsStatusSync = existingSg.status !== normalized.status ||
                         existingSg.saVerificationStatus !== normalized.saVerificationStatus ||
                         existingSg.idValidationStatus !== normalized.idValidationStatus ||
+                        (normalized.saNumber && normalized.saNumber !== 'N/A' && existingSg.saNumber !== normalized.saNumber) ||
                         (existingSg.documents?.batch !== normalized.batch) ||
                         (normalized.academic_year && existingSg.academic_year !== normalized.academic_year) ||
                         (normalized.semester && existingSg.semester !== normalized.semester);
@@ -920,6 +1074,8 @@ export class StudentSyncService {
                             id: existingSg.id,
                             uid: existingSg.uid,
                             status: normalized.status,
+                            sa_number: normalized.sa_number,
+                            saNumber: normalized.saNumber,
                             saVerificationStatus: normalized.saVerificationStatus,
                             sa_verification_status: normalized.saVerificationStatus,
                             idValidationStatus: normalized.idValidationStatus,
@@ -948,6 +1104,7 @@ export class StudentSyncService {
             //    Prevent any duplicates by verifying clean student_no and DB IDs.
             if (Array.isArray(sgList) && sgList.length > 0) {
                 const existingResultNos = new Set(result.map(r => this.clean(r.student_no)).filter(Boolean));
+                const unmatchedClaimedSs = new Set();
 
                 for (const sg of sgList) {
                     const sgId = String(sg.id || '');
@@ -966,7 +1123,7 @@ export class StudentSyncService {
                     if (alreadyIncluded) continue;
 
                     const ssMatch = Array.isArray(schoolStudents)
-                        ? this.findBestStudentMatch(sg, schoolStudents, claimedSchoolStudentNos)
+                        ? this.findBestStudentMatch(sg, schoolStudents, unmatchedClaimedSs)
                         : null;
                     const normalized = this.normalizeStudentRecord(ssMatch || {}, null, null, sg, activeDeadline);
                     result.push(normalized);

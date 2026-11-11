@@ -542,6 +542,7 @@ export class VerificationService {
         }
 
         grantees.forEach((grantee, idx) => {
+            if (grantee.isDuplicate || grantee.hasScholarshipConflict) return;
             const verification = this.verifyGrantee(grantee, schoolStudents);
             verification.granteeIndex = idx;
 

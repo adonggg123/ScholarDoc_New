@@ -96,7 +96,7 @@ export class AcademicYearService {
      * - Backend REST API /api/academic-term/update (persists on server & mobile OCR sync)
      * - Supabase system_settings table (persists in database)
      */
-    static setDefaultTerm(academicYear, semester, { broadcast = true, syncApi = true } = {}) {
+    static setDefaultTerm(academicYear, semester, { broadcast = true, syncApi = true, forceBroadcast = false } = {}) {
         if (!academicYear || !semester) return null;
 
         let cleanAy = String(academicYear).trim().replace(/\s*-\s*/g, '-').replace(/\s+/g, '-');
@@ -105,6 +105,9 @@ export class AcademicYearService {
         if (cleanAy === 'All' || cleanAy === 'custom' || cleanSem === 'All' || cleanSem === 'custom') {
             return null;
         }
+
+        const current = this.getDefaultTerm();
+        const isSameTerm = current && current.academicYear === cleanAy && current.semester === cleanSem;
 
         // Auto-save to custom terms list if not standard
         if (!DEFAULT_ACADEMIC_YEARS.includes(cleanAy)) {
@@ -134,7 +137,7 @@ export class AcademicYearService {
             console.warn('AcademicYearService: could not set default term in localStorage:', e);
         }
 
-        if (broadcast) {
+        if (broadcast && (!isSameTerm || forceBroadcast)) {
             if (broadcastChannel) {
                 broadcastChannel.postMessage({ type: 'DEFAULT_TERM_UPDATED', term: termData });
             }
@@ -142,7 +145,7 @@ export class AcademicYearService {
             window.dispatchEvent(new CustomEvent(CUSTOM_EVENT_NAME, { detail: termData }));
         }
 
-        if (syncApi) {
+        if (syncApi && (!isSameTerm || forceBroadcast)) {
             try {
                 fetch('/api/academic-term/update', {
                     method: 'POST',
@@ -214,17 +217,15 @@ export class AcademicYearService {
         try {
             const supabase = window.supabaseClient;
             if (supabase) {
-                const [resF2, resF3, resSG, resMaster] = await Promise.all([
+                const [resF2, resF3, resSG] = await Promise.all([
                     supabase.from('annex_form_2').select('academic_year').limit(500),
                     supabase.from('annex_form_3').select('academic_year').limit(500),
-                    supabase.from('student_grantees').select('academic_year').limit(500),
-                    supabase.from('new_grantees_masterlist').select('academic_year').limit(500)
+                    supabase.from('student_grantees').select('academic_year').limit(500)
                 ]);
 
-                (resF2.data || []).forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
-                (resF3.data || []).forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
-                (resSG.data || []).forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
-                (resMaster.data || []).forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
+                if (Array.isArray(resF2?.data)) resF2.data.forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
+                if (Array.isArray(resF3?.data)) resF3.data.forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
+                if (Array.isArray(resSG?.data)) resSG.data.forEach(r => { if (r.academic_year) yearSet.add(String(r.academic_year).trim()); });
             }
         } catch (e) {
             console.warn('AcademicYearService: Could not query distinct academic years from database:', e);
@@ -263,9 +264,9 @@ export class AcademicYearService {
                     supabase.from('student_grantees').select('semester').limit(500)
                 ]);
 
-                (resF2.data || []).forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
-                (resF3.data || []).forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
-                (resSG.data || []).forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
+                if (Array.isArray(resF2?.data)) resF2.data.forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
+                if (Array.isArray(resF3?.data)) resF3.data.forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
+                if (Array.isArray(resSG?.data)) resSG.data.forEach(r => { if (r.semester) semSet.add(String(r.semester).trim()); });
             }
         } catch (e) {
             console.warn('AcademicYearService: Could not query distinct semesters from database:', e);

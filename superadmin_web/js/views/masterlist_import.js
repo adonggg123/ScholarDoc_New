@@ -23,6 +23,7 @@ if (!window.mammoth) {
 
 // State
 let currentFile = null;
+let isImportingMasterlist = false;
 let allMasterlistRecords = [];
 let extractedRecords = [];
 let schoolStudents = [];
@@ -32,7 +33,20 @@ let uploadedSchoolFile = null;
 
 let verifiedForm2List = [];
 let verifiedForm3List = [];
+let studentExistList = [];
 let needsReviewList = [];
+
+// Student Exist & Duplicate Management Elements
+let badgeMasterlistDuplicates = null;
+let countMasterlistDuplicates = null;
+let btnMoveAllDuplicates = null;
+let saTabBtnExist = null;
+let saBadgeExistCount = null;
+let saStatExistCount = null;
+let saSearchExist = null;
+let saTbodyExist = null;
+let saBtnExportExist = null;
+let saBtnClearExist = null;
 
 // Elements
 let dropZone = null;
@@ -61,7 +75,7 @@ let customImportScholarshipContainer = null;
 let customImportScholarshipInput = null;
 let importScholarshipSelectBox = null;
 let importScholarshipValidationHint = null;
-let selectedScholarshipProgram = localStorage.getItem('scholardoc_target_scholarship') || '';
+let selectedScholarshipProgram = localStorage.getItem('scholardoc_target_scholarship') || 'CHED TES';
 
 // Scholarship Conflict Summary Elements
 let summaryConflicts = null;
@@ -110,6 +124,7 @@ let saTabBtnRev = null;
 let saTabPane2 = null;
 let saTabPane3 = null;
 let saTabPaneRev = null;
+let saTabPaneExist = null;
 
 let btnExportAnnexExcel = null;
 let btnExportF2 = null;
@@ -258,7 +273,7 @@ async function populateImportScholarshipPrograms() {
             }
         }
 
-        const currentVal = selectImportScholarship.value || selectedScholarshipProgram || '';
+        const currentVal = selectImportScholarship.value || selectedScholarshipProgram || 'CHED TES';
         let html = '<option value="" disabled' + (!currentVal ? ' selected' : '') + '>-- Select Scholarship Program * --</option>';
         programs.forEach(prog => {
             const isSel = currentVal && (currentVal.toUpperCase() === prog.toUpperCase());
@@ -266,8 +281,9 @@ async function populateImportScholarshipPrograms() {
         });
         html += '<option value="custom">+ Enter Custom Scholarship...</option>';
         selectImportScholarship.innerHTML = html;
-        if (currentVal && programs.includes(currentVal)) {
+        if (currentVal) {
             selectImportScholarship.value = currentVal;
+            selectedScholarshipProgram = currentVal;
         }
     } catch (e) {
         console.warn('Could not load scholarship programs:', e);
@@ -322,8 +338,10 @@ function getSelectedImportTerm() {
         AcademicYearService.addCustomSemester(chosenSem);
     }
 
-    // Save chosen values as system defaults
-    AcademicYearService.setDefaultTerm(chosenAy, chosenSem);
+    // Save chosen values as system defaults if changed
+    if (chosenAy !== selectedAcademicYear || chosenSem !== selectedSemester) {
+        AcademicYearService.setDefaultTerm(chosenAy, chosenSem);
+    }
 
     selectedAcademicYear = chosenAy;
     selectedSemester = chosenSem;
@@ -549,8 +567,715 @@ function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemes
     }
 }
 
+// ── Student Exist & Duplicate Detection Helpers ──────────────────────────
+function saveStudentExistList(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        if (ay && sem && ay !== 'All' && sem !== 'All') {
+            localStorage.setItem(`scholardoc_student_exist_${ay}_${sem}`, JSON.stringify(studentExistList || []));
+        }
+        if (typeof AnnexSyncService !== 'undefined' && AnnexSyncService.saveStudentExistData) {
+            AnnexSyncService.saveStudentExistData(studentExistList, ay, sem);
+        }
+    } catch (e) {
+        console.warn('Error saving student exist list:', e);
+    }
+}
+
+function loadStudentExistList(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        if (typeof AnnexSyncService !== 'undefined' && AnnexSyncService.getStudentExistData) {
+            const list = AnnexSyncService.getStudentExistData(ay, sem);
+            if (Array.isArray(list)) {
+                studentExistList = list;
+                return studentExistList;
+            }
+        }
+        if (ay && sem && ay !== 'All' && sem !== 'All') {
+            const raw = localStorage.getItem(`scholardoc_student_exist_${ay}_${sem}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    studentExistList = parsed;
+                    return studentExistList;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Error loading student exist list:', e);
+    }
+    studentExistList = [];
+    return studentExistList;
+}
+
+// ── Intelligent Duplicate & Name Matching Engine ────────────────────────
+let cachedStudentGranteesList = [];
+
+function cleanAlpha(str) {
+    return String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getComparableName(rec) {
+    if (!rec) {
+        return {
+            id: '',
+            last: '',
+            first: '',
+            mi: '',
+            cleanFull: '',
+            revCleanFull: '',
+            fTokens: [],
+            cleanId: '',
+            rawName: '',
+            batch: 'Batch 1.2',
+            scholarship: 'CHED TES',
+            record: null
+        };
+    }
+
+    let l = rec.lastName || rec.last_name || '';
+    let f = rec.firstName || rec.first_name || rec.given_name || '';
+    let m = rec.middleName || rec.middle_name || rec.middle_initial || '';
+    let raw = rec.name || rec.full_name || rec.fullName || '';
+
+    if ((!l || !l.trim()) && raw) {
+        const parsed = splitFullName(raw);
+        l = parsed.lastName;
+        f = parsed.firstName;
+        m = parsed.middleName || m;
+    }
+
+    if (!raw && (l || f)) {
+        raw = `${l}, ${f} ${m}`.trim();
+    }
+
+    const cleanL = cleanAlpha(l);
+    const cleanF = cleanAlpha(f);
+
+    let mi = '';
+    const cleanM = String(m || '').trim();
+    if (cleanM) {
+        const mLetter = cleanM.replace(/[^a-zA-Z]/g, '').charAt(0);
+        if (mLetter) mi = mLetter.toUpperCase();
+    }
+
+    const cleanFull = cleanAlpha(raw || `${l} ${f} ${m}`);
+    const revCleanFull = cleanAlpha(`${f} ${m} ${l}`);
+
+    const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v']);
+    const fTokens = String(f || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length > 1 && !suffixes.has(t));
+
+    const sId = String(rec.studentId || rec.student_id || rec.student_no || rec.student_number || '').trim();
+    const cleanId = cleanAlpha(sId);
+    const validId = (cleanId.length >= 5 && cleanId !== 'null' && cleanId !== 'undefined' && cleanId !== 'none' && cleanId !== 'unassigned') ? cleanId : '';
+
+    const rawBatch = rec.batch || rec.tes_batch || (rec.documents && rec.documents.batch) || 'Batch 1.2';
+    const cleanBatch = String(rawBatch).startsWith('Batch') ? rawBatch : `Batch ${String(rawBatch).replace(/^batch\s*/i, '').trim() || '1.2'}`;
+
+    const rawSch = rec.scholarshipProgram || rec.scholarship_name || rec.scholarship || (rec.documents && rec.documents.scholarshipName) || 'CHED TES';
+
+    return {
+        id: String(rec.id || rec.uid || '').trim(),
+        last: cleanL,
+        first: cleanF,
+        mi,
+        cleanFull,
+        revCleanFull,
+        fTokens,
+        cleanId: validId,
+        rawName: raw,
+        batch: cleanBatch,
+        scholarship: String(rawSch || 'CHED TES').trim(),
+        record: rec
+    };
+}
+
+function areNamesMatching(cand, exist) {
+    if (!cand || !exist) return false;
+
+    // 1. Institutional Student ID check (definitive if both present)
+    if (cand.cleanId && exist.cleanId) {
+        if (cand.cleanId === exist.cleanId) return true;
+        // Strict rejection if both have distinct valid institutional IDs (6+ chars)
+        if (cand.cleanId.length >= 6 && exist.cleanId.length >= 6 && cand.cleanId !== exist.cleanId) {
+            return false;
+        }
+    }
+
+    // 2. Exact clean full name check (e.g. "jarioljudeesidorezacarias")
+    if (cand.cleanFull && exist.cleanFull && cand.cleanFull.length >= 5) {
+        if (cand.cleanFull === exist.cleanFull) return true;
+        if (cand.revCleanFull && cand.revCleanFull === exist.cleanFull) return true;
+        if (exist.revCleanFull && cand.cleanFull === exist.revCleanFull) return true;
+    }
+
+    // 3. Surname + Given Name Match
+    if (cand.last && exist.last && cand.first && exist.first) {
+        let lastSim = 0;
+        if (cand.last === exist.last) {
+            lastSim = 1.0;
+        } else if (typeof StudentSyncService !== 'undefined' && StudentSyncService.levenshteinSimilarity) {
+            lastSim = StudentSyncService.levenshteinSimilarity(cand.last, exist.last);
+        }
+
+        const isLastMatching = cand.last === exist.last || lastSim >= 0.88;
+
+        if (isLastMatching) {
+            // If BOTH records have explicit, conflicting middle initials, they are different people
+            if (cand.mi && exist.mi && cand.mi !== exist.mi) {
+                return false;
+            }
+
+            // A. Exact first name
+            if (cand.first === exist.first) {
+                return true;
+            }
+
+            // B. First name token overlap (e.g. "Jude Esidore" vs "Jude", "April Joy" vs "April")
+            if (cand.fTokens.length > 0 && exist.fTokens.length > 0) {
+                const shared = cand.fTokens.filter(t => exist.fTokens.includes(t));
+                if (shared.length >= Math.min(cand.fTokens.length, exist.fTokens.length)) {
+                    return true;
+                }
+            }
+
+            // C. First name Levenshtein similarity >= 0.80
+            let firstSim = 0;
+            if (typeof StudentSyncService !== 'undefined' && StudentSyncService.levenshteinSimilarity) {
+                firstSim = StudentSyncService.levenshteinSimilarity(cand.first, exist.first);
+            }
+            if (firstSim >= 0.80) {
+                return true;
+            }
+
+            // D. Substring containment for multi-part names
+            if (cand.first.length >= 4 && exist.first.length >= 4) {
+                if (cand.first.includes(exist.first) || exist.first.includes(cand.first)) {
+                    return true;
+                }
+            }
+        }
+
+        // Swapped First & Last name check (e.g. "Jude Esidore" in last name, "Jariol" in first name)
+        if (cand.last === exist.first && cand.first === exist.last && cand.last.length >= 3 && cand.first.length >= 3) {
+            return true;
+        }
+    }
+
+    // 4. Fallback to StudentSyncService.isMatch if available
+    if (typeof StudentSyncService !== 'undefined' && StudentSyncService.isMatch) {
+        if (StudentSyncService.isMatch(cand.record, exist.record)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function detectAndMarkMasterlistDuplicates(records) {
+    if (!records || records.length === 0) return records;
+
+    loadStudentExistList();
+    const studentExistPool = (studentExistList || []).map(e => getComparableName(e));
+    const studentGranteesPool = (cachedStudentGranteesList || []).map(s => getComparableName(s));
+    const masterPool = (allMasterlistRecords || []).map(m => getComparableName(m));
+
+    const seenInList = [];
+
+    records.forEach(r => {
+        // Reset duplicate status unless there is an existing scholarship conflict
+        if (!r.hasScholarshipConflict) {
+            r.isDuplicate = false;
+            r.duplicateReason = '';
+        } else {
+            r.isDuplicate = true;
+            r.duplicateReason = r.conflictReason || `Already registered in ${r.existingScholarship}`;
+            return;
+        }
+
+        const cand = getComparableName(r);
+        const isSavedMasterRecord = Boolean(r.id);
+
+        // 1. Check Student Grantees table (student_grantees, annex_form_2)
+        // Skip for records already saved in new_grantees_masterlist (their Student Grantees / Form 2 entry is their own synced record)
+        if (!isSavedMasterRecord && studentGranteesPool.length > 0) {
+            const sgMatch = studentGranteesPool.find(exist => areNamesMatching(cand, exist));
+            if (sgMatch && masterPool.some(m => (!r.id || !m.id || m.id !== r.id) && areNamesMatching(cand, m))) {
+                r.isDuplicate = true;
+                const matchBatch = sgMatch.batch || r.batch || 'Batch 1.2';
+                r.duplicateReason = `Already exists in Student Grantees (${matchBatch})`;
+                return;
+            }
+        }
+
+        // 2. Check Student Exist table
+        if (studentExistPool.length > 0) {
+            const existMatch = studentExistPool.find(exist => areNamesMatching(cand, exist));
+            if (existMatch) {
+                r.isDuplicate = true;
+                r.duplicateReason = 'Already in Student Exist table';
+                return;
+            }
+        }
+
+        // 3. Check New Grantees Master List (for unsaved uploaded records matching existing masterlist records)
+        if (!isSavedMasterRecord && masterPool.length > 0) {
+            const mlMatch = masterPool.find(exist => exist.record !== r && (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
+            if (mlMatch) {
+                r.isDuplicate = true;
+                const matchBatch = mlMatch.batch || r.batch || 'Batch 1.2';
+                r.duplicateReason = `Already exists in Master List (${matchBatch})`;
+                return;
+            }
+        }
+
+        // 4. Check Duplicate entry within this current view list
+        const dupMatch = seenInList.find(exist => exist.record !== r && (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
+        if (dupMatch) {
+            r.isDuplicate = true;
+            r.duplicateReason = 'Duplicate entry in master list';
+            return;
+        }
+
+        seenInList.push(cand);
+    });
+
+    return records;
+}
+
+async function moveRecordToStudentExist(index) {
+    const record = extractedRecords[index];
+    if (!record) return;
+
+    const studentName = `${record.lastName || ''}, ${record.firstName || ''} ${record.middleName || ''}`.trim();
+
+    const existItem = {
+        id: record.id || `exist_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        studentId: record.studentId || record.student_id || 'N/A',
+        firstName: record.firstName || '',
+        middleName: record.middleName || '',
+        lastName: record.lastName || '',
+        name: studentName,
+        course: record.course || 'BSIT',
+        batch: record.batch || '1.2',
+        academicYear: record.academicYear || selectedAcademicYear,
+        semester: record.semester || selectedSemester,
+        scholarshipProgram: record.scholarshipProgram || selectedScholarshipProgram || 'CHED TES',
+        duplicateReason: record.duplicateReason || 'Duplicate grantee in master list',
+        movedAt: new Date().toISOString()
+    };
+
+    studentExistList.unshift(existItem);
+    saveStudentExistList();
+
+    extractedRecords.splice(index, 1);
+    const recCand = getComparableName(record);
+    const mIdx = allMasterlistRecords.findIndex(x => (record.id && x.id === record.id) || areNamesMatching(getComparableName(x), recCand));
+    if (mIdx !== -1) {
+        allMasterlistRecords.splice(mIdx, 1);
+    }
+
+    if (record.id && window.supabaseClient) {
+        try {
+            await window.supabaseClient.from(getTableName()).delete().eq('id', record.id);
+        } catch (delErr) {
+            console.warn('Could not delete moved grantee from database:', delErr);
+        }
+    }
+
+    detectAndMarkMasterlistDuplicates(extractedRecords);
+
+    // Ensure this student is removed from Form 3 if present
+    const prevF3Len = (verifiedForm3List || []).length;
+    verifiedForm3List = (verifiedForm3List || []).filter(f3 => !AnnexSyncService.isSameStudent(existItem, f3));
+    if (verifiedForm3List.length !== prevF3Len) {
+        AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            studentExistList: studentExistList,
+            needsReviewList: needsReviewList,
+            updatedBy: 'Super Admin',
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
+        renderAnnexForm3Table(verifiedForm3List);
+    }
+
+    if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
+    renderTable();
+    renderStudentExistTable();
+    updateAnnexKPIs();
+
+    if (window.showToast) {
+        window.showToast(`Moved ${studentName || 'grantee'} to Student Exist table`, 'check-circle');
+    }
+}
+
+async function moveAllDuplicatesToStudentExist() {
+    const dups = extractedRecords.filter(r => r.isDuplicate || r.hasScholarshipConflict);
+    if (dups.length === 0) {
+        if (window.showToast) window.showToast('No duplicate records detected to move.', 'info');
+        return;
+    }
+
+    const count = dups.length;
+    const idsToDelete = [];
+
+    dups.forEach(record => {
+        const studentName = `${record.lastName || ''}, ${record.firstName || ''} ${record.middleName || ''}`.trim();
+        const existItem = {
+            id: record.id || `exist_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            studentId: record.studentId || record.student_id || 'N/A',
+            firstName: record.firstName || '',
+            middleName: record.middleName || '',
+            lastName: record.lastName || '',
+            name: studentName,
+            course: record.course || 'BSIT',
+            batch: record.batch || '1.2',
+            academicYear: record.academicYear || selectedAcademicYear,
+            semester: record.semester || selectedSemester,
+            scholarshipProgram: record.scholarshipProgram || selectedScholarshipProgram || 'CHED TES',
+            duplicateReason: record.duplicateReason || 'Duplicate grantee in master list',
+            movedAt: new Date().toISOString()
+        };
+        studentExistList.unshift(existItem);
+        if (record.id) idsToDelete.push(record.id);
+    });
+
+    saveStudentExistList();
+
+    extractedRecords = extractedRecords.filter(r => !r.isDuplicate && !r.hasScholarshipConflict);
+    const dupPool = dups.map(d => getComparableName(d));
+    allMasterlistRecords = allMasterlistRecords.filter(r => {
+        if (r.id && idsToDelete.includes(r.id)) return false;
+        const cand = getComparableName(r);
+        return !dupPool.some(d => areNamesMatching(cand, d));
+    });
+
+    if (idsToDelete.length > 0 && window.supabaseClient) {
+        try {
+            await window.supabaseClient.from(getTableName()).delete().in('id', idsToDelete);
+        } catch (delErr) {
+            console.warn('Could not bulk delete moved grantees from database:', delErr);
+        }
+    }
+
+    detectAndMarkMasterlistDuplicates(extractedRecords);
+
+    // Ensure all moved duplicate students are removed from Form 3 if present
+    const prevAllF3Len = (verifiedForm3List || []).length;
+    verifiedForm3List = (verifiedForm3List || []).filter(f3 => {
+        return !dups.some(d => AnnexSyncService.isSameStudent(d, f3));
+    });
+    if (verifiedForm3List.length !== prevAllF3Len) {
+        AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            studentExistList: studentExistList,
+            needsReviewList: needsReviewList,
+            updatedBy: 'Super Admin',
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
+        renderAnnexForm3Table(verifiedForm3List);
+    }
+    if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
+    renderTable();
+    renderStudentExistTable();
+    updateAnnexKPIs();
+
+    if (window.showToast) {
+        window.showToast(`Successfully moved ${count} duplicate record${count > 1 ? 's' : ''} to Student Exist table`, 'check-circle');
+    }
+}
+
+async function deleteMasterlistRecord(index) {
+    const record = extractedRecords[index];
+    if (!record) return;
+
+    const studentName = `${record.lastName || ''}, ${record.firstName || ''} ${record.middleName || ''}`.trim();
+    if (!confirm(`Are you sure you want to delete "${studentName || 'this student'}" from the masterlist?`)) {
+        return;
+    }
+
+    extractedRecords.splice(index, 1);
+    const recCand = getComparableName(record);
+    const mIdx = allMasterlistRecords.findIndex(x => (record.id && x.id === record.id) || areNamesMatching(getComparableName(x), recCand));
+    if (mIdx !== -1) {
+        allMasterlistRecords.splice(mIdx, 1);
+    }
+
+    if (record.id && window.supabaseClient) {
+        try {
+            await window.supabaseClient.from(getTableName()).delete().eq('id', record.id);
+        } catch (delErr) {
+            console.warn('Could not delete grantee from database:', delErr);
+        }
+    }
+
+    detectAndMarkMasterlistDuplicates(extractedRecords);
+    if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
+    renderTable();
+    updateAnnexKPIs();
+
+    if (window.showToast) {
+        window.showToast(`Deleted ${studentName || 'grantee'} from masterlist`, 'trash');
+    }
+}
+
+function renderStudentExistTable(filterText = '') {
+    if (!saTbodyExist) saTbodyExist = document.getElementById('sa-tbody-exist');
+    if (!saBadgeExistCount) saBadgeExistCount = document.getElementById('sa-badge-exist-count');
+    if (!saStatExistCount) saStatExistCount = document.getElementById('sa-stat-exist-count');
+
+    const totalCount = studentExistList.length;
+    if (saBadgeExistCount) saBadgeExistCount.textContent = totalCount;
+    if (saStatExistCount) saStatExistCount.textContent = `${totalCount} Duplicate Grantee${totalCount === 1 ? '' : 's'}`;
+
+    if (!saTbodyExist) return;
+
+    let displayList = studentExistList;
+    if (filterText && filterText.trim()) {
+        const q = filterText.toLowerCase().trim();
+        displayList = studentExistList.filter(item => {
+            const name = (item.name || `${item.lastName || ''} ${item.firstName || ''}`).toLowerCase();
+            const sId = String(item.studentId || '').toLowerCase();
+            const reason = String(item.duplicateReason || '').toLowerCase();
+            const course = String(item.course || '').toLowerCase();
+            return name.includes(q) || sId.includes(q) || reason.includes(q) || course.includes(q);
+        });
+    }
+
+    if (displayList.length === 0) {
+        saTbodyExist.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                        <i class="icon-user-check" style="font-size: 34px; color: #cbd5e1;"></i>
+                        <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
+                            ${filterText ? `No duplicate records matching "${filterText}"` : 'No duplicate records in Student Exist'}
+                        </span>
+                        <span style="font-size: 12px; color: var(--text-secondary); max-width: 320px; line-height: 1.4;">
+                            ${filterText ? 'Try a different keyword or clear the search.' : 'Use the "Move" action in the New Grantees Master List above to place duplicate students here.'}
+                        </span>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    saTbodyExist.innerHTML = '';
+    displayList.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.style.background = 'rgba(254, 226, 226, 0.2)';
+        tr.style.borderLeft = '3px solid #ef4444';
+
+        const fullName = item.name || `${item.lastName || ''}, ${item.firstName || ''} ${item.middleName || ''}`.trim();
+        const batchClean = String(item.batch || '1.2').replace(/^batch\s*/i, '').trim();
+
+        tr.innerHTML = `
+            <td style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #64748b;">${index + 1}</td>
+            <td style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--text-primary);">${item.studentId || 'N/A'}</td>
+            <td style="padding: 10px 12px;">
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${fullName}</span>
+                    <span style="font-size: 11px; color: var(--text-secondary);">${item.scholarshipProgram || 'CHED TES'}</span>
+                </div>
+            </td>
+            <td style="padding: 10px 12px; font-size: 12px; color: var(--text-secondary);">${item.course || 'BSIT'}</td>
+            <td style="padding: 10px 12px; white-space: nowrap;">
+                <span class="badge-batch-pill" title="Assigned Batch">
+                    <i class="icon-layers" style="font-size: 11px;"></i> ${batchClean}
+                </span>
+            </td>
+            <td style="padding: 10px 12px;">
+                <span style="background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.35); padding: 3px 8px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                    <i class="icon-alert-circle" style="font-size: 12px;"></i>
+                    ${item.duplicateReason || 'Duplicate Record'}
+                </span>
+            </td>
+            <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
+                <div style="display: inline-flex; align-items: center; gap: 5px; justify-content: center;">
+                    <button class="btn-restore-exist" data-index="${index}" title="Restore student to New Grantees Master List"
+                        style="padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(30,136,229,0.3); background: rgba(30,136,229,0.08); color: #1E88E5; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
+                        <i class="icon-rotate-ccw" style="font-size: 11px;"></i> Restore
+                    </button>
+                    <button class="btn-delete-exist" data-index="${index}" title="Permanently delete duplicate record from Student Exist"
+                        style="padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); color: #dc2626; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
+                        <i class="icon-trash-2" style="font-size: 11px;"></i> Delete
+                    </button>
+                </div>
+            </td>
+        `;
+        saTbodyExist.appendChild(tr);
+    });
+
+    saTbodyExist.querySelectorAll('.btn-restore-exist').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
+            restoreFromStudentExist(idx);
+        });
+    });
+
+    saTbodyExist.querySelectorAll('.btn-delete-exist').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
+            deleteFromStudentExist(idx);
+        });
+    });
+}
+
+function restoreFromStudentExist(index) {
+    const item = studentExistList[index];
+    if (!item) return;
+
+    studentExistList.splice(index, 1);
+    saveStudentExistList();
+
+    const restored = {
+        id: item.id && !item.id.startsWith('exist_') ? item.id : null,
+        studentId: item.studentId !== 'N/A' ? item.studentId : '',
+        firstName: item.firstName || '',
+        middleName: item.middleName || '',
+        lastName: item.lastName || '',
+        course: item.course || 'BSIT',
+        batch: item.batch || '1.2',
+        academicYear: item.academicYear || selectedAcademicYear,
+        semester: item.semester || selectedSemester,
+        scholarshipProgram: item.scholarshipProgram || selectedScholarshipProgram || 'CHED TES',
+        isDuplicate: false
+    };
+
+    extractedRecords.push(restored);
+    allMasterlistRecords.push(restored);
+
+    if (window.supabaseClient) {
+        window.supabaseClient.from(getTableName()).insert([{
+            student_id: restored.studentId,
+            first_name: restored.firstName,
+            middle_name: restored.middleName,
+            last_name: restored.lastName,
+            name: `${restored.lastName}, ${restored.firstName} ${restored.middleName}`.trim(),
+            course: restored.course,
+            batch: restored.batch,
+            academic_year: restored.academicYear,
+            semester: restored.semester
+        }]).select('id').then(res => {
+            if (res.data && res.data[0]) restored.id = res.data[0].id;
+        }).catch(err => console.warn('Could not re-insert restored grantee to database:', err));
+    }
+
+    detectAndMarkMasterlistDuplicates(extractedRecords);
+    if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
+    renderTable();
+    renderStudentExistTable();
+    updateAnnexKPIs();
+
+    if (window.showToast) {
+        window.showToast(`Restored ${item.name || 'grantee'} to New Grantees Master List`, 'check-circle');
+    }
+}
+
+function deleteFromStudentExist(index) {
+    const item = studentExistList[index];
+    if (!item) return;
+
+    if (!confirm(`Permanently remove "${item.name || 'this student'}" from Student Exist?`)) {
+        return;
+    }
+
+    studentExistList.splice(index, 1);
+    saveStudentExistList();
+    renderStudentExistTable();
+    updateAnnexKPIs();
+
+    if (window.showToast) {
+        window.showToast(`Removed from Student Exist`, 'trash');
+    }
+}
+
+function clearStudentExistList() {
+    if (studentExistList.length === 0) {
+        if (window.showToast) window.showToast('Student Exist table is already empty.', 'info');
+        return;
+    }
+    if (!confirm('Are you sure you want to clear all duplicate records in Student Exist?')) {
+        return;
+    }
+    studentExistList = [];
+    saveStudentExistList();
+    renderStudentExistTable();
+    updateAnnexKPIs();
+    if (window.showToast) {
+        window.showToast('Cleared all Student Exist records', 'check-circle');
+    }
+}
+
+function exportStudentExistToExcel() {
+    if (!studentExistList || studentExistList.length === 0) {
+        if (window.showToast) window.showToast('No records in Student Exist to export.', 'info');
+        return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+        if (window.showToast) window.showToast('Excel library (SheetJS) is not loaded.', 'error');
+        return;
+    }
+
+    const rows = studentExistList.map((item, idx) => ({
+        'No.': idx + 1,
+        'Student ID': item.studentId || 'N/A',
+        'Last Name': item.lastName || '',
+        'First Name': item.firstName || '',
+        'Middle Name': item.middleName || '',
+        'Full Name': item.name || '',
+        'Degree Program': item.course || '',
+        'Batch': item.batch || '',
+        'Scholarship Program': item.scholarshipProgram || 'CHED TES',
+        'Academic Year': item.academicYear || selectedAcademicYear,
+        'Semester': item.semester || selectedSemester,
+        'Duplicate / Exist Reason': item.duplicateReason || '',
+        'Date Moved': item.movedAt ? new Date(item.movedAt).toLocaleDateString() : ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Student Exist');
+    const termClean = `${selectedAcademicYear || '2026-2027'}_${(selectedSemester || '1st_Sem').replace(/\s+/g, '_')}`;
+    XLSX.writeFile(wb, `Student_Exist_Duplicates_${termClean}.xlsx`);
+
+    if (window.showToast) {
+        window.showToast(`Exported ${studentExistList.length} Student Exist records to Excel`, 'check-circle');
+    }
+}
+
 function applyTermFilterToMasterlist(ay = selectedAcademicYear, sem = selectedSemester) {
     if (!allMasterlistRecords) allMasterlistRecords = [];
+
+    // If auto-import pipeline is actively processing, do not let background term loaders interrupt or clobber extractedRecords
+    if (isImportingMasterlist) {
+        return;
+    }
+
+    const matchesCurrentTerm = (!ay || ay === 'All' || ay === selectedAcademicYear) &&
+                               (!sem || sem === 'All' || sem === selectedSemester);
+
+    // If an imported file is currently loaded and displayed for the active term, preserve the extracted records (including detected duplicates)
+    if (currentFile && extractedRecords && extractedRecords.length > 0 && matchesCurrentTerm) {
+        detectAndMarkMasterlistDuplicates(extractedRecords);
+        if (badgeToggleGrantees) {
+            badgeToggleGrantees.textContent = extractedRecords.length;
+        }
+        updateStep1TargetTermBadge(ay, sem);
+        updateStep2TermIndicator(ay, sem);
+        populateBatchFilter();
+        renderTable();
+        updateClearMasterlistButtonVisibility();
+        return;
+    }
 
     // Filter allMasterlistRecords by selected AY and Semester
     extractedRecords = allMasterlistRecords.filter(r => {
@@ -558,6 +1283,9 @@ function applyTermFilterToMasterlist(ay = selectedAcademicYear, sem = selectedSe
         const matchSem = !sem || sem === 'All' || r.semester === sem;
         return matchAY && matchSem;
     });
+
+    // Detect and flag any duplicates automatically
+    detectAndMarkMasterlistDuplicates(extractedRecords);
 
     if (badgeToggleGrantees) {
         badgeToggleGrantees.textContent = extractedRecords.length;
@@ -1029,9 +1757,11 @@ async function parseDocumentText(text, selectedBatch) {
 async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarship) {
     const targetScholarship = selectedScholarship || getSelectedImportScholarship() || selectedScholarshipProgram || 'CHED TES';
     const normTargetSch = normalizeScholarshipName(targetScholarship);
+    const targetBatch = selectedBatch || 'Batch 1.2';
 
-    const existingMasterlistMap = new Map(); // normKey -> batch
-    const existingStudentScholarshipMap = new Map(); // identifier -> { scholarshipName, batch, source }
+    let masterDbRows = [];
+    let sgRows = [];
+    let f2Rows = [];
 
     try {
         const [masterRes, sgRes, f2Res] = await Promise.all([
@@ -1046,80 +1776,69 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
                 .select('id, student_number, last_name, given_name, middle_initial, tes_batch, scholarship_name')
         ]);
 
-        if (masterRes.data) {
-            masterRes.data.forEach(row => {
-                const norm = normalizeName(row.last_name, row.first_name, row.middle_name || '');
-                const rowBatch = row.batch || getCachedGranteeBatch(row) || 'Batch 1.2';
-                if (norm) existingMasterlistMap.set(norm, rowBatch);
-                if (row.name) {
-                    const normDirect = row.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (normDirect) existingMasterlistMap.set(normDirect, rowBatch);
-                }
-            });
-        }
-
-        if (sgRes.data) {
-            sgRes.data.forEach(sg => {
-                const rawSch = sg.scholarship_name || sg.scholarshipProgram || sg.documents?.scholarshipName || 'CHED TES';
-                const sch = String(rawSch).trim();
-                const sBatch = sg.documents?.batch || sg.batch || 'Batch 1.2';
-                const entry = { scholarshipName: sch, batch: sBatch, source: 'student_grantees' };
-
-                const sNo = String(sg.student_no || sg.studentId || '').trim();
-                if (sNo) existingStudentScholarshipMap.set(sNo, entry);
-
-                const normFull = String(sg.full_name || sg.fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                if (normFull) existingStudentScholarshipMap.set(normFull, entry);
-
-                const lName = sg.last_name || '';
-                const fName = sg.first_name || '';
-                const mName = sg.middle_name || '';
-                if (lName && fName) {
-                    const k = `${String(lName).toLowerCase().trim()}|${String(fName).toLowerCase().trim()}`;
-                    existingStudentScholarshipMap.set(k, entry);
-                    const normK = normalizeName(lName, fName, mName);
-                    if (normK) existingStudentScholarshipMap.set(normK, entry);
-                }
-            });
-        }
-
-        if (f2Res.data) {
-            f2Res.data.forEach(f2 => {
-                const sch = f2.scholarship_name || 'CHED TES';
-                const entry = { scholarshipName: sch, batch: f2.tes_batch || '1.2', source: 'annex_form_2' };
-                const f2No = String(f2.student_number || '').trim();
-                if (f2No) existingStudentScholarshipMap.set(f2No, entry);
-                const normKey = normalizeName(f2.last_name, f2.given_name, f2.middle_initial);
-                if (normKey) existingStudentScholarshipMap.set(normKey, entry);
-                const k = `${String(f2.last_name).toLowerCase().trim()}|${String(f2.given_name).toLowerCase().trim()}`;
-                existingStudentScholarshipMap.set(k, entry);
-            });
-        }
+        masterDbRows = masterRes?.data || [];
+        sgRows = sgRes?.data || [];
+        f2Rows = f2Res?.data || [];
     } catch (e) {
         console.warn('Could not query databases for duplicate & scholarship conflict check:', e);
     }
 
-    // Also consult local cached scholarships
-    try {
-        const localSchMap = JSON.parse(localStorage.getItem('scholardoc_grantee_scholarships') || '{}');
-        Object.entries(localSchMap).forEach(([k, sch]) => {
-            if (k && sch && !existingStudentScholarshipMap.has(k)) {
-                existingStudentScholarshipMap.set(k, { scholarshipName: sch, batch: '1.2', source: 'local_cache' });
+    // Refresh cachedStudentGranteesList with comprehensive records
+    const combinedSg = [
+        ...sgRows,
+        ...f2Rows.map(f2 => ({
+            id: f2.id,
+            studentId: f2.student_number,
+            lastName: f2.last_name,
+            firstName: f2.given_name,
+            middleName: f2.middle_initial,
+            name: `${f2.last_name}, ${f2.given_name} ${f2.middle_initial || ''}`.trim(),
+            batch: f2.tes_batch || 'Batch 1.2',
+            scholarshipProgram: f2.scholarship_name || 'CHED TES',
+            source: 'annex_form_2'
+        }))
+    ];
+
+    if (typeof StudentSyncService !== 'undefined' && StudentSyncService.getAllStudents) {
+        try {
+            const syncList = StudentSyncService.getAllStudents();
+            if (Array.isArray(syncList)) {
+                syncList.forEach(s => combinedSg.push(s));
+            }
+        } catch (_) { }
+    }
+
+    if (cachedStudentGranteesList && cachedStudentGranteesList.length > 0) {
+        cachedStudentGranteesList.forEach(c => {
+            if (!combinedSg.some(x => x.id && c.id && x.id === c.id)) {
+                combinedSg.push(c);
             }
         });
-    } catch (_) { }
+    }
+    cachedStudentGranteesList = combinedSg;
 
-    const seenInFile = new Set();
+    // Build comparable pools
+    const studentGranteesPool = (cachedStudentGranteesList || []).map(s => getComparableName(s));
+
+    const combinedMaster = [...masterDbRows];
+    (allMasterlistRecords || []).forEach(m => {
+        if (!combinedMaster.some(x => x.id && m.id && x.id === m.id)) {
+            combinedMaster.push(m);
+        }
+    });
+    const masterPool = combinedMaster.map(m => getComparableName(m));
+
+    loadStudentExistList();
+    const studentExistPool = (studentExistList || []).map(e => getComparableName(e));
+
+    const seenInFile = [];
     let skippedCount = 0;
     let importedCount = 0;
     let conflictCount = 0;
-    const targetBatch = selectedBatch || 'Batch 1.2';
 
-    extractedRecords = (records || []).map(r => {
+    extractedRecords = (records || []).map((r, rIdx) => {
         const recordBatch = r.batch || targetBatch;
-        const normKey = normalizeName(r.lastName, r.firstName, r.middleName);
-        const nameKey = `${String(r.lastName || '').toLowerCase().trim()}|${String(r.firstName || '').toLowerCase().trim()}`;
-        const sId = String(r.studentId || r.student_id || '').trim();
+        const cand = getComparableName({ ...r, batch: recordBatch, scholarship: targetScholarship });
 
         let hasScholarshipConflict = false;
         let existingScholarship = '';
@@ -1127,40 +1846,58 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
         let isDuplicate = false;
         let duplicateReason = '';
 
-        // Check if student exists in another scholarship program
-        const registeredInfo = (sId && existingStudentScholarshipMap.get(sId)) ||
-            (normKey && existingStudentScholarshipMap.get(normKey)) ||
-            (nameKey && existingStudentScholarshipMap.get(nameKey));
+        if (!cand.last && !cand.first && !cand.cleanFull) {
+            isDuplicate = true;
+            duplicateReason = 'Empty grantee name';
+        }
 
-        if (registeredInfo && registeredInfo.scholarshipName) {
-            const regSchNorm = normalizeScholarshipName(registeredInfo.scholarshipName);
-            if (regSchNorm !== normTargetSch) {
-                // CONFLICT: already registered in another scholarship!
-                hasScholarshipConflict = true;
-                existingScholarship = registeredInfo.scholarshipName;
-                conflictReason = `Already registered under ${registeredInfo.scholarshipName}`;
-                isDuplicate = true; // Exclude from saving
-                duplicateReason = conflictReason;
+        // 1. Check duplicate within the uploaded document
+        if (!isDuplicate) {
+            const fileMatch = seenInFile.find(exist => areNamesMatching(cand, exist));
+            if (fileMatch) {
+                isDuplicate = true;
+                duplicateReason = 'Duplicate entry in uploaded document';
             }
         }
 
-        if (!hasScholarshipConflict) {
-            if (!normKey) {
+        // 2. Check Student Grantees table (student_grantees & annex_form_2)
+        if (!isDuplicate) {
+            const sgMatch = studentGranteesPool.find(exist => areNamesMatching(cand, exist));
+            if (sgMatch) {
+                const regSchNorm = normalizeScholarshipName(sgMatch.scholarship);
+                if (regSchNorm && normTargetSch && regSchNorm !== normTargetSch) {
+                    hasScholarshipConflict = true;
+                    existingScholarship = sgMatch.scholarship || 'Another Scholarship';
+                    conflictReason = `Already registered under ${existingScholarship}`;
+                    isDuplicate = true;
+                    duplicateReason = conflictReason;
+                } else if (!r.id) {
+                    const existsInMaster = masterPool.some(exist => (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
+                    if (existsInMaster) {
+                        isDuplicate = true;
+                        const mBatch = sgMatch.batch || recordBatch;
+                        duplicateReason = `Already exists in Student Grantees (${mBatch})`;
+                    }
+                }
+            }
+        }
+
+        // 3. Check New Grantees Master List (new_grantees_masterlist & allMasterlistRecords)
+        if (!isDuplicate && !r.id) {
+            const mlMatch = masterPool.find(exist => (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
+            if (mlMatch) {
                 isDuplicate = true;
-                duplicateReason = 'Empty name';
-            } else if (seenInFile.has(normKey)) {
+                const mBatch = mlMatch.batch || recordBatch;
+                duplicateReason = `Already exists in Master List (${mBatch})`;
+            }
+        }
+
+        // 4. Check Student Exist table
+        if (!isDuplicate) {
+            const existMatch = studentExistPool.find(exist => areNamesMatching(cand, exist));
+            if (existMatch) {
                 isDuplicate = true;
-                duplicateReason = 'Duplicate in document';
-            } else if (existingMasterlistMap.has(normKey)) {
-                isDuplicate = true;
-                const prevBatch = existingMasterlistMap.get(normKey);
-                duplicateReason = prevBatch === recordBatch ? `Already in ${recordBatch}` : `Already registered in ${prevBatch}`;
-            } else if (registeredInfo && normalizeScholarshipName(registeredInfo.scholarshipName) === normTargetSch) {
-                // Already registered under the same scholarship program
-                isDuplicate = true;
-                duplicateReason = `Already registered in ${registeredInfo.scholarshipName}`;
-            } else {
-                seenInFile.add(normKey);
+                duplicateReason = 'Already in Student Exist table';
             }
         }
 
@@ -1170,6 +1907,7 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
             skippedCount++;
         } else {
             importedCount++;
+            seenInFile.push(cand);
         }
 
         return {
@@ -1223,38 +1961,39 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
 async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, explicitScholarship) {
     if (!file) return;
 
-    const selectedTerm = explicitTerm || getSelectedImportTerm();
-    if (!selectedTerm) {
-        return;
-    }
-
-    const selectedScholarship = explicitScholarship || getSelectedImportScholarship();
-    if (!selectedScholarship) {
-        return;
-    }
-
-    const selectedBatch = explicitBatch || getSelectedImportBatch();
-    if (!selectedBatch) {
-        return;
-    }
-
-    if (btnExtract) {
-        btnExtract.disabled = true;
-        btnExtract.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Auto-Extracting...';
-    }
-    if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
-    if (ocrStatusText) ocrStatusText.textContent = `Extracting grantee data for ${selectedScholarship} • ${selectedBatch} (${selectedTerm.academicYear} • ${selectedTerm.semester})...`;
-    if (ocrProgressBar) {
-        ocrProgressBar.style.width = '35%';
-        ocrProgressBar.style.animation = 'pulse 1.5s infinite';
-    }
-
-    extractedRecords = [];
-    if (importSummaryCard) importSummaryCard.classList.add('hidden');
-    populateBatchFilter();
-    renderTable();
-
+    isImportingMasterlist = true;
     try {
+        const selectedTerm = explicitTerm || getSelectedImportTerm();
+        if (!selectedTerm) {
+            return;
+        }
+
+        const selectedScholarship = explicitScholarship || getSelectedImportScholarship();
+        if (!selectedScholarship) {
+            return;
+        }
+
+        const selectedBatch = explicitBatch || getSelectedImportBatch();
+        if (!selectedBatch) {
+            return;
+        }
+
+        if (btnExtract) {
+            btnExtract.disabled = true;
+            btnExtract.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Auto-Extracting...';
+        }
+        if (ocrProgressContainer) ocrProgressContainer.classList.remove('hidden');
+        if (ocrStatusText) ocrStatusText.textContent = `Extracting grantee data for ${selectedScholarship} • ${selectedBatch} (${selectedTerm.academicYear} • ${selectedTerm.semester})...`;
+        if (ocrProgressBar) {
+            ocrProgressBar.style.width = '35%';
+            ocrProgressBar.style.animation = 'pulse 1.5s infinite';
+        }
+
+        extractedRecords = [];
+        if (importSummaryCard) importSummaryCard.classList.add('hidden');
+        populateBatchFilter();
+        renderTable();
+
         const ext = file.name.split('.').pop().toLowerCase();
         let rawRecords = [];
 
@@ -1360,26 +2099,24 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
             }
         }
 
-        // Merge newly saved and duplicate records into allMasterlistRecords master state with target batch, term & scholarship
-        extractedRecords.forEach(r => {
+        // Merge newly saved unique records into allMasterlistRecords master state
+        validToInsert.forEach(r => {
+            const cand = getComparableName(r);
             const existing = allMasterlistRecords.find(x =>
                 (x.id && r.id && x.id === r.id) ||
-                normalizeName(x.lastName || x.last_name, x.firstName || x.first_name, x.middleName || x.middle_name) ===
-                normalizeName(r.lastName || r.last_name, r.firstName || r.first_name, r.middleName || r.middle_name)
+                areNamesMatching(getComparableName(x), cand)
             );
             if (existing) {
-                if (!r.hasScholarshipConflict) {
-                    existing.batch = selectedBatch;
-                    existing.scholarshipProgram = selectedScholarship;
-                    existing.academicYear = selectedTerm.academicYear;
-                    existing.semester = selectedTerm.semester;
-                }
+                existing.batch = selectedBatch;
+                existing.scholarshipProgram = selectedScholarship;
+                existing.academicYear = selectedTerm.academicYear;
+                existing.semester = selectedTerm.semester;
                 if (r.id && !existing.id) existing.id = r.id;
             } else {
                 allMasterlistRecords.push({
                     ...r,
                     batch: selectedBatch,
-                    scholarshipProgram: r.hasScholarshipConflict ? (r.existingScholarship || selectedScholarship) : selectedScholarship,
+                    scholarshipProgram: selectedScholarship,
                     academicYear: selectedTerm.academicYear,
                     semester: selectedTerm.semester
                 });
@@ -1565,28 +2302,34 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
                 }
             } catch (_) { }
         } else {
-            if (conflictCount > 0) {
-                if (ocrStatusText) ocrStatusText.textContent = `Completed: ${conflictCount} student${conflictCount > 1 ? 's were' : ' was'} excluded due to conflicts with existing scholarship programs.`;
+            if (conflictCount > 0 && skippedCount === 0) {
+                if (ocrStatusText) ocrStatusText.textContent = `Completed: ${conflictCount} student${conflictCount > 1 ? 's were' : ' was'} excluded due to conflicts with existing scholarship programs. 0 duplicate records created.`;
                 if (ocrProgressBar) ocrProgressBar.style.width = '100%';
                 if (window.showToast) {
                     window.showToast(`${conflictCount} student${conflictCount > 1 ? 's were' : ' was'} excluded due to existing scholarship registrations.${dupMsg}`, 'alert-triangle');
                 }
-            } else {
-                // All records were already in masterlist table; updated batch & term across records
-                if (ocrStatusText) ocrStatusText.textContent = `All ${extractedRecords.length} records updated to ${selectedBatch} (${selectedTerm.academicYear} • ${selectedTerm.semester}).`;
+            } else if (skippedCount > 0) {
+                if (ocrStatusText) ocrStatusText.textContent = `Completed: All ${extractedRecords.length} records already exist in Student Grantees / Master List. Flagged in red (0 duplicates saved).`;
                 if (ocrProgressBar) ocrProgressBar.style.width = '100%';
-
                 if (window.showToast) {
-                    window.showToast(`All ${extractedRecords.length} records updated to ${selectedBatch} (${selectedTerm.academicYear} • ${selectedTerm.semester}).`, 'check-circle');
+                    window.showToast(`All ${extractedRecords.length} student(s) already exist in Student Grantees / Master List. Flagged in red (0 duplicate records saved).`, 'alert-circle');
                 }
+            } else {
+                if (ocrStatusText) ocrStatusText.textContent = `Completed: No new unique records to import.`;
+                if (ocrProgressBar) ocrProgressBar.style.width = '100%';
             }
         }
 
-        // Re-render table and badges according to active term filter
-        applyTermFilterToMasterlist(selectedTerm.academicYear, selectedTerm.semester);
+        // Render extracted records with duplicate indicators and update badges
+        updateStep1TargetTermBadge(selectedTerm.academicYear, selectedTerm.semester);
+        updateStep2TermIndicator(selectedTerm.academicYear, selectedTerm.semester);
+        populateBatchFilter();
+        renderTable();
+        updateClearMasterlistButtonVisibility();
 
-        // Sync with Annex 5 and verification for active term grantees
-        const granteesForVerification = extractedRecords.map(m => ({
+        // Sync with Annex 5 and verification for active term grantees (only truly new, non-duplicate grantees)
+        const validGrantees = (extractedRecords || []).filter(r => !r.isDuplicate && !r.hasScholarshipConflict);
+        const granteesForVerification = validGrantees.map(m => ({
             id: m.id,
             name: m.name || `${m.lastName || m.last_name || ''}, ${m.firstName || m.first_name || ''} ${m.middleName || m.middle_name || ''}`.trim(),
             last_name: m.lastName || m.last_name,
@@ -1598,6 +2341,11 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
             year: '1'
         }));
         await loadSchoolStudentsAndVerify(granteesForVerification);
+
+        // Ensure all verified Form 2 students are immediately synced to Student Grantees
+        if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+            await StudentSyncService.loadAndSyncStudents();
+        }
 
         if (btnExtract) {
             btnExtract.disabled = true;
@@ -1614,6 +2362,7 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
             btnExtract.innerHTML = '<i class="icon-refresh-cw" style="font-size: 16px;"></i> Retry Import';
         }
     } finally {
+        isImportingMasterlist = false;
         setTimeout(() => {
             if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
         }, 3000);
@@ -1666,13 +2415,40 @@ function renderTable() {
     if (!extractedTableBody) return;
     updateClearMasterlistButtonVisibility();
 
+    // Update duplicate detection badge and Move All button
+    const dupCount = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).length;
+    if (!badgeMasterlistDuplicates) badgeMasterlistDuplicates = document.getElementById('badge-masterlist-duplicates');
+    if (!countMasterlistDuplicates) countMasterlistDuplicates = document.getElementById('count-masterlist-duplicates');
+    if (!btnMoveAllDuplicates) btnMoveAllDuplicates = document.getElementById('btn-move-all-duplicates');
+
+    if (badgeMasterlistDuplicates) {
+        if (dupCount > 0) {
+            badgeMasterlistDuplicates.classList.remove('hidden');
+            badgeMasterlistDuplicates.style.display = 'inline-flex';
+            if (countMasterlistDuplicates) countMasterlistDuplicates.textContent = dupCount;
+        } else {
+            badgeMasterlistDuplicates.classList.add('hidden');
+            badgeMasterlistDuplicates.style.display = 'none';
+        }
+    }
+    if (btnMoveAllDuplicates) {
+        if (dupCount > 0) {
+            btnMoveAllDuplicates.classList.remove('hidden');
+            btnMoveAllDuplicates.style.display = 'inline-flex';
+            btnMoveAllDuplicates.innerHTML = `<i class="icon-arrow-right" style="font-size: 12px;"></i> Move All Duplicates (${dupCount}) to Student Exist`;
+        } else {
+            btnMoveAllDuplicates.classList.add('hidden');
+            btnMoveAllDuplicates.style.display = 'none';
+        }
+    }
+
     if (extractedRecords.length === 0) {
         const hasFilter = (selectedAcademicYear && selectedAcademicYear !== 'All') || (selectedSemester && selectedSemester !== 'All');
         const termLabel = (selectedAcademicYear !== 'All' ? `A.Y. ${selectedAcademicYear}` : 'All School Years') +
             (selectedSemester !== 'All' ? ` (${selectedSemester})` : '');
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
+                <td colspan="5" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <div style="position: relative;">
                             <i class="icon-file-search" style="font-size: 44px; color: #cbd5e1; opacity: 0.6;"></i>
@@ -1686,7 +2462,7 @@ function renderTable() {
         return;
     }
 
-    const filterValue = filterBatch ? filterBatch.value : 'All Batches';
+    const filterValue = (filterBatch && filterBatch.value && filterBatch.value.trim() !== '') ? filterBatch.value.trim() : 'All Batches';
 
     const displayRecords = extractedRecords.map((record, index) => ({ record, index }))
         .filter(item => {
@@ -1701,7 +2477,7 @@ function renderTable() {
     if (displayRecords.length === 0) {
         extractedTableBody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
+                <td colspan="5" style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <i class="icon-filter" style="font-size: 38px; color: #cbd5e1;"></i>
                         <span style="font-size: 14px; font-weight: 700; color: var(--text-primary);">No records match batch "${filterValue}"</span>
@@ -1719,16 +2495,17 @@ function renderTable() {
         let statusBadge = '';
         if (record.hasScholarshipConflict) {
             tr.style.background = 'rgba(254, 226, 226, 0.45)';
-            tr.style.borderLeft = '3px solid #ef4444';
-            statusBadge = `<span class="badge-scholarship-conflict" title="${record.conflictReason || `Already registered in ${record.existingScholarship}`}" style="background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.35); padding: 3px 8px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; white-space: nowrap;">
+            tr.style.borderLeft = '4px solid #ef4444';
+            statusBadge = `<span class="badge-scholarship-conflict" title="${record.conflictReason || `Already registered in ${record.existingScholarship}`}" style="background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1.5px solid rgba(239, 68, 68, 0.38); padding: 3px 8px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; white-space: nowrap;">
                 <i class="icon-alert-triangle" style="font-size: 13px; color: #ef4444;"></i>
                 Registered in: ${record.existingScholarship}
             </span>`;
         } else if (record.isDuplicate) {
-            tr.style.background = 'rgba(254, 243, 199, 0.3)';
-            statusBadge = `<span title="${record.duplicateReason || 'Duplicate'}" style="background: rgba(245, 158, 11, 0.15); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 8px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; white-space: nowrap;">
-                <i class="icon-alert-triangle" style="font-size: 12px;"></i>
-                ${record.duplicateReason || 'Duplicate'}
+            tr.style.background = 'rgba(254, 226, 226, 0.45)';
+            tr.style.borderLeft = '4px solid #ef4444';
+            statusBadge = `<span class="badge-duplicate-indicator" title="${record.duplicateReason || 'Duplicate student already exists in masterlist'}" style="background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1.5px solid rgba(239, 68, 68, 0.38); padding: 3px 8px; border-radius: 8px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; white-space: nowrap;">
+                <i class="icon-alert-circle" style="font-size: 13px; color: #ef4444;"></i>
+                ${record.duplicateReason || 'Already Exists'}
             </span>`;
         }
 
@@ -1751,8 +2528,35 @@ function renderTable() {
                     ${String(record.batch || '1.2').replace(/^batch\s*/i, '').trim()}
                 </span>
             </td>
+            <td style="padding: 6px 12px; text-align: center; white-space: nowrap;">
+                <div style="display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
+                    <button type="button" class="btn-action-move" data-index="${index}" title="Move to Student Exist table"
+                        style="padding: 5px 10px; border-radius: 8px; border: 1px solid ${record.isDuplicate || record.hasScholarshipConflict ? '#fca5a5' : '#cbd5e1'}; background: ${record.isDuplicate || record.hasScholarshipConflict ? 'rgba(239, 68, 68, 0.12)' : 'rgba(241, 245, 249, 0.8)'}; color: ${record.isDuplicate || record.hasScholarshipConflict ? '#dc2626' : '#475569'}; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s ease;">
+                        <i class="icon-arrow-right" style="font-size: 11px;"></i> Move
+                    </button>
+                    <button type="button" class="btn-action-delete" data-index="${index}" title="Delete record from masterlist"
+                        style="padding: 5px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: rgba(241, 245, 249, 0.8); color: #64748b; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s ease;">
+                        <i class="icon-trash-2" style="font-size: 11px;"></i> Delete
+                    </button>
+                </div>
+            </td>
         `;
         extractedTableBody.appendChild(tr);
+    });
+
+    // Wire listeners for Move & Delete actions
+    extractedTableBody.querySelectorAll('.btn-action-move').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
+            moveRecordToStudentExist(idx);
+        });
+    });
+
+    extractedTableBody.querySelectorAll('.btn-action-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
+            deleteMasterlistRecord(idx);
+        });
     });
 
     // Listeners for inline edits
@@ -2146,7 +2950,10 @@ function renderSchoolStudentsTable(students) {
     if (!tbody) return;
 
     if (!students || students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found.</td></tr>`;
+        const termDesc = (selectedAcademicYear && selectedSemester && selectedAcademicYear !== 'All' && selectedSemester !== 'All')
+            ? ` for A.Y. ${selectedAcademicYear} (${selectedSemester})`
+            : '';
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 32px; color: var(--text-secondary);">No school student records found${termDesc}.</td></tr>`;
         return;
     }
 
@@ -2811,6 +3618,7 @@ async function fetchAllSchoolStudents(supabaseClient) {
             const { data, error } = await supabaseClient
                 .from('school_students')
                 .select('*')
+                .order('student_no', { ascending: true })
                 .range(from, to);
 
             if (error || !data || data.length === 0) {
@@ -2831,9 +3639,159 @@ async function fetchAllSchoolStudents(supabaseClient) {
     return allStudents;
 }
 
+function autoHealSchoolStudentTerms(allDbStudents) {
+    if (!allDbStudents || allDbStudents.length === 0) return;
+    try {
+        let termMap = {};
+        try { termMap = JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}'); } catch (_) { }
+
+        let needSave = false;
+        if (!termMap['2026-2027_1st Semester'] || termMap['2026-2027_1st Semester'].length < 1600) {
+            const firstSemStudents = allDbStudents.filter(s => !s.created_at || s.created_at < '2026-11-10T05:28:00Z');
+            const targetFirstSem = firstSemStudents.length > 0 ? firstSemStudents : allDbStudents;
+            if (targetFirstSem.length > 0) {
+                termMap['2026-2027_1st Semester'] = targetFirstSem.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+                needSave = true;
+            }
+        }
+
+        if (!termMap['2026-2027_2nd Semester'] || termMap['2026-2027_2nd Semester'].length < 1500) {
+            const secondSemStudents = allDbStudents.filter(s => (s.updated_at && s.updated_at >= '2026-11-10T05:28:00Z') || (s.created_at && s.created_at >= '2026-11-10T05:28:00Z'));
+            if (secondSemStudents.length > 0) {
+                termMap['2026-2027_2nd Semester'] = secondSemStudents.map(s => String(s.student_no || s.studentNo || s.studentId || '').trim()).filter(Boolean);
+                needSave = true;
+            }
+        }
+
+        if (needSave) {
+            localStorage.setItem('scholardoc_school_term_students', JSON.stringify(termMap));
+            const studentTermsCache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+            Object.entries(termMap).forEach(([tKey, sNos]) => {
+                const parts = tKey.split('_');
+                const tAy = parts[0];
+                const tSem = parts.slice(1).join('_');
+                sNos.forEach(sNo => {
+                    let existing = studentTermsCache[sNo];
+                    let list = Array.isArray(existing) ? existing : (existing && existing.academicYear ? [existing] : []);
+                    if (!list.some(t => t.academicYear === tAy && t.semester === tSem)) {
+                        list.push({ academicYear: tAy, semester: tSem });
+                    }
+                    studentTermsCache[sNo] = list;
+                });
+            });
+            localStorage.setItem('scholardoc_school_student_terms', JSON.stringify(studentTermsCache));
+        }
+    } catch (e) {
+        console.warn('Error during autoHealSchoolStudentTerms:', e);
+    }
+}
+
+function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new Map()) {
+    if (!targetAy || targetAy === 'All') {
+        if (!targetSem || targetSem === 'All') return true;
+    }
+
+    const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
+    const sName = String(s.full_name || s.fullName || s.name || '').toLowerCase().trim();
+    const sId = s.id ? String(s.id).trim() : null;
+    const termKey = `${targetAy}_${targetSem}`;
+
+    try {
+        const termStudentsMap = JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
+        if (termStudentsMap && termStudentsMap[termKey]) {
+            const studentSet = new Set(termStudentsMap[termKey]);
+            if (sNo && studentSet.has(sNo)) return true;
+            if (sName && studentSet.has(sName)) return true;
+            if (sId && studentSet.has(sId)) return true;
+            return false;
+        }
+    } catch (_) { }
+
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+        const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
+        if (Array.isArray(entry)) {
+            const hasMatch = entry.some(t => {
+                const matchAy = !targetAy || targetAy === 'All' || t.academicYear === targetAy;
+                const matchSem = !targetSem || targetSem === 'All' || t.semester === targetSem;
+                return matchAy && matchSem;
+            });
+            if (hasMatch) return true;
+        } else if (entry && entry.academicYear && entry.semester) {
+            const matchAy = !targetAy || targetAy === 'All' || entry.academicYear === targetAy;
+            const matchSem = !targetSem || targetSem === 'All' || entry.semester === targetSem;
+            if (matchAy && matchSem) return true;
+        }
+    } catch (_) { }
+
+    const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+    if (matchedSt) {
+        const ay = matchedSt.academic_year || matchedSt.academicYear;
+        const sem = matchedSt.semester;
+        if (ay && sem) {
+            const matchAy = !targetAy || targetAy === 'All' || ay === targetAy;
+            const matchSem = !targetSem || targetSem === 'All' || sem === targetSem;
+            if (matchAy && matchSem) return true;
+        }
+    }
+
+    const objAy = s.academicYear || s.academic_year;
+    const objSem = s.semester;
+    if (objAy && objSem) {
+        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
+        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
+        return matchAy && matchSem;
+    }
+
+    return false;
+}
+
+function getSchoolStudentTerm(s, studentProfileMap = new Map(), targetAy = selectedAcademicYear, targetSem = selectedSemester) {
+    if (targetAy && targetSem && targetAy !== 'All' && targetSem !== 'All') {
+        if (isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap)) {
+            return { academicYear: targetAy, semester: targetSem };
+        }
+    }
+
+    const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
+    const sName = String(s.full_name || s.fullName || s.name || '').toLowerCase().trim();
+    const sId = s.id ? String(s.id).trim() : null;
+
+    let ay = s.academic_year || s.academicYear;
+    let sem = s.semester;
+    if (ay && sem) return { academicYear: ay, semester: sem };
+
+    try {
+        const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
+        const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
+        if (Array.isArray(entry) && entry.length > 0) {
+            const activeMatch = entry.find(t => (!targetAy || targetAy === 'All' || t.academicYear === targetAy) && (!targetSem || targetSem === 'All' || t.semester === targetSem));
+            if (activeMatch) return activeMatch;
+            return entry[0];
+        } else if (entry && entry.academicYear && entry.semester) {
+            return { academicYear: entry.academicYear, semester: entry.semester };
+        }
+    } catch (_) { }
+
+    const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
+    if (matchedSt) {
+        ay = matchedSt.academic_year || matchedSt.academicYear;
+        sem = matchedSt.semester;
+        if (ay && sem) return { academicYear: ay, semester: sem };
+    }
+
+    return {
+        academicYear: targetAy && targetAy !== 'All' ? targetAy : '2026-2027',
+        semester: targetSem && targetSem !== 'All' ? targetSem : '1st Semester'
+    };
+}
+
 async function loadSchoolStudentsAndVerify(grantees) {
     try {
         let dbStudents = await fetchAllSchoolStudents(window.supabaseClient);
+        if (dbStudents && dbStudents.length > 0) {
+            autoHealSchoolStudentTerms(dbStudents);
+        }
 
         let { data: fallbackStudents } = await window.supabaseClient
             .from('student_grantees')
@@ -2850,18 +3808,35 @@ async function loadSchoolStudentsAndVerify(grantees) {
         });
 
         if (dbStudents && dbStudents.length > 0) {
-            schoolStudents = dbStudents.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+            const filteredSchool = dbStudents.filter(s => {
+                return isSchoolStudentInTerm(s, selectedAcademicYear, selectedSemester, studentProfileMap);
+            });
+            schoolStudents = filteredSchool.map(s => {
+                const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                mapped.academicYear = selectedAcademicYear !== 'All' ? selectedAcademicYear : (s.academic_year || '2026-2027');
+                mapped.semester = selectedSemester !== 'All' ? selectedSemester : (s.semester || '1st Semester');
+                return mapped;
+            });
         } else if (fallbackStudents && fallbackStudents.length > 0) {
-            schoolStudents = fallbackStudents.map(s => mapSchoolStudentRecord(s, studentProfileMap));
+            const filteredSchool = fallbackStudents.filter(s => {
+                return isSchoolStudentInTerm(s, selectedAcademicYear, selectedSemester, studentProfileMap);
+            });
+            schoolStudents = filteredSchool.map(s => {
+                const mapped = mapSchoolStudentRecord(s, studentProfileMap);
+                mapped.academicYear = selectedAcademicYear !== 'All' ? selectedAcademicYear : (s.academic_year || '2026-2027');
+                mapped.semester = selectedSemester !== 'All' ? selectedSemester : (s.semester || '1st Semester');
+                return mapped;
+            });
         } else {
             schoolStudents = [];
         }
 
         renderSchoolStudentsTable(schoolStudents);
 
-        if (!grantees || grantees.length === 0) {
-            if (extractedRecords && extractedRecords.length > 0) {
-                grantees = extractedRecords.map(m => ({
+        if (grantees === undefined || grantees === null) {
+            const valid = (extractedRecords || []).filter(r => !r.isDuplicate && !r.hasScholarshipConflict);
+            if (valid.length > 0) {
+                grantees = valid.map(m => ({
                     id: m.id,
                     name: m.name || `${m.last_name || m.lastName || ''}, ${m.first_name || m.firstName || ''} ${m.middle_name || m.middleName || ''}`.trim(),
                     last_name: m.last_name || m.lastName,
@@ -2872,11 +3847,48 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     course: m.course || 'BSIT',
                     year: m.year || '1'
                 }));
+            } else {
+                grantees = [];
             }
         }
 
-        // 1. Check if Admin has already verified and categorized records in Review Queue
-        const savedSync = AnnexSyncService.getVerifiedData();
+        // 1. Strict Isolation: First check if authentic records already exist in Supabase for this active term
+        const dbSync = await AnnexSyncService.loadFromSupabase({
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester,
+            fallbackToLatest: false
+        });
+
+        if (dbSync && dbSync.fromDb && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
+            const dbItems = [...(dbSync.form2List || []), ...(dbSync.form3List || [])];
+            const hasUnverifiedGrantees = (grantees || []).some(g => !dbItems.some(d => AnnexSyncService.isSameStudent(d, g)));
+            if (!hasUnverifiedGrantees) {
+                verifiedForm2List = dbSync.form2List || [];
+                const existPool = (studentExistList || []).map(e => getComparableName(e));
+                verifiedForm3List = (dbSync.form3List || []).filter(item => {
+                    const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
+                    if (String(r).includes('Categorized from Student Exist')) return false;
+                    if ((studentExistList || []).some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
+                    const cand = getComparableName(item.grantee || item.matchedStudent || item);
+                    if (existPool.some(e => areNamesMatching(cand, e))) return false;
+                    return true;
+                });
+                needsReviewList = [];
+                updateAnnexKPIs();
+                renderAnnexForm2Table(verifiedForm2List);
+                renderAnnexForm3Table(verifiedForm3List);
+                renderAnnexReviewQueue(needsReviewList);
+                if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+                    StudentSyncService.loadAndSyncStudents().catch(() => {});
+                }
+                return;
+            }
+        }
+
+        // 2. Check if verified data is cached specifically for this active term
+        const savedSync = (dbSync && dbSync.fromDb && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0))
+            ? dbSync
+            : AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
         if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
             if (grantees && grantees.length > 0) {
                 const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -2947,7 +3959,7 @@ async function loadSchoolStudentsAndVerify(grantees) {
                     }
                 }
 
-                const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview);
+                const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview, studentExistList);
                 verifiedForm2List = deduped.form2List;
                 verifiedForm3List = deduped.form3List;
                 needsReviewList = deduped.needsReviewList;
@@ -2958,19 +3970,50 @@ async function loadSchoolStudentsAndVerify(grantees) {
             }
         } else {
             const result = VerificationService.runBatchVerification(grantees || [], schoolStudents);
-            const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList);
+            const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList, studentExistList);
             verifiedForm2List = deduped.form2List;
             verifiedForm3List = deduped.form3List;
             needsReviewList = deduped.needsReviewList;
+        }
 
-            AnnexSyncService.saveVerifiedData({
-                form2List: verifiedForm2List,
-                form3List: verifiedForm3List,
-                needsReviewList: needsReviewList,
-                updatedBy: 'Super Admin (Initial Verification)',
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester
-            });
+        // Strictly exclude any student who already exists (in Student Exist, or flagged duplicate/conflict) from Form 3
+        const currentExist = studentExistList || loadStudentExistList(selectedAcademicYear, selectedSemester) || [];
+        const existPool = currentExist.map(e => getComparableName(e));
+        const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
+        const allExcludePool = [...existPool, ...dupPool];
+
+        verifiedForm3List = (verifiedForm3List || []).filter(f3 => {
+            if (!f3) return false;
+            if (f3.isDuplicate || f3.grantee?.isDuplicate || f3.matchedStudent?.isDuplicate) return false;
+            if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, f3))) return false;
+            const cand = getComparableName(f3.grantee || f3.matchedStudent || f3);
+            if (allExcludePool.some(ex => areNamesMatching(cand, ex))) return false;
+            return true;
+        });
+
+        const hasVerifiedRecords = (verifiedForm2List && verifiedForm2List.length > 0) || (verifiedForm3List && verifiedForm3List.length > 0);
+        AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            studentExistList: currentExist,
+            needsReviewList: needsReviewList,
+            updatedBy: 'Super Admin (Verification Sync)',
+            syncToDb: false,
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester
+        });
+
+        if (hasVerifiedRecords) {
+            await AnnexSyncService.saveToSupabase(
+                verifiedForm2List,
+                verifiedForm3List,
+                'Super Admin (Verification Sync)',
+                selectedAcademicYear,
+                selectedSemester
+            );
+            if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+                await StudentSyncService.loadAndSyncStudents();
+            }
         }
 
         updateAnnexKPIs();
@@ -3092,24 +4135,29 @@ function resolveSuperAdminReviewItem(reviewIndex, targetForm, specialReason = 'N
 function updateAnnexKPIs() {
     const f2Count = verifiedForm2List.length;
     const f3Count = verifiedForm3List.length;
+    const existCount = (studentExistList || []).length;
     const revCount = needsReviewList.length;
     const totalBilling = f2Count * 10000;
 
     const b2 = document.getElementById('sa-badge-form2-count');
     const b3 = document.getElementById('sa-badge-form3-count');
+    const bExist = document.getElementById('sa-badge-exist-count');
     const bRev = document.getElementById('sa-badge-review-count');
 
     if (b2) b2.textContent = f2Count;
     if (b3) b3.textContent = f3Count;
+    if (bExist) bExist.textContent = existCount;
     if (bRev) bRev.textContent = revCount;
 
     const countF2 = document.getElementById('sa-stat-form2-count');
     const amtF2 = document.getElementById('sa-stat-form2-amount');
     const countF3 = document.getElementById('sa-stat-form3-count');
+    const countExist = document.getElementById('sa-stat-exist-count');
 
     if (countF2) countF2.textContent = `${f2Count} Enrolled Grantees`;
     if (amtF2) amtF2.textContent = `\u20B1${totalBilling.toLocaleString('en-US', { minimumFractionDigits: 2 })} Total Billing`;
-    if (countF3) countF3.textContent = `${f3Count} Not Included Grantees`;
+    if (countF3) countF3.textContent = `${f3Count} Not Included`;
+    if (countExist) countExist.textContent = `${existCount} Duplicate Grantee${existCount === 1 ? '' : 's'}`;
 }
 
 function renderAnnexForm2Table(items) {
@@ -3196,7 +4244,21 @@ function renderAnnexForm3Table(items) {
     const tbody = document.getElementById('sa-tbody-form3');
     if (!tbody) return;
 
-    if (items.length === 0) {
+    // Filter out any student who exists in Student Exist or is marked as duplicate/conflict
+    const currentExist = studentExistList || [];
+    const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
+    const existPool = currentExist.map(e => getComparableName(e));
+    const allExclude = [...existPool, ...dupPool];
+
+    const cleanItems = (items || []).filter(item => {
+        if (!item) return false;
+        if (item.isDuplicate || item.grantee?.isDuplicate || item.matchedStudent?.isDuplicate) return false;
+        if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
+        const cand = getComparableName(item.grantee || item.matchedStudent || item);
+        return !allExclude.some(ex => areNamesMatching(cand, ex));
+    });
+
+    if (cleanItems.length === 0) {
         const termLabel = `${selectedSemester !== 'All' ? selectedSemester : 'All Semesters'} (${selectedAcademicYear !== 'All' ? 'AY ' + selectedAcademicYear : 'All School Years'})`;
         tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 42px 20px; color: var(--text-secondary);">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -3208,7 +4270,7 @@ function renderAnnexForm3Table(items) {
         return;
     }
 
-    tbody.innerHTML = items.map((item, idx) => {
+    tbody.innerHTML = cleanItems.map((item, idx) => {
         const ctrl = String(idx + 1).padStart(5, '0');
         const grantee = item.grantee;
         const student = item.matchedStudent || {};
@@ -3427,8 +4489,8 @@ function switchSourceSection(section) {
 }
 
 function activateSATab(activeBtn, activePane) {
-    [saTabBtn2, saTabBtn3, saTabBtnRev].forEach(b => b && b.classList.remove('active'));
-    [saTabPane2, saTabPane3, saTabPaneRev].forEach(p => p && (p.style.display = 'none'));
+    [saTabBtn2, saTabBtn3, saTabBtnRev, saTabBtnExist].forEach(b => b && b.classList.remove('active'));
+    [saTabPane2, saTabPane3, saTabPaneRev, saTabPaneExist].forEach(p => p && (p.style.display = 'none'));
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.style.display = 'block';
@@ -3445,13 +4507,13 @@ async function fetchExistingMasterlist() {
                 .order('created_at', { ascending: false }),
             window.supabaseClient
                 .from('annex_form_2')
-                .select('id, last_name, given_name, middle_initial, academic_year, semester, tes_batch'),
+                .select('id, last_name, given_name, middle_initial, academic_year, semester, tes_batch, student_number'),
             window.supabaseClient
                 .from('annex_form_3')
                 .select('id, last_name, given_name, middle_initial, academic_year, semester'),
             window.supabaseClient
                 .from('student_grantees')
-                .select('id, full_name, student_no, studentId, documents, academic_year, semester')
+                .select('id, full_name, student_no, studentId, documents, academic_year, semester, scholarship_name')
         ]);
 
         const data = masterRes.data;
@@ -3460,9 +4522,47 @@ async function fetchExistingMasterlist() {
             return;
         }
 
-        const f2Rows = f2Res.data || [];
-        const f3Rows = f3Res.data || [];
-        const sgRows = (sgRes && sgRes.data) || [];
+        const f2Rows = Array.isArray(f2Res?.data) ? f2Res.data : [];
+        const f3Rows = Array.isArray(f3Res?.data) ? f3Res.data : [];
+        const sgRows = Array.isArray(sgRes?.data) ? sgRes.data : [];
+
+        // Refresh cachedStudentGranteesList
+        cachedStudentGranteesList = [
+            ...sgRows.map(sg => {
+                const parsed = splitFullName(sg.full_name || sg.fullName || '');
+                return {
+                    id: sg.id,
+                    studentId: sg.student_no || sg.studentId || '',
+                    lastName: parsed.lastName,
+                    firstName: parsed.firstName,
+                    middleName: parsed.middleName,
+                    name: sg.full_name || sg.fullName || '',
+                    batch: (sg.documents && sg.documents.batch) || 'Batch 1.2',
+                    scholarshipProgram: sg.scholarship_name || 'CHED TES',
+                    source: 'student_grantees'
+                };
+            }),
+            ...f2Rows.map(f2 => ({
+                id: f2.id,
+                studentId: f2.student_number,
+                lastName: f2.last_name,
+                firstName: f2.given_name,
+                middleName: f2.middle_initial,
+                name: `${f2.last_name}, ${f2.given_name} ${f2.middle_initial || ''}`.trim(),
+                batch: f2.tes_batch || 'Batch 1.2',
+                scholarshipProgram: 'CHED TES',
+                source: 'annex_form_2'
+            }))
+        ];
+
+        if (typeof StudentSyncService !== 'undefined' && StudentSyncService.getAllStudents) {
+            try {
+                const syncList = StudentSyncService.getAllStudents();
+                if (Array.isArray(syncList)) {
+                    syncList.forEach(s => cachedStudentGranteesList.push(s));
+                }
+            } catch (_) { }
+        }
 
         // Build term lookup maps from Annex Form 2, Form 3, and student_grantees
         const f2Lookup = new Map();
@@ -3606,14 +4706,18 @@ async function fetchExistingMasterlist() {
                 course: m.course || 'BSIT',
                 year: '1'
             }));
-            await loadSchoolStudentsAndVerify(granteesForVerification);
+            loadSchoolStudentsAndVerify(granteesForVerification).catch(e => console.warn('School students background verify error:', e));
 
         } else {
             allMasterlistRecords = [];
-            extractedRecords = [];
-            if (importSummaryCard) importSummaryCard.classList.add('hidden');
+            if (!currentFile) {
+                extractedRecords = [];
+                if (importSummaryCard) importSummaryCard.classList.add('hidden');
+            }
             applyTermFilterToMasterlist(selectedAcademicYear, selectedSemester);
-            await loadSchoolStudentsAndVerify([]);
+            if (!currentFile) {
+                loadSchoolStudentsAndVerify([]).catch(e => console.warn('School students background verify error:', e));
+            }
         }
     } catch (err) {
         console.error('Error fetching existing masterlist:', err);
@@ -3636,6 +4740,27 @@ export function initMasterlistImport() {
     btnSaveRecords = document.getElementById('btn-save-records');
     filterBatch = document.getElementById('filter-batch');
     btnClearMasterlist = document.getElementById('btn-clear-masterlist');
+
+    // Duplicate Management Elements (Step 2 Header)
+    badgeMasterlistDuplicates = document.getElementById('badge-masterlist-duplicates');
+    countMasterlistDuplicates = document.getElementById('count-masterlist-duplicates');
+    btnMoveAllDuplicates = document.getElementById('btn-move-all-duplicates');
+    if (btnMoveAllDuplicates) {
+        btnMoveAllDuplicates.addEventListener('click', moveAllDuplicatesToStudentExist);
+    }
+
+    // Student Exist Elements (Step 3 Dual Container)
+    saTabBtnExist = document.getElementById('sa-tab-btn-exist');
+    saBadgeExistCount = document.getElementById('sa-badge-exist-count');
+    saStatExistCount = document.getElementById('sa-stat-exist-count');
+    saSearchExist = document.getElementById('sa-search-exist');
+    saTbodyExist = document.getElementById('sa-tbody-exist');
+    saBtnExportExist = document.getElementById('sa-btn-export-exist-top');
+    saBtnClearExist = document.getElementById('sa-btn-clear-exist');
+
+    // Initial load of Student Exist data
+    studentExistList = loadStudentExistList(selectedAcademicYear, selectedSemester);
+    renderStudentExistTable();
 
     // Target Scholarship Elements (Required before import)
     selectImportScholarship = document.getElementById('select-import-scholarship');
@@ -3668,7 +4793,7 @@ export function initMasterlistImport() {
                     try { localStorage.setItem('scholardoc_target_scholarship', val); } catch (_) { }
                     updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester, val);
                     updateStep2TermIndicator(selectedAcademicYear, selectedSemester, val);
-                    if (extractedRecords && extractedRecords.length > 0) {
+                    if (currentFile && extractedRecords && extractedRecords.some(r => !r.id)) {
                         await checkAndFlagDuplicates(extractedRecords, getSelectedImportBatch() || 'Batch 1.2', val);
                     }
                 }
@@ -3693,7 +4818,7 @@ export function initMasterlistImport() {
                 try { localStorage.setItem('scholardoc_target_scholarship', val); } catch (_) { }
                 updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester, val);
                 updateStep2TermIndicator(selectedAcademicYear, selectedSemester, val);
-                if (extractedRecords && extractedRecords.length > 0) {
+                if (currentFile && extractedRecords && extractedRecords.some(r => !r.id)) {
                     await checkAndFlagDuplicates(extractedRecords, getSelectedImportBatch() || 'Batch 1.2', val);
                 }
             }
@@ -3842,6 +4967,9 @@ export function initMasterlistImport() {
     batchSelectBox = document.getElementById('import-scholarship-batch-container') || document.getElementById('import-batch-selection-container');
 
     if (selectImportBatch) {
+        if (!selectImportBatch.value || selectImportBatch.value === '') {
+            selectImportBatch.value = 'Batch 1.2';
+        }
         selectImportBatch.addEventListener('change', () => {
             const val = selectImportBatch.value;
             if (val === 'custom') {
@@ -4005,6 +5133,7 @@ export function initMasterlistImport() {
     saTabPane2 = document.getElementById('sa-tab-pane-form2');
     saTabPane3 = document.getElementById('sa-tab-pane-form3');
     saTabPaneRev = document.getElementById('sa-tab-pane-review');
+    saTabPaneExist = document.getElementById('sa-tab-pane-exist');
 
     btnExportAnnexExcel = document.getElementById('sa-btn-export-annex-excel');
     btnExportF2 = document.getElementById('sa-btn-export-form2-top');
@@ -4034,8 +5163,21 @@ export function initMasterlistImport() {
             return;
         }
 
+        const termChanged = (newAY !== undefined && newAY !== selectedAcademicYear) ||
+                            (newSem !== undefined && newSem !== selectedSemester);
+
         if (newAY !== undefined) selectedAcademicYear = newAY;
         if (newSem !== undefined) selectedSemester = newSem;
+
+        // If switching to a different term, clear uploaded file belonging to the prior term
+        if (termChanged && currentFile) {
+            currentFile = null;
+            if (fileInput) fileInput.value = '';
+            if (fileInfoContainer) fileInfoContainer.classList.add('hidden');
+            if (dropZone) dropZone.classList.remove('hidden');
+            if (btnExtract) btnExtract.disabled = true;
+            if (importSummaryCard) importSummaryCard.classList.add('hidden');
+        }
 
         if (filterAcademicYear && filterAcademicYear.value !== selectedAcademicYear) filterAcademicYear.value = selectedAcademicYear;
         if (headerFilterAcademicYear && headerFilterAcademicYear.value !== selectedAcademicYear) headerFilterAcademicYear.value = selectedAcademicYear;
@@ -4177,6 +5319,14 @@ export function initMasterlistImport() {
         btnRefreshTerm.addEventListener('click', async () => {
             if (iconRefreshTerm) iconRefreshTerm.classList.add('sync-spin');
             try {
+                if (currentFile) {
+                    currentFile = null;
+                    if (fileInput) fileInput.value = '';
+                    if (fileInfoContainer) fileInfoContainer.classList.add('hidden');
+                    if (dropZone) dropZone.classList.remove('hidden');
+                    if (btnExtract) btnExtract.disabled = true;
+                    if (importSummaryCard) importSummaryCard.classList.add('hidden');
+                }
                 if (selectedAcademicYear && selectedAcademicYear !== 'All' && selectedSemester && selectedSemester !== 'All') {
                     fetch('/api/academic-term/update', {
                         method: 'POST',
@@ -4257,8 +5407,22 @@ export function initMasterlistImport() {
 
     // Real-time synchronization when system default academic term is updated across interfaces
     AcademicYearService.onDefaultTermUpdated(async (newTerm) => {
+        if (newTerm?.academicYear === selectedAcademicYear && newTerm?.semester === selectedSemester) {
+            return;
+        }
+        if (isImportingMasterlist) {
+            return;
+        }
         if (newTerm?.academicYear) selectedAcademicYear = newTerm.academicYear;
         if (newTerm?.semester) selectedSemester = newTerm.semester;
+        if (currentFile) {
+            currentFile = null;
+            if (fileInput) fileInput.value = '';
+            if (fileInfoContainer) fileInfoContainer.classList.add('hidden');
+            if (dropZone) dropZone.classList.remove('hidden');
+            if (btnExtract) btnExtract.disabled = true;
+            if (importSummaryCard) importSummaryCard.classList.add('hidden');
+        }
         await populateDistinctAcademicYears();
         updateStep1TargetTermBadge(selectedAcademicYear, selectedSemester);
         updateStep2TermIndicator(selectedAcademicYear, selectedSemester);
@@ -4280,9 +5444,21 @@ export function initMasterlistImport() {
                 fallbackToLatest: false
             });
 
-            if (dbSync && dbSync.fromDb) {
+            // Load and render Student Exist table for the active term
+            studentExistList = loadStudentExistList(ay, sem);
+            renderStudentExistTable();
+
+            if (dbSync && dbSync.fromDb && ((dbSync.form2List && dbSync.form2List.length > 0) || (dbSync.form3List && dbSync.form3List.length > 0))) {
                 verifiedForm2List = dbSync.form2List || [];
-                verifiedForm3List = dbSync.form3List || [];
+                const existPool = (studentExistList || []).map(e => getComparableName(e));
+                verifiedForm3List = (dbSync.form3List || []).filter(item => {
+                    const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
+                    if (String(r).includes('Categorized from Student Exist')) return false;
+                    if ((studentExistList || []).some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
+                    const cand = getComparableName(item.grantee || item.matchedStudent || item);
+                    if (existPool.some(e => areNamesMatching(cand, e))) return false;
+                    return true;
+                });
                 needsReviewList = [];
                 updateAnnexKPIs();
                 renderAnnexForm2Table(verifiedForm2List);
@@ -4292,6 +5468,7 @@ export function initMasterlistImport() {
                 AnnexSyncService.saveVerifiedData({
                     form2List: verifiedForm2List,
                     form3List: verifiedForm3List,
+                    studentExistList: studentExistList,
                     needsReviewList: [],
                     updatedBy: `Term Filter (${ay} ${sem})`,
                     syncToDb: false,
@@ -4299,9 +5476,28 @@ export function initMasterlistImport() {
                     semester: sem
                 });
             } else {
-                verifiedForm2List = [];
-                verifiedForm3List = [];
-                needsReviewList = [];
+                // If not saved in Supabase for this term, check term-isolated local storage
+                const cachedTerm = AnnexSyncService.getVerifiedData(ay, sem);
+                if (cachedTerm && ((cachedTerm.form2List && cachedTerm.form2List.length > 0) || (cachedTerm.form3List && cachedTerm.form3List.length > 0))) {
+                    verifiedForm2List = cachedTerm.form2List || [];
+                    verifiedForm3List = cachedTerm.form3List || [];
+                    needsReviewList = cachedTerm.needsReviewList || [];
+                    AnnexSyncService.saveToSupabase(
+                        verifiedForm2List,
+                        verifiedForm3List,
+                        `Term Sync (${ay} ${sem})`,
+                        ay,
+                        sem
+                    ).then(() => {
+                        if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+                            StudentSyncService.loadAndSyncStudents().catch(() => {});
+                        }
+                    }).catch(() => {});
+                } else {
+                    verifiedForm2List = [];
+                    verifiedForm3List = [];
+                    needsReviewList = [];
+                }
                 updateAnnexKPIs();
                 renderAnnexForm2Table(verifiedForm2List);
                 renderAnnexForm3Table(verifiedForm3List);
@@ -4493,6 +5689,11 @@ export function initMasterlistImport() {
                 }
 
                 extractedRecords = [];
+                currentFile = null;
+                if (fileInput) fileInput.value = '';
+                if (fileInfoContainer) fileInfoContainer.classList.add('hidden');
+                if (dropZone) dropZone.classList.remove('hidden');
+                if (btnExtract) btnExtract.disabled = true;
                 if (summaryExtracted) summaryExtracted.textContent = '0';
                 if (summaryImported) summaryImported.textContent = '0';
                 if (summarySkipped) summarySkipped.textContent = '0';
@@ -4518,7 +5719,19 @@ export function initMasterlistImport() {
     // Annex Tab Switching
     if (saTabBtn2) saTabBtn2.addEventListener('click', () => activateSATab(saTabBtn2, saTabPane2));
     if (saTabBtn3) saTabBtn3.addEventListener('click', () => activateSATab(saTabBtn3, saTabPane3));
+    if (saTabBtnExist) saTabBtnExist.addEventListener('click', () => activateSATab(saTabBtnExist, saTabPaneExist));
     if (saTabBtnRev) saTabBtnRev.addEventListener('click', () => activateSATab(saTabBtnRev, saTabPaneRev));
+
+    // Student Exist search, export, and clear listeners
+    if (saSearchExist) {
+        saSearchExist.addEventListener('input', (e) => renderStudentExistTable(e.target.value));
+    }
+    if (saBtnExportExist) {
+        saBtnExportExist.addEventListener('click', exportStudentExistToExcel);
+    }
+    if (saBtnClearExist) {
+        saBtnClearExist.addEventListener('click', clearStudentExistList);
+    }
 
     // Helper: Universal Blob download with FileSaver / Anchor tag fallback
     function downloadBlob(blob, filename) {
@@ -4993,7 +6206,10 @@ export function initMasterlistImport() {
                 form2List: verifiedForm2List,
                 form3List: verifiedForm3List,
                 needsReviewList: needsReviewList,
-                updatedBy: 'Super Admin'
+                updatedBy: 'Super Admin',
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
             });
             if (synced) {
                 verifiedForm2List = synced.form2List;
@@ -5010,6 +6226,10 @@ export function initMasterlistImport() {
     // Subscribe to live synchronization with Admin Review Queue
     AnnexSyncService.onSync((synced) => {
         if (!synced) return;
+        // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
+        if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && synced.academicYear !== selectedAcademicYear) return;
+        if (synced.semester && selectedSemester && selectedSemester !== 'All' && synced.semester !== selectedSemester) return;
+
         verifiedForm2List = synced.form2List || [];
         verifiedForm3List = synced.form3List || [];
         needsReviewList = synced.needsReviewList || [];
