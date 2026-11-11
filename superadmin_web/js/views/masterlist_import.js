@@ -3866,8 +3866,8 @@ async function loadSchoolStudentsAndVerify(grantees) {
             }
         }
 
-        // 2. Check if verified data is cached specifically for this active term
-        const savedSync = (dbSync && dbSync.fromDb && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0))
+        // 2. Check if verified data is in Supabase (or local storage only when offline/unreachable)
+        const savedSync = (dbSync && dbSync.fromDb)
             ? dbSync
             : AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
         if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
@@ -5419,28 +5419,20 @@ export function initMasterlistImport() {
                     semester: sem
                 });
             } else {
-                // If not saved in Supabase for this term, check term-isolated local storage
-                const cachedTerm = AnnexSyncService.getVerifiedData(ay, sem);
-                if (cachedTerm && ((cachedTerm.form2List && cachedTerm.form2List.length > 0) || (cachedTerm.form3List && cachedTerm.form3List.length > 0))) {
-                    verifiedForm2List = cachedTerm.form2List || [];
-                    verifiedForm3List = cachedTerm.form3List || [];
-                    needsReviewList = cachedTerm.needsReviewList || [];
-                    AnnexSyncService.saveToSupabase(
-                        verifiedForm2List,
-                        verifiedForm3List,
-                        `Term Sync (${ay} ${sem})`,
-                        ay,
-                        sem
-                    ).then(() => {
-                        if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
-                            StudentSyncService.loadAndSyncStudents().catch(() => {});
-                        }
-                    }).catch(() => {});
-                } else {
-                    verifiedForm2List = [];
-                    verifiedForm3List = [];
-                    needsReviewList = [];
-                }
+                // Supabase returned empty for this term — clear stale local cache so deleted records do not reappear
+                verifiedForm2List = [];
+                verifiedForm3List = [];
+                needsReviewList = [];
+                AnnexSyncService.saveVerifiedData({
+                    form2List: [],
+                    form3List: [],
+                    studentExistList: studentExistList,
+                    needsReviewList: [],
+                    updatedBy: `Term Filter (${ay} ${sem})`,
+                    syncToDb: false,
+                    academicYear: ay,
+                    semester: sem
+                });
                 updateAnnexKPIs();
                 renderAnnexForm2Table(verifiedForm2List);
                 renderAnnexForm3Table(verifiedForm3List);
