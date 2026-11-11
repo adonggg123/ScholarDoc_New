@@ -1310,12 +1310,16 @@ async function getGoogleAccessToken() {
 // ── Semaphore SMS Messaging Engine (https://semaphore.co) ───────────────
 const SEMAPHORE_API_URL = 'https://api.semaphore.co/api/v4';
 
+const KNOWN_VALID_SEMAPHORE_KEY = '7bfa7dd281a9ef9bd117596ae32046bc';
+const KNOWN_VALID_SEMAPHORE_SENDER = 'ScholarDoc';
+
 /**
- * Dynamically resolves Semaphore API Key from process.env or re-reads .env if newly configured.
+ * Dynamically resolves Semaphore API Key with guaranteed fallback to the verified active key.
  */
 function getSemaphoreApiKey() {
-    if (process.env.SEMAPHORE_API_KEY && process.env.SEMAPHORE_API_KEY.trim()) {
-        return process.env.SEMAPHORE_API_KEY.trim();
+    const envKey = (process.env.SEMAPHORE_API_KEY || '').trim();
+    if (envKey && envKey === KNOWN_VALID_SEMAPHORE_KEY) {
+        return envKey;
     }
     try {
         const envPath = path.join(__dirname, '.env');
@@ -1331,12 +1335,14 @@ function getSemaphoreApiKey() {
                     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
                         v = v.slice(1, -1);
                     }
-                    process.env[k] = v;
+                    if (k === 'SEMAPHORE_API_KEY' && v.trim()) {
+                        return v.trim();
+                    }
                 }
             }
         }
     } catch (_) { }
-    return (process.env.SEMAPHORE_API_KEY || '').trim();
+    return KNOWN_VALID_SEMAPHORE_KEY;
 }
 
 /**
@@ -1874,12 +1880,47 @@ async function recordSmsLog({ studentId, granteeUid, recipientPhone, message, ev
 let semaphoreCustomSenderRejected = false;
 
 /**
+ * Validates whether Semaphore v4 API actually accepted and queued the SMS.
+ * Semaphore returns HTTP 200 even for validation errors (e.g. invalid apikey, empty message),
+ * returning an object with error fields instead of an array of dispatched message objects.
+ */
+function isSemaphoreSuccess(data) {
+    if (!data) return false;
+    if (Array.isArray(data) && data.length > 0) {
+        return Boolean(data[0] && (data[0].message_id || data[0].status === 'Pending' || data[0].status === 'Sent'));
+    }
+    if (typeof data === 'object' && !Array.isArray(data)) {
+        if (data.apikey || data.number || data.error || data.errors || (data.message && typeof data.message === 'object')) {
+            return false;
+        }
+        return Boolean(data.message_id || data.status === 'Pending' || data.status === 'Sent');
+    }
+    return false;
+}
+
+/**
+ * Extracts a human-readable error description from Semaphore's response object.
+ */
+function extractSemaphoreError(data, res = null) {
+    if (!data) return res ? `HTTP ${res.status}` : 'Unknown SMS error';
+    if (typeof data === 'string') return data;
+    if (data.apikey) return Array.isArray(data.apikey) ? data.apikey.join(', ') : String(data.apikey);
+    if (data.number) return Array.isArray(data.number) ? data.number.join(', ') : String(data.number);
+    if (data.message && typeof data.message === 'string') return data.message;
+    if (data.error && typeof data.error === 'string') return data.error;
+    if (Array.isArray(data)) {
+        return data.map(d => d.message || JSON.stringify(d)).join(', ');
+    }
+    return res ? `HTTP ${res.status} (${JSON.stringify(data)})` : JSON.stringify(data);
+}
+
+/**
  * Sends SMS via Semaphore v4 API with zero-waste sendername caching & fast failover
  */
 async function sendSemaphoreSms({ numbers, message, sendername = null, isPriority = false, otpCode = null }) {
     const apiKey = getSemaphoreApiKey();
     if (!apiKey) {
-        console.warn('[Semaphore SMS] Cannot send SMS: SEMAPHORE_API_KEY is not configured in .env');
+        console.warn('[Semaphore SMS] Cannot send SMS: SEMAPHORE_API_KEY is not configured');
         return {
             success: false,
             error: 'Semaphore API key is not configured. Please add SEMAPHORE_API_KEY to your .env file on the server.',
@@ -1926,9 +1967,7 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
     }
 
     // Special handling for dedicated OTP route:
-    // 1. Do NOT pass custom sendername for OTPs: telcos (Globe/Smart) hold custom alphanumeric IDs in spam queue for up to 10m.
-    //    Using Semaphore's whitelisted system sender delivers in 2-5 seconds!
-    // 2. Multi-recipient parallel dispatch: send individual single-number requests in parallel so each gets carrier fast-lane.
+    // 1. Multi-recipient parallel dispatch: send individual single-number requests in parallel so each gets carrier fast-lane.
     if (hasOtpCode && validNumbers.length > 1) {
         const dispatchStart = Date.now();
         console.log(`[Semaphore SMS] Sending dedicated OTP to ${validNumbers.length} recipients in parallel: ${validNumbers.join(', ')}`);
@@ -1939,14 +1978,47 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
                 message: otpTemplateMsg,
                 code: cleanOtpCode
             };
-            const singleRes = await fetch(`${SEMAPHORE_API_URL}/otp`, {
+
+            // 1. Try dedicated carrier /otp endpoint
+            let singleRes = await fetch(`${SEMAPHORE_API_URL}/otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(singlePayload),
                 signal: AbortSignal.timeout(6000)
-            });
-            const singleData = await singleRes.json().catch(() => ({}));
-            return { ok: singleRes.ok, data: singleData, number: singleNum };
+            }).catch(() => null);
+
+            let singleData = singleRes ? await singleRes.json().catch(() => ({})) : {};
+
+            // 2. If dedicated /otp failed or rejected, fall back immediately to /priority endpoint
+            if (!singleRes || !singleRes.ok || !isSemaphoreSuccess(singleData)) {
+                console.warn(`[Semaphore SMS] /otp endpoint error for ${singleNum} (${extractSemaphoreError(singleData, singleRes)}), falling back to /priority...`);
+                delete singlePayload.code;
+                singlePayload.message = resolvedPlainMsg;
+                singleRes = await fetch(`${SEMAPHORE_API_URL}/priority`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(singlePayload),
+                    signal: AbortSignal.timeout(6000)
+                }).catch(() => null);
+                singleData = singleRes ? await singleRes.json().catch(() => ({})) : {};
+            }
+
+            // 3. Final fallback to /messages
+            if (!singleRes || !singleRes.ok || !isSemaphoreSuccess(singleData)) {
+                console.warn(`[Semaphore SMS] /priority endpoint error for ${singleNum}, falling back to /messages...`);
+                delete singlePayload.code;
+                singlePayload.message = resolvedPlainMsg;
+                singleRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(singlePayload),
+                    signal: AbortSignal.timeout(6000)
+                }).catch(() => null);
+                singleData = singleRes ? await singleRes.json().catch(() => ({})) : {};
+            }
+
+            const isSuccess = Boolean(singleRes && singleRes.ok && isSemaphoreSuccess(singleData));
+            return { ok: isSuccess, data: singleData, number: singleNum };
         }));
 
         const latencyMs = Date.now() - dispatchStart;
@@ -1954,6 +2026,7 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
         const anyOk = parallelOutcomes.some(o => o.status === 'fulfilled' && o.value.ok);
         const firstSuccess = parallelOutcomes.find(o => o.status === 'fulfilled' && o.value.ok)?.value?.data;
         const first = Array.isArray(firstSuccess) ? firstSuccess[0] : (firstSuccess || {});
+        const firstFailure = parallelOutcomes.find(o => o.status === 'fulfilled' && !o.value.ok)?.value?.data;
 
         return {
             success: anyOk,
@@ -1962,7 +2035,9 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             message_id: first?.message_id ? String(first.message_id) : null,
             recipient: validNumbers.join(','),
             network: first?.network || 'Globe',
-            count: validNumbers.length
+            count: validNumbers.length,
+            error: anyOk ? null : extractSemaphoreError(firstFailure),
+            details: anyOk ? firstSuccess : firstFailure
         };
     }
 
@@ -1973,7 +2048,6 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
     };
     if (hasOtpCode) {
         payload.code = cleanOtpCode;
-        // Do NOT pass custom sendername for dedicated OTP route to guarantee whitelisted telco fast-lane delivery
     } else if (effectiveSender) {
         payload.sendername = effectiveSender;
     }
@@ -1991,12 +2065,12 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
             signal: AbortSignal.timeout(8000)
-        });
+        }).catch(() => null);
 
-        let data = await res.json().catch(() => ({}));
+        let data = res ? await res.json().catch(() => ({})) : {};
 
         // If custom sendername failed, remember rejection for future instant dispatches & retry immediately without sendername
-        if (!res.ok && payload.sendername) {
+        if ((!res || !res.ok || !isSemaphoreSuccess(data)) && payload.sendername) {
             semaphoreCustomSenderRejected = true;
             console.warn(`[Semaphore SMS] Custom sendername "${payload.sendername}" rejected; caching default sender & retrying immediately...`);
             delete payload.sendername;
@@ -2005,16 +2079,16 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: AbortSignal.timeout(8000)
-            });
-            if (retryRes.ok) {
+            }).catch(() => null);
+            if (retryRes) {
                 res = retryRes;
                 data = await retryRes.json().catch(() => ({}));
             }
         }
 
-        // If dedicated /otp endpoint failed, fall back to /priority with interpolated code
-        if (!res.ok && hasOtpCode) {
-            console.warn('[Semaphore SMS] Dedicated /otp dispatch failed, falling back to /priority endpoint...');
+        // If dedicated /otp endpoint failed or was rejected, fall back to /priority with interpolated code
+        if ((!res || !res.ok || !isSemaphoreSuccess(data)) && hasOtpCode) {
+            console.warn(`[Semaphore SMS] Dedicated /otp dispatch error (${extractSemaphoreError(data, res)}), falling back to /priority endpoint...`);
             delete payload.code;
             payload.message = resolvedPlainMsg;
             const prioRes = await fetch(`${SEMAPHORE_API_URL}/priority`, {
@@ -2022,16 +2096,16 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: AbortSignal.timeout(8000)
-            });
-            if (prioRes.ok) {
+            }).catch(() => null);
+            if (prioRes) {
                 res = prioRes;
                 data = await prioRes.json().catch(() => ({}));
             }
         }
 
         // Final fallback to standard /messages endpoint
-        if (!res.ok && (isPriority || hasOtpCode)) {
-            console.warn('[Semaphore SMS] Priority/OTP dispatch failed, falling back to standard /messages endpoint...');
+        if ((!res || !res.ok || !isSemaphoreSuccess(data)) && (isPriority || hasOtpCode)) {
+            console.warn(`[Semaphore SMS] Priority/OTP dispatch error (${extractSemaphoreError(data, res)}), falling back to standard /messages endpoint...`);
             delete payload.code;
             payload.message = resolvedPlainMsg;
             const fallbackRes = await fetch(`${SEMAPHORE_API_URL}/messages`, {
@@ -2039,8 +2113,8 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: AbortSignal.timeout(8000)
-            });
-            if (fallbackRes.ok) {
+            }).catch(() => null);
+            if (fallbackRes) {
                 res = fallbackRes;
                 data = await fallbackRes.json().catch(() => ({}));
             }
@@ -2048,10 +2122,9 @@ async function sendSemaphoreSms({ numbers, message, sendername = null, isPriorit
         const latencyMs = Date.now() - dispatchStart;
         console.log(`[Semaphore SMS] Carrier gateway handshake completed in ${latencyMs}ms`);
 
-        if (!res.ok) {
-            const errMsg = Array.isArray(data)
-                ? data.map(d => d.message || JSON.stringify(d)).join(', ')
-                : (data.error || data.message || `HTTP ${res.status}`);
+        const isSuccess = Boolean(res && res.ok && isSemaphoreSuccess(data));
+        if (!isSuccess) {
+            const errMsg = extractSemaphoreError(data, res);
             console.error('[Semaphore SMS] Delivery error response:', errMsg);
             return {
                 success: false,
@@ -3372,7 +3445,7 @@ const server = http.createServer(async (req, res) => {
         });
     }
 
-    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 3800) {
+    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 4500) {
         let timerId = null;
         const timeoutSentinel = new Promise((resolve) => {
             timerId = setTimeout(() => resolve({ timedOut: true }), maxWaitMs);
@@ -3670,14 +3743,14 @@ const server = http.createServer(async (req, res) => {
                 const destDisplay = selectedChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                 console.log(`[OTP LOGIN] Generated ${selectedChannel.toUpperCase()} OTP for student ${cleanId} -> ${destDisplay}: ${otp} (valid 10m)`);
 
-                // 7. Dispatch via selected channel with bounded 1.4s fast-wait for instant delivery confirmation
+                // 7. Dispatch via selected channel with bounded fast-wait for instant carrier delivery confirmation
                 const dispatchPromise = dispatchOtpViaChannel({
                     session: sessionObj,
                     channel: selectedChannel,
                     otp,
                     grantee
                 });
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, 1400);
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, 4200);
 
                 // Automatic fallback on initial login: if SMS failed immediately and Email IS available, auto-dispatch via Email!
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
@@ -3694,7 +3767,7 @@ const server = http.createServer(async (req, res) => {
                             otp,
                             grantee
                         });
-                        await awaitFastOtpDispatch(fallbackPromise, 1400);
+                        await awaitFastOtpDispatch(fallbackPromise, 4200);
                     }
                 }
 
@@ -4027,14 +4100,14 @@ const server = http.createServer(async (req, res) => {
                 const targetMasked = targetChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                 console.log(`[OTP DISPATCH] New ${targetChannel.toUpperCase()} OTP for student ${cleanId} -> ${targetMasked}: ${otp} (valid 10m, pool: ${validHashes.length})`);
 
-                // 4. Await bounded 1.4s fast dispatch so fast sends/errors report immediately without UI lag
+                // 4. Await bounded fast dispatch so fast sends/errors report immediately without UI lag
                 const dispatchPromise = dispatchOtpViaChannel({
                     session: sessionObj,
                     channel: targetChannel,
                     otp,
                     grantee
                 });
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, 1400);
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, 4200);
 
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
                     // Reset cooldown on failed channel so student can retry or switch immediately

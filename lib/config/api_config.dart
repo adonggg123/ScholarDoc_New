@@ -40,9 +40,10 @@ class ApiConfig {
       if (defaultTargetPlatform == TargetPlatform.android) {
         return [
           'http://127.0.0.1:8080',       // Physical device via adb reverse tcp:8080 tcp:8080
+          'http://192.168.0.107:8080',   // Active Host PC Wi-Fi LAN IP
           'http://10.0.2.2:8080',        // Android Emulator loopback
           defaultProductionUrl,          // Production Vercel cloud (works over cellular and any Wi-Fi)
-          'http://192.168.254.104:8080', // Active Host PC Wi-Fi LAN IP
+          'http://192.168.254.104:8080', // Alternative Host PC LAN IP
         ];
       }
     } catch (_) {}
@@ -50,6 +51,7 @@ class ApiConfig {
     return [
       'http://localhost:8080',
       'http://127.0.0.1:8080',
+      'http://192.168.0.107:8080',
       defaultProductionUrl,
       'http://192.168.254.104:8080',
     ];
