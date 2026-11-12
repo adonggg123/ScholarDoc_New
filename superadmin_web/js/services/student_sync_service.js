@@ -818,7 +818,7 @@ export class StudentSyncService {
                 f2Res = { data: [] };
             }
 
-            const form2List = f2Res.data || [];
+            let form2List = f2Res.data || [];
             console.log(`StudentSyncService: Loaded ${form2List.length} annex_form_2 records.`);
 
             // 2. Fetch School Student records (demographics & details)
@@ -931,6 +931,32 @@ export class StudentSyncService {
                     }
                 } catch (_) { }
             };
+
+            // Deduplicate newGranteesList and clean up any duplicate masterlist rows in Supabase
+            if (Array.isArray(newGranteesList) && newGranteesList.length > 1) {
+                const uniqueGrantees = [];
+                const duplicateGmIds = [];
+                for (const gm of newGranteesList) {
+                    const gmAy = gm.academic_year || '';
+                    const gmSem = gm.semester || '';
+                    const isDup = uniqueGrantees.some(existing =>
+                        this.isMatch(existing, gm) &&
+                        (existing.academic_year || '') === gmAy &&
+                        (existing.semester || '') === gmSem
+                    );
+                    if (isDup) {
+                        if (gm.id) duplicateGmIds.push(gm.id);
+                    } else {
+                        uniqueGrantees.push(gm);
+                    }
+                }
+                if (duplicateGmIds.length > 0) {
+                    newGranteesList = uniqueGrantees;
+                    try {
+                        await supabase.from('new_grantees_masterlist').delete().in('id', duplicateGmIds);
+                    } catch (_) { }
+                }
+            }
 
             // 3d. Reconcile any verified Form 2 records from local AnnexSyncService storage or active masterlist
             //     that have not yet been persisted to annex_form_2 in Supabase (ONLY when masterlist has active records
@@ -1131,6 +1157,32 @@ export class StudentSyncService {
                 return [];
             }
 
+            // Deduplicate form2List per term and clean up any duplicate annex_form_2 rows in Supabase
+            if (Array.isArray(form2List) && form2List.length > 1) {
+                const uniqueF2 = [];
+                const duplicateF2Ids = [];
+                for (const f2 of form2List) {
+                    const f2Ay = f2.academic_year || '';
+                    const f2Sem = f2.semester || '';
+                    const isDup = uniqueF2.some(existing =>
+                        this.isMatch(existing, f2) &&
+                        (existing.academic_year || '') === f2Ay &&
+                        (existing.semester || '') === f2Sem
+                    );
+                    if (isDup) {
+                        if (f2.id) duplicateF2Ids.push(f2.id);
+                    } else {
+                        uniqueF2.push(f2);
+                    }
+                }
+                form2List = uniqueF2;
+                if (duplicateF2Ids.length > 0) {
+                    try {
+                        await supabase.from('annex_form_2').delete().in('id', duplicateF2Ids);
+                    } catch (_) { }
+                }
+            }
+
             // 4. For each Form 2 record, select its student data from school_students
             const toInsert = [];
             const toUpdate = [];
@@ -1172,53 +1224,69 @@ export class StudentSyncService {
                 const normalized = this.normalizeStudentRecord(ssMatch || {}, f2, gmMatch, existingSg || {}, activeDeadline);
                 const rKey = getRecordKey(normalized);
 
+                // Prevent any duplicate student record in the same term from being added to result or toInsert
+                const alreadyInResultForTerm = result.some(r =>
+                    this.isMatch(r, normalized) &&
+                    (r.academic_year || '') === (normalized.academic_year || '') &&
+                    (r.semester || '') === (normalized.semester || '')
+                );
+                if (alreadyInResultForTerm) {
+                    continue;
+                }
+
                 if (!existingSg) {
+                    const alreadyQueuedInsert = toInsert.some(ins =>
+                        (ins.student_no && normalized.student_no && this.clean(ins.student_no) === this.clean(normalized.student_no)) ||
+                        this.isMatch(ins, normalized)
+                    );
                     const newUid = normalized.uid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
                     normalized.uid = newUid;
                     if (f2IdStr) pendingSyncF2Ids.push(f2IdStr);
                     if (rKey) pendingSyncStudentKeys.push(rKey);
-                    toInsert.push({
-                        uid: newUid,
-                        student_no: normalized.student_no,
-                        studentId: normalized.student_no,
-                        full_name: normalized.full_name,
-                        fullName: normalized.fullName,
-                        program_name: normalized.program_name,
-                        course: normalized.course,
-                        year_level: String(normalized.year_level),
-                        year: String(normalized.year),
-                        date_of_birth: normalized.date_of_birth,
-                        birthdate: normalized.birthdate,
-                        age: normalized.age,
-                        gender: normalized.gender,
-                        civil_status: normalized.civil_status,
-                        religion: normalized.religion,
-                        mobile_number: normalized.mobile_number,
-                        contactNumber: normalized.contactNumber,
-                        email_address: normalized.email_address,
-                        email: normalized.email,
-                        father_full_name: normalized.father_full_name,
-                        father_occupation: normalized.father_occupation,
-                        mother_full_name: normalized.mother_full_name,
-                        mother_occupation: normalized.mother_occupation,
-                        status: normalized.status, // "No Submission Yet" initially!
-                        scholarship_name: normalized.scholarship_name,
-                        role: 'student',
-                        sa_number: normalized.sa_number,
-                        saNumber: normalized.saNumber,
-                        academic_year: normalized.academic_year,
-                        academicYear: normalized.academicYear,
-                        semester: normalized.semester,
-                        documents: normalized.documents,
-                        familyDetails: normalized.familyDetails,
-                        idValidationStatus: normalized.idValidationStatus,
-                        id_validation_status: normalized.idValidationStatus,
-                        saVerificationStatus: normalized.saVerificationStatus,
-                        sa_verification_status: normalized.saVerificationStatus,
-                        admin_remarks: normalized.admin_remarks,
-                        email_status: 'pending',
-                        email_sent_at: null
-                    });
+                    if (!alreadyQueuedInsert) {
+                        toInsert.push({
+                            uid: newUid,
+                            student_no: normalized.student_no,
+                            studentId: normalized.student_no,
+                            full_name: normalized.full_name,
+                            fullName: normalized.fullName,
+                            program_name: normalized.program_name,
+                            course: normalized.course,
+                            year_level: String(normalized.year_level),
+                            year: String(normalized.year),
+                            date_of_birth: normalized.date_of_birth,
+                            birthdate: normalized.birthdate,
+                            age: normalized.age,
+                            gender: normalized.gender,
+                            civil_status: normalized.civil_status,
+                            religion: normalized.religion,
+                            mobile_number: normalized.mobile_number,
+                            contactNumber: normalized.contactNumber,
+                            email_address: normalized.email_address,
+                            email: normalized.email,
+                            father_full_name: normalized.father_full_name,
+                            father_occupation: normalized.father_occupation,
+                            mother_full_name: normalized.mother_full_name,
+                            mother_occupation: normalized.mother_occupation,
+                            status: normalized.status, // "No Submission Yet" initially!
+                            scholarship_name: normalized.scholarship_name,
+                            role: 'student',
+                            sa_number: normalized.sa_number,
+                            saNumber: normalized.saNumber,
+                            academic_year: normalized.academic_year,
+                            academicYear: normalized.academicYear,
+                            semester: normalized.semester,
+                            documents: normalized.documents,
+                            familyDetails: normalized.familyDetails,
+                            idValidationStatus: normalized.idValidationStatus,
+                            id_validation_status: normalized.idValidationStatus,
+                            saVerificationStatus: normalized.saVerificationStatus,
+                            sa_verification_status: normalized.saVerificationStatus,
+                            admin_remarks: normalized.admin_remarks,
+                            email_status: 'pending',
+                            email_sent_at: null
+                        });
+                    }
                 } else if (existingSg) {
                     if (f2IdStr) syncedF2Ids.add(f2IdStr);
                     if (rKey) syncedStudentKeys.add(rKey);
@@ -1293,11 +1361,19 @@ export class StudentSyncService {
                     if ((sgId && claimedSgIds.has(sgId)) || (sgUid && claimedSgIds.has(sgUid))) {
                         continue;
                     }
-                    if (sgNo && existingResultNos.has(sgNo)) {
+                    const alreadyIncluded = (sgNo && existingResultNos.has(sgNo)) || result.some(r => this.isMatch(r, sg));
+                    if (alreadyIncluded) {
+                        // Clean up duplicate unclaimed student_grantees row if it has no submission
+                        if (!this.hasStudentSubmitted(sg)) {
+                            try {
+                                if (sg.id) await supabase.from('student_grantees').delete().eq('id', sg.id);
+                                else if (sg.uid) await supabase.from('student_grantees').delete().eq('uid', sg.uid);
+                            } catch (_) { }
+                            if (sgId) syncedSgIds.delete(sgId);
+                            if (sgUid) syncedSgIds.delete(sgUid);
+                        }
                         continue;
                     }
-                    const alreadyIncluded = result.some(r => this.isMatch(r, sg));
-                    if (alreadyIncluded) continue;
 
                     // If this student_grantees row was previously synced from Form 2 (or has no submission) and is no longer in Form 2, it was deleted from annex_form_2
                     if ((sgId && syncedSgIds.has(sgId)) || (sgUid && syncedSgIds.has(sgUid)) || !this.hasStudentSubmitted(sg)) {

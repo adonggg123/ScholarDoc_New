@@ -1405,6 +1405,9 @@ function clearFileState() {
 }
 
 async function handleFile(file, explicitBatch, explicitTerm, explicitScholarship) {
+    if (isImportingMasterlist || window.__isImportingMasterlist) {
+        return;
+    }
     const selectedTerm = explicitTerm || getSelectedImportTerm();
     if (!selectedTerm) {
         if (fileInput) fileInput.value = '';
@@ -1960,8 +1963,10 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
 // â”€â”€ Fully Automatic Pipeline: Extract -> Display in Table -> Save to Database â”€â”€
 async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, explicitScholarship) {
     if (!file) return;
+    if (isImportingMasterlist || window.__isImportingMasterlist) return;
 
     isImportingMasterlist = true;
+    window.__isImportingMasterlist = true;
     try {
         const selectedTerm = explicitTerm || getSelectedImportTerm();
         if (!selectedTerm) {
@@ -2262,11 +2267,6 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
             renderAnnexForm2Table(verifiedForm2List);
         }
 
-        // Call StudentSyncService to reconcile, sync, and persist any remaining student grantees
-        if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
-            await StudentSyncService.loadAndSyncStudents();
-        }
-
         let conflictMsg = conflictCount > 0 ? ` (${conflictCount} conflict${conflictCount > 1 ? 's' : ''} excluded)` : '';
         let dupMsg = skippedCount > 0 ? ` (${skippedCount} duplicate${skippedCount > 1 ? 's' : ''} skipped)` : '';
 
@@ -2369,6 +2369,7 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
         }
     } finally {
         isImportingMasterlist = false;
+        window.__isImportingMasterlist = false;
         setTimeout(() => {
             if (ocrProgressContainer) ocrProgressContainer.classList.add('hidden');
         }, 3000);
@@ -4717,6 +4718,29 @@ async function fetchExistingMasterlist() {
                     isDuplicate: false
                 };
             });
+
+            // Deduplicate allMasterlistRecords per term and delete any duplicate rows from Supabase
+            if (allMasterlistRecords.length > 1) {
+                const uniqueMasterlist = [];
+                const duplicateIdsToDelete = [];
+                for (const rec of allMasterlistRecords) {
+                    const cand = getComparableName(rec);
+                    const isDup = uniqueMasterlist.some(exist =>
+                        exist.academicYear === rec.academicYear &&
+                        exist.semester === rec.semester &&
+                        areNamesMatching(cand, getComparableName(exist))
+                    );
+                    if (isDup) {
+                        if (rec.id) duplicateIdsToDelete.push(rec.id);
+                    } else {
+                        uniqueMasterlist.push(rec);
+                    }
+                }
+                if (duplicateIdsToDelete.length > 0) {
+                    allMasterlistRecords = uniqueMasterlist;
+                    window.supabaseClient.from(tableName).delete().in('id', duplicateIdsToDelete).then(() => { }).catch(() => { });
+                }
+            }
 
             // Cache retrieved batches and terms
             cacheGranteeBatches(allMasterlistRecords);

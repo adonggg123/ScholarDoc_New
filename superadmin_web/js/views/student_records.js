@@ -268,6 +268,18 @@ function applyFilters() {
         return matchSearch && matchStatus && matchBatch && matchCourse && matchSchol && matchAy;
     });
 
+    // Deduplicate filteredStudents so each student grantee is displayed only once
+    const seenStudentKeys = new Set();
+    filteredStudents = filteredStudents.filter(s => {
+        const sNo = String(s.student_no || s.studentId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sName = String(s.full_name || s.fullName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const key = (sNo && sNo !== 'na') ? `no_${sNo}` : `name_${sName}`;
+        if (!key || key === 'name_') return true;
+        if (seenStudentKeys.has(key)) return false;
+        seenStudentKeys.add(key);
+        return true;
+    });
+
     if (sort === 'Name (A-Z)') {
         filteredStudents.sort((a, b) => (a.full_name || a.fullName || '').localeCompare(b.full_name || b.fullName || ''));
     } else if (sort === 'Latest First') {

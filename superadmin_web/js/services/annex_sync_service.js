@@ -586,6 +586,10 @@ export class AnnexSyncService {
 
         this.isSavingToDb = true;
         try {
+            const dedupedInput = this.deduplicateLists(form2List, form3List, []);
+            form2List = dedupedInput.form2List;
+            form3List = dedupedInput.form3List;
+
             // Preserve authentic SA numbers and batches already stored in annex_form_2 or student_grantees
             const existingF2Map = new Map();
             const existingSgMap = new Map();
@@ -921,6 +925,13 @@ export class AnnexSyncService {
 
                 const existList = this.getStudentExistData(academicYear, semester) || [];
                 const deduplicated = this.deduplicateLists(form2List, form3List, [], existList);
+                if (form2List.length > deduplicated.form2List.length) {
+                    const keptF2Ids = new Set(deduplicated.form2List.map(i => i.grantee?.id).filter(Boolean));
+                    const dupF2Ids = form2List.map(i => i.grantee?.id).filter(id => id && !keptF2Ids.has(id));
+                    if (dupF2Ids.length > 0) {
+                        supabase.from('annex_form_2').delete().in('id', dupF2Ids).then(() => { }).catch(() => { });
+                    }
+                }
                 return {
                     form2List: deduplicated.form2List,
                     form3List: deduplicated.form3List,

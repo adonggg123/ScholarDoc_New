@@ -1707,7 +1707,12 @@ class AuthService {
           });
         }
         final normalized = _normalizeStudentData(list.first);
-        return await _enrichStudentDataFromSchool(normalized);
+        try {
+          return await _enrichStudentDataFromSchool(normalized);
+        } catch (enrichErr) {
+          debugPrint('AuthService: Enrich error: $enrichErr');
+          return normalized;
+        }
       }
 
       // Fallback: If no document by uid, attempt lookup by student ID, email, or user metadata
@@ -1717,7 +1722,7 @@ class AuthService {
         final sId = email.contains('@')
             ? email.split('@').first.replaceAll('_', ' ').trim()
             : '';
-        final cleanSid = sId.replaceAll(' ', '');
+        final cleanSid = sId.replaceAll(' ', '').replaceAll('-', '');
 
         final filterParts = <String>{};
         if (sId.isNotEmpty) {
@@ -1746,10 +1751,6 @@ class AuthService {
         }
 
         final metaName = (user.userMetadata?['fullName'] ?? user.userMetadata?['full_name'])?.toString().trim();
-        if (metaName != null && metaName.isNotEmpty) {
-          filterParts.add('full_name.ilike.$metaName');
-          filterParts.add('fullName.ilike.$metaName');
-        }
 
         if (filterParts.isNotEmpty) {
           final byId = await _supabase
@@ -1769,40 +1770,86 @@ class AuthService {
               if (!aHas && bHas) return 1;
               return 0;
             });
-            // Link UID in background so future lookups and getStudentStream succeed instantly
+            // Link UID immediately so future lookups and getStudentStream succeed instantly
             try {
               await _supabase
                   .from('student_grantees')
                   .update({'uid': uid})
                   .eq('id', list.first['id']);
-            } catch (_) {}
+              list.first['uid'] = uid;
+            } catch (upErr) {
+              debugPrint('AuthService: Notice linking UID: $upErr');
+            }
             final normalized = _normalizeStudentData(list.first);
-            return await _enrichStudentDataFromSchool(normalized);
-          } else {
-            // If not found in student_grantees, check school_students (read-only)
             try {
-              final schoolFilter = <String>{};
-              if (sId.isNotEmpty) schoolFilter.add('student_no.eq.$sId');
-              if (cleanSid.isNotEmpty) schoolFilter.add('student_no.eq.$cleanSid');
-              if (email.isNotEmpty) schoolFilter.add('email_address.eq.$email');
-              if (metaStudentId != null && metaStudentId.isNotEmpty) schoolFilter.add('student_no.eq.$metaStudentId');
-              if (metaEmail != null && metaEmail.isNotEmpty) schoolFilter.add('email_address.eq.$metaEmail');
-              if (metaName != null && metaName.isNotEmpty) schoolFilter.add('full_name.ilike.$metaName');
-
-              if (schoolFilter.isNotEmpty) {
-                final schoolRes = await _supabase
-                    .from('school_students')
-                    .select()
-                    .or(schoolFilter.join(','))
-                    .limit(1);
-                if (schoolRes.isNotEmpty) {
-                  final normalized = _normalizeStudentData(schoolRes.first);
-                  return normalized;
-                }
-              }
-            } catch (_) {}
+              return await _enrichStudentDataFromSchool(normalized);
+            } catch (enrichErr) {
+              debugPrint('AuthService: Enrich error: $enrichErr');
+              return normalized;
+            }
           }
         }
+
+        // Secondary fallback by full name without using .or() (avoids PostgREST comma parsing errors)
+        if (metaName != null && metaName.isNotEmpty) {
+          try {
+            final byName = await _supabase
+                .from('student_grantees')
+                .select()
+                .ilike('full_name', metaName)
+                .limit(1);
+            if (byName.isNotEmpty) {
+              final record = Map<String, dynamic>.from(byName.first);
+              try {
+                await _supabase
+                    .from('student_grantees')
+                    .update({'uid': uid})
+                    .eq('id', record['id']);
+                record['uid'] = uid;
+              } catch (_) {}
+              final normalized = _normalizeStudentData(record);
+              try {
+                return await _enrichStudentDataFromSchool(normalized);
+              } catch (enrichErr) {
+                return normalized;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // If not found in student_grantees, check school_students (read-only)
+        try {
+          final schoolFilter = <String>{};
+          if (sId.isNotEmpty) schoolFilter.add('student_no.eq.$sId');
+          if (cleanSid.isNotEmpty) schoolFilter.add('student_no.eq.$cleanSid');
+          if (email.isNotEmpty) schoolFilter.add('email_address.eq.$email');
+          if (metaStudentId != null && metaStudentId.isNotEmpty) schoolFilter.add('student_no.eq.$metaStudentId');
+          if (metaEmail != null && metaEmail.isNotEmpty) schoolFilter.add('email_address.eq.$metaEmail');
+
+          if (schoolFilter.isNotEmpty) {
+            final schoolRes = await _supabase
+                .from('school_students')
+                .select()
+                .or(schoolFilter.join(','))
+                .limit(1);
+            if (schoolRes.isNotEmpty) {
+              final normalized = _normalizeStudentData(schoolRes.first);
+              return normalized;
+            }
+          }
+
+          if (metaName != null && metaName.isNotEmpty) {
+            final schoolByName = await _supabase
+                .from('school_students')
+                .select()
+                .ilike('full_name', metaName)
+                .limit(1);
+            if (schoolByName.isNotEmpty) {
+              final normalized = _normalizeStudentData(schoolByName.first);
+              return normalized;
+            }
+          }
+        } catch (_) {}
 
         // Final in-memory fallback from user metadata so profile never returns null for logged-in user
         final fallbackName = metaName ?? (sId.isNotEmpty ? sId : 'Scholar');
