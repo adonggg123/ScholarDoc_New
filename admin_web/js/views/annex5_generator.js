@@ -694,10 +694,33 @@ function saveSchoolStudentTerms(records, ay, sem) {
     }
 }
 
+// Helpers to strictly check term matching across formats
+function isSemesterTermMatch(itemSem, targetSem) {
+    if (!targetSem || targetSem === 'All') return true;
+    const is = String(itemSem || '').toLowerCase().trim();
+    const ts = String(targetSem || '').toLowerCase().trim();
+    if (!is) return false;
+    if (ts.includes('1st')) return is.includes('1st') && !is.includes('2nd') && !is.includes('summer');
+    if (ts.includes('2nd')) return is.includes('2nd') && !is.includes('1st') && !is.includes('summer');
+    if (ts.includes('summer')) return is.includes('summer') && !is.includes('1st') && !is.includes('2nd');
+    return is === ts || is.includes(ts) || ts.includes(is);
+}
+
+function isAcademicYearTermMatch(itemAy, targetAy) {
+    if (!targetAy || targetAy === 'All') return true;
+    const ia = String(itemAy || '').toLowerCase().trim();
+    const ta = String(targetAy || '').toLowerCase().trim();
+    if (!ia) return false;
+    const yearMatchT = ta.match(/\d{4}-\d{4}/);
+    const filterYear = yearMatchT ? yearMatchT[0] : ta;
+    return ia.includes(filterYear);
+}
+
 // Determines whether a student belongs to a specific academic year and semester
 function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new Map()) {
-    if (!targetAy || targetAy === 'All') {
-        if (!targetSem || targetSem === 'All') return true;
+    if (!s) return false;
+    if ((!targetAy || targetAy === 'All') && (!targetSem || targetSem === 'All')) {
+        return true;
     }
 
     const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
@@ -712,7 +735,7 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
             : JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
 
         if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
-            if (termStudentsMap && Array.isArray(termStudentsMap[termKey]) && termStudentsMap[termKey].length > 0) {
+            if (termStudentsMap && Array.isArray(termStudentsMap[termKey])) {
                 const studentSet = new Set(termStudentsMap[termKey]);
                 if (sNo && studentSet.has(sNo)) return true;
                 if (sName && studentSet.has(sName)) return true;
@@ -727,26 +750,17 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
         const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
         const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
         if (Array.isArray(entry) && entry.length > 0) {
-            const hasMatch = entry.some(t => {
-                const matchAy = !targetAy || targetAy === 'All' || t.academicYear === targetAy;
-                const matchSem = !targetSem || targetSem === 'All' || t.semester === targetSem;
-                return matchAy && matchSem;
-            });
-            if (hasMatch) return true;
-        } else if (entry && entry.academicYear && entry.semester) {
-            const matchAy = !targetAy || targetAy === 'All' || entry.academicYear === targetAy;
-            const matchSem = !targetSem || targetSem === 'All' || entry.semester === targetSem;
-            if (matchAy && matchSem) return true;
+            return entry.some(t => isAcademicYearTermMatch(t.academicYear, targetAy) && isSemesterTermMatch(t.semester, targetSem));
+        } else if (entry && (entry.academicYear || entry.semester)) {
+            return isAcademicYearTermMatch(entry.academicYear, targetAy) && isSemesterTermMatch(entry.semester, targetSem);
         }
     } catch (_) { }
 
     // 3. Database column checks on the record itself
     const objAy = s.academic_year || s.academicYear;
     const objSem = s.semester;
-    if (objAy && objSem) {
-        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
-        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
-        if (matchAy && matchSem) return true;
+    if (objAy || objSem) {
+        return isAcademicYearTermMatch(objAy, targetAy) && isSemesterTermMatch(objSem, targetSem);
     }
 
     // 4. Matched profile in student_grantees
@@ -754,15 +768,16 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
     if (matchedSt) {
         const ay = matchedSt.academic_year || matchedSt.academicYear;
         const sem = matchedSt.semester;
-        if (ay && sem) {
-            const matchAy = !targetAy || targetAy === 'All' || ay === targetAy;
-            const matchSem = !targetSem || targetSem === 'All' || sem === targetSem;
-            if (matchAy && matchSem) return true;
+        if (ay || sem) {
+            return isAcademicYearTermMatch(ay, targetAy) && isSemesterTermMatch(sem, targetSem);
         }
     }
 
-    // 5. Safe Fallback: If no term partition is recorded in localStorage and the record has no term columns,
-    // display the institutional school records so the live table is never empty!
+    // If target term is specified (concrete AY and Semester) and no record matched this term, return false
+    if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
+        return false;
+    }
+
     return true;
 }
 
@@ -872,8 +887,8 @@ async function loadInitialData() {
 
             // Filter according to selected academic year & semester
             rawSuperAdminGrantees = mapped.filter(g => {
-                const matchAy = selectedAcademicYear === 'All' || g.academicYear === selectedAcademicYear;
-                const matchSem = selectedSemester === 'All' || g.semester === selectedSemester;
+                const matchAy = selectedAcademicYear === 'All' || isAcademicYearTermMatch(g.academicYear, selectedAcademicYear);
+                const matchSem = selectedSemester === 'All' || isSemesterTermMatch(g.semester, selectedSemester);
                 return matchAy && matchSem;
             });
 
@@ -1003,8 +1018,16 @@ async function loadInitialData() {
                     // Database tables annex_form_2 and annex_form_3 are empty for this term
                     const cachedTerm = AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
                     if (cachedTerm && ((cachedTerm.form2List && cachedTerm.form2List.length > 0) || (cachedTerm.form3List && cachedTerm.form3List.length > 0))) {
-                        verifiedForm2List = cachedTerm.form2List || [];
-                        verifiedForm3List = cachedTerm.form3List || [];
+                        verifiedForm2List = (cachedTerm.form2List || []).filter(item => {
+                            const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                            const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                            return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                        });
+                        verifiedForm3List = (cachedTerm.form3List || []).filter(item => {
+                            const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                            const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                            return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                        });
                         needsReviewList = cachedTerm.needsReviewList || [];
                     } else {
                         verifiedForm2List = [];
@@ -1012,8 +1035,16 @@ async function loadInitialData() {
                         needsReviewList = [];
                     }
                 } else {
-                    verifiedForm2List = dbSync.form2List || [];
-                    verifiedForm3List = dbSync.form3List || [];
+                    verifiedForm2List = (dbSync.form2List || []).filter(item => {
+                        const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                        const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                        return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                    });
+                    verifiedForm3List = (dbSync.form3List || []).filter(item => {
+                        const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                        const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                        return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                    });
                     needsReviewList = [];
                     AnnexSyncService.saveVerifiedData({
                         form2List: verifiedForm2List,

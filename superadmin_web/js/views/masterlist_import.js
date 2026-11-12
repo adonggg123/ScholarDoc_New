@@ -567,6 +567,28 @@ function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemes
     }
 }
 
+// ── Universal Term Matching Helpers ─────────────────────────────────────
+function isSemesterMatch(itemSem, targetSem) {
+    if (!targetSem || targetSem === 'All') return true;
+    const is = String(itemSem || '').toLowerCase().trim();
+    const ts = String(targetSem || '').toLowerCase().trim();
+    if (!is) return false;
+    if (ts.includes('1st')) return is.includes('1st') && !is.includes('2nd') && !is.includes('summer');
+    if (ts.includes('2nd')) return is.includes('2nd') && !is.includes('1st') && !is.includes('summer');
+    if (ts.includes('summer')) return is.includes('summer') && !is.includes('1st') && !is.includes('2nd');
+    return is === ts || is.includes(ts) || ts.includes(is);
+}
+
+function isAcademicYearMatch(itemAy, targetAy) {
+    if (!targetAy || targetAy === 'All') return true;
+    const ia = String(itemAy || '').toLowerCase().trim();
+    const ta = String(targetAy || '').toLowerCase().trim();
+    if (!ia) return false;
+    const yearMatchT = ta.match(/\d{4}-\d{4}/);
+    const filterYear = yearMatchT ? yearMatchT[0] : ta;
+    return ia.includes(filterYear);
+}
+
 // ── Student Exist & Duplicate Detection Helpers ──────────────────────────
 function isTermMatchForExist(item, ay, sem) {
     if (!item) return false;
@@ -578,7 +600,7 @@ function isTermMatchForExist(item, ay, sem) {
         if (ts.includes('summer') && (is.includes('1st') || is.includes('2nd'))) return false;
     }
     if (ay && ay !== 'All') {
-        const ia = String(item.academicYear || '').toLowerCase().trim();
+        const ia = String(item.academicYear || item.academic_year || '').toLowerCase().trim();
         const ta = String(ay || '').toLowerCase().trim();
         if (ia && !ia.includes(ta) && !ta.includes(ia)) return false;
     }
@@ -1326,8 +1348,10 @@ function applyTermFilterToMasterlist(ay = selectedAcademicYear, sem = selectedSe
 
     // Filter allMasterlistRecords by selected AY and Semester
     extractedRecords = allMasterlistRecords.filter(r => {
-        const matchAY = !ay || ay === 'All' || r.academicYear === ay;
-        const matchSem = !sem || sem === 'All' || r.semester === sem;
+        const rAy = r.academicYear || r.academic_year;
+        const rSem = r.semester;
+        const matchAY = isAcademicYearMatch(rAy, ay);
+        const matchSem = isSemesterMatch(rSem, sem);
         return matchAY && matchSem;
     });
 
@@ -3812,8 +3836,9 @@ async function autoHealSchoolStudentTerms(allDbStudents) {
 }
 
 function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new Map()) {
-    if (!targetAy || targetAy === 'All') {
-        if (!targetSem || targetSem === 'All') return true;
+    if (!s) return false;
+    if ((!targetAy || targetAy === 'All') && (!targetSem || targetSem === 'All')) {
+        return true;
     }
 
     const sNo = String(s.student_no || s.studentNo || s.studentId || '').trim();
@@ -3828,7 +3853,7 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
             : JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
 
         if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
-            if (termStudentsMap && Array.isArray(termStudentsMap[termKey]) && termStudentsMap[termKey].length > 0) {
+            if (termStudentsMap && Array.isArray(termStudentsMap[termKey])) {
                 const studentSet = new Set(termStudentsMap[termKey]);
                 if (sNo && studentSet.has(sNo)) return true;
                 if (sName && studentSet.has(sName)) return true;
@@ -3843,26 +3868,17 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
         const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
         const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
         if (Array.isArray(entry) && entry.length > 0) {
-            const hasMatch = entry.some(t => {
-                const matchAy = !targetAy || targetAy === 'All' || t.academicYear === targetAy;
-                const matchSem = !targetSem || targetSem === 'All' || t.semester === targetSem;
-                return matchAy && matchSem;
-            });
-            if (hasMatch) return true;
-        } else if (entry && entry.academicYear && entry.semester) {
-            const matchAy = !targetAy || targetAy === 'All' || entry.academicYear === targetAy;
-            const matchSem = !targetSem || targetSem === 'All' || entry.semester === targetSem;
-            if (matchAy && matchSem) return true;
+            return entry.some(t => isAcademicYearMatch(t.academicYear, targetAy) && isSemesterMatch(t.semester, targetSem));
+        } else if (entry && (entry.academicYear || entry.semester)) {
+            return isAcademicYearMatch(entry.academicYear, targetAy) && isSemesterMatch(entry.semester, targetSem);
         }
     } catch (_) { }
 
     // 3. Database column checks on the record itself
     const objAy = s.academic_year || s.academicYear;
     const objSem = s.semester;
-    if (objAy && objSem) {
-        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
-        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
-        if (matchAy && matchSem) return true;
+    if (objAy || objSem) {
+        return isAcademicYearMatch(objAy, targetAy) && isSemesterMatch(objSem, targetSem);
     }
 
     // 4. Matched profile in student_grantees
@@ -3870,15 +3886,16 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
     if (matchedSt) {
         const ay = matchedSt.academic_year || matchedSt.academicYear;
         const sem = matchedSt.semester;
-        if (ay && sem) {
-            const matchAy = !targetAy || targetAy === 'All' || ay === targetAy;
-            const matchSem = !targetSem || targetSem === 'All' || sem === targetSem;
-            if (matchAy && matchSem) return true;
+        if (ay || sem) {
+            return isAcademicYearMatch(ay, targetAy) && isSemesterMatch(sem, targetSem);
         }
     }
 
-    // 5. Safe Fallback: If no term partition is recorded in localStorage and the record has no term columns,
-    // display the institutional school records so the live table is never empty!
+    // If target term is specified (concrete AY and Semester) and no record matched this term, return false
+    if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
+        return false;
+    }
+
     return true;
 }
 
@@ -5614,9 +5631,16 @@ export function initMasterlistImport() {
             renderStudentExistTable();
 
             if (dbSync && dbSync.fromDb && ((dbSync.form2List && dbSync.form2List.length > 0) || (dbSync.form3List && dbSync.form3List.length > 0))) {
-                verifiedForm2List = dbSync.form2List || [];
+                verifiedForm2List = (dbSync.form2List || []).filter(item => {
+                    const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                    const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                    return isAcademicYearMatch(iAy, ay) && isSemesterMatch(iSem, sem);
+                });
                 const existPool = (studentExistList || []).map(e => getComparableName(e));
                 verifiedForm3List = (dbSync.form3List || []).filter(item => {
+                    const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                    const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                    if (!isAcademicYearMatch(iAy, ay) || !isSemesterMatch(iSem, sem)) return false;
                     const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
                     if (String(r).includes('Categorized from Student Exist')) return false;
                     if ((studentExistList || []).some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
@@ -5663,6 +5687,9 @@ export function initMasterlistImport() {
 
             // Synchronize the masterlist table and top badge for this term
             applyTermFilterToMasterlist(ay, sem);
+
+            // Synchronize school students table for this term
+            await loadSchoolStudentsAndVerify(extractedRecords);
 
             if (syncBadge) {
                 const gCount = extractedRecords.length;

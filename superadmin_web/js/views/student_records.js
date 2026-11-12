@@ -255,12 +255,18 @@ function applyFilters() {
             const sSem = (s.semester || '').toLowerCase().trim();
             const yearMatch = ay.match(/\d{4}-\d{4}/);
             const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
-            const matchYear = !filterYear || (Boolean(sAy) && sAy.includes(filterYear));
+            const matchYear = !filterYear || !sAy || sAy === 'n/a' || sAy.includes(filterYear);
 
             let matchSemester = true;
-            if (ay.toLowerCase().includes('1st') && !sSem.includes('1st')) matchSemester = false;
-            else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
-            else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
+            const ayLower = ay.toLowerCase();
+            if (ayLower.includes('1st')) {
+                if (sSem.includes('2nd') || sSem.includes('summer')) matchSemester = false;
+                else if (sSem && !sSem.includes('1st')) matchSemester = false;
+            } else if (ayLower.includes('2nd')) {
+                if (!sSem.includes('2nd')) matchSemester = false;
+            } else if (ayLower.includes('summer')) {
+                if (!sSem.includes('summer')) matchSemester = false;
+            }
 
             matchAy = matchYear && matchSemester;
         }

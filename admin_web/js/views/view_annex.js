@@ -208,8 +208,9 @@ async function fetchRecordsFromSupabase() {
     const selAY = document.getElementById('view-filter-ay');
     const selSem = document.getElementById('view-filter-sem');
 
-    const filterAY = selAY ? selAY.value : '2024-2025';
-    const filterSem = selSem ? selSem.value : '1st Semester';
+    const defaultTerm = AcademicYearService.getDefaultTerm() || { academicYear: '2026-2027', semester: '1st Semester' };
+    const filterAY = selAY && selAY.value ? selAY.value : (defaultTerm.academicYear || '2026-2027');
+    const filterSem = selSem && selSem.value ? selSem.value : (defaultTerm.semester || '1st Semester');
 
     updateFilterBadge(filterAY, filterSem);
 
@@ -265,14 +266,38 @@ function applyFiltersAndRender() {
     const selBatch = document.getElementById('view-filter-batch');
     const selStatus = document.getElementById('view-filter-status');
     const selProgram = document.getElementById('view-filter-program');
+    const selAY = document.getElementById('view-filter-ay');
+    const selSem = document.getElementById('view-filter-sem');
 
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
     const batchFilter = selBatch ? selBatch.value : 'All';
     const statusFilter = selStatus ? selStatus.value : 'All';
     const programFilter = selProgram ? selProgram.value : 'All';
+    const currentAY = selAY ? selAY.value : 'All';
+    const currentSem = selSem ? selSem.value : 'All';
+
+    const isSemMatch = (rowSem, targetSem) => {
+        if (!targetSem || targetSem === 'All') return true;
+        const s = String(rowSem || '').toLowerCase().trim();
+        const t = String(targetSem || '').toLowerCase().trim();
+        if (t.includes('1st')) return s.includes('1st') && !s.includes('2nd') && !s.includes('summer');
+        if (t.includes('2nd')) return s.includes('2nd') && !s.includes('1st') && !s.includes('summer');
+        if (t.includes('summer')) return s.includes('summer') && !s.includes('1st') && !s.includes('2nd');
+        return s === t;
+    };
+    const isAyMatch = (rowAy, targetAy) => {
+        if (!targetAy || targetAy === 'All') return true;
+        const a = String(rowAy || '').toLowerCase().trim();
+        const t = String(targetAy || '').toLowerCase().trim();
+        const yearMatchT = t.match(/\d{4}-\d{4}/);
+        const filterYear = yearMatchT ? yearMatchT[0] : t;
+        return a.includes(filterYear);
+    };
 
     // 1. Filter Form 2 Records
     const filteredF2 = rawForm2Records.filter(row => {
+        if (!isAyMatch(row.academic_year, currentAY) || !isSemMatch(row.semester, currentSem)) return false;
+
         const matchBatch = batchFilter === 'All' || String(row.tes_batch || '').toLowerCase().includes(batchFilter.toLowerCase());
         if (!matchBatch) return false;
 
@@ -292,6 +317,8 @@ function applyFiltersAndRender() {
 
     // 2. Filter Form 3 Records
     const filteredF3 = rawForm3Records.filter(row => {
+        if (!isAyMatch(row.academic_year, currentAY) || !isSemMatch(row.semester, currentSem)) return false;
+
         const matchStatus = statusFilter === 'All' || String(row.status || '').toLowerCase() === statusFilter.toLowerCase();
         if (!matchStatus) return false;
 

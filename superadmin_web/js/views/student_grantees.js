@@ -290,10 +290,11 @@ function applyFilters() {
             const ayLower = ay.toLowerCase();
             if (ayLower.includes('1st')) {
                 if (sSem.includes('2nd') || sSem.includes('summer')) matchSemester = false;
+                else if (sSem && !sSem.includes('1st')) matchSemester = false;
             } else if (ayLower.includes('2nd')) {
-                if (sSem.includes('1st') || sSem.includes('summer')) matchSemester = false;
+                if (!sSem.includes('2nd')) matchSemester = false;
             } else if (ayLower.includes('summer')) {
-                if (sSem.includes('1st') || sSem.includes('2nd')) matchSemester = false;
+                if (!sSem.includes('summer')) matchSemester = false;
             }
 
             matchAy = matchYear && matchSemester;
