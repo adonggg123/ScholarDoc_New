@@ -4353,6 +4353,46 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // ── API: Public Stats (Total Active Scholars) ─────────────────────────
+    if ((urlPath === '/api/public/stats' || urlPath === '/api/stats/active-scholars') && req.method === 'GET') {
+        try {
+            const headers = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Prefer': 'count=exact'
+            };
+            const countRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?select=id`, {
+                headers,
+                signal: AbortSignal.timeout(6000)
+            });
+            const range = countRes.headers.get('content-range');
+            let count = 0;
+            if (range && range.includes('/')) {
+                count = parseInt(range.split('/')[1], 10) || 0;
+            } else if (countRes.ok) {
+                const rows = await countRes.json();
+                count = Array.isArray(rows) ? rows.length : 0;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'no-cache'
+            });
+            res.end(JSON.stringify({
+                success: true,
+                activeScholars: count,
+                timestamp: new Date().toISOString()
+            }));
+        } catch (err) {
+            res.writeHead(500, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: err.message, activeScholars: 0 }));
+        }
+        return;
+    }
+
     // ── API: Push Notification Broadcast for Announcements ───────────────
     if (urlPath === '/api/notifications/broadcast-announcement' && req.method === 'POST') {
         let body = '';

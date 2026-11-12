@@ -14,6 +14,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         /* ════════════════════════════════════════════════════════
@@ -2117,7 +2118,7 @@
 
                     <div class="hero-stats">
                         <div class="hero-stat-card">
-                            <div class="hero-stat-num" data-count="1200">0</div>
+                            <div class="hero-stat-num" id="heroActiveScholars" data-count="0">0</div>
                             <div class="hero-stat-label">Active Scholars</div>
                         </div>
                         <div class="hero-stat-card">
@@ -2772,10 +2773,181 @@
 
         revealElements.forEach(el => revealObserver.observe(el));
 
+        // ─── Dynamic Live Active Scholars Counter from Student Grantees DB ───
+        const SG_CONFIG = {
+            url: 'https://ywavesulvkqwpsejprxp.supabase.co',
+            key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3YXZlc3Vsdmtxd3BzZWpwcnhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTQ5NjcsImV4cCI6MjA5NjgzMDk2N30.2PdPn3Z88Hn0q_1AUlSFjv94wxKSvZaPa_fi2umKHbk'
+        };
+
+        let liveActiveScholarsCount = null;
+        let activeScholarsCurrentDisplay = 0;
+        let heroStatsObserverTriggered = false;
+
+        function formatScholarCount(val, finalTarget = null) {
+            const num = Math.floor(val);
+            const target = finalTarget !== null ? finalTarget : num;
+            if (target >= 1000) {
+                return num.toLocaleString() + '+';
+            }
+            return num.toLocaleString();
+        }
+
+        async function fetchActiveScholarsFromDB() {
+            // Tier 1: Fast Supabase REST exact count (HEAD request with Prefer: count=exact)
+            try {
+                const res = await fetch(`${SG_CONFIG.url}/rest/v1/student_grantees?select=id`, {
+                    method: 'HEAD',
+                    headers: {
+                        'apikey': SG_CONFIG.key,
+                        'Authorization': `Bearer ${SG_CONFIG.key}`,
+                        'Prefer': 'count=exact'
+                    }
+                });
+                const range = res.headers.get('content-range');
+                if (range && range.includes('/')) {
+                    const count = parseInt(range.split('/')[1], 10);
+                    if (!isNaN(count)) return count;
+                }
+            } catch (err) {
+                console.warn('[ActiveScholars] REST fetch notice:', err);
+            }
+
+            // Tier 2: Supabase JS Client exact count
+            try {
+                if (window.supabase) {
+                    const client = window._landingSupabase || window.supabase.createClient(SG_CONFIG.url, SG_CONFIG.key, {
+                        auth: { persistSession: false, autoRefreshToken: false }
+                    });
+                    window._landingSupabase = client;
+                    const { count, error } = await client
+                        .from('student_grantees')
+                        .select('*', { count: 'exact', head: true });
+                    if (!error && typeof count === 'number') return count;
+                }
+            } catch (err) {
+                console.warn('[ActiveScholars] Supabase client notice:', err);
+            }
+
+            // Tier 3: Local/Vercel unified backend endpoint fallback
+            try {
+                const res = await fetch('/api/public/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (typeof data.activeScholars === 'number') return data.activeScholars;
+                }
+            } catch (_) {}
+
+            return null;
+        }
+
+        function animateScholarValue(startVal, targetVal, duration = 1600) {
+            const el = document.getElementById('heroActiveScholars');
+            if (!el) return;
+            el.setAttribute('data-count', targetVal);
+
+            const startTime = performance.now();
+            function step(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const currentVal = startVal + (targetVal - startVal) * easeOut;
+                activeScholarsCurrentDisplay = currentVal;
+                el.textContent = formatScholarCount(currentVal, targetVal);
+
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    activeScholarsCurrentDisplay = targetVal;
+                    el.textContent = formatScholarCount(targetVal, targetVal);
+                }
+            }
+            requestAnimationFrame(step);
+        }
+
+        async function syncActiveScholarsCount(isLiveUpdate = false) {
+            const count = await fetchActiveScholarsFromDB();
+            if (typeof count !== 'number' || isNaN(count)) return;
+
+            const el = document.getElementById('heroActiveScholars');
+            if (!el) return;
+
+            const prevTarget = liveActiveScholarsCount;
+            liveActiveScholarsCount = count;
+            el.setAttribute('data-count', count);
+
+            if (!heroStatsObserverTriggered) {
+                // If hero stats section hasn't scrolled into view yet, pre-set the data-count
+                return;
+            }
+
+            if (isLiveUpdate) {
+                if (prevTarget !== null && prevTarget !== count) {
+                    // Smoothly transition from current displayed value to the new count
+                    animateScholarValue(activeScholarsCurrentDisplay, count, 1000);
+                }
+            } else {
+                animateScholarValue(0, count, 1800);
+            }
+        }
+
+        function initActiveScholarsWatcher() {
+            // Initial fetch right away
+            syncActiveScholarsCount(false);
+
+            // Supabase Realtime Postgres Changes Listener
+            try {
+                if (window.supabase) {
+                    const client = window._landingSupabase || window.supabase.createClient(SG_CONFIG.url, SG_CONFIG.key, {
+                        auth: { persistSession: false, autoRefreshToken: false }
+                    });
+                    window._landingSupabase = client;
+
+                    client.channel('public:student_grantees_landing_count')
+                        .on('postgres_changes', {
+                            event: '*',
+                            schema: 'public',
+                            table: 'student_grantees'
+                        }, (payload) => {
+                            console.log('[ScholarDoc Realtime] student_grantees record change:', payload.eventType);
+                            syncActiveScholarsCount(true);
+                        })
+                        .subscribe((status) => {
+                            console.log('[ScholarDoc Realtime] Subscription status:', status);
+                        });
+                }
+            } catch (err) {
+                console.warn('[ScholarDoc Realtime] Setup notice:', err);
+            }
+
+            // Polling fallback every 15s so any network reconnect / background tab updates reliably
+            setInterval(() => syncActiveScholarsCount(true), 15000);
+
+            // Re-sync on window focus or visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    syncActiveScholarsCount(true);
+                }
+            });
+            window.addEventListener('focus', () => syncActiveScholarsCount(true));
+        }
+
+        // Initialize active scholars live watcher
+        initActiveScholarsWatcher();
+
         // Counter Animation for Hero Stats
         function runCounters() {
-            const counterElements = document.querySelectorAll('.hero-stat-num[data-count]');
-            counterElements.forEach(el => {
+            heroStatsObserverTriggered = true;
+
+            // Animate Active Scholars from 0 to live count (or wait for fetch to complete)
+            if (liveActiveScholarsCount !== null) {
+                animateScholarValue(0, liveActiveScholarsCount, 1800);
+            } else {
+                syncActiveScholarsCount(false);
+            }
+
+            // Animate other stat cards (OCR Accuracy, Paperless TES)
+            const otherCounterElements = document.querySelectorAll('.hero-stat-num[data-count]:not(#heroActiveScholars)');
+            otherCounterElements.forEach(el => {
                 const target = parseFloat(el.getAttribute('data-count'));
                 const suffix = el.getAttribute('data-suffix') || '';
                 const isDecimal = target % 1 !== 0;

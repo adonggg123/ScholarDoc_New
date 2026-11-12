@@ -583,3 +583,16 @@ loadStats();
 loadActivity();
 loadPending();
 renderChart();
+
+// Realtime sync for student_grantees changes on dashboard
+if (window.supabase) {
+    try {
+        supabase.channel('dashboard:student_grantees_sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'student_grantees' }, () => {
+                console.log('[Dashboard Realtime] student_grantees updated, refreshing stats...');
+                loadStats();
+                loadPending();
+            })
+            .subscribe();
+    } catch (_) {}
+}
