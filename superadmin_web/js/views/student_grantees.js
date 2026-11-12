@@ -282,20 +282,21 @@ function applyFilters() {
         if (!matchAy) {
             const sAy = (s.academic_year || s.academicYear || '').toLowerCase();
             const sSem = (s.semester || '').toLowerCase();
-            if (!sAy || sAy === 'n/a') {
-                matchAy = true;
-            } else {
-                const yearMatch = ay.match(/\d{4}-\d{4}/);
-                const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
-                const matchYear = !filterYear || sAy.includes(filterYear);
+            const yearMatch = ay.match(/\d{4}-\d{4}/);
+            const filterYear = yearMatch ? yearMatch[0].toLowerCase() : '';
+            const matchYear = !filterYear || !sAy || sAy === 'n/a' || sAy.includes(filterYear);
 
-                let matchSemester = true;
-                if (ay.toLowerCase().includes('1st') && !sSem.includes('1st') && sSem) matchSemester = false;
-                else if (ay.toLowerCase().includes('2nd') && !sSem.includes('2nd')) matchSemester = false;
-                else if (ay.toLowerCase().includes('summer') && !sSem.includes('summer')) matchSemester = false;
-
-                matchAy = matchYear && matchSemester;
+            let matchSemester = true;
+            const ayLower = ay.toLowerCase();
+            if (ayLower.includes('1st')) {
+                if (sSem.includes('2nd') || sSem.includes('summer')) matchSemester = false;
+            } else if (ayLower.includes('2nd')) {
+                if (sSem.includes('1st') || sSem.includes('summer')) matchSemester = false;
+            } else if (ayLower.includes('summer')) {
+                if (sSem.includes('1st') || sSem.includes('2nd')) matchSemester = false;
             }
+
+            matchAy = matchYear && matchSemester;
         }
 
         return matchSearch && matchStatus && matchBatch && matchCourse && matchSchol && matchAy;

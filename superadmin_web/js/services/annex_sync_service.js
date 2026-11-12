@@ -367,7 +367,28 @@ export class AnnexSyncService {
             if ((!studentExistList || studentExistList.length === 0) && academicYear && semester) {
                 studentExistList = this.getStudentExistData(academicYear, semester) || [];
             }
-            const deduplicated = this.deduplicateLists(form2List, form3List, needsReviewList, studentExistList);
+            const filterBySemester = (list, targetSem, targetAy) => {
+                if (!Array.isArray(list)) return [];
+                return list.filter(item => {
+                    if (!item) return false;
+                    const is = String(item.semester || '').toLowerCase().trim();
+                    const ts = String(targetSem || '').toLowerCase().trim();
+                    if (ts && ts !== 'all') {
+                        if (ts.includes('1st') && (is.includes('2nd') || is.includes('summer'))) return false;
+                        if (ts.includes('2nd') && (is.includes('1st') || is.includes('summer'))) return false;
+                        if (ts.includes('summer') && (is.includes('1st') || is.includes('2nd'))) return false;
+                    }
+                    if (targetAy && targetAy !== 'All') {
+                        const ia = String(item.academicYear || '').toLowerCase().trim();
+                        const ta = String(targetAy || '').toLowerCase().trim();
+                        if (ia && !ia.includes(ta) && !ta.includes(ia)) return false;
+                    }
+                    return true;
+                });
+            };
+
+            const isolatedExistList = filterBySemester(studentExistList || [], semester, academicYear);
+            const deduplicated = this.deduplicateLists(form2List, form3List, needsReviewList, isolatedExistList);
             const totalCount = deduplicated.form2List.length + deduplicated.form3List.length + deduplicated.needsReviewList.length;
 
             const payload = {
@@ -378,11 +399,11 @@ export class AnnexSyncService {
                 semester: semester,
                 form2Count: deduplicated.form2List.length,
                 form3Count: deduplicated.form3List.length,
-                existCount: (studentExistList || []).length,
+                existCount: isolatedExistList.length,
                 reviewCount: deduplicated.needsReviewList.length,
                 form2List: deduplicated.form2List,
                 form3List: deduplicated.form3List,
-                studentExistList: studentExistList || [],
+                studentExistList: isolatedExistList,
                 needsReviewList: deduplicated.needsReviewList
             };
 
@@ -391,9 +412,28 @@ export class AnnexSyncService {
             localStorage.setItem(termStorageKey, JSON.stringify(payload));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 
-            if (academicYear && semester) {
+            if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
                 try {
-                    localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(studentExistList || []));
+                    localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(isolatedExistList));
+                    // Update master store preserving other terms
+                    try {
+                        let master = [];
+                        const rawMaster = localStorage.getItem('scholardoc_all_student_exist_master');
+                        if (rawMaster) master = JSON.parse(rawMaster) || [];
+                        const otherTerms = (Array.isArray(master) ? master : []).filter(item => {
+                            const is = String(item.semester || '').toLowerCase().trim();
+                            const ts = String(semester || '').toLowerCase().trim();
+                            const ia = String(item.academicYear || '').toLowerCase().trim();
+                            const ta = String(academicYear || '').toLowerCase().trim();
+                            const sameAy = !ta || !ia || ia.includes(ta) || ta.includes(ia);
+                            const sameSem = (!ts || ts === 'all') ? true :
+                                (ts.includes('1st') && is.includes('1st')) ||
+                                (ts.includes('2nd') && is.includes('2nd')) ||
+                                (ts.includes('summer') && is.includes('summer'));
+                            return !(sameAy && sameSem);
+                        });
+                        localStorage.setItem('scholardoc_all_student_exist_master', JSON.stringify([...otherTerms, ...isolatedExistList]));
+                    } catch (_) {}
                 } catch (_) {}
             }
 
@@ -508,17 +548,48 @@ export class AnnexSyncService {
      */
     static getStudentExistData(academicYear, semester) {
         try {
+            const filterBySemester = (list, targetSem, targetAy) => {
+                if (!Array.isArray(list)) return [];
+                return list.filter(item => {
+                    if (!item) return false;
+                    const is = String(item.semester || '').toLowerCase().trim();
+                    const ts = String(targetSem || '').toLowerCase().trim();
+                    if (ts && ts !== 'all') {
+                        if (ts.includes('1st') && (is.includes('2nd') || is.includes('summer'))) return false;
+                        if (ts.includes('2nd') && (is.includes('1st') || is.includes('summer'))) return false;
+                        if (ts.includes('summer') && (is.includes('1st') || is.includes('2nd'))) return false;
+                    }
+                    if (targetAy && targetAy !== 'All') {
+                        const ia = String(item.academicYear || '').toLowerCase().trim();
+                        const ta = String(targetAy || '').toLowerCase().trim();
+                        if (ia && !ia.includes(ta) && !ta.includes(ia)) return false;
+                    }
+                    return true;
+                });
+            };
+
             if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
                 const termRaw = localStorage.getItem(`scholardoc_student_exist_${academicYear}_${semester}`);
                 if (termRaw) {
                     const parsed = JSON.parse(termRaw);
-                    if (Array.isArray(parsed)) return parsed;
+                    if (Array.isArray(parsed)) return filterBySemester(parsed, semester, academicYear);
                 }
+                // Check master store fallback
+                try {
+                    const rawMaster = localStorage.getItem('scholardoc_all_student_exist_master');
+                    if (rawMaster) {
+                        const parsedMaster = JSON.parse(rawMaster);
+                        if (Array.isArray(parsedMaster)) {
+                            const filtered = filterBySemester(parsedMaster, semester, academicYear);
+                            if (filtered.length > 0) return filtered;
+                        }
+                    }
+                } catch (_) {}
                 return [];
             }
             const general = this.getVerifiedData(academicYear, semester);
             if (general && Array.isArray(general.studentExistList)) {
-                return general.studentExistList;
+                return filterBySemester(general.studentExistList, semester, academicYear);
             }
         } catch (_) {}
         return [];
@@ -530,14 +601,27 @@ export class AnnexSyncService {
     static saveStudentExistData(list, academicYear = '2026-2027', semester = '1st Semester') {
         try {
             const arr = Array.isArray(list) ? list : [];
-            if (academicYear && semester) {
-                localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(arr));
+            const isSem = (item) => {
+                if (!item) return false;
+                const is = String(item.semester || '').toLowerCase().trim();
+                const ts = String(semester || '').toLowerCase().trim();
+                if (ts && ts !== 'all') {
+                    if (ts.includes('1st') && (is.includes('2nd') || is.includes('summer'))) return false;
+                    if (ts.includes('2nd') && (is.includes('1st') || is.includes('summer'))) return false;
+                    if (ts.includes('summer') && (is.includes('1st') || is.includes('2nd'))) return false;
+                }
+                return true;
+            };
+            const termList = arr.filter(isSem);
+
+            if (academicYear && semester && academicYear !== 'All' && semester !== 'All') {
+                localStorage.setItem(`scholardoc_student_exist_${academicYear}_${semester}`, JSON.stringify(termList));
             }
-            const current = this.getVerifiedData() || {};
+            const current = this.getVerifiedData(academicYear, semester) || {};
             this.saveVerifiedData({
                 form2List: current.form2List || [],
                 form3List: current.form3List || [],
-                studentExistList: arr,
+                studentExistList: termList,
                 needsReviewList: current.needsReviewList || [],
                 updatedBy: 'Super Admin',
                 syncToDb: false,

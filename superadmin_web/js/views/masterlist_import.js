@@ -568,13 +568,39 @@ function updateStep2TermIndicator(ay = selectedAcademicYear, sem = selectedSemes
 }
 
 // ── Student Exist & Duplicate Detection Helpers ──────────────────────────
+function isTermMatchForExist(item, ay, sem) {
+    if (!item) return false;
+    const is = String(item.semester || '').toLowerCase().trim();
+    const ts = String(sem || '').toLowerCase().trim();
+    if (ts && ts !== 'all') {
+        if (ts.includes('1st') && (is.includes('2nd') || is.includes('summer'))) return false;
+        if (ts.includes('2nd') && (is.includes('1st') || is.includes('summer'))) return false;
+        if (ts.includes('summer') && (is.includes('1st') || is.includes('2nd'))) return false;
+    }
+    if (ay && ay !== 'All') {
+        const ia = String(item.academicYear || '').toLowerCase().trim();
+        const ta = String(ay || '').toLowerCase().trim();
+        if (ia && !ia.includes(ta) && !ta.includes(ia)) return false;
+    }
+    return true;
+}
+
 function saveStudentExistList(ay = selectedAcademicYear, sem = selectedSemester) {
     try {
-        if (ay && sem && ay !== 'All' && sem !== 'All') {
-            localStorage.setItem(`scholardoc_student_exist_${ay}_${sem}`, JSON.stringify(studentExistList || []));
+        if (!ay || !sem) return;
+        const taggedList = (studentExistList || []).map(item => ({
+            ...item,
+            academicYear: item.academicYear || ay,
+            semester: item.semester || sem
+        }));
+        const termOnly = taggedList.filter(item => isTermMatchForExist(item, ay, sem));
+        studentExistList = termOnly;
+
+        if (ay !== 'All' && sem !== 'All') {
+            localStorage.setItem(`scholardoc_student_exist_${ay}_${sem}`, JSON.stringify(termOnly));
         }
         if (typeof AnnexSyncService !== 'undefined' && AnnexSyncService.saveStudentExistData) {
-            AnnexSyncService.saveStudentExistData(studentExistList, ay, sem);
+            AnnexSyncService.saveStudentExistData(termOnly, ay, sem);
         }
     } catch (e) {
         console.warn('Error saving student exist list:', e);
@@ -583,22 +609,20 @@ function saveStudentExistList(ay = selectedAcademicYear, sem = selectedSemester)
 
 function loadStudentExistList(ay = selectedAcademicYear, sem = selectedSemester) {
     try {
+        let list = null;
         if (typeof AnnexSyncService !== 'undefined' && AnnexSyncService.getStudentExistData) {
-            const list = AnnexSyncService.getStudentExistData(ay, sem);
-            if (Array.isArray(list)) {
-                studentExistList = list;
-                return studentExistList;
-            }
+            list = AnnexSyncService.getStudentExistData(ay, sem);
         }
-        if (ay && sem && ay !== 'All' && sem !== 'All') {
+        if ((!list || list.length === 0) && ay && sem && ay !== 'All' && sem !== 'All') {
             const raw = localStorage.getItem(`scholardoc_student_exist_${ay}_${sem}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    studentExistList = parsed;
-                    return studentExistList;
-                }
+                if (Array.isArray(parsed)) list = parsed;
             }
+        }
+        if (Array.isArray(list)) {
+            studentExistList = list.filter(item => isTermMatchForExist(item, ay, sem));
+            return studentExistList;
         }
     } catch (e) {
         console.warn('Error loading student exist list:', e);
@@ -1031,16 +1055,18 @@ function renderStudentExistTable(filterText = '') {
     if (!saBadgeExistCount) saBadgeExistCount = document.getElementById('sa-badge-exist-count');
     if (!saStatExistCount) saStatExistCount = document.getElementById('sa-stat-exist-count');
 
-    const totalCount = studentExistList.length;
+    // Filter strictly to current selected term
+    const termList = (studentExistList || []).filter(item => isTermMatchForExist(item, selectedAcademicYear, selectedSemester));
+    const totalCount = termList.length;
     if (saBadgeExistCount) saBadgeExistCount.textContent = totalCount;
     if (saStatExistCount) saStatExistCount.textContent = `${totalCount} Duplicate Grantee${totalCount === 1 ? '' : 's'}`;
 
     if (!saTbodyExist) return;
 
-    let displayList = studentExistList;
+    let displayList = termList;
     if (filterText && filterText.trim()) {
         const q = filterText.toLowerCase().trim();
-        displayList = studentExistList.filter(item => {
+        displayList = termList.filter(item => {
             const name = (item.name || `${item.lastName || ''} ${item.firstName || ''}`).toLowerCase();
             const sId = String(item.studentId || '').toLowerCase();
             const reason = String(item.duplicateReason || '').toLowerCase();
@@ -1075,6 +1101,7 @@ function renderStudentExistTable(filterText = '') {
 
         const fullName = item.name || `${item.lastName || ''}, ${item.firstName || ''} ${item.middleName || ''}`.trim();
         const batchClean = String(item.batch || '1.2').replace(/^batch\s*/i, '').trim();
+        const itemId = item.id || `idx_${index}`;
 
         tr.innerHTML = `
             <td style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #64748b;">${index + 1}</td>
@@ -1099,11 +1126,11 @@ function renderStudentExistTable(filterText = '') {
             </td>
             <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
                 <div style="display: inline-flex; align-items: center; gap: 5px; justify-content: center;">
-                    <button class="btn-restore-exist" data-index="${index}" title="Restore student to New Grantees Master List"
+                    <button class="btn-restore-exist" data-id="${itemId}" title="Restore student to New Grantees Master List"
                         style="padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(30,136,229,0.3); background: rgba(30,136,229,0.08); color: #1E88E5; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
                         <i class="icon-rotate-ccw" style="font-size: 11px;"></i> Restore
                     </button>
-                    <button class="btn-delete-exist" data-index="${index}" title="Permanently delete duplicate record from Student Exist"
+                    <button class="btn-delete-exist" data-id="${itemId}" title="Permanently delete duplicate record from Student Exist"
                         style="padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); color: #dc2626; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
                         <i class="icon-trash-2" style="font-size: 11px;"></i> Delete
                     </button>
@@ -1115,22 +1142,32 @@ function renderStudentExistTable(filterText = '') {
 
     saTbodyExist.querySelectorAll('.btn-restore-exist').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
-            restoreFromStudentExist(idx);
+            const targetId = e.currentTarget.getAttribute('data-id');
+            const targetItem = displayList.find((it, idx) => (it.id && it.id === targetId) || `idx_${idx}` === targetId);
+            if (targetItem) restoreFromStudentExist(targetItem);
         });
     });
 
     saTbodyExist.querySelectorAll('.btn-delete-exist').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
-            deleteFromStudentExist(idx);
+            const targetId = e.currentTarget.getAttribute('data-id');
+            const targetItem = displayList.find((it, idx) => (it.id && it.id === targetId) || `idx_${idx}` === targetId);
+            if (targetItem) deleteFromStudentExist(targetItem);
         });
     });
 }
 
-function restoreFromStudentExist(index) {
-    const item = studentExistList[index];
-    if (!item) return;
+function restoreFromStudentExist(target) {
+    let item = null;
+    let index = -1;
+    if (typeof target === 'number') {
+        index = target;
+        item = studentExistList[index];
+    } else if (target && typeof target === 'object') {
+        item = target;
+        index = studentExistList.findIndex(x => (target.id && x.id === target.id) || x === target || (x.studentId && x.studentId === target.studentId && x.name === target.name));
+    }
+    if (!item || index === -1) return;
 
     studentExistList.splice(index, 1);
     saveStudentExistList();
@@ -1179,9 +1216,17 @@ function restoreFromStudentExist(index) {
     }
 }
 
-function deleteFromStudentExist(index) {
-    const item = studentExistList[index];
-    if (!item) return;
+function deleteFromStudentExist(target) {
+    let item = null;
+    let index = -1;
+    if (typeof target === 'number') {
+        index = target;
+        item = studentExistList[index];
+    } else if (target && typeof target === 'object') {
+        item = target;
+        index = studentExistList.findIndex(x => (target.id && x.id === target.id) || x === target || (x.studentId && x.studentId === target.studentId && x.name === target.name));
+    }
+    if (!item || index === -1) return;
 
     if (!confirm(`Permanently remove "${item.name || 'this student'}" from Student Exist?`)) {
         return;
@@ -1198,25 +1243,27 @@ function deleteFromStudentExist(index) {
 }
 
 function clearStudentExistList() {
-    if (studentExistList.length === 0) {
-        if (window.showToast) window.showToast('Student Exist table is already empty.', 'info');
+    const termList = (studentExistList || []).filter(item => isTermMatchForExist(item, selectedAcademicYear, selectedSemester));
+    if (termList.length === 0) {
+        if (window.showToast) window.showToast('Student Exist table is already empty for this semester.', 'info');
         return;
     }
-    if (!confirm('Are you sure you want to clear all duplicate records in Student Exist?')) {
+    if (!confirm(`Are you sure you want to clear all ${termList.length} duplicate record(s) from Student Exist for ${selectedSemester} (${selectedAcademicYear})?`)) {
         return;
     }
-    studentExistList = [];
+    studentExistList = (studentExistList || []).filter(item => !isTermMatchForExist(item, selectedAcademicYear, selectedSemester));
     saveStudentExistList();
     renderStudentExistTable();
     updateAnnexKPIs();
     if (window.showToast) {
-        window.showToast('Cleared all Student Exist records', 'check-circle');
+        window.showToast('Cleared Student Exist records for this semester', 'check-circle');
     }
 }
 
 function exportStudentExistToExcel() {
-    if (!studentExistList || studentExistList.length === 0) {
-        if (window.showToast) window.showToast('No records in Student Exist to export.', 'info');
+    const termList = (studentExistList || []).filter(item => isTermMatchForExist(item, selectedAcademicYear, selectedSemester));
+    if (!termList || termList.length === 0) {
+        if (window.showToast) window.showToast('No Student Exist records to export for this semester.', 'info');
         return;
     }
 
@@ -1225,7 +1272,7 @@ function exportStudentExistToExcel() {
         return;
     }
 
-    const rows = studentExistList.map((item, idx) => ({
+    const rows = termList.map((item, idx) => ({
         'No.': idx + 1,
         'Student ID': item.studentId || 'N/A',
         'Last Name': item.lastName || '',
@@ -1248,7 +1295,7 @@ function exportStudentExistToExcel() {
     XLSX.writeFile(wb, `Student_Exist_Duplicates_${termClean}.xlsx`);
 
     if (window.showToast) {
-        window.showToast(`Exported ${studentExistList.length} Student Exist records to Excel`, 'check-circle');
+        window.showToast(`Exported ${termList.length} Student Exist records to Excel`, 'check-circle');
     }
 }
 
@@ -5278,6 +5325,11 @@ export function initMasterlistImport() {
 
         const termChanged = (newAY !== undefined && newAY !== selectedAcademicYear) ||
                             (newSem !== undefined && newSem !== selectedSemester);
+
+        // Before updating selectedAcademicYear and selectedSemester, save current term's Student Exist data so it is never lost
+        if (termChanged && selectedAcademicYear && selectedSemester) {
+            saveStudentExistList(selectedAcademicYear, selectedSemester);
+        }
 
         if (newAY !== undefined) selectedAcademicYear = newAY;
         if (newSem !== undefined) selectedSemester = newSem;
