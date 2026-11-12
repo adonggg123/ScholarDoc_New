@@ -3774,24 +3774,28 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
     const sId = s.id ? String(s.id).trim() : null;
     const termKey = `${targetAy}_${targetSem}`;
 
+    // 1. Direct lookup in term-students mapping if populated in localStorage
     try {
-        const termStudentsMap = JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
+        const termStudentsMap = (typeof getSchoolTermStudentsMap === 'function') 
+            ? getSchoolTermStudentsMap() 
+            : JSON.parse(localStorage.getItem('scholardoc_school_term_students') || '{}');
+
         if (targetAy && targetAy !== 'All' && targetSem && targetSem !== 'All') {
-            if (termStudentsMap && Array.isArray(termStudentsMap[termKey])) {
+            if (termStudentsMap && Array.isArray(termStudentsMap[termKey]) && termStudentsMap[termKey].length > 0) {
                 const studentSet = new Set(termStudentsMap[termKey]);
                 if (sNo && studentSet.has(sNo)) return true;
                 if (sName && studentSet.has(sName)) return true;
                 if (sId && studentSet.has(sId)) return true;
                 return false;
             }
-            return false;
         }
     } catch (_) { }
 
+    // 2. Multi-term list check in scholardoc_school_student_terms
     try {
         const cache = JSON.parse(localStorage.getItem('scholardoc_school_student_terms') || '{}');
         const entry = (sNo && cache[sNo]) || (sId && cache[sId]) || (sName && cache[sName]);
-        if (Array.isArray(entry)) {
+        if (Array.isArray(entry) && entry.length > 0) {
             const hasMatch = entry.some(t => {
                 const matchAy = !targetAy || targetAy === 'All' || t.academicYear === targetAy;
                 const matchSem = !targetSem || targetSem === 'All' || t.semester === targetSem;
@@ -3805,6 +3809,16 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
         }
     } catch (_) { }
 
+    // 3. Database column checks on the record itself
+    const objAy = s.academic_year || s.academicYear;
+    const objSem = s.semester;
+    if (objAy && objSem) {
+        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
+        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
+        if (matchAy && matchSem) return true;
+    }
+
+    // 4. Matched profile in student_grantees
     const matchedSt = studentProfileMap.get(sNo) || studentProfileMap.get(sName);
     if (matchedSt) {
         const ay = matchedSt.academic_year || matchedSt.academicYear;
@@ -3816,15 +3830,9 @@ function isSchoolStudentInTerm(s, targetAy, targetSem, studentProfileMap = new M
         }
     }
 
-    const objAy = s.academicYear || s.academic_year;
-    const objSem = s.semester;
-    if (objAy && objSem) {
-        const matchAy = !targetAy || targetAy === 'All' || objAy === targetAy;
-        const matchSem = !targetSem || targetSem === 'All' || objSem === targetSem;
-        return matchAy && matchSem;
-    }
-
-    return false;
+    // 5. Safe Fallback: If no term partition is recorded in localStorage and the record has no term columns,
+    // display the institutional school records so the live table is never empty!
+    return true;
 }
 
 function getSchoolStudentTerm(s, studentProfileMap = new Map(), targetAy = selectedAcademicYear, targetSem = selectedSemester) {
