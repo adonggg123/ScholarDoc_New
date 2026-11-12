@@ -994,8 +994,15 @@ window.toggleReadStatus = async function (notificationId, targetState) {
     }
 };
 
-window.handleActivityCardClick = async function (id) {
-    const notif = systemNotifications.find(n => String(n.id) === String(id));
+window.handleActivityCardClick = async function (id, fallbackData = null) {
+    let notif = systemNotifications.find(n => String(n.id) === String(id));
+    if (!notif && fallbackData) notif = fallbackData;
+    if (!notif && window.supabaseClient) {
+        try {
+            const { data } = await window.supabaseClient.from('notifications').select('*').eq('id', id).single();
+            if (data) notif = data;
+        } catch (_) {}
+    }
     if (!notif) return;
 
     // Mark as read if currently unread
@@ -1003,34 +1010,184 @@ window.handleActivityCardClick = async function (id) {
         await toggleReadStatus(id, true);
     }
 
-    // Close dropdown
+    // Close dropdown and modal
     if (notificationDropdown) notificationDropdown.classList.add('hidden');
+    const modal = document.getElementById('activity-details-modal');
+    if (modal) modal.classList.remove('open');
 
     // Context-aware navigation for Super Admin Dashboard
     const lowerTitle = (notif.title || '').toLowerCase();
     const lowerMsg = (notif.message || '').toLowerCase();
     const combined = `${lowerTitle} ${lowerMsg}`;
 
-    if (combined.includes('school student') || combined.includes('school enrollment') || combined.includes('school_students') || combined.includes('student record')) {
-        window.navigateToView('student_records');
-    } else if (combined.includes('masterlist') || combined.includes('grantee') || combined.includes('import')) {
-        window.navigateToView('masterlist_import');
-    } else if (combined.includes('sa number') || combined.includes('sa verification')) {
-        window.navigateToView('sa_verification');
-    } else if (combined.includes('id validation') || combined.includes('id document') || combined.includes('sticker')) {
-        window.navigateToView('id_validation');
-    } else if (combined.includes('announcement')) {
-        window.navigateToView('announcements');
-    } else if (combined.includes('audit') || combined.includes('activity')) {
-        window.navigateToView('audit_logs');
-    } else if (combined.includes('report') || combined.includes('analytics')) {
-        window.navigateToView('reports');
-    } else if (combined.includes('scholarship')) {
-        window.navigateToView('scholarships');
-    } else if (combined.includes('setting') || combined.includes('password') || combined.includes('security')) {
-        window.navigateToView('settings');
-    } else {
-        // Default: Dashboard overview
+    // 1. School Student Records (Uploaded by Registrar or managed in Masterlist Import)
+    // E.g. "New Submission: School Student Records Uploaded" or "Registrar uploaded ... school student records"
+    if (
+        combined.includes('school student') ||
+        combined.includes('school enrollment') ||
+        combined.includes('school_students') ||
+        combined.includes('school records') ||
+        combined.includes('enrollment list') ||
+        (combined.includes('registrar') && combined.includes('records'))
+    ) {
+        window.requestedMasterlistSource = 'school';
+        if (currentViewName !== 'masterlist_import') {
+            window.navigateToView('masterlist_import');
+        }
+
+        const trySwitchToSchool = (attempts = 0) => {
+            const schoolBtn = document.getElementById('toggle-source-school');
+            const schoolCard = document.getElementById('card-source-school');
+            if (typeof window.switchSourceSection === 'function') {
+                window.switchSourceSection('school');
+            } else if (schoolBtn) {
+                schoolBtn.click();
+            }
+            if (schoolCard) {
+                schoolCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                schoolCard.style.outline = '3px solid #1E88E5';
+                schoolCard.style.outlineOffset = '2px';
+                setTimeout(() => {
+                    schoolCard.style.transition = 'outline 0.8s ease';
+                    schoolCard.style.outline = '3px solid transparent';
+                }, 1500);
+            } else if (attempts < 15) {
+                setTimeout(() => trySwitchToSchool(attempts + 1), 100);
+            }
+        };
+        trySwitchToSchool();
+        return;
+    }
+
+    // 2. SA Number Verification
+    if (combined.includes('sa number') || combined.includes('sa verification') || combined.includes('atm card') || combined.includes('atm proof')) {
+        if (currentViewName !== 'sa_verification') {
+            window.navigateToView('sa_verification');
+        }
+        return;
+    }
+
+    // 3. ID Validation
+    if (combined.includes('id validation') || combined.includes('id document') || combined.includes('sticker') || combined.includes('school id') || combined.includes('cor/coe')) {
+        if (currentViewName !== 'id_validation') {
+            window.navigateToView('id_validation');
+        }
+        return;
+    }
+
+    // 4. Student Documents Submission (Generic submission without explicit SA or ID)
+    if (combined.includes('document submission') || combined.includes('documents submitted') || combined.includes('documentary requirements')) {
+        if (currentViewName !== 'sa_verification') {
+            window.navigateToView('sa_verification');
+        }
+        return;
+    }
+
+    // 5. New Grantees Masterlist / Grantees Import / Billing Generation
+    if (combined.includes('masterlist') || combined.includes('new grantees') || combined.includes('billing form') || combined.includes('import')) {
+        window.requestedMasterlistSource = 'grantees';
+        if (combined.includes('form 2') || combined.includes('billing')) {
+            window.requestedSATab = 'form2';
+        } else if (combined.includes('form 3') || combined.includes('exceptions') || combined.includes('not included')) {
+            window.requestedSATab = 'form3';
+        } else if (combined.includes('review queue') || combined.includes('review')) {
+            window.requestedSATab = 'review';
+        }
+
+        if (currentViewName !== 'masterlist_import') {
+            window.navigateToView('masterlist_import');
+        }
+
+        const trySwitchToGrantees = (attempts = 0) => {
+            const granteesBtn = document.getElementById('toggle-source-grantees');
+            if (typeof window.switchSourceSection === 'function') {
+                window.switchSourceSection('grantees');
+                if (window.requestedSATab && typeof window.activateSATab === 'function') {
+                    const btnMap = {
+                        'form2': document.getElementById('sa-tab-btn-2'),
+                        'form3': document.getElementById('sa-tab-btn-3'),
+                        'review': document.getElementById('sa-tab-btn-rev'),
+                        'exist': document.getElementById('sa-tab-btn-exist')
+                    };
+                    const paneMap = {
+                        'form2': document.getElementById('sa-tab-pane-2'),
+                        'form3': document.getElementById('sa-tab-pane-3'),
+                        'review': document.getElementById('sa-tab-pane-rev'),
+                        'exist': document.getElementById('sa-tab-pane-exist')
+                    };
+                    if (btnMap[window.requestedSATab] && paneMap[window.requestedSATab]) {
+                        window.activateSATab(btnMap[window.requestedSATab], paneMap[window.requestedSATab]);
+                    }
+                }
+            } else if (granteesBtn) {
+                granteesBtn.click();
+            } else if (attempts < 15) {
+                setTimeout(() => trySwitchToGrantees(attempts + 1), 100);
+            }
+        };
+        trySwitchToGrantees();
+        return;
+    }
+
+    // 6. Student Registered / Profile Updated / Grantee Approved / Rejected / Student Directory
+    if (
+        combined.includes('student registered') ||
+        combined.includes('new student') ||
+        combined.includes('profile updated') ||
+        combined.includes('grantee approved') ||
+        combined.includes('application rejected') ||
+        combined.includes('scholar grantee') ||
+        combined.includes('student record')
+    ) {
+        if (currentViewName !== 'student_records') {
+            window.navigateToView('student_records');
+        }
+        return;
+    }
+
+    // 7. Announcements
+    if (combined.includes('announcement')) {
+        if (currentViewName !== 'announcements') {
+            window.navigateToView('announcements');
+        }
+        return;
+    }
+
+    // 8. Scholarships
+    if (combined.includes('scholarship')) {
+        if (currentViewName !== 'scholarships') {
+            window.navigateToView('scholarships');
+        }
+        return;
+    }
+
+    // 9. Activity / Audit Logs
+    if (combined.includes('audit') || combined.includes('activity log') || combined.includes('security notice') || combined.includes('log')) {
+        if (currentViewName !== 'audit_logs') {
+            window.navigateToView('audit_logs');
+        }
+        return;
+    }
+
+    // 10. Reports & Analytics
+    if (combined.includes('report') || combined.includes('analytics') || combined.includes('demographics')) {
+        if (currentViewName !== 'reports') {
+            window.navigateToView('reports');
+        }
+        return;
+    }
+
+    // 11. Settings & Appearance
+    if (combined.includes('setting') || combined.includes('password') || combined.includes('security') || combined.includes('appearance') || combined.includes('theme')) {
+        const targetView = (combined.includes('appearance') || combined.includes('theme')) ? 'appearance' : 'settings';
+        if (currentViewName !== targetView) {
+            window.navigateToView(targetView);
+        }
+        return;
+    }
+
+    // Fallback: Dashboard
+    if (currentViewName !== 'dashboard') {
         window.navigateToView('dashboard');
     }
 };
@@ -1085,6 +1242,7 @@ window.openActivityDetails = function (id) {
     }
 
     if (actionBtn) {
+        actionBtn.innerHTML = '<i class="icon-arrow-right" style="font-size: 12px; margin-right: 4px;"></i> View Activity';
         actionBtn.onclick = () => {
             modal.classList.remove('open');
             window.handleActivityCardClick(notif.id);

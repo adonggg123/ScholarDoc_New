@@ -3427,6 +3427,34 @@ if (tabBtnRev) tabBtnRev.addEventListener('click', () => activateTab(tabBtnRev, 
 if (tabBtn2) tabBtn2.addEventListener('click', () => activateTab(tabBtn2, tabPane2));
 if (tabBtn3) tabBtn3.addEventListener('click', () => activateTab(tabBtn3, tabPane3));
 
+window.activateAnnexTab = activateTab;
+
+// Check if tab or section requested via notification navigation
+if (window.requestedAnnexTab) {
+    const rTab = window.requestedAnnexTab;
+    window.requestedAnnexTab = null;
+    if (rTab === 'form2' && tabBtn2 && tabPane2) activateTab(tabBtn2, tabPane2);
+    else if (rTab === 'form3' && tabBtn3 && tabPane3) activateTab(tabBtn3, tabPane3);
+    else if (rTab === 'review' && tabBtnRev && tabPaneRev) activateTab(tabBtnRev, tabPaneRev);
+}
+
+if (window.requestedAnnexSection) {
+    const sec = window.requestedAnnexSection;
+    window.requestedAnnexSection = null;
+    const cardEl = sec === 'school' ? document.getElementById('card-source-school') : document.getElementById('card-source-superadmin');
+    if (cardEl) {
+        setTimeout(() => {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            cardEl.style.outline = '3px solid #1E88E5';
+            cardEl.style.outlineOffset = '2px';
+            setTimeout(() => {
+                cardEl.style.transition = 'outline 0.8s ease';
+                cardEl.style.outline = '3px solid transparent';
+            }, 1500);
+        }, 200);
+    }
+}
+
 // ── 12. Search Filter Listeners ─────────────────────────────────────
 const searchF2 = document.getElementById('search-form2');
 if (searchF2) {

@@ -4510,6 +4510,12 @@ function renderAnnexReviewQueue(items) {
 }
 
 function switchSourceSection(section) {
+    if (!toggleBtnGrantees) toggleBtnGrantees = document.getElementById('toggle-source-grantees');
+    if (!toggleBtnSchool) toggleBtnSchool = document.getElementById('toggle-source-school');
+    if (!sectionNewGrantees) sectionNewGrantees = document.getElementById('section-new-grantees');
+    if (!cardSourceSchool) cardSourceSchool = document.getElementById('card-source-school');
+    if (!sourceActiveLabel) sourceActiveLabel = document.getElementById('source-active-label');
+
     if (section === 'grantees') {
         if (toggleBtnGrantees) toggleBtnGrantees.classList.add('active');
         if (toggleBtnSchool) toggleBtnSchool.classList.remove('active');
@@ -4531,6 +4537,8 @@ function switchSourceSection(section) {
         loadSchoolStudentsAndVerify(extractedRecords);
     }
 }
+window.switchSourceSection = switchSourceSection;
+window.activateSATab = activateSATab;
 
 function activateSATab(activeBtn, activePane) {
     [saTabBtn2, saTabBtn3, saTabBtnRev, saTabBtnExist].forEach(b => b && b.classList.remove('active'));
@@ -5073,6 +5081,36 @@ export function initMasterlistImport() {
 
     if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
     if (badgeToggleSchool) badgeToggleSchool.textContent = schoolStudents.length;
+
+    // Check if source section or tab requested via notification navigation
+    if (window.requestedMasterlistSource) {
+        const reqSrc = window.requestedMasterlistSource;
+        window.requestedMasterlistSource = null;
+        switchSourceSection(reqSrc);
+        if (reqSrc === 'school') {
+            setTimeout(() => {
+                const schoolCard = document.getElementById('card-source-school');
+                if (schoolCard) {
+                    schoolCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    schoolCard.style.outline = '3px solid #1E88E5';
+                    schoolCard.style.outlineOffset = '2px';
+                    setTimeout(() => {
+                        schoolCard.style.transition = 'outline 0.8s ease';
+                        schoolCard.style.outline = '3px solid transparent';
+                    }, 1500);
+                }
+            }, 200);
+        }
+    }
+
+    if (window.requestedSATab) {
+        const reqTab = window.requestedSATab;
+        window.requestedSATab = null;
+        if (reqTab === 'form2' && saTabBtn2 && saTabPane2) activateSATab(saTabBtn2, saTabPane2);
+        else if (reqTab === 'form3' && saTabBtn3 && saTabPane3) activateSATab(saTabBtn3, saTabPane3);
+        else if (reqTab === 'review' && saTabBtnRev && saTabPaneRev) activateSATab(saTabBtnRev, saTabPaneRev);
+        else if (reqTab === 'exist' && saTabBtnExist && saTabPaneExist) activateSATab(saTabBtnExist, saTabPaneExist);
+    }
 
     // School Students DOM Elements
     elSchoolCount = document.getElementById('school-students-count');

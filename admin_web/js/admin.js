@@ -951,8 +951,15 @@ window.toggleReadStatus = async function (notificationId, targetState) {
     }
 };
 
-window.handleActivityCardClick = async function (id) {
-    const notif = systemNotifications.find(n => String(n.id) === String(id));
+window.handleActivityCardClick = async function (id, fallbackData = null) {
+    let notif = systemNotifications.find(n => String(n.id) === String(id));
+    if (!notif && fallbackData) notif = fallbackData;
+    if (!notif && window.supabaseClient) {
+        try {
+            const { data } = await window.supabaseClient.from('notifications').select('*').eq('id', id).single();
+            if (data) notif = data;
+        } catch (_) {}
+    }
     if (!notif) return;
 
     // Mark as read if currently unread
@@ -960,20 +967,156 @@ window.handleActivityCardClick = async function (id) {
         await toggleReadStatus(id, true);
     }
 
-    // Close dropdown
+    // Close dropdown and modal
     if (notificationDropdown) notificationDropdown.classList.add('hidden');
+    const modal = document.getElementById('activity-details-modal');
+    if (modal) modal.classList.remove('open');
 
-    // Context-aware navigation
+    // Context-aware navigation for Registrar (Admin)
     const targetTitle = (notif.title || '').toLowerCase();
     const targetMsg = (notif.message || '').toLowerCase();
     const combined = `${targetTitle} ${targetMsg}`;
 
-    if (combined.includes('historical') || combined.includes('view annex') || combined.includes('past records')) {
-        window.navigateToView('view_annex');
-    } else if (combined.includes('setting') || combined.includes('password') || combined.includes('email') || combined.includes('preference')) {
-        window.navigateToView('settings');
-    } else {
-        // Default: Student Records / Annex 5 Generator (Billing, Verification, Enrollment)
+    // 1. Historical Archived Annex 5 Exports
+    if (combined.includes('historical') || combined.includes('view annex') || combined.includes('past records') || combined.includes('archived')) {
+        if (currentViewName !== 'view_annex') {
+            window.navigateToView('view_annex');
+        }
+        return;
+    }
+
+    // 2. Settings & Security
+    if (combined.includes('setting') || combined.includes('password') || combined.includes('email') || combined.includes('preference')) {
+        if (currentViewName !== 'settings') {
+            window.navigateToView('settings');
+        }
+        return;
+    }
+
+    // 3. New Grantees Masterlist Uploaded by Super Admin (ready for Annex 5 Billing review)
+    if (combined.includes('new grantees masterlist') || (combined.includes('super admin') && combined.includes('grantees')) || (combined.includes('masterlist') && combined.includes('uploaded'))) {
+        window.requestedAnnexSection = 'superadmin';
+        if (currentViewName !== 'annex5_generator') {
+            window.navigateToView('annex5_generator');
+        }
+
+        const tryFocusSuperAdminList = (attempts = 0) => {
+            const superCard = document.getElementById('card-source-superadmin');
+            if (superCard) {
+                superCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                superCard.style.outline = '3px solid var(--primary-color)';
+                superCard.style.outlineOffset = '2px';
+                setTimeout(() => {
+                    superCard.style.transition = 'outline 0.8s ease';
+                    superCard.style.outline = '3px solid transparent';
+                }, 1500);
+            } else if (attempts < 15) {
+                setTimeout(() => tryFocusSuperAdminList(attempts + 1), 100);
+            }
+        };
+        tryFocusSuperAdminList();
+        return;
+    }
+
+    // 4. School Enrollment List / School Student Records Uploaded
+    if (combined.includes('school enrollment') || combined.includes('school student') || combined.includes('enrollment list')) {
+        window.requestedAnnexSection = 'school';
+        if (currentViewName !== 'annex5_generator') {
+            window.navigateToView('annex5_generator');
+        }
+
+        const tryFocusSchoolList = (attempts = 0) => {
+            const schoolCard = document.getElementById('card-source-school');
+            if (schoolCard) {
+                schoolCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                schoolCard.style.outline = '3px solid #1E88E5';
+                schoolCard.style.outlineOffset = '2px';
+                setTimeout(() => {
+                    schoolCard.style.transition = 'outline 0.8s ease';
+                    schoolCard.style.outline = '3px solid transparent';
+                }, 1500);
+            } else if (attempts < 15) {
+                setTimeout(() => tryFocusSchoolList(attempts + 1), 100);
+            }
+        };
+        tryFocusSchoolList();
+        return;
+    }
+
+    // 5. Annex 5 Form 2 Generated / Form 2 Billing
+    if (combined.includes('form 2') || combined.includes('form2') || combined.includes('billing generated')) {
+        window.requestedAnnexTab = 'form2';
+        if (currentViewName !== 'annex5_generator') {
+            window.navigateToView('annex5_generator');
+        }
+
+        const trySwitchToForm2 = (attempts = 0) => {
+            const btn2 = document.getElementById('tab-btn-form2');
+            const pane2 = document.getElementById('tab-pane-form2');
+            if (typeof window.activateAnnexTab === 'function' && btn2 && pane2) {
+                window.activateAnnexTab(btn2, pane2);
+                btn2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (btn2) {
+                btn2.click();
+                btn2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (attempts < 15) {
+                setTimeout(() => trySwitchToForm2(attempts + 1), 100);
+            }
+        };
+        trySwitchToForm2();
+        return;
+    }
+
+    // 6. Annex 5 Form 3 Generated / Form 3 Exceptions
+    if (combined.includes('form 3') || combined.includes('form3') || combined.includes('exceptions') || combined.includes('not enrolled')) {
+        window.requestedAnnexTab = 'form3';
+        if (currentViewName !== 'annex5_generator') {
+            window.navigateToView('annex5_generator');
+        }
+
+        const trySwitchToForm3 = (attempts = 0) => {
+            const btn3 = document.getElementById('tab-btn-form3');
+            const pane3 = document.getElementById('tab-pane-form3');
+            if (typeof window.activateAnnexTab === 'function' && btn3 && pane3) {
+                window.activateAnnexTab(btn3, pane3);
+                btn3.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (btn3) {
+                btn3.click();
+                btn3.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (attempts < 15) {
+                setTimeout(() => trySwitchToForm3(attempts + 1), 100);
+            }
+        };
+        trySwitchToForm3();
+        return;
+    }
+
+    // 7. Review Queue / Cross-Verification
+    if (combined.includes('review') || combined.includes('cross-verification') || combined.includes('cross-matched') || combined.includes('resolved') || combined.includes('queue')) {
+        window.requestedAnnexTab = 'review';
+        if (currentViewName !== 'annex5_generator') {
+            window.navigateToView('annex5_generator');
+        }
+
+        const trySwitchToReview = (attempts = 0) => {
+            const btnRev = document.getElementById('tab-btn-review');
+            const paneRev = document.getElementById('tab-pane-review');
+            if (typeof window.activateAnnexTab === 'function' && btnRev && paneRev) {
+                window.activateAnnexTab(btnRev, paneRev);
+                btnRev.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (btnRev) {
+                btnRev.click();
+                btnRev.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (attempts < 15) {
+                setTimeout(() => trySwitchToReview(attempts + 1), 100);
+            }
+        };
+        trySwitchToReview();
+        return;
+    }
+
+    // Default: Student Records / Annex 5 Generator
+    if (currentViewName !== 'annex5_generator') {
         window.navigateToView('annex5_generator');
     }
 };
@@ -1028,6 +1171,7 @@ window.openActivityDetails = function (id) {
     }
 
     if (actionBtn) {
+        actionBtn.innerHTML = '<i class="icon-arrow-right" style="font-size: 12px; margin-right: 4px;"></i> View Activity';
         actionBtn.onclick = () => {
             modal.classList.remove('open');
             window.handleActivityCardClick(notif.id);
