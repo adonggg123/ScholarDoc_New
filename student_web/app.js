@@ -612,46 +612,31 @@ async function checkGranteeRecord(identifier) {
     return null;
 }
 
+// Role normalization helpers to ensure strict role verification
+const SYSTEM_ADMIN_EMAILS = new Set([
+    'admin@scholardoc.com',
+    'superadmin@scholardoc.com',
+    'registrar@scholardoc.com'
+]);
+
+function normalizeAdminRole(role) {
+    const r = String(role || '').trim().toLowerCase();
+    if (r === 'super admin' || r === 'superadmin' || r === 'super_admin') return 'Super Admin';
+    if (r === 'admin' || r === 'registrar') return 'Admin';
+    return null;
+}
+
+function isSystemAdminEmail(email) {
+    return SYSTEM_ADMIN_EMAILS.has(String(email || '').trim().toLowerCase());
+}
+
 // Automatic Routing Helper based on Database Role
-async function routeUserByRole(authUser, rawIdentifier, authSession) {
+async function routeUserByRole(authUser, rawIdentifier, authSession, options = {}) {
     const uid = authUser.id;
-    const userEmail = (authUser.email || '').toLowerCase();
-    
-    // Check if user exists in admins table
-    let adminData = null;
-    try {
-        const { data: adminRows } = await supabaseClient
-            .from('admins')
-            .select('*')
-            .or(`uid.eq.${uid},email.eq.${userEmail}`)
-            .limit(1);
-        if (adminRows && adminRows.length > 0) {
-            adminData = adminRows[0];
-        }
-    } catch (_) {}
+    const userEmail = (authUser.email || '').trim().toLowerCase();
+    const metadataRole = String(authUser.user_metadata?.role || '').trim().toLowerCase();
 
-    const isAdminAccount = !!adminData || userEmail.includes('admin') || userEmail.includes('superadmin');
-
-    if (!isAdminAccount) {
-        // STRICT POST-LOGIN VALIDATION: Verify student is listed in student_grantees table
-        let studentData = await checkGranteeRecord(uid);
-        if (!studentData) {
-            studentData = await checkGranteeRecord(rawIdentifier);
-        }
-        if (!studentData && userEmail) {
-            studentData = await checkGranteeRecord(userEmail);
-        }
-
-        // If NOT in student_grantees table, strictly deny login and sign out!
-        if (!studentData) {
-            try {
-                await supabaseClient.auth.signOut();
-                localStorage.removeItem(STUDENT_STORAGE_KEY);
-                sessionStorage.removeItem(STUDENT_STORAGE_KEY);
-            } catch (_) {}
-            throw new Error(`Access denied. Student ID "${rawIdentifier}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
-        }
-
+    const routeToStudentDashboard = async (studentData) => {
         // Log student activity
         try {
             await supabaseClient.from('audit_logs').insert({
@@ -664,6 +649,8 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
 
         await new Promise(r => setTimeout(r, 300));
 
+        const primaryStudentId = studentData?.student_no || studentData?.studentId || rawIdentifier;
+
         // Save Student session to student storage key
         if (authSession) {
             try {
@@ -671,9 +658,14 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
                 sessionStorage.setItem(STUDENT_STORAGE_KEY, JSON.stringify(authSession));
             } catch (_) {}
         }
+        try {
+            if (primaryStudentId) {
+                localStorage.setItem('scholardoc_student_id', primaryStudentId);
+                sessionStorage.setItem('scholardoc_student_id', primaryStudentId);
+            }
+        } catch (_) {}
 
         // Route to Student Dashboard with session tokens in hash
-        const primaryStudentId = studentData?.student_no || studentData?.studentId || rawIdentifier;
         const tokenHash = authSession ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}&student_id=${encodeURIComponent(primaryStudentId)}` : '';
 
         if (window.location.protocol === 'file:') {
@@ -681,49 +673,117 @@ async function routeUserByRole(authUser, rawIdentifier, authSession) {
         } else {
             window.location.href = `/student_web/dashboard.html${tokenHash}`;
         }
-    } else {
-        // User is Admin / Super Admin!
-        const isSuper = (adminData?.role === 'Super Admin' || adminData?.role === 'SuperAdmin' || userEmail.includes('superadmin'));
-        const roleLabel = isSuper ? 'Super Admin' : (adminData?.role || 'Admin');
-        const adminName = adminData?.username || (isSuper ? 'Super Admin' : 'Admin');
+    };
 
-        try {
-            await supabaseClient.from('audit_logs').insert({
-                action: 'Logged in via Admin Portal',
-                userName: adminName,
-                role: roleLabel,
-                studentId: isSuper ? 'superadmin' : 'admin',
-            });
-        } catch (_) {}
-
-        // Persist session to the specific role's isolated storage
-        if (authSession) {
-            try {
-                if (isSuper) {
-                    localStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
-                    sessionStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
-                } else {
-                    localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
-                    sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
-                }
-            } catch (_) {}
+    // 1. If authenticated via student login flow or user metadata explicitly marks Student
+    if (options.loginType === 'student' || metadataRole === 'student') {
+        let studentData = options.granteeRecord || await checkGranteeRecord(uid);
+        if (!studentData) {
+            studentData = await checkGranteeRecord(rawIdentifier);
+        }
+        if (!studentData && userEmail) {
+            studentData = await checkGranteeRecord(userEmail);
         }
 
-        await new Promise(r => setTimeout(r, 300));
-        
-        // Route to respective portal
-        if (isSuper) {
-            if (window.location.protocol === 'file:') {
-                window.location.href = '../superadmin_web/superadmin.html';
+        if (!studentData) {
+            try {
+                await supabaseClient.auth.signOut();
+                localStorage.removeItem(STUDENT_STORAGE_KEY);
+                sessionStorage.removeItem(STUDENT_STORAGE_KEY);
+            } catch (_) {}
+            throw new Error(`Access denied. Student ID "${rawIdentifier}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
+        }
+
+        await routeToStudentDashboard(studentData);
+        return;
+    }
+
+    // 2. Check if user exists in admins table with a valid admin role
+    let adminData = null;
+    try {
+        const { data: adminRows } = await supabaseClient
+            .from('admins')
+            .select('*')
+            .or(`uid.eq.${uid},email.eq.${userEmail}`)
+            .limit(1);
+        if (adminRows && adminRows.length > 0) {
+            adminData = adminRows[0];
+        }
+    } catch (_) {}
+
+    // 3. Check if user is a student grantee (unless logging in with a dedicated system admin email)
+    if (!isSystemAdminEmail(userEmail)) {
+        let studentData = options.granteeRecord || await checkGranteeRecord(uid);
+        if (!studentData) {
+            studentData = await checkGranteeRecord(rawIdentifier);
+        }
+        if (!studentData && userEmail) {
+            studentData = await checkGranteeRecord(userEmail);
+        }
+        if (studentData) {
+            await routeToStudentDashboard(studentData);
+            return;
+        }
+    }
+
+    // 4. Verify explicit admin role (never infer admin from arbitrary email substring)
+    const verifiedAdminRole =
+        normalizeAdminRole(adminData?.role) ||
+        normalizeAdminRole(authUser?.user_metadata?.role) ||
+        (userEmail === 'superadmin@scholardoc.com'
+            ? 'Super Admin'
+            : (isSystemAdminEmail(userEmail) ? 'Admin' : null));
+
+    if (!verifiedAdminRole) {
+        try {
+            await supabaseClient.auth.signOut();
+            localStorage.removeItem(STUDENT_STORAGE_KEY);
+            sessionStorage.removeItem(STUDENT_STORAGE_KEY);
+        } catch (_) {}
+        throw new Error(`Access denied. Account "${rawIdentifier}" is not authorized as an administrator or eligible student grantee.`);
+    }
+
+    // User is verified Admin / Super Admin
+    const isSuper = verifiedAdminRole === 'Super Admin';
+    const roleLabel = isSuper ? 'Super Admin' : (adminData?.role || 'Admin');
+    const adminName = adminData?.username || (isSuper ? 'Super Admin' : 'Admin');
+
+    try {
+        await supabaseClient.from('audit_logs').insert({
+            action: 'Logged in via Admin Portal',
+            userName: adminName,
+            role: roleLabel,
+            studentId: isSuper ? 'superadmin' : 'admin',
+        });
+    } catch (_) {}
+
+    // Persist session to the specific role's isolated storage
+    if (authSession) {
+        try {
+            if (isSuper) {
+                localStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                sessionStorage.setItem(SUPERADMIN_STORAGE_KEY, JSON.stringify(authSession));
             } else {
-                window.location.href = '/superadmin_web/superadmin.html';
+                localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
+                sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(authSession));
             }
+        } catch (_) {}
+    }
+
+    await new Promise(r => setTimeout(r, 300));
+
+    // Route to respective portal
+    if (isSuper) {
+        if (window.location.protocol === 'file:') {
+            window.location.href = '../superadmin_web/superadmin.html';
         } else {
-            if (window.location.protocol === 'file:') {
-                window.location.href = '../admin_web/admin.html';
-            } else {
-                window.location.href = '/admin_web/admin.html';
-            }
+            window.location.href = '/superadmin_web/superadmin.html';
+        }
+    } else {
+        if (window.location.protocol === 'file:') {
+            window.location.href = '../admin_web/admin.html';
+        } else {
+            window.location.href = '/admin_web/admin.html';
         }
     }
 }
@@ -743,44 +803,53 @@ if (loginForm) {
         try {
             let authResponse = null;
             const lowerId = rawIdentifier.toLowerCase();
-            let isAdmin = lowerId === 'admin' || lowerId === 'superadmin' || lowerId.includes('admin@');
-            let matchedAdminEmail = null;
+            const isExplicitSystemAdmin = lowerId === 'admin' || lowerId === 'superadmin' || isSystemAdminEmail(lowerId);
+            let isAdmin = isExplicitSystemAdmin;
+            let matchedAdminEmail = isSystemAdminEmail(lowerId) ? lowerId : null;
+            let prefetchedGrantee = null;
 
-            // Strategy 0: Check if identifier matches an admin username (custom or default)
-            if (!rawIdentifier.includes('@')) {
-                try {
-                    const { data: adminRows } = await supabaseClient
-                        .from('admins')
-                        .select('email, username')
-                        .ilike('username', rawIdentifier.trim())
-                        .limit(1);
-                    if (adminRows && adminRows.length > 0 && adminRows[0].email) {
-                        matchedAdminEmail = adminRows[0].email;
-                        isAdmin = true;
-                    }
-                } catch (_) {}
+            // Check student_grantees first unless an explicit system admin identifier was entered
+            if (!isExplicitSystemAdmin) {
+                prefetchedGrantee = await checkGranteeRecord(rawIdentifier);
+            }
 
-                if (!matchedAdminEmail) {
-                    if (lowerId === 'superadmin') {
-                        matchedAdminEmail = 'superadmin@scholardoc.com';
-                        isAdmin = true;
-                    } else if (lowerId === 'admin') {
-                        matchedAdminEmail = 'admin@scholardoc.com';
-                        isAdmin = true;
+            // Strategy 0: Only check admins table if identifier is not a registered student grantee
+            if (!prefetchedGrantee) {
+                if (!rawIdentifier.includes('@')) {
+                    try {
+                        const { data: adminRows } = await supabaseClient
+                            .from('admins')
+                            .select('email, username, role')
+                            .ilike('username', rawIdentifier.trim())
+                            .limit(1);
+                        if (adminRows && adminRows.length > 0 && adminRows[0].email && normalizeAdminRole(adminRows[0].role)) {
+                            matchedAdminEmail = adminRows[0].email;
+                            isAdmin = true;
+                        }
+                    } catch (_) {}
+
+                    if (!matchedAdminEmail) {
+                        if (lowerId === 'superadmin') {
+                            matchedAdminEmail = 'superadmin@scholardoc.com';
+                            isAdmin = true;
+                        } else if (lowerId === 'admin') {
+                            matchedAdminEmail = 'admin@scholardoc.com';
+                            isAdmin = true;
+                        }
                     }
+                } else {
+                    try {
+                        const { data: adminRows } = await supabaseClient
+                            .from('admins')
+                            .select('email, username, role')
+                            .ilike('email', rawIdentifier.trim())
+                            .limit(1);
+                        if (adminRows && adminRows.length > 0 && normalizeAdminRole(adminRows[0].role)) {
+                            isAdmin = true;
+                            matchedAdminEmail = adminRows[0].email;
+                        }
+                    } catch (_) {}
                 }
-            } else {
-                try {
-                    const { data: adminRows } = await supabaseClient
-                        .from('admins')
-                        .select('email, username')
-                        .ilike('email', rawIdentifier.trim())
-                        .limit(1);
-                    if (adminRows && adminRows.length > 0) {
-                        isAdmin = true;
-                        matchedAdminEmail = adminRows[0].email;
-                    }
-                } catch (_) {}
             }
 
             if (isAdmin) {
@@ -798,7 +867,7 @@ if (loginForm) {
                 // --- MANDATORY STUDENT GRANTEE VALIDATION ---
                 // STRICT CHECK: Student MUST exist in student_grantees table before attempting login!
                 const cleanId = rawIdentifier.trim();
-                const granteeRecord = await checkGranteeRecord(cleanId);
+                const granteeRecord = prefetchedGrantee || await checkGranteeRecord(cleanId);
 
                 if (!granteeRecord) {
                     throw new Error(`Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
@@ -902,6 +971,12 @@ if (loginForm) {
                         const { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
                             email: primaryEmail,
                             password: autoPwd,
+                            options: {
+                                data: {
+                                    role: 'Student',
+                                    student_no: primaryNo
+                                }
+                            }
                         });
                         if (!signUpErr && signUpData && signUpData.user) {
                             authResponse = signUpData;
@@ -923,6 +998,16 @@ if (loginForm) {
                         }
                     }
                 }
+
+                if (!authResponse || !authResponse.user) {
+                    throw new Error('Invalid credentials. Please verify your Student ID/Username and password.');
+                }
+
+                await routeUserByRole(authResponse.user, rawIdentifier, authResponse.session, {
+                    loginType: 'student',
+                    granteeRecord
+                });
+                return;
             }
 
             if (!authResponse || !authResponse.user) {
@@ -930,7 +1015,9 @@ if (loginForm) {
             }
 
             // Automatically route user to the appropriate dashboard based on their verified account role
-            await routeUserByRole(authResponse.user, rawIdentifier, authResponse.session);
+            await routeUserByRole(authResponse.user, rawIdentifier, authResponse.session, {
+                loginType: 'admin'
+            });
 
         } catch (err) {
             const rawMsg = (err.message || '').replace(/^Exception:\s*/i, '').trim();

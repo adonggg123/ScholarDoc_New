@@ -6,6 +6,24 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // Storage configuration for Super Admin (isolates Super Admin session from Admin & Student portals)
 const SUPERADMIN_STORAGE_KEY = 'scholardoc_superadmin_auth_token';
 
+// Role verification helpers
+const SYSTEM_ADMIN_EMAILS = new Set([
+    'admin@scholardoc.com',
+    'superadmin@scholardoc.com',
+    'registrar@scholardoc.com'
+]);
+
+function normalizeAdminRole(role) {
+    const r = String(role || '').trim().toLowerCase();
+    if (r === 'super admin' || r === 'superadmin' || r === 'super_admin') return 'Super Admin';
+    if (r === 'admin' || r === 'registrar') return 'Admin';
+    return null;
+}
+
+function isSystemAdminEmail(email) {
+    return SYSTEM_ADMIN_EMAILS.has(String(email || '').trim().toLowerCase());
+}
+
 // Migrate legacy session if present and belongs to superadmin
 try {
     if (!localStorage.getItem(SUPERADMIN_STORAGE_KEY) && !sessionStorage.getItem(SUPERADMIN_STORAGE_KEY)) {
@@ -13,7 +31,8 @@ try {
         if (legacy) {
             const parsed = JSON.parse(legacy);
             const email = (parsed?.user?.email || '').toLowerCase();
-            if (email.includes('superadmin')) {
+            const metaRole = (parsed?.user?.user_metadata?.role || '').trim().toLowerCase();
+            if (email === 'superadmin@scholardoc.com' || metaRole === 'super admin' || metaRole === 'superadmin') {
                 localStorage.setItem(SUPERADMIN_STORAGE_KEY, legacy);
                 sessionStorage.setItem(SUPERADMIN_STORAGE_KEY, legacy);
             }
@@ -53,32 +72,74 @@ window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
 // Global Current Admin State
 window.currentAdmin = null;
 
-// Load Admin Profile Details
+// Load Admin Profile Details & Verify Super Admin Role
 async function loadAdminProfile(user) {
     try {
-        let adminDoc = null;
-        if (user) {
-            const { data } = await window.supabaseClient
-                .from('admins')
-                .select('*')
-                .or(`uid.eq.${user.id},email.eq.${user.email}`)
-                .limit(1);
+        if (!user) return { authorized: false, redirectTo: 'login' };
 
-            if (data && data.length > 0) {
-                adminDoc = data[0];
+        const userEmail = (user.email || '').trim().toLowerCase();
+        const metaRole = String(user.user_metadata?.role || '').trim().toLowerCase();
+
+        let adminDoc = null;
+        const adminFilter = userEmail ? `uid.eq.${user.id},email.eq.${userEmail}` : `uid.eq.${user.id}`;
+        const { data } = await window.supabaseClient
+            .from('admins')
+            .select('*')
+            .or(adminFilter)
+            .limit(1);
+
+        if (data && data.length > 0) {
+            adminDoc = data[0];
+        }
+
+        // Check if this user is actually a student grantee (and not a system admin email)
+        if (!isSystemAdminEmail(userEmail)) {
+            let studentRecord = null;
+            try {
+                const studentFilters = [`uid.eq.${user.id}`];
+                if (userEmail) {
+                    studentFilters.push(`email_address.eq.${encodeURIComponent(userEmail)}`);
+                    studentFilters.push(`email.eq.${encodeURIComponent(userEmail)}`);
+                }
+                const { data: studentRows } = await window.supabaseClient
+                    .from('student_grantees')
+                    .select('*')
+                    .or(studentFilters.join(','))
+                    .limit(1);
+                if (studentRows && studentRows.length > 0) {
+                    studentRecord = studentRows[0];
+                }
+            } catch (_) {}
+
+            if (metaRole === 'student' || studentRecord) {
+                return { authorized: false, redirectTo: 'student', studentRecord };
             }
         }
 
-        const email = user?.email || adminDoc?.email || '';
-        const isSuper = (adminDoc?.role === 'Super Admin' || adminDoc?.role === 'SuperAdmin' || email.toLowerCase().includes('superadmin'));
-        const displayRole = isSuper ? 'Super Admin' : (adminDoc?.role || 'Admin');
-        const username = adminDoc?.username || (isSuper ? 'superadmin' : 'admin');
+        const verifiedRole =
+            normalizeAdminRole(adminDoc?.role) ||
+            normalizeAdminRole(user?.user_metadata?.role) ||
+            (userEmail === 'superadmin@scholardoc.com'
+                ? 'Super Admin'
+                : (isSystemAdminEmail(userEmail) ? 'Admin' : null));
+
+        if (!verifiedRole) {
+            return { authorized: false, redirectTo: 'login' };
+        }
+
+        if (verifiedRole !== 'Super Admin') {
+            return { authorized: false, redirectTo: 'admin' };
+        }
+
+        const email = user.email || adminDoc?.email || '';
+        const displayRole = 'Super Admin';
+        const username = adminDoc?.username || 'superadmin';
 
         window.currentAdmin = {
-            uid: user?.id || adminDoc?.uid,
+            uid: user.id || adminDoc?.uid,
             email: email,
             username: username,
-            role: adminDoc?.role || (isSuper ? 'Super Admin' : 'Admin'),
+            role: adminDoc?.role || 'Super Admin',
             displayRole: displayRole
         };
 
@@ -89,10 +150,12 @@ async function loadAdminProfile(user) {
 
         if (profileNameEl) profileNameEl.textContent = username || displayRole;
         if (profileRoleEl) profileRoleEl.textContent = username || displayRole;
-        if (profileEmailEl) profileEmailEl.textContent = email || (isSuper ? 'superadmin@scholardoc.com' : 'admin@scholardoc.com');
+        if (profileEmailEl) profileEmailEl.textContent = email || 'superadmin@scholardoc.com';
 
+        return { authorized: true };
     } catch (e) {
         console.error('Error loading admin profile:', e);
+        return { authorized: false, redirectTo: 'login' };
     }
 }
 
@@ -100,8 +163,6 @@ async function loadAdminProfile(user) {
 function applyRoleAccessControls() {
     const isSuperAdmin = window.currentAdmin?.displayRole === 'Super Admin';
     if (!isSuperAdmin) {
-        // Not a superadmin, redirect to admin portal
-        window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
         return;
     }
 
@@ -122,15 +183,53 @@ function applyRoleAccessControls() {
     loadView(initialView);
 }
 
-// Check Authentication Session
+// Check Authentication Session & Enforce Super Admin Role
 async function checkSession() {
     const { data: { session } } = await window.supabaseClient.auth.getSession();
     if (!session) {
-        window.location.href = 'login.html'; // Redirect to login if not authenticated
-        return;
+        window.location.href = window.location.protocol === 'file:' ? 'login.html' : '/login.html';
+        return false;
     }
-    await loadAdminProfile(session.user);
+
+    const profileResult = await loadAdminProfile(session.user);
+    if (!profileResult || !profileResult.authorized) {
+        if (profileResult && profileResult.redirectTo === 'admin') {
+            window.location.href = window.location.protocol === 'file:' ? '../admin_web/admin.html' : '/admin_web/admin.html';
+            return false;
+        }
+
+        try {
+            localStorage.removeItem(SUPERADMIN_STORAGE_KEY);
+            sessionStorage.removeItem(SUPERADMIN_STORAGE_KEY);
+        } catch (_) {}
+
+        if (profileResult && profileResult.redirectTo === 'student') {
+            const sid = profileResult.studentRecord?.student_no || profileResult.studentRecord?.studentId || '';
+            try {
+                if (!localStorage.getItem('scholardoc_student_auth_token') && !sessionStorage.getItem('scholardoc_student_auth_token')) {
+                    const serialized = JSON.stringify(session);
+                    localStorage.setItem('scholardoc_student_auth_token', serialized);
+                    sessionStorage.setItem('scholardoc_student_auth_token', serialized);
+                }
+                if (sid) {
+                    localStorage.setItem('scholardoc_student_id', sid);
+                    sessionStorage.setItem('scholardoc_student_id', sid);
+                }
+            } catch (_) {}
+            const hash = `#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}${sid ? '&student_id=' + encodeURIComponent(sid) : ''}`;
+            window.location.href = (window.location.protocol === 'file:' ? '../student_web/dashboard.html' : '/student_web/dashboard.html') + hash;
+            return false;
+        }
+
+        try {
+            await window.supabaseClient.auth.signOut();
+        } catch (_) {}
+        window.location.href = window.location.protocol === 'file:' ? 'login.html' : '/login.html';
+        return false;
+    }
+
     applyRoleAccessControls();
+    return true;
 }
 
 // Elements
@@ -1466,8 +1565,10 @@ if (settingsMenuBtn) {
 }
 
 // Reliable Initialization (handles DOMContentLoaded already fired in module scripts)
-function initDashboard() {
-    checkSession();
+async function initDashboard() {
+    const authorized = await checkSession();
+    if (!authorized) return;
+
     loadNotifications();
     setupRealtimeNotifications();
     setupActivityTabsAndFilters();
