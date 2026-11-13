@@ -14,10 +14,7 @@ try {
         if (legacy) {
             const parsed = JSON.parse(legacy);
             const email = (parsed?.user?.email || '').toLowerCase();
-            const metaRole = (parsed?.user?.user_metadata?.role || '').toLowerCase().trim();
-            const isSystemAdminEmail = ['admin@scholardoc.com', 'superadmin@scholardoc.com', 'registrar@scholardoc.com'].includes(email);
-            const isAdminMetaRole = ['admin', 'super admin', 'superadmin', 'registrar'].includes(metaRole);
-            if (!isSystemAdminEmail && !isAdminMetaRole) {
+            if (!email.includes('admin') && !email.includes('superadmin')) {
                 localStorage.setItem(STUDENT_STORAGE_KEY, legacy);
                 sessionStorage.setItem(STUDENT_STORAGE_KEY, legacy);
             }
@@ -53,7 +50,15 @@ window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
     }
 });
 
-
+// ─── Session Check ───
+async function checkSession() {
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session) {
+        window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
+        return null;
+    }
+    return session;
+}
 
 // ─── DOM Elements ───
 const appContent = document.getElementById('app-content');
@@ -323,7 +328,7 @@ async function checkSession() {
 async function loadProfileData() {
     await initSessionFromHash();
     const session = await checkSession();
-    const storedStudentId = sessionStorage.getItem('scholardoc_student_id') || localStorage.getItem('scholardoc_student_id');
+    const storedStudentId = sessionStorage.getItem('scholardoc_student_id');
 
     let studentRecord = null;
     let uid = session?.user?.id;
@@ -345,23 +350,15 @@ async function loadProfileData() {
     // 2. Attempt lookup by student ID or email in student_grantees or school_students
     if (!studentRecord) {
         let queryTarget = storedStudentId;
-        const userEmail = session?.user?.email;
-        if (!queryTarget && userEmail) {
-            queryTarget = userEmail.split('@')[0];
+        if (!queryTarget && session?.user?.email) {
+            queryTarget = session.user.email.split('@')[0];
         }
-        const orParts = [];
         if (queryTarget) {
-            orParts.push(`student_no.eq.${queryTarget}`, `studentId.eq.${queryTarget}`);
-        }
-        if (userEmail) {
-            orParts.push(`email_address.eq.${userEmail}`, `email.eq.${userEmail}`);
-        }
-        if (orParts.length > 0) {
             try {
                 const { data } = await window.supabaseClient
                     .from('student_grantees')
                     .select('*')
-                    .or(orParts.join(','))
+                    .or(`student_no.eq.${queryTarget},studentId.eq.${queryTarget},email_address.eq.${session?.user?.email},email.eq.${session?.user?.email}`)
                     .limit(1);
                 if (data && data.length > 0) {
                     studentRecord = data[0];
@@ -378,12 +375,10 @@ async function loadProfileData() {
             await window.supabaseClient.auth.signOut();
             localStorage.removeItem(STUDENT_STORAGE_KEY);
             sessionStorage.removeItem(STUDENT_STORAGE_KEY);
-            localStorage.removeItem('scholardoc_student_id');
-            sessionStorage.removeItem('scholardoc_student_id');
         } catch (_) {}
         alert('Access denied: Your account is not registered as an eligible student grantee in the scholarship database.');
         window.location.href = window.location.protocol === 'file:' ? '../admin_web/login.html' : '/login.html';
-        return false;
+        return;
     }
 
     if (studentRecord) {
@@ -410,12 +405,10 @@ async function loadProfileData() {
                 await window.supabaseClient.auth.signOut();
                 localStorage.removeItem(STUDENT_STORAGE_KEY);
                 sessionStorage.removeItem(STUDENT_STORAGE_KEY);
-                localStorage.removeItem('scholardoc_student_id');
-                sessionStorage.removeItem('scholardoc_student_id');
             } catch (_) {}
             alert('Security Verification Required: You must complete the SMS OTP verification sent to your registered mobile number before accessing the portal.');
             window.location.href = '/login.html';
-            return false;
+            return;
         }
 
         currentStudentProfile = studentRecord;
@@ -433,9 +426,7 @@ async function loadProfileData() {
         if (photoUrl && profileAvatar) {
             profileAvatar.innerHTML = `<img src="${photoUrl}" alt="Avatar">`;
         }
-        return true;
     }
-    return false;
 }
 
 // ─── Real-Time Notification Listener ───
@@ -563,8 +554,7 @@ window.showToast = showToast;
 
 // ─── Initialize ───
 (async () => {
-    const ok = await loadProfileData();
-    if (!ok) return;
+    await loadProfileData();
     await setupNotificationListener();
     loadView('home');
 })();

@@ -549,6 +549,14 @@ function getStudentEmail(raw) {
     return `${clean.replaceAll(' ', '_')}@scholardoc.com`;
 }
 
+function formatPostgrestValue(val) {
+    const s = String(val || '').trim();
+    if (/[(),."\\]/.test(s)) {
+        return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    }
+    return s;
+}
+
 /**
  * Validates whether an identifier belongs to an authorized student grantee in student_grantees.
  * Returns the grantee record if eligible, or null if not in student_grantees.
@@ -556,6 +564,7 @@ function getStudentEmail(raw) {
 async function checkGranteeRecord(identifier) {
     if (!identifier) return null;
     const cleanId = String(identifier).trim();
+    if (!cleanId) return null;
     const cleanNo = cleanId.replace(/[- ]/g, '');
 
     // 1. Try server backend endpoint first if available
@@ -578,22 +587,25 @@ async function checkGranteeRecord(identifier) {
     } catch (_) {}
 
     // 2. Direct Supabase query fallback strictly on student_grantees table
+    if (!supabaseClient) return null;
     try {
+        const safeId = formatPostgrestValue(cleanId);
         const filterTerms = [
-            `student_no.eq.${encodeURIComponent(cleanId)}`,
-            `studentId.eq.${encodeURIComponent(cleanId)}`
+            `student_no.eq.${safeId}`,
+            `studentId.eq.${safeId}`
         ];
         if (cleanNo && cleanNo !== cleanId) {
-            filterTerms.push(`student_no.eq.${encodeURIComponent(cleanNo)}`);
-            filterTerms.push(`studentId.eq.${encodeURIComponent(cleanNo)}`);
+            const safeNo = formatPostgrestValue(cleanNo);
+            filterTerms.push(`student_no.eq.${safeNo}`);
+            filterTerms.push(`studentId.eq.${safeNo}`);
         }
         if (cleanId.includes('@')) {
-            filterTerms.push(`email_address.eq.${encodeURIComponent(cleanId)}`);
-            filterTerms.push(`email.eq.${encodeURIComponent(cleanId)}`);
+            filterTerms.push(`email_address.eq.${safeId}`);
+            filterTerms.push(`email.eq.${safeId}`);
         }
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
-            filterTerms.push(`id.eq.${encodeURIComponent(cleanId)}`);
-            filterTerms.push(`uid.eq.${encodeURIComponent(cleanId)}`);
+            filterTerms.push(`id.eq.${cleanId}`);
+            filterTerms.push(`uid.eq.${cleanId}`);
         }
 
         const { data, error } = await supabaseClient
@@ -669,7 +681,8 @@ async function routeUserByRole(authUser, rawIdentifier, authSession, options = {
         const tokenHash = authSession ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}&student_id=${encodeURIComponent(primaryStudentId)}` : '';
 
         if (window.location.protocol === 'file:') {
-            window.location.href = `../student_web/dashboard.html${tokenHash}`;
+            const isSubdir = /\/(admin_web|superadmin_web|student_web)\//i.test(window.location.pathname);
+            window.location.href = `${isSubdir ? '../' : ''}student_web/dashboard.html${tokenHash}`;
         } else {
             window.location.href = `/student_web/dashboard.html${tokenHash}`;
         }
@@ -775,13 +788,15 @@ async function routeUserByRole(authUser, rawIdentifier, authSession, options = {
     // Route to respective portal
     if (isSuper) {
         if (window.location.protocol === 'file:') {
-            window.location.href = '../superadmin_web/superadmin.html';
+            const isSubdir = /\/(admin_web|superadmin_web|student_web)\//i.test(window.location.pathname);
+            window.location.href = `${isSubdir ? '../' : ''}superadmin_web/superadmin.html`;
         } else {
             window.location.href = '/superadmin_web/superadmin.html';
         }
     } else {
         if (window.location.protocol === 'file:') {
-            window.location.href = '../admin_web/admin.html';
+            const isSubdir = /\/(admin_web|superadmin_web|student_web)\//i.test(window.location.pathname);
+            window.location.href = `${isSubdir ? '../' : ''}admin_web/admin.html`;
         } else {
             window.location.href = '/admin_web/admin.html';
         }
@@ -796,7 +811,16 @@ if (loginForm) {
         const rawIdentifier = identifierInput ? identifierInput.value.trim() : '';
         const password = passwordInput ? passwordInput.value.trim() : '';
 
-        if (!rawIdentifier || !password) return;
+        if (!rawIdentifier) {
+            showError('Please enter your Student ID.');
+            if (identifierInput) identifierInput.focus();
+            return;
+        }
+        if (!password) {
+            showError('Please enter your password.');
+            if (passwordInput) passwordInput.focus();
+            return;
+        }
 
         setLoading(true);
 
@@ -867,6 +891,7 @@ if (loginForm) {
                 // --- MANDATORY STUDENT GRANTEE VALIDATION ---
                 // STRICT CHECK: Student MUST exist in student_grantees table before attempting login!
                 const cleanId = rawIdentifier.trim();
+                const cleanNo = cleanId.replace(/[- ]/g, '');
                 const granteeRecord = prefetchedGrantee || await checkGranteeRecord(cleanId);
 
                 if (!granteeRecord) {
@@ -875,50 +900,89 @@ if (loginForm) {
 
                 // --- FIRST-LOGIN SECURITY VERIFICATION: SMS OTP GATE ---
                 // Validate student credentials and check if first-login OTP is required
-                const otpRes = await fetch('/api/auth/student-login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        studentId: cleanId,
-                        password: password
-                    })
-                });
-                const otpData = await otpRes.json();
+                let otpRes = null;
+                let otpData = null;
+                let backendReachable = false;
 
-                if (!otpRes.ok) {
-                    if (otpRes.status === 403) {
-                        throw new Error(`Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
+                try {
+                    otpRes = await fetch('/api/auth/student-login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            studentId: cleanId,
+                            password: password
+                        })
+                    });
+                    const contentType = otpRes.headers.get('content-type') || '';
+                    if (contentType.includes('application/json')) {
+                        otpData = await otpRes.json();
+                        backendReachable = true;
                     }
-                    if (otpRes.status === 401) {
-                        throw new Error(otpData.error || 'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.');
-                    }
-                    if (otpRes.status === 429) {
-                        throw new Error(otpData.error || 'Too many OTP requests. Please wait before trying again.');
-                    }
-                    throw new Error(otpData.error || otpData.message || 'Login failed. Please check your credentials.');
+                } catch (_) {
+                    backendReachable = false;
                 }
 
-                // If First Login: DO NOT ALLOW ACCESS TO SYSTEM. Channel selection & OTP required!
-                if (otpData.requiresOtp === true) {
-                    setLoading(false);
-                    if (otpData.requiresChannelSelection === true) {
-                        showOtpChannelSelectionModal(cleanId, password, otpData);
+                if (backendReachable) {
+                    if (!otpRes.ok) {
+                        if (otpRes.status === 403) {
+                            throw new Error(`Access denied. Student ID "${cleanId}" is not registered as an eligible grantee in the scholarship database. Only official student grantees can log in.`);
+                        }
+                        if (otpRes.status === 401) {
+                            throw new Error(otpData.error || 'Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.');
+                        }
+                        if (otpRes.status === 429) {
+                            throw new Error(otpData.error || 'Too many OTP requests. Please wait before trying again.');
+                        }
+                        throw new Error(otpData.error || otpData.message || 'Login failed. Please check your credentials.');
+                    }
+
+                    // If First Login: DO NOT ALLOW ACCESS TO SYSTEM. Channel selection & OTP required!
+                    if (otpData.requiresOtp === true) {
+                        setLoading(false);
+                        if (otpData.requiresChannelSelection === true) {
+                            showOtpChannelSelectionModal(cleanId, password, otpData);
+                            return;
+                        }
+                        try {
+                            sessionStorage.setItem('scholardoc_pending_otp_student', JSON.stringify({
+                                studentId: cleanId,
+                                password: password,
+                                channel: otpData.channel || 'sms',
+                                maskedPhone: otpData.maskedPhone,
+                                maskedEmail: otpData.maskedEmail,
+                                availableChannels: otpData.availableChannels,
+                                expiresIn: otpData.expiresIn || 600,
+                                resendCooldown: otpData.resendCooldown || 30
+                            }));
+                        } catch (_) {}
+                        window.location.href = `/otp.html?student_id=${encodeURIComponent(cleanId)}&channel=${encodeURIComponent(otpData.channel || 'sms')}`;
                         return;
                     }
-                    try {
-                        sessionStorage.setItem('scholardoc_pending_otp_student', JSON.stringify({
-                            studentId: cleanId,
-                            password: password,
-                            channel: otpData.channel || 'sms',
-                            maskedPhone: otpData.maskedPhone,
-                            maskedEmail: otpData.maskedEmail,
-                            availableChannels: otpData.availableChannels,
-                            expiresIn: otpData.expiresIn || 600,
-                            resendCooldown: otpData.resendCooldown || 30
-                        }));
-                    } catch (_) {}
-                    window.location.href = `/otp.html?student_id=${encodeURIComponent(cleanId)}&channel=${encodeURIComponent(otpData.channel || 'sms')}`;
-                    return;
+                } else {
+                    // Fallback: Direct Supabase verification when backend server is offline or unreachable (matches mobile AuthService)
+                    const isFirstCompleted = granteeRecord.first_login_completed === true ||
+                        granteeRecord.otp_verified_at != null;
+
+                    if (!isFirstCompleted) {
+                        const studentNo = String(granteeRecord.student_no || granteeRecord.studentId || '').trim();
+                        const matchesInitialId = password === cleanId ||
+                            (cleanNo && password === cleanNo) ||
+                            (studentNo && password === studentNo);
+
+                        if (!matchesInitialId) {
+                            throw new Error('Invalid initial credentials. On your first login, please enter your Student ID as both your username and password.');
+                        }
+
+                        const rawPhone = String(granteeRecord.mobile_number || granteeRecord.contactNumber || '');
+                        let maskedPhone = 'your registered contact';
+                        const cleanDigits = rawPhone.replace(/\D/g, '');
+                        if (cleanDigits.length === 11) {
+                            maskedPhone = `${cleanDigits.substring(0, 4)} •••• ${cleanDigits.substring(8)}`;
+                        } else if (cleanDigits.length > 4) {
+                            maskedPhone = `${cleanDigits.substring(0, 2)} •••• ${cleanDigits.substring(cleanDigits.length - 2)}`;
+                        }
+                        throw new Error(`Unable to reach the verification server to send your OTP code (${maskedPhone}). Please ensure the ScholarDoc server is running and your device is connected.`);
+                    }
                 }
 
                 // Returning Student: Proceed with existing authentication flow
@@ -981,10 +1045,11 @@ if (loginForm) {
                         if (!signUpErr && signUpData && signUpData.user) {
                             authResponse = signUpData;
                             try {
+                                const safePrimaryNo = formatPostgrestValue(primaryNo);
                                 await supabaseClient
                                     .from('student_grantees')
                                     .update({ uid: signUpData.user.id })
-                                    .or(`student_no.eq.${encodeURIComponent(primaryNo)},studentId.eq.${encodeURIComponent(primaryNo)}`);
+                                    .or(`student_no.eq.${safePrimaryNo},studentId.eq.${safePrimaryNo}`);
                             } catch (_) {}
                         } else if (signUpErr) {
                             const errMsg = (signUpErr.message || '').toLowerCase();
