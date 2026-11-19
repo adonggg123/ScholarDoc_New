@@ -424,7 +424,7 @@ function renderForm2Table(rows) {
     tbody.innerHTML = rows.map((row, idx) => {
         const ctrl = row.control_number || String(idx + 1).padStart(5, '0');
         const studentNo = row.student_number || 'N/A';
-        const saNo = row.tes_application_number || 'N/A';
+        const saNo = (row.tes_application_number && !/^\d{9,12}$/.test(String(row.tes_application_number).trim())) ? row.tes_application_number : 'N/A';
         const lastName = row.last_name || '';
         const givenName = row.given_name || '';
         const mi = row.middle_initial || '';
@@ -488,7 +488,7 @@ function renderForm3Table(rows) {
     tbody.innerHTML = rows.map((row, idx) => {
         const ctrl = row.control_number || String(idx + 1).padStart(5, '0');
         const studentNo = row.student_number || 'N/A';
-        const saNo = row.tes_application_number || 'N/A';
+        const saNo = (row.tes_application_number && !/^\d{9,12}$/.test(String(row.tes_application_number).trim())) ? row.tes_application_number : 'N/A';
         const lastName = row.last_name || '';
         const givenName = row.given_name || '';
         const mi = row.middle_initial || '';
@@ -558,7 +558,7 @@ async function exportForm2Excel() {
 
         const studentsToFill = recordsToExport.map(row => ({
             studentId: row.student_number || '',
-            saNumber: row.tes_application_number || '',
+            saNumber: (row.tes_application_number && !/^\d{9,12}$/.test(String(row.tes_application_number).trim())) ? row.tes_application_number : 'N/A',
             fullName: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
             lastName: row.last_name || '',
             firstName: row.given_name || '',
@@ -613,7 +613,7 @@ async function exportForm3Excel() {
 
         const studentsToFill = recordsToExport.map(row => ({
             studentId: row.student_number || '',
-            saNumber: row.tes_application_number || '',
+            saNumber: (row.tes_application_number && !/^\d{9,12}$/.test(String(row.tes_application_number).trim())) ? row.tes_application_number : 'N/A',
             fullName: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
             lastName: row.last_name || '',
             firstName: row.given_name || '',

@@ -741,7 +741,7 @@ export class AnnexSyncService {
                 return {
                     control_number: ctrl,
                     student_number: studentNo,
-                    tes_application_number: saNo,
+                    tes_application_number: 'N/A',
                     last_name: name.lastName || 'N/A',
                     given_name: name.firstName || 'N/A',
                     middle_initial: name.mi || '',
@@ -789,7 +789,7 @@ export class AnnexSyncService {
                 return {
                     control_number: ctrl,
                     student_number: studentNo,
-                    tes_application_number: saNo,
+                    tes_application_number: 'N/A',
                     last_name: name.lastName || 'N/A',
                     given_name: name.firstName || 'N/A',
                     middle_initial: name.mi || '',

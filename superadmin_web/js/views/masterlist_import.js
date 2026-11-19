@@ -4356,7 +4356,7 @@ function renderAnnexForm2Table(items) {
             <tr>
                 <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
                 <td><span style="font-weight: 600;">${studentId}</span></td>
-                <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">${sa}</span></td>
+                <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">N/A</span></td>
                 <td>${name.lastName}</td>
                 <td>${name.firstName}</td>
                 <td>${name.mi}</td>
@@ -5944,7 +5944,7 @@ export function initMasterlistImport() {
                 ...grantee,
                 ...matched,
                 studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
-                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                saNumber: 'N/A',
                 fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
                 lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
                 firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',
@@ -5969,7 +5969,7 @@ export function initMasterlistImport() {
                 ...grantee,
                 ...matched,
                 studentId: matched.studentId || matched.student_id || grantee.student_id || grantee.studentId || '',
-                saNumber: matched.saNumber || grantee.saNumber || grantee.familyDetails?.saNumber || matched.familyDetails?.saNumber || '',
+                saNumber: 'N/A',
                 fullName: matched.fullName || grantee.name || `${grantee.last_name || ''}, ${grantee.first_name || ''} ${grantee.middle_name || ''}`.trim(),
                 lastName: grantee.last_name || grantee.lastName || matched.lastName || matched.last_name || '',
                 firstName: grantee.first_name || grantee.firstName || matched.firstName || matched.first_name || '',

@@ -20,7 +20,7 @@ window.switchReportTab = function (tabName) {
 async function loadAllData() {
     const body = document.getElementById('rpt-master-body');
     if (body && allStudents.length === 0) {
-        body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i><div>Loading student master list records...</div></td></tr>`;
+        body.innerHTML = `<tr><td colspan="24" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-loader" style="font-size: 24px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 8px;"></i><div>Loading student master list records...</div></td></tr>`;
         if (window.lucide) window.lucide.createIcons();
     }
     try {
@@ -30,7 +30,7 @@ async function loadAllData() {
         buildCharts(allStudents);
     } catch (e) {
         console.error('Error loading students for reports:', e);
-        if (body) body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data: ${e.message || e}</td></tr>`;
+        if (body) body.innerHTML = `<tr><td colspan="24" style="text-align: center; padding: 20px; color: var(--error);">Failed to load student data: ${e.message || e}</td></tr>`;
     }
 }
 
@@ -128,9 +128,10 @@ function getFilteredStudents() {
         const id = (s.student_no || s.studentId || '').toLowerCase();
         const email = (s.email_address || s.email || '').toLowerCase();
         const program = (s.program_name || s.course || '').toLowerCase();
+        const saStr = String(s.saNumber || s.sa_number || s.documents?.saNumber || s.documents?.atmExtractedSaNumber || family.saNumber || '').toLowerCase();
 
         // 1. Search Query
-        const matchSearch = !query || name.includes(query) || id.includes(query) || email.includes(query) || program.includes(query);
+        const matchSearch = !query || name.includes(query) || id.includes(query) || email.includes(query) || program.includes(query) || saStr.includes(query);
 
         // 2. Batch Match
         let matchBatch = batchFilter === 'All';
@@ -219,7 +220,7 @@ function renderMasterTable(students) {
     const body = document.getElementById('rpt-master-body');
     if (!body) return;
     if (students.length === 0) {
-        body.innerHTML = `<tr><td colspan="23" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-users" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>No students match filters.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="24" style="text-align: center; padding: 40px; color: var(--text-secondary);"><i class="icon-users" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 8px;"></i>No students match filters.</td></tr>`;
         if (window.lucide) window.lucide.createIcons();
         return;
     }
@@ -284,12 +285,34 @@ function renderMasterTable(students) {
         const motherName = s.mother_full_name || family.motherName || 'N/A';
         const religion = s.religion || family.religion || 'N/A';
 
+        const saCandidates = [
+            s.saNumber,
+            s.sa_number,
+            s.documents?.saNumber,
+            s.documents?.sa_number,
+            s.documents?.atmExtractedSaNumber,
+            s.documents?.atm_extracted_sa_number,
+            s.atmExtractedSaNumber,
+            family.saNumber
+        ];
+        let saNumberDisplay = 'N/A';
+        for (const cand of saCandidates) {
+            if (cand !== undefined && cand !== null) {
+                const str = String(cand).trim();
+                if (str && str.toUpperCase() !== 'N/A' && str.toLowerCase() !== 'null' && str.toLowerCase() !== 'undefined') {
+                    saNumberDisplay = str;
+                    break;
+                }
+            }
+        }
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color); vertical-align: middle;">
                 <td style="padding: 14px;">
                     <input type="checkbox" class="rpt-row-checkbox" data-uid="${s.uid || s.id}" ${isChecked} style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
                 </td>
                 <td style="padding: 14px; font-size: 13px; color: var(--text-secondary);">${studentNo}</td>
+                <td style="padding: 14px; font-size: 13px;"><span style="display: inline-block; padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 12px; font-weight: 600; color: var(--text-primary);">${saNumberDisplay}</span></td>
                 <td style="padding: 14px; font-weight: 600; font-size: 13px;">
                     ${nameParts.last}
                 </td>
@@ -526,7 +549,7 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
     }
 
     // Build CSV
-    const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'Course', 'Year', 'Gender', 'Scholarship', 'Batch', 'Status', 'Scholar Year', 'Payouts', 'SA Number', 'Father Edu', 'Mother Edu'];
+    const headers = ['Last Name', 'First Name', 'M.I.', 'Student ID', 'SA Account Number', 'Course', 'Year', 'Gender', 'Scholarship', 'Batch', 'Status', 'Scholar Year', 'Payouts', 'Father Edu', 'Mother Edu'];
     const rows = studentsToExport.map(s => {
         let nameParts = { last: '', first: '', mi: '' };
         const fn = (s.full_name || s.fullName || '').trim();
@@ -570,7 +593,10 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
             s.saNumber,
             s.sa_number,
             s.documents?.saNumber,
+            s.documents?.sa_number,
             s.documents?.atmExtractedSaNumber,
+            s.documents?.atm_extracted_sa_number,
+            s.atmExtractedSaNumber,
             fam.saNumber
         ];
         let saReportVal = '';
@@ -589,6 +615,7 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
             nameParts.first,
             nameParts.mi,
             s.student_no || s.studentId || '',
+            saReportVal || 'N/A',
             s.program_name || s.course || '',
             s.year_level || s.year || '',
             s.gender || '',
@@ -597,7 +624,6 @@ document.getElementById('btn-export-excel').addEventListener('click', function (
             s.status || 'Pending',
             rawSy || '',
             rawPayouts !== null && rawPayouts !== undefined ? rawPayouts : '',
-            saReportVal,
             fam.fatherEduStatus || '',
             fam.motherEduStatus || ''
         ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
@@ -647,7 +673,7 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
             <table>
                 <thead>
                     <tr>
-                        <th>Name</th><th>Student ID</th><th>Course</th><th>Year Level</th><th>Scholar Year</th><th>Payouts</th><th>Scholarship</th><th>Batch</th><th>Status</th>
+                        <th>Name</th><th>Student ID</th><th>SA Account Number</th><th>Course</th><th>Year Level</th><th>Scholar Year</th><th>Payouts</th><th>Scholarship</th><th>Batch</th><th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -655,10 +681,19 @@ document.getElementById('btn-export-pdf').addEventListener('click', function () 
                         const fam = s.familyDetails || {};
                         const sy = s.scholarYearLevel || s.yearBecameScholar || s.year_became_scholar || fam.scholarYearLevel || fam.yearBecameScholar || fam.year_became_scholar || 'Not specified';
                         const py = (s.payoutsReceived !== null && s.payoutsReceived !== undefined && String(s.payoutsReceived).trim() !== '') ? s.payoutsReceived : (fam.payoutsReceived ?? s.payouts_received ?? fam.payouts_received ?? 'Not specified');
+                        const saCands = [s.saNumber, s.sa_number, s.documents?.saNumber, s.documents?.sa_number, s.documents?.atmExtractedSaNumber, fam.saNumber];
+                        let saVal = 'N/A';
+                        for (const c of saCands) {
+                            if (c && String(c).trim() && String(c).trim().toUpperCase() !== 'N/A') {
+                                saVal = String(c).trim();
+                                break;
+                            }
+                        }
                         return `
                         <tr>
                             <td>${s.full_name || s.fullName || ''}</td>
                             <td>${s.student_no || s.studentId || ''}</td>
+                            <td>${saVal}</td>
                             <td>${s.program_name || s.course || ''}</td>
                             <td>${s.year_level || s.year || ''}</td>
                             <td>${sy}</td>

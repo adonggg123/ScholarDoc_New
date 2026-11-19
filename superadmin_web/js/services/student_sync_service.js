@@ -995,7 +995,7 @@ export class StudentSyncService {
                             const candidateF2 = {
                                 control_number: String(form2List.length + missingF2ToPersist.length + 1).padStart(5, '0'),
                                 student_number: s.studentId || s.student_no || s.studentNo || g.student_id || g.studentNo || null,
-                                tes_application_number: cleanCandSa,
+                                tes_application_number: 'N/A',
                                 last_name: s.lastName || s.last_name || g.last_name || g.lastName || 'N/A',
                                 given_name: s.firstName || s.first_name || g.first_name || g.firstName || 'N/A',
                                 middle_initial: s.mi || g.middle_name || g.middleName || '',
