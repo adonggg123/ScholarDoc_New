@@ -1236,26 +1236,14 @@ window.approveStudent = async function (uid) {
             timestamp: new Date().toISOString()
         }]);
 
-        // Mirror in-app notification directly to SMS via Semaphore with identical content
-        const phone = student?.mobile_number || student?.contactNumber || student?.phone_number;
-        if (phone) {
-            SmsNotificationService.sendStudentSms(uid, {
-                eventType: 'application_approved',
-                title: 'Application Approved',
-                message: 'Congratulations! Your scholarship application has been officially approved.',
-                phone: phone,
-                force: true
-            }).catch(e => console.warn('Could not mirror approval notification to SMS:', e));
-        }
-
         alert('Student approved successfully.');
         hideModal();
         loadStudents();
 
-        // Prompt to dispatch grantee email notification immediately upon approval
-        if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification via Email & SMS to ${student?.fullName || 'this student'} now?`)) {
+        // Prompt to dispatch grantee email notification upon approval
+        // Note: SMS notifications are sent only when Super Admin manually clicks the Send SMS button
+        if (confirm(`Student approved successfully!\n\nWould you like to send the official ScholarDoc Grantee acceptance notification email to ${student?.fullName || 'this student'} now?`)) {
             window.sendGranteeEmail(uid, true);
-            window.sendGranteeSms(uid, true);
         }
     } catch (err) {
         console.error('Error approving student:', err);

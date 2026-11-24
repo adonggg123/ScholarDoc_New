@@ -5723,6 +5723,19 @@ function isAdminActivityNotification(notif) {
     return false;
 }
 
+function isGranteeApprovalNotification(notif) {
+    if (!notif) return false;
+    const title = (notif.title || '').trim().toLowerCase();
+    const msg = (notif.message || '').trim().toLowerCase();
+    return title.includes('application approved') ||
+           title.includes('grantee approved') ||
+           title.includes('scholarship approved') ||
+           title.includes('scholarship application approved') ||
+           msg.includes('application has been officially approved') ||
+           msg.includes('officially approved as a scholar grantee') ||
+           msg.includes('officially approved');
+}
+
 let isWatcherPolling = false;
 
 async function lookupStudentForNotification(studentId, notif = null) {
@@ -5951,6 +5964,14 @@ async function pollNotificationsAndSendSms() {
                 console.warn(`[Push Dispatcher] Error sending push for ${notifId}:`, pushErr.message);
             }
 
+            // Do NOT automatically send SMS for newly approved grantees.
+            // SMS notifications should only be sent when the Super Admin manually clicks the Send button.
+            if (isGranteeApprovalNotification(notif)) {
+                processedNotificationIds.add(notifId);
+                saveProcessedNotificationIds();
+                continue;
+            }
+
             // 2. Look up student details & registered phone number for student mobile workflow SMS
             const studentInfo = await lookupStudentForNotification(targetStudentId, notif);
             if (!studentInfo || !studentInfo.rawPhone) {
@@ -6062,7 +6083,7 @@ async function startNotificationSmsWatcher() {
                 for (const row of rows) {
                     const notifId = String(row.id);
                     const targetStudentId = row.studentId || row.student_id;
-                    if (isAdminActivityNotification(row) || isAdminOrSuperAdminTarget(targetStudentId)) {
+                    if (isAdminActivityNotification(row) || isAdminOrSuperAdminTarget(targetStudentId) || isGranteeApprovalNotification(row)) {
                         processedNotificationIds.add(notifId);
                         continue;
                     }
@@ -6101,12 +6122,11 @@ async function startNotificationSmsWatcher() {
     schedulePoll();
 }
 
-// ── Automatic Grantee Messaging Watcher Daemon (Email & SMS) ─────────────
+// ── Grantee Messaging Watcher Daemon (Email only; SMS is manual only) ───
 // Automatically sends an official scholarship acceptance email (via Gmail SMTP)
-// AND SMS notification (via Semaphore) to any student record in student_grantees
-// whose notifications have not been dispatched yet (email_sent_at is null or sms_sent_at is null).
-// Continuously monitors in the background without requiring the Super Admin to click a button.
-// Ensures each grantee receives the email and SMS only once.
+// to any student record in student_grantees whose email has not been dispatched yet.
+// NOTE: Automatic SMS sending for newly approved grantees is REMOVED.
+// SMS notifications are sent ONLY when the Super Admin manually clicks the Send SMS button.
 
 const inFlightGranteeIds = new Set();
 let isGranteeWatcherPolling = false;
@@ -6123,8 +6143,8 @@ async function pollNewGranteesAndMessage() {
             'Content-Type': 'application/json'
         };
 
-        // Query grantees who are missing either email_sent_at or sms_sent_at
-        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?or=(email_sent_at.is.null,sms_sent_at.is.null)&order=created_at.desc&limit=25`, {
+        // Query grantees who are missing email_sent_at
+        const res = await fetch(`${SUPABASE_REST_URL}/student_grantees?email_sent_at=is.null&order=created_at.desc&limit=25`, {
             headers,
             signal: AbortSignal.timeout(10000)
         });
@@ -6145,8 +6165,6 @@ async function pollNewGranteesAndMessage() {
 
             const fullName = grantee.full_name || grantee.fullName || 'Student Grantee';
             const targetEmail = (grantee.email_address || grantee.email || '').trim();
-            const rawPhone = grantee.mobile_number || grantee.contactNumber || grantee.phone_number;
-            const normalizedPhone = normalizePhilippineMobile(rawPhone);
 
             inFlightGranteeIds.add(rowKey);
 
@@ -6176,32 +6194,10 @@ async function pollNewGranteesAndMessage() {
                     await new Promise(r => setTimeout(r, 400));
                 }
 
-                // 2. Dispatch SMS if not yet sent
-                if (!grantee.sms_sent_at) {
-                    if (normalizedPhone) {
-                        console.log(`[Grantee Messaging Watcher] Dispatching automated SMS to ${normalizedPhone} for ${fullName}...`);
-                        const smsRes = await sendSingleGranteeSms(grantee, { force: false });
-                        if (smsRes.success) {
-                            console.log(`[Grantee Messaging Watcher] SMS delivered to ${normalizedPhone} for ${fullName}.`);
-                            grantee.sms_sent_at = new Date().toISOString();
-                        } else {
-                            console.error(`[Grantee Messaging Watcher] SMS delivery failed for ${normalizedPhone}:`, smsRes.error);
-                        }
-                    } else {
-                        // Mark sms_status as skipped_no_phone to avoid infinite querying
-                        console.warn(`[Grantee Messaging Watcher] Grantee ${fullName} has no valid phone number. Marking sms_status.`);
-                        const patchKey = (grantee.id && isUuidString(grantee.id)) ? `id=eq.${encodeURIComponent(grantee.id)}` : `uid=eq.${encodeURIComponent(grantee.uid)}`;
-                        await fetch(`${SUPABASE_REST_URL}/student_grantees?${patchKey}`, {
-                            method: 'PATCH',
-                            headers,
-                            body: JSON.stringify({ sms_status: 'skipped_no_phone', sms_sent_at: new Date().toISOString() })
-                        });
-                        grantee.sms_sent_at = new Date().toISOString();
-                    }
-                    await new Promise(r => setTimeout(r, 400));
-                }
+                // NOTE: Automatic SMS sending for newly approved grantees is removed.
+                // SMS notifications must only be sent when the Super Admin manually clicks the Send button.
 
-                // 3. Create In-App Notification if target has a uid/student_no
+                // 2. Create In-App Notification if target has a uid/student_no
                 const notifTarget = grantee.uid || grantee.student_no;
                 if (notifTarget) {
                     try {
