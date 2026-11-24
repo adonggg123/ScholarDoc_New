@@ -7,7 +7,20 @@ import 'notification_service.dart';
 import 'presence_service.dart';
 import 'push_notification_service.dart';
 import 'sms_service.dart';
+import 'password_policy.dart';
 import '../config/api_config.dart';
+
+/// Metadata describing whether the signed-in student has updated their password
+/// from the initial Student ID default.
+class PasswordSecurityInfo {
+  final bool hasCustomPassword;
+  final DateTime? passwordUpdatedAt;
+
+  const PasswordSecurityInfo({
+    required this.hasCustomPassword,
+    this.passwordUpdatedAt,
+  });
+}
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -380,6 +393,394 @@ class AuthService {
     }
   }
 
+  /// Formats a password to satisfy Supabase Auth's 6-character minimum
+  /// (used for legacy short Student IDs).
+  static String formatAuthPassword(String pwd) {
+    final clean = pwd.trim();
+    if (clean.isNotEmpty && clean.length < 6) {
+      return clean.padLeft(6, '0');
+    }
+    return clean;
+  }
+
+  /// Returns true when [enteredPassword] matches any of [studentIdVariants]
+  /// (exact or ignoring spaces/hyphens).
+  static bool doesPasswordMatchStudentId({
+    required String enteredPassword,
+    required Iterable<String> studentIdVariants,
+  }) {
+    final cleanEntered = enteredPassword.trim();
+    if (cleanEntered.isEmpty) return false;
+    final normEntered = PasswordPolicy.normalizeToken(cleanEntered);
+    if (normEntered.isEmpty) return false;
+
+    for (final rawVariant in studentIdVariants) {
+      final cleanVariant = rawVariant.trim();
+      if (cleanVariant.isEmpty) continue;
+      if (cleanEntered == cleanVariant) return true;
+      final normVariant = PasswordPolicy.normalizeToken(cleanVariant);
+      if (normVariant.isNotEmpty && normEntered == normVariant) return true;
+    }
+    return false;
+  }
+
+  /// Builds the ordered list of password candidates to attempt against Supabase Auth.
+  ///
+  /// Security invariant:
+  /// - Always includes ONLY the password actually entered by the user (plus its
+  ///   6-char zero-padded form when shorter than 6 characters).
+  /// - Only adds alternate Student ID formatting variants (e.g. with/without
+  ///   hyphens) when [allowStudentIdVariants] is true AND the user genuinely
+  ///   entered their Student ID as the password.
+  /// - An incorrect/unrelated password NEVER falls back to the Student ID.
+  static List<String> buildStudentPasswordCandidates({
+    required String enteredPassword,
+    required Iterable<String> studentIdVariants,
+    bool allowStudentIdVariants = true,
+  }) {
+    final candidates = <String>{};
+
+    void addCandidate(String? p) {
+      if (p == null || p.trim().isEmpty) return;
+      final clean = p.trim();
+      if (clean.length >= 6) {
+        candidates.add(clean);
+      } else {
+        candidates.add(formatAuthPassword(clean));
+      }
+    }
+
+    addCandidate(enteredPassword);
+
+    if (allowStudentIdVariants &&
+        doesPasswordMatchStudentId(
+          enteredPassword: enteredPassword,
+          studentIdVariants: studentIdVariants,
+        )) {
+      for (final variant in studentIdVariants) {
+        addCandidate(variant);
+      }
+    }
+
+    return candidates.toList();
+  }
+
+  /// Determines whether a student sign-in attempt may auto-provision a brand new
+  /// Supabase Auth account when sign-in fails.
+  ///
+  /// Prevents duplicate account creation or UID hijacking when a returning
+  /// student with an existing linked auth UID enters an incorrect password.
+  static bool canAutoProvisionStudentAccount({
+    required bool hasExistingLinkedAuthUid,
+    required bool otpJustVerified,
+    required bool passwordMatchesStudentId,
+  }) {
+    if (hasExistingLinkedAuthUid) return false;
+    return otpJustVerified || passwordMatchesStudentId;
+  }
+
+  /// Reads non-sensitive password security metadata for the currently signed-in user.
+  PasswordSecurityInfo getPasswordSecurityInfo() {
+    final meta = _supabase.auth.currentUser?.userMetadata;
+    if (meta == null) {
+      return const PasswordSecurityInfo(hasCustomPassword: false);
+    }
+    final hasCustom = meta['has_custom_password'] == true;
+    final rawUpdatedAt = meta['password_updated_at']?.toString();
+    final updatedAt = rawUpdatedAt != null ? DateTime.tryParse(rawUpdatedAt) : null;
+    return PasswordSecurityInfo(
+      hasCustomPassword: hasCustom || updatedAt != null,
+      passwordUpdatedAt: updatedAt,
+    );
+  }
+
+  /// Verifies whether the signed-in student has completed their first-login OTP
+  /// verification (checked against `student_grantees` with backend status fallback).
+  Future<bool> hasCompletedFirstLogin({
+    Map<String, dynamic>? profile,
+    String? studentId,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return false;
+
+    if (getPasswordSecurityInfo().hasCustomPassword) {
+      return true;
+    }
+
+    final resolvedProfile = profile ?? await getStudentProfile(user.id);
+    if (resolvedProfile != null &&
+        (resolvedProfile['first_login_completed'] == true ||
+            resolvedProfile['otp_verified_at'] != null)) {
+      return true;
+    }
+
+    final resolvedId = _pickNonEmpty([
+      studentId,
+      resolvedProfile?['student_no'],
+      resolvedProfile?['studentId'],
+      user.userMetadata?['student_no'],
+      user.userMetadata?['studentId'],
+      if ((user.email ?? '').toLowerCase().endsWith('@scholardoc.com'))
+        user.email!.split('@').first.replaceAll('_', ' '),
+    ]);
+
+    if (resolvedId.isEmpty) return false;
+
+    final candidates = await ApiConfig.resolveFastCandidates();
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse(
+          '$candidate/api/auth/otp/status?studentId=${Uri.encodeComponent(resolvedId)}',
+        );
+        final statusRes =
+            await http.get(uri).timeout(const Duration(milliseconds: 2200));
+        if (statusRes.statusCode == 200) {
+          final decoded = jsonDecode(statusRes.body);
+          if (decoded is Map && decoded['firstLoginCompleted'] == true) {
+            if (candidate.isNotEmpty) ApiConfig.setWorkingBaseUrl(candidate);
+            return true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return false;
+  }
+
+  /// Securely updates the authenticated student's password after their first login.
+  ///
+  /// Security checks enforced:
+  /// 1. Requires an active authenticated Supabase session.
+  /// 2. Confirms the student has completed first-login OTP verification.
+  /// 3. Enforces [PasswordPolicy] rules (length, complexity, no whitespace edges,
+  ///    confirmation match, different from current password & Student ID).
+  /// 4. Cryptographically re-authenticates the user's current password via
+  ///    Supabase Auth before permitting any password mutation.
+  /// 5. Updates the password atomically in Supabase Auth (bcrypt-hashed server-side)
+  ///    and records non-sensitive metadata (`has_custom_password`, `password_updated_at`).
+  /// 6. Revokes other device sessions (`SignOutScope.others`) while keeping the
+  ///    current device logged in.
+  /// 7. Writes an audit trail entry and dispatches a security alert notification.
+  Future<void> updateStudentPassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    final session = _supabase.auth.currentSession;
+    if (user == null || session == null) {
+      throw Exception('Your session has expired. Please sign in again.');
+    }
+
+    final authEmail = (user.email ?? '').trim();
+    if (authEmail.isEmpty) {
+      throw Exception(
+        'Unable to verify your account credentials. Please sign in again.',
+      );
+    }
+
+    // 1. Load student profile & collect Student ID variants for validation/logging
+    final profile = await getStudentProfile(user.id);
+    final primaryStudentNo = _pickNonEmpty([
+      profile?['student_no'],
+      profile?['studentId'],
+      user.userMetadata?['student_no'],
+      user.userMetadata?['studentId'],
+      if (authEmail.toLowerCase().endsWith('@scholardoc.com'))
+        authEmail.split('@').first.replaceAll('_', ' '),
+    ]);
+
+    final studentIdVariants = <String>{};
+    void addVariant(dynamic raw) {
+      final s = raw?.toString().trim() ?? '';
+      if (s.isEmpty || s.toLowerCase() == 'null') return;
+      studentIdVariants.add(s);
+      final stripped = s.replaceAll('-', '').replaceAll(' ', '');
+      if (stripped.isNotEmpty) studentIdVariants.add(stripped);
+    }
+
+    addVariant(primaryStudentNo);
+    addVariant(profile?['student_no']);
+    addVariant(profile?['studentId']);
+    if (authEmail.toLowerCase().endsWith('@scholardoc.com')) {
+      addVariant(authEmail.split('@').first.replaceAll('_', ' '));
+    }
+
+    // 2. Enforce first-login completion requirement
+    final firstLoginCompleted = await hasCompletedFirstLogin(
+      profile: profile,
+      studentId: primaryStudentNo,
+    );
+    if (!firstLoginCompleted) {
+      throw Exception(
+        'Password updates are available only after completing your first-login OTP verification.',
+      );
+    }
+
+    // 3. Enforce PasswordPolicy checks before any network call
+    final currentErr = PasswordPolicy.validateCurrentPassword(currentPassword);
+    if (currentErr != null) {
+      throw Exception(currentErr);
+    }
+
+    final newErr = PasswordPolicy.validateNewPassword(
+      newPassword,
+      currentPassword: currentPassword.trim(),
+      studentIds: studentIdVariants,
+    );
+    if (newErr != null) {
+      throw Exception(newErr);
+    }
+
+    final confirmErr = PasswordPolicy.validateConfirmPassword(
+      confirmPassword,
+      newPassword,
+    );
+    if (confirmErr != null) {
+      throw Exception(confirmErr);
+    }
+
+    // 4. Cryptographically verify current password against Supabase Auth
+    final securityInfo = getPasswordSecurityInfo();
+    final currentCandidates = buildStudentPasswordCandidates(
+      enteredPassword: currentPassword.trim(),
+      studentIdVariants: studentIdVariants,
+      allowStudentIdVariants: !securityInfo.hasCustomPassword,
+    );
+
+    bool currentPasswordVerified = false;
+    for (final candidate in currentCandidates) {
+      if (candidate.length < 6) continue;
+      try {
+        final reauthRes = await _supabase.auth.signInWithPassword(
+          email: authEmail,
+          password: candidate,
+        );
+        if (reauthRes.user != null && reauthRes.user!.id == user.id) {
+          currentPasswordVerified = true;
+          break;
+        }
+      } on AuthException catch (e) {
+        final msg = e.message.toLowerCase();
+        if (msg.contains('too many') ||
+            msg.contains('rate limit') ||
+            e.statusCode == '429') {
+          throw Exception(
+            'Too many verification attempts. Please wait a moment and try again.',
+          );
+        }
+        // Invalid credentials for this candidate; try next safe candidate if any
+      } catch (e) {
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('socketexception') ||
+            errStr.contains('clientexception') ||
+            errStr.contains('timeoutexception') ||
+            errStr.contains('failed host lookup')) {
+          throw Exception(
+            'Network error while verifying your current password. Please check your internet connection and try again.',
+          );
+        }
+        rethrow;
+      }
+    }
+
+    if (!currentPasswordVerified) {
+      throw Exception(
+        'Current password is incorrect. Please check and try again.',
+      );
+    }
+
+    // 5. Update password & security metadata atomically in Supabase Auth
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final refreshedMeta = Map<String, dynamic>.from(
+      _supabase.auth.currentUser?.userMetadata ?? user.userMetadata ?? {},
+    );
+    refreshedMeta['has_custom_password'] = true;
+    refreshedMeta['password_updated_at'] = nowIso;
+
+    try {
+      final updateRes = await _supabase.auth.updateUser(
+        UserAttributes(
+          password: newPassword,
+          data: refreshedMeta,
+        ),
+      );
+      if (updateRes.user == null) {
+        throw Exception('Unable to update password right now. Please try again.');
+      }
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('same_password') ||
+          msg.contains('different from the old password')) {
+        throw Exception(
+          'New password must be different from your current password.',
+        );
+      }
+      if (msg.contains('weak') || msg.contains('strength')) {
+        throw Exception(
+          'Password does not meet security strength requirements. Please choose a stronger password.',
+        );
+      }
+      if (msg.contains('reauthentication')) {
+        throw Exception(
+          'For security, please sign out and sign in again before updating your password.',
+        );
+      }
+      if (msg.contains('rate limit') ||
+          msg.contains('too many') ||
+          e.statusCode == '429') {
+        throw Exception(
+          'Too many password update attempts. Please wait a few minutes and try again.',
+        );
+      }
+      throw Exception('Failed to update password: ${e.message}');
+    }
+
+    // 6. Revoke sessions on other devices while preserving this active session
+    try {
+      await _supabase.auth.signOut(scope: SignOutScope.others);
+    } catch (e) {
+      debugPrint('AuthService: Sign out other sessions notice: $e');
+    }
+
+    // 7. Record security audit log & in-app notification (best-effort)
+    final displayName = _pickNonEmpty([
+      profile?['fullName'],
+      profile?['full_name'],
+      primaryStudentNo,
+    ], 'Student');
+    final studentPhone = _pickNonEmpty([
+      profile?['mobile_number'],
+      profile?['contactNumber'],
+    ]);
+
+    try {
+      await _auditService.logActivity(
+        action: 'Updated account password',
+        userName: displayName,
+        role: 'Student',
+        studentId: primaryStudentNo.isNotEmpty ? primaryStudentNo : user.id,
+      );
+    } catch (e) {
+      debugPrint('AuthService: Password audit log notice: $e');
+    }
+
+    try {
+      await _notificationService.sendNotification(
+        studentId: user.id,
+        title: 'Password Updated',
+        message:
+            'Your ScholarDoc account password was changed successfully. If you did not authorize this change, please contact the Scholarship Office immediately.',
+        type: 'success',
+        phone: studentPhone.isNotEmpty ? studentPhone : null,
+        studentNo: primaryStudentNo.isNotEmpty ? primaryStudentNo : null,
+      );
+    } catch (e) {
+      debugPrint('AuthService: Password security notification notice: $e');
+    }
+  }
+
   /// Signs out of Supabase Auth
   Future<void> signOut() async {
     try {
@@ -560,15 +961,6 @@ class AuthService {
       }
     }
 
-    // Helper to format password to satisfy Supabase Auth's minimum 6-character requirement
-    String formatAuthPassword(String pwd) {
-      final clean = pwd.trim();
-      if (clean.isNotEmpty && clean.length < 6) {
-        return clean.padLeft(6, '0');
-      }
-      return clean;
-    }
-
     AuthResponse? authResponse;
     List<Map<String, dynamic>> matchingRecords = [];
     bool isFromGranteesTable = false;
@@ -693,22 +1085,20 @@ class AuthService {
       final primaryEmail = _getAuthEmail(primaryStudentNo);
 
       final candidateEmails = <String>{};
-      final candidatePasswords = <String>{};
+      final studentIdVariants = <String>{};
 
-      void addCandidatePassword(String? p) {
-        if (p == null || p.trim().isEmpty) return;
-        final clean = p.trim();
-        if (clean.length >= 6) {
-          candidatePasswords.add(clean);
-        }
-        candidatePasswords.add(clean.padLeft(6, '0'));
+      void addStudentIdVariant(String? idVal) {
+        if (idVal == null || idVal.trim().isEmpty) return;
+        final clean = idVal.trim();
+        studentIdVariants.add(clean);
+        final stripped = clean.replaceAll('-', '').replaceAll(' ', '');
+        if (stripped.isNotEmpty) studentIdVariants.add(stripped);
       }
 
       candidateEmails.add(primaryEmail);
       candidateEmails.add(_getAuthEmail(trimmedId));
-      addCandidatePassword(trimmedPassword);
-      addCandidatePassword(trimmedId);
-      addCandidatePassword(primaryStudentNo);
+      addStudentIdVariant(trimmedId);
+      addStudentIdVariant(primaryStudentNo);
 
       for (final data in matchingRecords) {
         final sNo = data['student_no']?.toString().trim();
@@ -720,11 +1110,11 @@ class AuthService {
 
         if (sNo != null && sNo.isNotEmpty) {
           candidateEmails.add(_getAuthEmail(sNo));
-          addCandidatePassword(sNo);
+          addStudentIdVariant(sNo);
         }
         if (sId != null && sId.isNotEmpty) {
           candidateEmails.add(_getAuthEmail(sId));
-          addCandidatePassword(sId);
+          addStudentIdVariant(sId);
         }
         if (authEmailField != null && authEmailField.isNotEmpty) {
           candidateEmails.add(authEmailField);
@@ -733,6 +1123,17 @@ class AuthService {
           candidateEmails.add(emailField);
         }
       }
+
+      final bool passwordMatchesStudentId = doesPasswordMatchStudentId(
+        enteredPassword: trimmedPassword,
+        studentIdVariants: studentIdVariants,
+      );
+
+      final candidatePasswords = buildStudentPasswordCandidates(
+        enteredPassword: trimmedPassword,
+        studentIdVariants: studentIdVariants,
+        allowStudentIdVariants: true,
+      );
 
       debugPrint(
         'AuthService: Student candidate emails: $candidateEmails, candidate passwords: ${candidatePasswords.length} options',
@@ -763,8 +1164,26 @@ class AuthService {
         }
       }
 
-      // Auto-provision student account if student exists in the database but Auth account does not
+      // Auto-provision student account ONLY when no auth UID is linked yet and
+      // the student either just passed first-login OTP or entered their Student ID
       if (authResponse == null || authResponse.user == null) {
+        final bool hasExistingLinkedAuthUid = matchingRecords.any((record) {
+          final existingUid = record['uid']?.toString().trim() ?? '';
+          return existingUid.isNotEmpty && existingUid.toLowerCase() != 'null';
+        });
+
+        final bool allowAutoProvision = canAutoProvisionStudentAccount(
+          hasExistingLinkedAuthUid: hasExistingLinkedAuthUid,
+          otpJustVerified: otpJustVerified,
+          passwordMatchesStudentId: passwordMatchesStudentId,
+        );
+
+        if (!allowAutoProvision) {
+          throw Exception(
+            'Incorrect password for Student ID "$trimmedId". Please enter your registered password.',
+          );
+        }
+
         final autoProvisionPassword = formatAuthPassword(
           trimmedPassword.isNotEmpty ? trimmedPassword : primaryStudentNo,
         );

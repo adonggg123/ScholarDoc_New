@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
@@ -11,6 +12,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/scholarship_service.dart';
 import '../../services/sms_service.dart';
 import '../auth/login_screen.dart';
+import 'change_password_screen.dart';
 import 'student_activity_log_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -57,8 +59,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   Map<String, String> _initialSnapshot = {};
   bool _isProfileLoading = true;
   bool _isUploadingPhoto = false;
+  bool _isOpeningPasswordSettings = false;
   String? _savingSection; // 'personal', 'academic', 'banking', 'all', or null
   String? _profilePictureUrl;
+  PasswordSecurityInfo _passwordSecurityInfo =
+      const PasswordSecurityInfo(hasCustomPassword: false);
 
   final Set<String> _expandedSections = {'personal', 'academic', 'banking'};
   final Set<String> _editingSections = {};
@@ -68,6 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
+    _passwordSecurityInfo = _authService.getPasswordSecurityInfo();
     for (final ctrl in [
       _saController,
       _nameController,
@@ -83,11 +89,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       ctrl.addListener(_onFieldChanged);
     }
     _loadProfile();
-    _scholarshipSub = _scholarshipService.getActiveScholarships().listen((
-      list,
-    ) {
-      // Kept strictly to TES
-    });
+    _scholarshipSub = _scholarshipService.getActiveScholarships().listen(
+      (list) {
+        // Kept strictly to TES
+      },
+      onError: (e) {
+        debugPrint('ProfileScreen scholarship stream notice: $e');
+      },
+    );
   }
 
   void _onFieldChanged() {
@@ -411,6 +420,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 (resolvedPhoto != null && resolvedPhoto.isNotEmpty)
                     ? resolvedPhoto
                     : null;
+            _passwordSecurityInfo = _authService.getPasswordSecurityInfo();
             _isProfileLoading = false;
             _captureInitialSnapshot();
           });
@@ -2786,8 +2796,69 @@ class _ProfileScreenState extends State<ProfileScreen>
   // SYSTEM & ACCOUNT SETTINGS + LOGOUT
   // ─────────────────────────────────────────────────────────────────────────
 
+  Future<void> _openChangePasswordScreen() async {
+    if (_isOpeningPasswordSettings) return;
+    setState(() => _isOpeningPasswordSettings = true);
+
+    try {
+      final studentId =
+          (_profileData?['studentId'] ?? _profileData?['student_no'] ?? '')
+              .toString()
+              .trim();
+      final isFirstLoginVerified = await _authService.hasCompletedFirstLogin(
+        profile: _profileData,
+        studentId: studentId,
+      );
+
+      if (!mounted) return;
+
+      if (!isFirstLoginVerified) {
+        _showStatusSnackBar(
+          'Complete your first-login OTP verification before updating your password.',
+          icon: LucideIcons.alertCircle,
+          backgroundColor: AppTheme.error,
+        );
+        return;
+      }
+
+      final securityInfo = _authService.getPasswordSecurityInfo();
+      final bool? updated = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChangePasswordScreen(
+            studentId: studentId,
+            hasCustomPassword: securityInfo.hasCustomPassword,
+            passwordUpdatedAt: securityInfo.passwordUpdatedAt,
+          ),
+        ),
+      );
+
+      if (updated == true && mounted) {
+        setState(() {
+          _passwordSecurityInfo = _authService.getPasswordSecurityInfo();
+        });
+        _showStatusSnackBar(
+          'Password updated! Use your new password on your next login.',
+          icon: LucideIcons.shieldCheck,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningPasswordSettings = false);
+      }
+    }
+  }
+
   Widget _buildSystemSettingsCard(BuildContext context) {
     final iconColor = _fieldIconColor(context);
+    final bool hasCustomPwd = _passwordSecurityInfo.hasCustomPassword;
+    final DateTime? updatedAt = _passwordSecurityInfo.passwordUpdatedAt;
+    final String passwordSubtitle = hasCustomPwd
+        ? (updatedAt != null
+            ? 'Last updated ${DateFormat('MMM d, yyyy').format(updatedAt.toLocal())} • Tap to change'
+            : 'Personal password active • Tap to update')
+        : 'Update your default Student ID password to secure your account';
+
     return Container(
       decoration: BoxDecoration(
         color: context.surfaceC,
@@ -2858,7 +2929,117 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           Divider(height: 1, color: context.crispBorder),
 
-          // 2. Account Activity Log Row
+          // 2. Change / Update Password Row
+          InkWell(
+            key: const Key('account_settings_change_password_tile'),
+            onTap: _isOpeningPasswordSettings
+                ? null
+                : _openChangePasswordScreen,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: iconColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _isOpeningPasswordSettings
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: iconColor,
+                            ),
+                          )
+                        : Icon(
+                            LucideIcons.keyRound,
+                            size: 18,
+                            color: iconColor,
+                          ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Change Password',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14.5,
+                                  color: context.textPri,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (hasCustomPwd
+                                        ? AppTheme.success
+                                        : const Color(0xFFF59E0B))
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                hasCustomPwd ? 'Secured' : 'Recommended',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: hasCustomPwd
+                                      ? AppTheme.success
+                                      : const Color(0xFFD97706),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          passwordSubtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textSec,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      LucideIcons.chevronRight,
+                      size: 16,
+                      color: context.isDark
+                          ? const Color(0xFFFBC02D)
+                          : const Color(0xFF0F3260),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          Divider(height: 1, color: context.crispBorder),
+
+          // 3. Account Activity Log Row
           InkWell(
             onTap: () => Navigator.push(
               context,

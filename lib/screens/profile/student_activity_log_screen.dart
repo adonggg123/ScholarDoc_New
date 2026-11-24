@@ -671,7 +671,11 @@ class _StudentActivityLogScreenState extends State<StudentActivityLogScreen> {
     Color iconColor = AppTheme.primaryColor;
     Color iconBg = AppTheme.primaryColor.withValues(alpha: 0.12);
 
-    if (actionLower.contains('login') || actionLower.contains('logged in')) {
+    if (actionLower.contains('password')) {
+      itemIcon = LucideIcons.keyRound;
+      iconColor = const Color(0xFFD97706); // Security amber for password updates
+      iconBg = const Color(0xFFF59E0B).withValues(alpha: 0.14);
+    } else if (actionLower.contains('login') || actionLower.contains('logged in')) {
       itemIcon = LucideIcons.logIn;
       iconColor = const Color(0xFF10B981); // Emerald green for logins
       iconBg = const Color(0xFF10B981).withValues(alpha: 0.14);

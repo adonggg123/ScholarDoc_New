@@ -134,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 32), // margin-bottom: 32px
                           // Restored and centered description text
                           Text(
-                            'Enter your Student ID as your password to access your scholarship portal.',
+                            'Sign in with your Student ID and password. First-time users: enter your Student ID as your initial password.',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               color: const Color(0xFF6B7280),

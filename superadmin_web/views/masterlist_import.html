@@ -311,12 +311,32 @@
         color: #38bdf8;
         border-color: rgba(56, 189, 248, 0.25);
     }
+
+    .badge-scholarship-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 11px;
+        background: rgba(16, 185, 129, 0.1);
+        color: #047857;
+        border: 1px solid rgba(16, 185, 129, 0.22);
+        white-space: nowrap;
+    }
+
+    body.dark .badge-scholarship-pill {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
 </style>
 
 <div class="view-content" style="display: flex; flex-direction: column; gap: 24px; padding-bottom: 60px;">
     <!-- Header -->
     <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-        <div style="display: flex; flex-direction: column; gap: 12px; max-width: 820px;">
+        <div style="display: flex; flex-direction: column; gap: 12px; max-width: 100%; flex: 1; min-width: 300px;">
             <div>
                 <h2 id="view-main-title"
                     style="margin: 0 0 4px 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: #0f172a;">
@@ -326,8 +346,8 @@
                     verification and Annex 5 TES generation.</p>
             </div>
 
-            <!-- Left-aligned School Year & Semester Filter Pill Group -->
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <!-- Left-aligned School Year, Semester, Scholarship Program & Batch Filter Pill Group -->
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div
                     style="display: inline-flex; align-items: center; gap: 8px; background: var(--surface-color, #ffffff); border: 1.5px solid var(--border-color); border-radius: 12px; padding: 4px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                     <div style="display: inline-flex; align-items: center; gap: 6px;">
@@ -358,6 +378,35 @@
                             <option value="Summer / Midyear">Summer / Midyear</option>
                             <option value="All">All Semesters</option>
                             <option value="custom">+ Custom Semester...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Per-Semester Scholarship Program & Batch Filter Pill -->
+                <div
+                    style="display: inline-flex; align-items: center; gap: 8px; background: var(--surface-color, #ffffff); border: 1.5px solid var(--border-color); border-radius: 12px; padding: 4px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                    <div style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="icon-award" style="font-size: 14px; color: #059669;"></i>
+                        <span
+                            style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Program</span>
+                        <select id="filter-scholarship"
+                            title="Filter grantees by Scholarship Program for the selected semester"
+                            style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px; max-width: 170px;">
+                            <option value="All Programs" selected>All Programs</option>
+                            <option value="CHED TES">CHED TES</option>
+                            <option value="TDP">TDP</option>
+                            <option value="STUFAP">STUFAP</option>
+                        </select>
+                    </div>
+                    <div style="width: 1px; height: 18px; background: var(--border-color);"></div>
+                    <div style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="icon-layers" style="font-size: 14px; color: #7c3aed;"></i>
+                        <span
+                            style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Batch</span>
+                        <select id="filter-batch"
+                            title="Filter grantees by Batch for the selected semester"
+                            style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--text-primary); cursor: pointer; outline: none; padding: 4px 2px; max-width: 140px;">
+                            <option value="All Batches" selected>All Batches</option>
                         </select>
                     </div>
                 </div>
@@ -682,9 +731,6 @@
                     <h3
                         style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
                         New Grantees Masterlist</h3>
-                    <select id="filter-batch" class="hidden glass-filter">
-                        <option value="All Batches">All Batches</option>
-                    </select>
                     <!-- Duplicates Indicator Badge -->
                     <div id="badge-masterlist-duplicates" class="hidden"
                         style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: #dc2626; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 10px; border-radius: 20px;">
@@ -692,7 +738,12 @@
                         <span id="count-masterlist-duplicates">0</span> Duplicates Detected
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <button id="btn-add-masterlist-grantee" type="button"
+                        title="Manually add a new grantee under any Scholarship Program and Batch"
+                        style="background: linear-gradient(135deg, var(--primary-color), #1e40af); color: white; border: none; padding: 6px 13px; border-radius: 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 8px rgba(15, 50, 96, 0.22); transition: all 0.2s ease;">
+                        <i class="icon-user-plus" style="font-size: 13px;"></i> Add Grantee
+                    </button>
                     <button id="btn-move-all-duplicates" class="hidden"
                         title="Move all detected duplicate records to Student Exist table"
                         style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 6px 14px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25); transition: all 0.2s ease;">
@@ -701,26 +752,27 @@
                     <div id="step2-term-indicator"
                         style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px;">
                         <i class="icon-filter" style="font-size: 12px; color: var(--primary-color);"></i>
-                        <span id="step2-term-text">Filtered by: 2026-2027 • 1st Semester</span>
+                        <span id="step2-term-text">Filtered by: All Programs • All Batches • 2026-2027 • 1st Semester</span>
                     </div>
                 </div>
             </div>
 
             <div style="overflow: auto; flex: 1; padding: 0 28px 28px 28px; background: var(--surface-color);">
                 <table class="import-table"
-                    style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 720px; text-align: left;">
+                    style="width: 100%; border-collapse: separate; border-spacing: 0; min-width: 820px; text-align: left;">
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Middle Name</th>
                             <th>Last Name</th>
+                            <th>Scholarship</th>
                             <th>Batch</th>
                             <th style="text-align: center; width: 140px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="extracted-table-body">
                         <tr>
-                            <td colspan="5"
+                            <td colspan="6"
                                 style="text-align: center; padding: 60px 20px; color: var(--text-secondary); font-weight: 500;">
                                 <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                                     <div style="position: relative;">
@@ -1170,6 +1222,124 @@
                 style="padding: 9px 18px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer;">Cancel</button>
             <button type="button" id="sa-btn-save-custom-term" class="btn btn-primary"
                 style="padding: 9px 20px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; background: var(--primary-color); border: none; color: white;">Save & Select Term</button>
+        </div>
+    </div>
+</div>
+
+<!-- Super Admin Add New Grantee Modal (Per Semester, Scholarship Program & Batch) -->
+<div id="sa-add-grantee-modal"
+    style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card"
+        style="width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; background: var(--surface-color, #ffffff); border-radius: 20px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.25); border: 1px solid var(--border-color); padding: 0;">
+        <div
+            style="padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div
+                    style="width: 38px; height: 38px; border-radius: 10px; background: rgba(15, 50, 96, 0.1); color: var(--primary-color); display: flex; align-items: center; justify-content: center;">
+                    <i class="icon-user-plus" style="font-size: 18px;"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary);">Add New Grantee</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Register a grantee under a specific semester, scholarship program, and batch</p>
+                </div>
+            </div>
+            <button type="button" id="sa-btn-close-add-grantee" class="icon-btn"
+                style="border: none; background: transparent; cursor: pointer; color: var(--text-secondary); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                <i class="icon-x" style="font-size: 16px;"></i>
+            </button>
+        </div>
+
+        <div style="padding: 22px 24px; display: flex; flex-direction: column; gap: 15px;">
+            <div id="sa-add-grantee-error" class="hidden"
+                style="display: none; padding: 10px 14px; border-radius: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #dc2626; font-size: 12px; font-weight: 600;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">First Name <span style="color: #ef4444;">*</span></label>
+                    <input type="text" id="sa-add-grantee-first" placeholder="e.g. Juan"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Middle Name / Initial</label>
+                    <input type="text" id="sa-add-grantee-middle" placeholder="e.g. Santos or S."
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Last Name <span style="color: #ef4444;">*</span></label>
+                    <input type="text" id="sa-add-grantee-last" placeholder="e.g. Dela Cruz"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Student ID (Optional)</label>
+                    <input type="text" id="sa-add-grantee-id" placeholder="e.g. 2023305322"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Academic Year <span style="color: #ef4444;">*</span></label>
+                    <select id="sa-add-grantee-ay"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Semester <span style="color: #ef4444;">*</span></label>
+                    <select id="sa-add-grantee-sem"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Scholarship Program <span style="color: #ef4444;">*</span></label>
+                    <select id="sa-add-grantee-scholarship"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                        <option value="CHED TES">CHED TES</option>
+                        <option value="TDP">TDP</option>
+                        <option value="STUFAP">STUFAP</option>
+                        <option value="custom">+ Enter Custom Scholarship...</option>
+                    </select>
+                    <input type="text" id="sa-add-grantee-custom-scholarship" class="hidden"
+                        placeholder="Type Scholarship Program..."
+                        style="display: none; margin-top: 6px; width: 100%; height: 38px; padding: 0 12px; border-radius: 8px; border: 1.5px solid var(--primary-color); background: var(--surface-color); font-size: 12.5px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 5px;">Batch <span style="color: #ef4444;">*</span></label>
+                    <select id="sa-add-grantee-batch"
+                        style="width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--border-color); background: var(--surface-color); font-size: 13px; font-weight: 600; color: var(--text-primary); outline: none; cursor: pointer;">
+                        <option value="Batch 1.1">Batch 1.1</option>
+                        <option value="Batch 1.2" selected>Batch 1.2</option>
+                        <option value="Batch 1.3">Batch 1.3</option>
+                        <option value="Batch 1.4">Batch 1.4</option>
+                        <option value="Batch 1.5">Batch 1.5</option>
+                        <option value="Batch 2.1">Batch 2.1</option>
+                        <option value="Batch 2.2">Batch 2.2</option>
+                        <option value="Batch 2.3">Batch 2.3</option>
+                        <option value="Batch 3.1">Batch 3.1</option>
+                        <option value="Batch 3.2">Batch 3.2</option>
+                        <option value="custom">+ Enter Custom Batch...</option>
+                    </select>
+                    <input type="text" id="sa-add-grantee-custom-batch" class="hidden"
+                        placeholder="Type Batch (e.g. Batch 1.6)..."
+                        style="display: none; margin-top: 6px; width: 100%; height: 38px; padding: 0 12px; border-radius: 8px; border: 1.5px solid var(--primary-color); background: var(--surface-color); font-size: 12.5px; font-weight: 600; color: var(--text-primary); outline: none;">
+                </div>
+            </div>
+        </div>
+
+        <div
+            style="padding: 16px 24px; background: rgba(0,0,0,0.02); border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+            <button type="button" id="sa-btn-cancel-add-grantee" class="btn btn-outline"
+                style="padding: 9px 18px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer;">Cancel</button>
+            <button type="button" id="sa-btn-confirm-add-grantee" class="btn btn-primary"
+                style="padding: 9px 20px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; background: var(--primary-color); border: none; color: white; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="icon-plus" style="font-size: 14px;"></i> Add Grantee
+            </button>
         </div>
     </div>
 </div>
