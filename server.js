@@ -5159,7 +5159,7 @@ const server = http.createServer(async (req, res) => {
     }
 
 
-    // ── API: Send Grantee Notification via Gmail SMTP & Semaphore SMS ────
+    // ── API: Send Grantee Notification via Gmail SMTP (SMS exclusive to manual Send) ────
     if (urlPath === '/api/send-grantee-notification' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -5173,7 +5173,7 @@ const server = http.createServer(async (req, res) => {
                     student_no,
                     limit = 100,
                     force = false,
-                    channel = 'both' // 'both' | 'email' | 'sms'
+                    channel = 'email' // Default is 'email' only. SMS is dispatched ONLY when Super Admin manually sends SMS.
                 } = payload;
 
                 const headers = {
@@ -5214,12 +5214,14 @@ const server = http.createServer(async (req, res) => {
                         let emailRes = null;
                         let smsRes = null;
 
-                        if (channel === 'both' || channel === 'email') {
+                        // Default: approval notifications are sent through email only
+                        if (channel === 'email' || channel === 'both') {
                             emailRes = await sendSingleGranteeEmail(grantee, { force });
                             if (emailRes.success && !emailRes.skipped) emailSent++;
                         }
 
-                        if (channel === 'both' || channel === 'sms') {
+                        // SMS is dispatched exclusively when manually requested
+                        if (channel === 'sms') {
                             smsRes = await sendSingleGranteeSms(grantee, { force });
                             if (smsRes.success && !smsRes.skipped) smsSent++;
                         }
@@ -5305,12 +5307,14 @@ const server = http.createServer(async (req, res) => {
                 let emailResult = null;
                 let smsResult = null;
 
-                if (channel === 'both' || channel === 'email') {
+                // Default: approval notifications are sent through email only
+                if (channel === 'email' || channel === 'both') {
                     console.log(`[API send-grantee-notification] Triggering email send to: ${granteeRecord.email_address || granteeRecord.email} (force=${shouldForce})`);
                     emailResult = await sendSingleGranteeEmail(granteeRecord, { force: shouldForce });
                 }
 
-                if (channel === 'both' || channel === 'sms') {
+                // SMS is dispatched exclusively when manually requested
+                if (channel === 'sms') {
                     console.log(`[API send-grantee-notification] Triggering SMS send to: ${granteeRecord.mobile_number || granteeRecord.contactNumber} (force=${shouldForce})`);
                     smsResult = await sendSingleGranteeSms(granteeRecord, { force: shouldForce });
                 }
@@ -5727,13 +5731,17 @@ function isGranteeApprovalNotification(notif) {
     if (!notif) return false;
     const title = (notif.title || '').trim().toLowerCase();
     const msg = (notif.message || '').trim().toLowerCase();
-    return title.includes('application approved') ||
-           title.includes('grantee approved') ||
-           title.includes('scholarship approved') ||
-           title.includes('scholarship application approved') ||
-           msg.includes('application has been officially approved') ||
-           msg.includes('officially approved as a scholar grantee') ||
-           msg.includes('officially approved');
+    const type = (notif.type || '').trim().toLowerCase();
+    return title.includes('approved') ||
+           title.includes('grantee') ||
+           title.includes('scholarship') ||
+           title.includes('acceptance') ||
+           msg.includes('approved') ||
+           msg.includes('grantee') ||
+           msg.includes('congratulations') ||
+           msg.includes('acceptance') ||
+           type === 'grantee_confirmed' ||
+           type.includes('approved');
 }
 
 let isWatcherPolling = false;

@@ -29,6 +29,7 @@ export class EmailNotificationService {
         console.log(`[EmailNotificationService] Sending notification for student: ${studentIdentifier}`);
 
         const payload = {
+            channel: 'email',
             student_id: studentIdentifier,
             force: force,
             email: email,
@@ -124,6 +125,7 @@ export class EmailNotificationService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode: 'batch',
+                    channel: 'email',
                     limit: limit,
                     force: force
                 })
@@ -167,6 +169,7 @@ export class EmailNotificationService {
                 },
                 body: JSON.stringify({
                     mode: 'batch',
+                    channel: 'email',
                     limit: limit,
                     force: force
                 })
