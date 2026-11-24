@@ -1689,9 +1689,15 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
 
     if (granteeRecord) {
         if (granteeRecord.first_login_completed === true ||
+            granteeRecord.has_custom_password === true ||
             granteeRecord.otp_verified_at != null ||
-            (granteeRecord.documents && (granteeRecord.documents.first_login_completed === true || granteeRecord.documents.otp_verified_at != null))) {
+            (granteeRecord.documents && (
+                granteeRecord.documents.first_login_completed === true ||
+                granteeRecord.documents.has_custom_password === true ||
+                granteeRecord.documents.otp_verified_at != null
+            ))) {
             completedFirstLoginStudents.add(cleanId);
+            if (cleanNo) completedFirstLoginStudents.add(cleanNo);
             return true;
         }
     }
@@ -3550,13 +3556,35 @@ const server = http.createServer(async (req, res) => {
                     (grantee.student_no && rawPassword === grantee.student_no);
 
                 let isRegisteredPassword = false;
-                if (!matchesInitialId && rawPassword && rawPassword.length >= 6) {
-                    const primaryEmail = `${cleanId.replace(/[- ]/g, '_')}@scholardoc.com`;
-                    const candidateEmails = [primaryEmail];
-                    if (grantee.email_address) candidateEmails.push(grantee.email_address.trim());
-                    if (grantee.email) candidateEmails.push(grantee.email.trim());
+                if (rawPassword && rawPassword.length >= 6) {
+                    const candidateEmails = new Set();
+                    candidateEmails.add(`${cleanId.replace(/[- ]/g, '_')}@scholardoc.com`);
+                    candidateEmails.add(`${cleanId}@scholardoc.com`);
+                    candidateEmails.add(`${cleanId}_auth@scholardoc.com`);
+                    if (cleanNo) {
+                        candidateEmails.add(`${cleanNo}@scholardoc.com`);
+                        candidateEmails.add(`${cleanNo}_auth@scholardoc.com`);
+                    }
+                    if (grantee.student_no) {
+                        const sNo = String(grantee.student_no).trim();
+                        candidateEmails.add(`${sNo}@scholardoc.com`);
+                        candidateEmails.add(`${sNo}_auth@scholardoc.com`);
+                    }
+                    if (grantee.studentId) {
+                        const sId = String(grantee.studentId).trim();
+                        candidateEmails.add(`${sId}@scholardoc.com`);
+                        candidateEmails.add(`${sId}_auth@scholardoc.com`);
+                    }
+                    if (grantee.documents && typeof grantee.documents === 'object') {
+                        if (grantee.documents.auth_email) candidateEmails.add(String(grantee.documents.auth_email).trim());
+                        if (grantee.documents.authEmail) candidateEmails.add(String(grantee.documents.authEmail).trim());
+                        if (grantee.documents.primary_email) candidateEmails.add(String(grantee.documents.primary_email).trim());
+                    }
+                    if (grantee.email_address) candidateEmails.add(String(grantee.email_address).trim());
+                    if (grantee.email) candidateEmails.add(String(grantee.email).trim());
 
                     for (const emailToTry of candidateEmails) {
+                        if (!emailToTry || !emailToTry.includes('@')) continue;
                         try {
                             const authCheckRes = await fetch(`${SUPABASE_REST_URL.replace('/rest/v1', '/auth/v1')}/token?grant_type=password`, {
                                 method: 'POST',
@@ -3571,7 +3599,42 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                if (!matchesInitialId && !isRegisteredPassword) {
+                if (isRegisteredPassword) {
+                    completedFirstLoginStudents.add(cleanId);
+                    if (cleanNo) completedFirstLoginStudents.add(cleanNo);
+                    saveOtpAuthState();
+
+                    // Persist returning student flags to Supabase so subsequent logins are instant
+                    try {
+                        const existingDocs = (grantee.documents && typeof grantee.documents === 'object') ? { ...grantee.documents } : {};
+                        existingDocs.first_login_completed = true;
+                        existingDocs.has_custom_password = true;
+                        const matchFilter = buildStudentQueryFilter(cleanId);
+                        if (matchFilter) {
+                            fetch(`${SUPABASE_REST_URL}/student_grantees?${matchFilter}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    apikey: SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ documents: existingDocs })
+                            }).catch(() => {});
+                        }
+                    } catch (_) {}
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        requiresOtp: false,
+                        isFirstLogin: false,
+                        studentId: cleanId,
+                        message: 'Returning student grantee authenticated with registered password.'
+                    }));
+                    return;
+                }
+
+                if (!matchesInitialId) {
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,

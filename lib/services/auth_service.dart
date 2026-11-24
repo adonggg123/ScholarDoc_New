@@ -162,9 +162,15 @@ class AuthService {
     }
 
     final grantee = query.first;
-    // Strict First-Login Check: Only consider completed if explicitly verified via first_login_completed or otp_verified_at
+    final docs = grantee['documents'] is Map ? grantee['documents'] as Map : null;
+    // Strict First-Login Check: Only consider completed if explicitly verified via first_login_completed, has_custom_password, or otp_verified_at
     final isFirstCompleted = grantee['first_login_completed'] == true ||
-        grantee['otp_verified_at'] != null;
+        grantee['has_custom_password'] == true ||
+        grantee['otp_verified_at'] != null ||
+        (docs != null &&
+            (docs['first_login_completed'] == true ||
+                docs['has_custom_password'] == true ||
+                docs['otp_verified_at'] != null));
 
     if (isFirstCompleted) {
       debugPrint('AuthService: Returning student verified directly via Supabase for $cleanId');
@@ -511,12 +517,14 @@ class AuthService {
     final resolvedProfile = profile ?? await getStudentProfile(user.id);
     if (resolvedProfile != null) {
       if (resolvedProfile['first_login_completed'] == true ||
+          resolvedProfile['has_custom_password'] == true ||
           resolvedProfile['otp_verified_at'] != null) {
         return true;
       }
       final docs = resolvedProfile['documents'];
       if (docs is Map &&
           (docs['first_login_completed'] == true ||
+              docs['has_custom_password'] == true ||
               docs['otp_verified_at'] != null)) {
         return true;
       }
@@ -750,6 +758,35 @@ class AuthService {
       await _supabase.auth.signOut(scope: SignOutScope.others);
     } catch (e) {
       debugPrint('AuthService: Sign out other sessions notice: $e');
+    }
+
+    // 6b. Synchronize password update & returning-student flags to student_grantees
+    try {
+      final existingDocs = Map<String, dynamic>.from(
+        (profile != null && profile['documents'] is Map)
+            ? profile!['documents'] as Map
+            : {},
+      );
+      existingDocs['first_login_completed'] = true;
+      existingDocs['has_custom_password'] = true;
+      existingDocs['password_updated_at'] = nowIso;
+      if (authEmail.isNotEmpty) {
+        existingDocs['auth_email'] = authEmail;
+      }
+
+      final studentTargetId = primaryStudentNo.isNotEmpty ? primaryStudentNo : user.id;
+      final updateData = <String, dynamic>{
+        'uid': user.id,
+        'documents': existingDocs,
+      };
+
+      await _supabase
+          .from('student_grantees')
+          .update(updateData)
+          .or('student_no.eq.$studentTargetId,studentId.eq.$studentTargetId,uid.eq.${user.id}');
+      debugPrint('AuthService: Synchronized student_grantees password flags for $studentTargetId');
+    } catch (dbSyncErr) {
+      debugPrint('AuthService: Notice: student_grantees sync: $dbSyncErr');
     }
 
     // 7. Record security audit log & in-app notification (best-effort)
@@ -1063,9 +1100,11 @@ class AuthService {
       // STRICT SECURITY GATE: Enforce OTP verification on student first login
       final bool firstLoginDone = otpJustVerified ||
           firstRecord['first_login_completed'] == true ||
+          firstRecord['has_custom_password'] == true ||
           firstRecord['otp_verified_at'] != null ||
           (firstRecord['documents'] is Map &&
               ((firstRecord['documents'] as Map)['first_login_completed'] == true ||
+                  (firstRecord['documents'] as Map)['has_custom_password'] == true ||
                   (firstRecord['documents'] as Map)['otp_verified_at'] != null));
       if (!firstLoginDone) {
         bool isBackendVerified = false;
@@ -1125,12 +1164,21 @@ class AuthService {
             ?.toString()
             .trim();
 
+        if (data['documents'] is Map) {
+          final docMap = data['documents'] as Map;
+          final docAuthEmail = (docMap['auth_email'] ?? docMap['authEmail'])?.toString().trim();
+          if (docAuthEmail != null && docAuthEmail.isNotEmpty) {
+            candidateEmails.add(docAuthEmail);
+          }
+        }
         if (sNo != null && sNo.isNotEmpty) {
           candidateEmails.add(_getAuthEmail(sNo));
+          candidateEmails.add('${sNo}_auth@scholardoc.com');
           addStudentIdVariant(sNo);
         }
         if (sId != null && sId.isNotEmpty) {
           candidateEmails.add(_getAuthEmail(sId));
+          candidateEmails.add('${sId}_auth@scholardoc.com');
           addStudentIdVariant(sId);
         }
         if (authEmailField != null && authEmailField.isNotEmpty) {
@@ -1230,11 +1278,22 @@ class AuthService {
               );
               if (isFromGranteesTable) {
                 try {
+                  final existingDocs = Map<String, dynamic>.from(
+                    (firstRecord['documents'] is Map)
+                        ? firstRecord['documents'] as Map
+                        : {},
+                  );
+                  existingDocs['auth_email'] = provEmail;
+                  if (otpJustVerified) {
+                    existingDocs['first_login_completed'] = true;
+                    existingDocs['otp_verified_at'] =
+                        DateTime.now().toUtc().toIso8601String();
+                  }
                   await _supabase
                       .from('student_grantees')
                       .update({
                         'uid': signUpRes.user!.id,
-                        'authEmail': provEmail,
+                        'documents': existingDocs,
                       })
                       .or('student_no.eq.$primaryStudentNo,studentId.eq.$primaryStudentNo');
                 } catch (upErr) {

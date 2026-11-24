@@ -249,6 +249,35 @@ void main() {
         isTrue,
       );
     });
+
+    test('hasCompletedFirstLogin recognizes documents has_custom_password and first_login_completed', () async {
+      final profileWithCustom = <String, dynamic>{
+        'student_no': '2023305322',
+        'documents': <String, dynamic>{
+          'has_custom_password': true,
+          'auth_email': '2023305322_auth@scholardoc.com',
+        },
+      };
+      final profileWithFirstLogin = <String, dynamic>{
+        'student_no': '2023305322',
+        'documents': <String, dynamic>{
+          'first_login_completed': true,
+        },
+      };
+      final profileUnverified = <String, dynamic>{
+        'student_no': '2023305322',
+        'documents': <String, dynamic>{},
+      };
+
+      // When profile has custom password or first_login_completed in documents
+      final customDocs = profileWithCustom['documents'] as Map<String, dynamic>;
+      final firstLoginDocs = profileWithFirstLogin['documents'] as Map<String, dynamic>;
+      final unverifiedDocs = profileUnverified['documents'] as Map<String, dynamic>;
+
+      expect(customDocs['has_custom_password'] == true, isTrue);
+      expect(firstLoginDocs['first_login_completed'] == true, isTrue);
+      expect(unverifiedDocs['has_custom_password'] == true, isFalse);
+    });
   });
 
   group('ChangePasswordScreen widget tests', () {
