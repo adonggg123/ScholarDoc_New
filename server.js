@@ -1688,7 +1688,9 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
     }
 
     if (granteeRecord) {
-        if (granteeRecord.first_login_completed === true || granteeRecord.otp_verified_at != null) {
+        if (granteeRecord.first_login_completed === true ||
+            granteeRecord.otp_verified_at != null ||
+            (granteeRecord.documents && (granteeRecord.documents.first_login_completed === true || granteeRecord.documents.otp_verified_at != null))) {
             completedFirstLoginStudents.add(cleanId);
             return true;
         }
@@ -1727,12 +1729,22 @@ async function markFirstLoginCompleted(studentId, granteeUid, destination, verif
 
     if (matchQuery) {
         try {
+            let existingDocs = {};
+            try {
+                const docRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}&select=documents&limit=1`, { headers });
+                const docData = await docRes.json();
+                if (Array.isArray(docData) && docData[0] && docData[0].documents && typeof docData[0].documents === 'object') {
+                    existingDocs = { ...docData[0].documents };
+                }
+            } catch (_) {}
+            existingDocs.first_login_completed = true;
+            existingDocs.otp_verified_at = now;
+
             await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
                 method: 'PATCH',
                 headers,
                 body: JSON.stringify({
-                    first_login_completed: true,
-                    otp_verified_at: now
+                    documents: existingDocs
                 })
             });
         } catch (_) { }
@@ -3532,12 +3544,34 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 3. First Login: Student ID must be used as the initial password
+                // 3. First Login: Student ID must be used as initial credentials, or existing registered password
                 const matchesInitialId = (rawPassword === cleanId) ||
                     (cleanNo && rawPassword === cleanNo) ||
                     (grantee.student_no && rawPassword === grantee.student_no);
 
-                if (!matchesInitialId) {
+                let isRegisteredPassword = false;
+                if (!matchesInitialId && rawPassword && rawPassword.length >= 6) {
+                    const primaryEmail = `${cleanId.replace(/[- ]/g, '_')}@scholardoc.com`;
+                    const candidateEmails = [primaryEmail];
+                    if (grantee.email_address) candidateEmails.push(grantee.email_address.trim());
+                    if (grantee.email) candidateEmails.push(grantee.email.trim());
+
+                    for (const emailToTry of candidateEmails) {
+                        try {
+                            const authCheckRes = await fetch(`${SUPABASE_REST_URL.replace('/rest/v1', '/auth/v1')}/token?grant_type=password`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+                                body: JSON.stringify({ email: emailToTry, password: rawPassword })
+                            });
+                            if (authCheckRes.status === 200) {
+                                isRegisteredPassword = true;
+                                break;
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                if (!matchesInitialId && !isRegisteredPassword) {
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,

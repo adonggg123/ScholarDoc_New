@@ -475,8 +475,9 @@ class AuthService {
     required bool otpJustVerified,
     required bool passwordMatchesStudentId,
   }) {
+    if (otpJustVerified) return true;
     if (hasExistingLinkedAuthUid) return false;
-    return otpJustVerified || passwordMatchesStudentId;
+    return passwordMatchesStudentId;
   }
 
   /// Reads non-sensitive password security metadata for the currently signed-in user.
@@ -508,10 +509,17 @@ class AuthService {
     }
 
     final resolvedProfile = profile ?? await getStudentProfile(user.id);
-    if (resolvedProfile != null &&
-        (resolvedProfile['first_login_completed'] == true ||
-            resolvedProfile['otp_verified_at'] != null)) {
-      return true;
+    if (resolvedProfile != null) {
+      if (resolvedProfile['first_login_completed'] == true ||
+          resolvedProfile['otp_verified_at'] != null) {
+        return true;
+      }
+      final docs = resolvedProfile['documents'];
+      if (docs is Map &&
+          (docs['first_login_completed'] == true ||
+              docs['otp_verified_at'] != null)) {
+        return true;
+      }
     }
 
     final resolvedId = _pickNonEmpty([
@@ -1055,7 +1063,10 @@ class AuthService {
       // STRICT SECURITY GATE: Enforce OTP verification on student first login
       final bool firstLoginDone = otpJustVerified ||
           firstRecord['first_login_completed'] == true ||
-          firstRecord['otp_verified_at'] != null;
+          firstRecord['otp_verified_at'] != null ||
+          (firstRecord['documents'] is Map &&
+              ((firstRecord['documents'] as Map)['first_login_completed'] == true ||
+                  (firstRecord['documents'] as Map)['otp_verified_at'] != null));
       if (!firstLoginDone) {
         bool isBackendVerified = false;
         final candidates = await ApiConfig.resolveFastCandidates();
@@ -1219,15 +1230,22 @@ class AuthService {
           final errStr = signUpErr.toString().toLowerCase();
           if (errStr.contains('already registered') ||
               errStr.contains('user already exists')) {
-            throw Exception(
-              'Incorrect password for Student ID "$trimmedId". Please enter your registered password.',
-            );
+            if (!otpJustVerified) {
+              throw Exception(
+                'Incorrect password for Student ID "$trimmedId". Please enter your registered password.',
+              );
+            }
           }
         }
       }
     }
 
     if (authResponse == null || authResponse.user == null) {
+      if (otpJustVerified) {
+        throw Exception(
+          'First-login OTP verified successfully! Your account is registered with a custom password. Please sign in with your registered password.',
+        );
+      }
       throw Exception('Login failed. Please verify your ID and password.');
     }
 

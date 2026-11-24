@@ -201,7 +201,7 @@ void main() {
           otpJustVerified: true,
           passwordMatchesStudentId: true,
         ),
-        isFalse,
+        isTrue,
       );
       // Unlinked account entering arbitrary wrong password MUST NOT auto-provision
       expect(
