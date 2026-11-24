@@ -5580,7 +5580,9 @@ const server = http.createServer(async (req, res) => {
     // ── Direct APK Download Redirect ─────────────────────────────────────
     if (urlPath === '/download/apk' || urlPath === '/download/ScholarDoc.apk' || urlPath === '/api/download-apk') {
         res.writeHead(302, {
-            'Location': 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk'
+            'Location': 'https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk',
+            'Content-Disposition': 'attachment; filename="ScholarDoc.apk"',
+            'Content-Type': 'application/vnd.android.package-archive'
         });
         res.end();
         return;
