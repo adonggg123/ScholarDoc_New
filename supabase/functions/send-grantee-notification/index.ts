@@ -281,11 +281,13 @@ function generateEmailHtml(grantee: {
           <p>
             Submit your scholarship documents (Certificate of Registration, School ID, and SA form) and track your stipend disbursement seamlessly on your mobile device.
           </p>
-          <a href="${grantee.downloadUrl}" class="btn-download" target="_blank">
-            Download ScholarDoc Application
+          <a href="${grantee.downloadUrl}" class="btn-download" target="_blank" download="ScholarDoc.apk">
+            Download ScholarDoc APK (Automatic Download)
           </a>
           <div style="margin-top: 14px; font-size: 11.5px; color: #64748b;">
-            Direct link: <a href="${grantee.downloadUrl}" style="color: #0F3260; word-break: break-all;">${grantee.downloadUrl}</a>
+            Direct APK link: <a href="${grantee.downloadUrl}" style="color: #0F3260; word-break: break-all;">${grantee.downloadUrl}</a>
+            <br>
+            GitHub Release: <a href="https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0" style="color: #0F3260;">https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0</a>
           </div>
         </div>
 
@@ -370,7 +372,7 @@ serve(async (req) => {
     // 1. Validate environment configuration
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const senderEmail = Deno.env.get("SENDER_EMAIL") || "ScholarDoc <onboarding@resend.dev>";
-    const downloadUrl = Deno.env.get("APP_DOWNLOAD_URL") || "https://github.com/adonggg123/ScholarDoc_New/releases/tag/v1.0.0";
+    const downloadUrl = Deno.env.get("APP_DOWNLOAD_URL") || "https://github.com/adonggg123/ScholarDoc_New/releases/download/v1.0.0/ScholarDoc.apk";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
 
