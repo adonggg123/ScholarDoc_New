@@ -1106,8 +1106,14 @@ class AuthService {
         if (stripped.isNotEmpty) studentIdVariants.add(stripped);
       }
 
+      final cleanNo = trimmedId.replaceAll('-', '').replaceAll(' ', '');
       candidateEmails.add(primaryEmail);
       candidateEmails.add(_getAuthEmail(trimmedId));
+      candidateEmails.add('${trimmedId}_auth@scholardoc.com');
+      if (cleanNo.isNotEmpty) {
+        candidateEmails.add('${cleanNo}_auth@scholardoc.com');
+      }
+      candidateEmails.add('${primaryStudentNo}_auth@scholardoc.com');
       addStudentIdVariant(trimmedId);
       addStudentIdVariant(primaryStudentNo);
 
@@ -1199,53 +1205,63 @@ class AuthService {
           trimmedPassword.isNotEmpty ? trimmedPassword : primaryStudentNo,
         );
 
-        debugPrint(
-          'AuthService: Auto-provisioning student Auth account ($primaryEmail)...',
-        );
-        try {
-          final signUpRes = await _supabase.auth.signUp(
-            email: primaryEmail,
-            password: autoProvisionPassword,
+        final provisionCandidateEmails = <String>[
+          primaryEmail,
+          if (cleanNo.isNotEmpty && cleanNo != trimmedId) '$cleanNo@scholardoc.com',
+          if (otpJustVerified) '${trimmedId}_auth@scholardoc.com',
+          if (otpJustVerified && cleanNo.isNotEmpty) '${cleanNo}_auth@scholardoc.com',
+          if (otpJustVerified) '${primaryStudentNo}_auth@scholardoc.com',
+          if (otpJustVerified) '${trimmedId}_${DateTime.now().millisecondsSinceEpoch}@scholardoc.com',
+        ];
+
+        for (final provEmail in provisionCandidateEmails) {
+          debugPrint(
+            'AuthService: Auto-provisioning student Auth account ($provEmail)...',
           );
-          if (signUpRes.user != null) {
-            authResponse = signUpRes;
-            debugPrint(
-              'AuthService: Auto-provisioning SUCCESS (UID: ${signUpRes.user!.id})',
+          try {
+            final signUpRes = await _supabase.auth.signUp(
+              email: provEmail,
+              password: autoProvisionPassword,
             );
-            if (isFromGranteesTable) {
-              try {
-                await _supabase
-                    .from('student_grantees')
-                    .update({'uid': signUpRes.user!.id})
-                    .or('student_no.eq.$primaryStudentNo,studentId.eq.$primaryStudentNo');
-              } catch (upErr) {
-                debugPrint(
-                  'AuthService: Auto-provision student UID link notice: $upErr',
-                );
+            if (signUpRes.user != null) {
+              authResponse = signUpRes;
+              debugPrint(
+                'AuthService: Auto-provisioning SUCCESS with $provEmail (UID: ${signUpRes.user!.id})',
+              );
+              if (isFromGranteesTable) {
+                try {
+                  await _supabase
+                      .from('student_grantees')
+                      .update({
+                        'uid': signUpRes.user!.id,
+                        'authEmail': provEmail,
+                      })
+                      .or('student_no.eq.$primaryStudentNo,studentId.eq.$primaryStudentNo');
+                } catch (upErr) {
+                  debugPrint(
+                    'AuthService: Auto-provision student UID link notice: $upErr',
+                  );
+                }
               }
+              break;
             }
-          }
-        } catch (signUpErr) {
-          debugPrint('AuthService: Auto-provisioning error: $signUpErr');
-          final errStr = signUpErr.toString().toLowerCase();
-          if (errStr.contains('already registered') ||
-              errStr.contains('user already exists')) {
-            if (!otpJustVerified) {
+          } catch (signUpErr) {
+            debugPrint('AuthService: Auto-provisioning error for $provEmail: $signUpErr');
+            final errStr = signUpErr.toString().toLowerCase();
+            if (errStr.contains('already registered') ||
+                errStr.contains('user already exists')) {
+              if (otpJustVerified) continue;
               throw Exception(
                 'Incorrect password for Student ID "$trimmedId". Please enter your registered password.',
               );
             }
+            if (!otpJustVerified) rethrow;
           }
         }
       }
     }
 
     if (authResponse == null || authResponse.user == null) {
-      if (otpJustVerified) {
-        throw Exception(
-          'First-login OTP verified successfully! Your account is registered with a custom password. Please sign in with your registered password.',
-        );
-      }
       throw Exception('Login failed. Please verify your ID and password.');
     }
 

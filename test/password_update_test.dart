@@ -230,6 +230,24 @@ void main() {
         ),
         isTrue,
       );
+
+      // Student with valid OTP verification is always allowed to auto-provision into app
+      expect(
+        AuthService.canAutoProvisionStudentAccount(
+          hasExistingLinkedAuthUid: true,
+          otpJustVerified: true,
+          passwordMatchesStudentId: false,
+        ),
+        isTrue,
+      );
+      expect(
+        AuthService.canAutoProvisionStudentAccount(
+          hasExistingLinkedAuthUid: false,
+          otpJustVerified: true,
+          passwordMatchesStudentId: false,
+        ),
+        isTrue,
+      );
     });
   });
 

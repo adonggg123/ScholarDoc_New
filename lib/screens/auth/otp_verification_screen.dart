@@ -538,70 +538,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             ? raw
             : 'OTP verification failed. Please try again.';
       });
-
-      if (raw.toLowerCase().contains('custom password') ||
-          raw.toLowerCase().contains('registered password')) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: Row(
-              children: [
-                const Icon(
-                  LucideIcons.checkCircle2,
-                  color: Color(0xFF16A34A),
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'OTP Verified!',
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0F3260),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              'Your first-login verification is complete.\n\nYour account is registered with a custom password. Please tap below to return to the login screen and sign in with your registered password.',
-              style: GoogleFonts.inter(
-                fontSize: 13.5,
-                color: const Color(0xFF334155),
-                height: 1.45,
-              ),
-            ),
-            actions: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F3260),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                ),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text(
-                  'Sign In with Password',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -1138,80 +1074,38 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Error Banner / Custom Password Notice Banner
+                  // Error Banner
                   if (_errorMessage != null) ...[
-                    Builder(
-                      builder: (context) {
-                        final isCustomNotice = _errorMessage!.toLowerCase().contains('custom password') ||
-                            _errorMessage!.toLowerCase().contains('registered password');
-                        final bgColor = isCustomNotice ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2);
-                        final borderColor = isCustomNotice ? const Color(0xFFBBF7D0) : const Color(0xFFFECACA);
-                        final iconColor = isCustomNotice ? const Color(0xFF16A34A) : const Color(0xFFDC2626);
-                        final textColor = isCustomNotice ? const Color(0xFF166534) : const Color(0xFFDC2626);
-
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 9,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.alertCircle,
+                            color: Color(0xFFDC2626),
+                            size: 15,
                           ),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: borderColor),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    isCustomNotice ? LucideIcons.checkCircle2 : LucideIcons.alertCircle,
-                                    color: iconColor,
-                                    size: 15,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _errorMessage!,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFFDC2626),
                               ),
-                              if (isCustomNotice) ...[
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      backgroundColor: const Color(0xFF0F3260),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onPressed: () => Navigator.pop(context),
-                                    icon: const Icon(LucideIcons.logIn, size: 14),
-                                    label: Text(
-                                      'Back to Login',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+                            ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 10),
                   ],
