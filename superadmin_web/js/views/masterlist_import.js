@@ -1234,6 +1234,7 @@ async function moveRecordToStudentExist(index) {
             studentExistList: studentExistList,
             needsReviewList: needsReviewList,
             updatedBy: 'Super Admin',
+            syncToDb: false,
             academicYear: selectedAcademicYear,
             semester: selectedSemester
         });
@@ -1315,6 +1316,7 @@ async function moveAllDuplicatesToStudentExist() {
             studentExistList: studentExistList,
             needsReviewList: needsReviewList,
             updatedBy: 'Super Admin',
+            syncToDb: false,
             academicYear: selectedAcademicYear,
             semester: selectedSemester
         });
@@ -4794,201 +4796,48 @@ async function loadSchoolStudentsAndVerify(grantees) {
 
         renderSchoolStudentsTable(schoolStudents);
 
-        if (grantees === undefined || grantees === null) {
-            const valid = (extractedRecords || []).filter(r => !r.isDuplicate && !r.hasScholarshipConflict);
-            if (valid.length > 0) {
-                grantees = valid.map(m => ({
-                    id: m.id,
-                    name: m.name || `${m.last_name || m.lastName || ''}, ${m.first_name || m.firstName || ''} ${m.middle_name || m.middleName || ''}`.trim(),
-                    last_name: m.last_name || m.lastName,
-                    first_name: m.first_name || m.firstName,
-                    middle_name: m.middle_name || m.middleName,
-                    batch: m.batch || 'Batch 1',
-                    student_id: m.student_id || m.studentId || '',
-                    course: m.course || 'BSIT',
-                    year: m.year || '1',
-                    academic_year: m.academic_year || m.academicYear || selectedAcademicYear,
-                    semester: m.semester || selectedSemester,
-                    scholarship_type: m.scholarship_type || m.scholarshipType || selectedScholarshipProgram || 'TES'
-                }));
-            } else {
-                grantees = [];
-            }
-        }
-
-        // 1. Strict Isolation: First check if authentic records already exist in Supabase for this active term
+        // Step 3 (Annex 5 Form 2 & Form 3) MUST remain empty until the Registrar completes the transaction and clicks Save.
+        // Never auto-verify locally or auto-write to Supabase from Super Admin; display strictly what Registrar has saved in Supabase.
         const dbSync = await AnnexSyncService.loadFromSupabase({
             academicYear: selectedAcademicYear,
             semester: selectedSemester,
             fallbackToLatest: false
         });
 
-        if (dbSync && dbSync.fromDb && (dbSync.form2List.length > 0 || dbSync.form3List.length > 0)) {
-            const dbItems = [...(dbSync.form2List || []), ...(dbSync.form3List || [])];
-            const hasUnverifiedGrantees = (grantees || []).some(g => !dbItems.some(d => AnnexSyncService.isSameStudent(d, g)));
-            if (!hasUnverifiedGrantees) {
-                verifiedForm2List = dbSync.form2List || [];
-                const existPool = (studentExistList || []).map(e => getComparableName(e));
-                verifiedForm3List = (dbSync.form3List || []).filter(item => {
-                    const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
-                    if (String(r).includes('Categorized from Student Exist')) return false;
-                    if ((studentExistList || []).some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
-                    const cand = getComparableName(item.grantee || item.matchedStudent || item);
-                    if (existPool.some(e => areNamesMatching(cand, e))) return false;
-                    return true;
-                });
-                needsReviewList = [];
-                updateAnnexKPIs();
-                renderAnnexForm2Table(verifiedForm2List);
-                renderAnnexForm3Table(verifiedForm3List);
-                renderAnnexReviewQueue(needsReviewList);
-                if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
-                    StudentSyncService.loadAndSyncStudents().catch(() => {});
-                }
-                return;
-            }
-        }
-
-        // 2. Check if verified data is in Supabase (or local storage only when offline/unreachable)
-        const savedSync = (dbSync && dbSync.fromDb)
-            ? dbSync
-            : AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
-        if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
-            if (grantees && grantees.length > 0) {
-                const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
-                const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
-
-                const batchResult = VerificationService.runBatchVerification(grantees, schoolStudents);
-                const allItems = [...batchResult.form2List, ...batchResult.form3List, ...batchResult.needsReviewList];
-
-                const combinedForm2 = [];
-                const combinedForm3 = [];
-                const remainingReview = [];
-                const processedKeys = new Set();
-
-                for (const item of allItems) {
-                    const key = AnnexSyncService.getUniqueKey(item);
-                    if (processedKeys.has(key) || combinedForm2.some(c => AnnexSyncService.isSameStudent(c, item)) || combinedForm3.some(c => AnnexSyncService.isSameStudent(c, item))) continue;
-                    processedKeys.add(key);
-
-                    const savedF2 = resolvedForm2Map.get(key) || savedSync.form2List.find(s => AnnexSyncService.isSameStudent(s, item));
-                    const savedF3 = resolvedForm3Map.get(key) || savedSync.form3List.find(s => AnnexSyncService.isSameStudent(s, item));
-
-                    if (savedF2) {
-                        processedKeys.add(AnnexSyncService.getUniqueKey(savedF2));
-                        const gL = (item.grantee?.last_name || item.grantee?.lastName || '').trim().toLowerCase();
-                        const sL = (savedF2.matchedStudent?.lastName || savedF2.matchedStudent?.last_name || '').trim().toLowerCase();
-                        const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
-                        if (isValid) {
-                            combinedForm2.push({ ...item, ...savedF2, classification: 'MATCHED_FORM2', isEnrolled: true });
-                        } else {
-                            if (item.classification === 'MATCHED_FORM2') combinedForm2.push(item);
-                            else if (item.classification === 'INACTIVE_FORM3') combinedForm3.push(item);
-                            else remainingReview.push(item);
-                        }
-                    } else if (savedF3) {
-                        processedKeys.add(AnnexSyncService.getUniqueKey(savedF3));
-                        combinedForm3.push({ ...item, ...savedF3, classification: 'INACTIVE_FORM3', isEnrolled: false });
-                    } else if (item.classification === 'MATCHED_FORM2') {
-                        combinedForm2.push(item);
-                    } else if (item.classification === 'INACTIVE_FORM3') {
-                        combinedForm3.push(item);
-                    } else {
-                        remainingReview.push(item);
-                    }
-                }
-
-                // Preserve any manually approved records from savedSync that were not already merged
-                for (const savedItem of (savedSync.form2List || [])) {
-                    const key = AnnexSyncService.getUniqueKey(savedItem);
-                    const alreadyInF2 = combinedForm2.some(c => AnnexSyncService.isSameStudent(c, savedItem));
-                    const alreadyInF3 = combinedForm3.some(c => AnnexSyncService.isSameStudent(c, savedItem));
-                    if (!processedKeys.has(key) && !alreadyInF2 && !alreadyInF3) {
-                        processedKeys.add(key);
-                        const gL = (savedItem.grantee?.last_name || savedItem.grantee?.lastName || '').trim().toLowerCase();
-                        const sL = (savedItem.matchedStudent?.lastName || savedItem.matchedStudent?.last_name || '').trim().toLowerCase();
-                        const isValid = !sL || !gL || gL === sL || gL.includes(sL) || sL.includes(gL) || (VerificationService.levenshteinSimilarity && VerificationService.levenshteinSimilarity(gL, sL) >= 0.75);
-                        if (isValid) {
-                            combinedForm2.push(savedItem);
-                        }
-                    }
-                }
-                for (const savedItem of (savedSync.form3List || [])) {
-                    const key = AnnexSyncService.getUniqueKey(savedItem);
-                    const alreadyInF2 = combinedForm2.some(c => AnnexSyncService.isSameStudent(c, savedItem));
-                    const alreadyInF3 = combinedForm3.some(c => AnnexSyncService.isSameStudent(c, savedItem));
-                    if (!processedKeys.has(key) && !alreadyInF2 && !alreadyInF3) {
-                        processedKeys.add(key);
-                        combinedForm3.push(savedItem);
-                    }
-                }
-
-                const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview, studentExistList);
-                verifiedForm2List = deduped.form2List;
-                verifiedForm3List = deduped.form3List;
-                needsReviewList = deduped.needsReviewList;
-            } else {
-                verifiedForm2List = savedSync.form2List;
-                verifiedForm3List = savedSync.form3List;
-                needsReviewList = savedSync.needsReviewList;
-            }
-        } else {
-            const result = VerificationService.runBatchVerification(grantees || [], schoolStudents);
-            const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList, studentExistList);
-            verifiedForm2List = deduped.form2List;
-            verifiedForm3List = deduped.form3List;
-            needsReviewList = deduped.needsReviewList;
-        }
-
-        // Strictly exclude any student who already exists (in Student Exist, or flagged duplicate/conflict) from Form 3
-        const currentExist = studentExistList || loadStudentExistList(selectedAcademicYear, selectedSemester) || [];
-        const existPool = currentExist.map(e => getComparableName(e));
-        const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
-        const allExcludePool = [...existPool, ...dupPool];
-
-        verifiedForm3List = (verifiedForm3List || []).filter(f3 => {
-            if (!f3) return false;
-            if (f3.isDuplicate || f3.grantee?.isDuplicate || f3.matchedStudent?.isDuplicate) return false;
-            if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, f3))) return false;
-            const cand = getComparableName(f3.grantee || f3.matchedStudent || f3);
-            if (allExcludePool.some(ex => areNamesMatching(cand, ex))) return false;
-            return true;
-        });
-
-        const hasVerifiedRecords = (verifiedForm2List && verifiedForm2List.length > 0) || (verifiedForm3List && verifiedForm3List.length > 0);
-        AnnexSyncService.saveVerifiedData({
-            form2List: verifiedForm2List,
-            form3List: verifiedForm3List,
-            studentExistList: currentExist,
-            needsReviewList: needsReviewList,
-            updatedBy: 'Super Admin (Verification Sync)',
-            syncToDb: false,
-            academicYear: selectedAcademicYear,
-            semester: selectedSemester
-        });
-
-        if (hasVerifiedRecords) {
-            await AnnexSyncService.saveToSupabase(
-                verifiedForm2List,
-                verifiedForm3List,
-                'Super Admin (Verification Sync)',
-                selectedAcademicYear,
-                selectedSemester
-            );
+        if (dbSync && dbSync.fromDb && ((dbSync.form2List && dbSync.form2List.length > 0) || (dbSync.form3List && dbSync.form3List.length > 0))) {
+            verifiedForm2List = (dbSync.form2List || []).filter(item => {
+                const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                return isAcademicYearMatch(iAy, selectedAcademicYear) && isSemesterMatch(iSem, selectedSemester);
+            });
+            verifiedForm3List = (dbSync.form3List || []).filter(item => {
+                const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+                const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+                return isAcademicYearMatch(iAy, selectedAcademicYear) && isSemesterMatch(iSem, selectedSemester);
+            });
+            needsReviewList = [];
+            updateAnnexKPIs();
+            renderAnnexForm2Table(verifiedForm2List);
+            renderAnnexForm3Table(verifiedForm3List);
+            renderAnnexReviewQueue(needsReviewList);
             if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
-                await StudentSyncService.loadAndSyncStudents();
+                StudentSyncService.loadAndSyncStudents().catch(() => { });
             }
+            const syncBadge = document.getElementById('sa-sync-status-badge');
+            if (syncBadge) {
+                syncBadge.style.display = 'inline-flex';
+            }
+            return;
         }
 
+        // Registrar has not saved Form 2 / Form 3 data for this term yet — keep tables strictly empty
+        verifiedForm2List = [];
+        verifiedForm3List = [];
+        needsReviewList = [];
         updateAnnexKPIs();
         renderAnnexForm2Table(verifiedForm2List);
         renderAnnexForm3Table(verifiedForm3List);
         renderAnnexReviewQueue(needsReviewList);
-
-        const syncBadge = document.getElementById('sa-sync-status-badge');
-        if (syncBadge) {
-            syncBadge.style.display = 'inline-flex';
-        }
 
     } catch (err) {
         console.warn('Error verifying Annex 5 tables in masterlist_import:', err);
@@ -5196,19 +5045,8 @@ function renderAnnexForm3Table(items) {
     const tbody = document.getElementById('sa-tbody-form3');
     if (!tbody) return;
 
-    // Filter out any student who exists in Student Exist or is marked as duplicate/conflict
-    const currentExist = studentExistList || [];
-    const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
-    const existPool = currentExist.map(e => getComparableName(e));
-    const allExclude = [...existPool, ...dupPool];
-
-    const cleanItems = getFilteredForm3List(items || []).filter(item => {
-        if (!item) return false;
-        if (item.isDuplicate || item.grantee?.isDuplicate || item.matchedStudent?.isDuplicate) return false;
-        if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
-        const cand = getComparableName(item.grantee || item.matchedStudent || item);
-        return !allExclude.some(ex => areNamesMatching(cand, ex));
-    });
+    // Display exact Registrar-saved Form 3 records filtered only by active Scholarship Program and Batch filters
+    const cleanItems = getFilteredForm3List(items || []);
 
     if (cleanItems.length === 0) {
         const activeSch = getActiveScholarshipFilter();
@@ -6489,49 +6327,21 @@ export function initMasterlistImport() {
                     const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
                     return isAcademicYearMatch(iAy, ay) && isSemesterMatch(iSem, sem);
                 });
-                const existPool = (studentExistList || []).map(e => getComparableName(e));
                 verifiedForm3List = (dbSync.form3List || []).filter(item => {
                     const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
                     const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
-                    if (!isAcademicYearMatch(iAy, ay) || !isSemesterMatch(iSem, sem)) return false;
-                    const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
-                    if (String(r).includes('Categorized from Student Exist')) return false;
-                    if ((studentExistList || []).some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
-                    const cand = getComparableName(item.grantee || item.matchedStudent || item);
-                    if (existPool.some(e => areNamesMatching(cand, e))) return false;
-                    return true;
+                    return isAcademicYearMatch(iAy, ay) && isSemesterMatch(iSem, sem);
                 });
                 needsReviewList = [];
                 updateAnnexKPIs();
                 renderAnnexForm2Table(verifiedForm2List);
                 renderAnnexForm3Table(verifiedForm3List);
                 renderAnnexReviewQueue(needsReviewList);
-
-                AnnexSyncService.saveVerifiedData({
-                    form2List: verifiedForm2List,
-                    form3List: verifiedForm3List,
-                    studentExistList: studentExistList,
-                    needsReviewList: [],
-                    updatedBy: `Term Filter (${ay} ${sem})`,
-                    syncToDb: false,
-                    academicYear: ay,
-                    semester: sem
-                });
             } else {
-                // Supabase returned empty for this term — clear stale local cache so deleted records do not reappear
+                // Supabase has no Registrar-saved Form 2 / Form 3 data for this term — keep strictly empty
                 verifiedForm2List = [];
                 verifiedForm3List = [];
                 needsReviewList = [];
-                AnnexSyncService.saveVerifiedData({
-                    form2List: [],
-                    form3List: [],
-                    studentExistList: studentExistList,
-                    needsReviewList: [],
-                    updatedBy: `Term Filter (${ay} ${sem})`,
-                    syncToDb: false,
-                    academicYear: ay,
-                    semester: sem
-                });
                 updateAnnexKPIs();
                 renderAnnexForm2Table(verifiedForm2List);
                 renderAnnexForm3Table(verifiedForm3List);
@@ -7632,8 +7442,7 @@ export function initMasterlistImport() {
     const applySyncedAnnexDataToSuperAdmin = (rawF2, rawF3, rawRev, {
         sourceLabel = 'Registrar',
         timestamp = Date.now(),
-        showNotification = false,
-        updateLocalCache = false
+        showNotification = false
     } = {}) => {
         const filterByActiveTerm = (list) => (Array.isArray(list) ? list : []).filter(item => {
             if (!item) return false;
@@ -7644,44 +7453,15 @@ export function initMasterlistImport() {
             return true;
         });
 
-        const currentExist = studentExistList || loadStudentExistList(selectedAcademicYear, selectedSemester) || [];
-        const existPool = currentExist.map(e => getComparableName(e));
-        const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
-        const allExcludePool = [...existPool, ...dupPool];
-
+        // Display exact Registrar-saved Form 2 and Form 3 records without stripping saved Form 3 entries
         const termF2 = filterByActiveTerm(rawF2);
-        const termF3 = filterByActiveTerm(rawF3).filter(item => {
-            if (!item) return false;
-            if (item.isDuplicate || item.grantee?.isDuplicate || item.matchedStudent?.isDuplicate) return false;
-            const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
-            if (String(r).includes('Categorized from Student Exist')) return false;
-            if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
-            const cand = getComparableName(item.grantee || item.matchedStudent || item);
-            if (allExcludePool.some(ex => areNamesMatching(cand, ex))) return false;
-            return true;
-        });
+        const termF3 = filterByActiveTerm(rawF3);
         const termRev = Array.isArray(rawRev) ? rawRev : [];
 
-        const deduped = AnnexSyncService.deduplicateLists(termF2, termF3, termRev, currentExist);
+        const deduped = AnnexSyncService.deduplicateLists(termF2, termF3, termRev, []);
         verifiedForm2List = deduped.form2List || [];
         verifiedForm3List = deduped.form3List || [];
         needsReviewList = deduped.needsReviewList || [];
-
-        if (updateLocalCache) {
-            const cachedPayload = AnnexSyncService.saveVerifiedData({
-                form2List: verifiedForm2List,
-                form3List: verifiedForm3List,
-                studentExistList: currentExist,
-                needsReviewList: needsReviewList,
-                updatedBy: 'Super Admin (Realtime Sync)',
-                syncToDb: false,
-                academicYear: selectedAcademicYear,
-                semester: selectedSemester
-            });
-            if (cachedPayload && cachedPayload.timestamp) {
-                lastAppliedAnnexSyncTs = cachedPayload.timestamp;
-            }
-        }
 
         populateScholarshipAndBatchFilters();
         refreshFilteredAnnexViews();
@@ -7724,8 +7504,7 @@ export function initMasterlistImport() {
                         {
                             sourceLabel,
                             timestamp: Date.now(),
-                            showNotification,
-                            updateLocalCache: true
+                            showNotification
                         }
                     );
                 }
@@ -7735,7 +7514,7 @@ export function initMasterlistImport() {
         }, 600);
     };
 
-    // Subscribe to live synchronization with Registrar / Admin Review Queue (same-browser instant sync)
+    // Subscribe to live synchronization with Registrar Save action (same-browser instant sync)
     if (typeof window.__saAnnexOnSyncUnsub === 'function') {
         try { window.__saAnnexOnSyncUnsub(); } catch (_) { }
         window.__saAnnexOnSyncUnsub = null;
@@ -7745,7 +7524,9 @@ export function initMasterlistImport() {
         // Deduplicate rapid BroadcastChannel + storage events for the same commit
         if (synced.timestamp && synced.timestamp === lastAppliedAnnexSyncTs) return;
         const updatedByStr = String(synced.updatedBy || '');
-        if (updatedByStr === 'Super Admin (Realtime Sync)') return;
+
+        // Strictly ignore non-saved / draft broadcasts — only display once Registrar explicitly clicks Save
+        if (!updatedByStr.includes('(Saved)')) return;
 
         // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
         if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && !isAcademicYearMatch(synced.academicYear, selectedAcademicYear)) return;
@@ -7753,10 +7534,9 @@ export function initMasterlistImport() {
 
         if (synced.timestamp) lastAppliedAnnexSyncTs = synced.timestamp;
 
-        const isExplicitRegistrarSave = updatedByStr.includes('(Saved)');
         // If Super Admin is currently viewing "All" years or semesters, reload full DB set instead of replacing with a single term
         if (selectedAcademicYear === 'All' || selectedSemester === 'All') {
-            scheduleSuperAdminAnnexRefresh('Registrar', isExplicitRegistrarSave);
+            scheduleSuperAdminAnnexRefresh('Registrar', true);
             return;
         }
 
@@ -7765,10 +7545,9 @@ export function initMasterlistImport() {
             synced.form3List || [],
             synced.needsReviewList || [],
             {
-                sourceLabel: isExplicitRegistrarSave ? 'Registrar' : 'Admin',
+                sourceLabel: 'Registrar',
                 timestamp: synced.timestamp || Date.now(),
-                showNotification: isExplicitRegistrarSave,
-                updateLocalCache: false
+                showNotification: true
             }
         );
     });

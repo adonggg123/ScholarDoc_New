@@ -1360,6 +1360,7 @@ async function loadInitialData() {
         }
 
         // 3. Automatic Restore from Supabase Database for Form 2 & Form 3 for active term
+        lastSavedDbSignature = null;
         try {
             const dbSync = await AnnexSyncService.loadFromSupabase({
                 academicYear: selectedAcademicYear,
@@ -1368,20 +1369,20 @@ async function loadInitialData() {
             });
             if (dbSync && dbSync.fromDb) {
                 if ((!dbSync.form2List || dbSync.form2List.length === 0) && (!dbSync.form3List || dbSync.form3List.length === 0)) {
-                    // Database tables annex_form_2 and annex_form_3 are empty for this term
-                    const cachedTerm = AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
-                    if (cachedTerm && ((cachedTerm.form2List && cachedTerm.form2List.length > 0) || (cachedTerm.form3List && cachedTerm.form3List.length > 0))) {
-                        verifiedForm2List = (cachedTerm.form2List || []).filter(item => {
+                    // Database tables annex_form_2 and annex_form_3 are empty for this term (not yet saved by Registrar)
+                    const localDraft = getRegistrarDraftState(selectedAcademicYear, selectedSemester);
+                    if (localDraft && ((localDraft.form2List && localDraft.form2List.length > 0) || (localDraft.form3List && localDraft.form3List.length > 0) || (localDraft.needsReviewList && localDraft.needsReviewList.length > 0))) {
+                        verifiedForm2List = (localDraft.form2List || []).filter(item => {
                             const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
                             const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
-                            return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                            return (!ay || isAcademicYearTermMatch(ay, selectedAcademicYear)) && (!sem || isSemesterTermMatch(sem, selectedSemester));
                         });
-                        verifiedForm3List = (cachedTerm.form3List || []).filter(item => {
+                        verifiedForm3List = (localDraft.form3List || []).filter(item => {
                             const ay = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
                             const sem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
-                            return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
+                            return (!ay || isAcademicYearTermMatch(ay, selectedAcademicYear)) && (!sem || isSemesterTermMatch(sem, selectedSemester));
                         });
-                        needsReviewList = cachedTerm.needsReviewList || [];
+                        needsReviewList = localDraft.needsReviewList || [];
                     } else {
                         verifiedForm2List = [];
                         verifiedForm3List = [];
@@ -1399,14 +1400,14 @@ async function loadInitialData() {
                         return isAcademicYearTermMatch(ay, selectedAcademicYear) && isSemesterTermMatch(sem, selectedSemester);
                     });
                     needsReviewList = [];
-                    AnnexSyncService.saveVerifiedData({
+                    lastSavedDbSignature = computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, []);
+                    saveRegistrarDraftState({
                         form2List: verifiedForm2List,
                         form3List: verifiedForm3List,
                         needsReviewList: [],
-                        updatedBy: 'Supabase Auto-Restore',
-                        syncToDb: false,
                         academicYear: selectedAcademicYear,
-                        semester: selectedSemester
+                        semester: selectedSemester,
+                        markUnsaved: false
                     });
                 }
             } else {
@@ -1433,6 +1434,88 @@ async function loadInitialData() {
     }
 }
 
+// ── Registrar Local Draft Storage (Isolated from Super Admin until explicit Save) ──
+const REGISTRAR_DRAFT_STORAGE_PREFIX = 'scholardoc_registrar_annex5_draft';
+let lastSavedDbSignature = null;
+
+function getRegistrarDraftKey(ay = selectedAcademicYear, sem = selectedSemester) {
+    if (ay && sem && ay !== 'All' && sem !== 'All') {
+        return `${REGISTRAR_DRAFT_STORAGE_PREFIX}_${ay}_${sem}`;
+    }
+    return REGISTRAR_DRAFT_STORAGE_PREFIX;
+}
+
+function computeAnnexStateSignature(f2List = [], f3List = [], revList = []) {
+    const f2Keys = (f2List || []).map(it => AnnexSyncService.getUniqueKey(it)).sort().join('|');
+    const f3Keys = (f3List || []).map(it => `${AnnexSyncService.getUniqueKey(it)}:${it?.specialStatusReason || ''}:${it?.remarks || ''}`).sort().join('|');
+    return `${f2Keys}::${f3Keys}::${(revList || []).length}`;
+}
+
+function getRegistrarDraftState(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        const raw = localStorage.getItem(getRegistrarDraftKey(ay, sem));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.form2List)) return null;
+        return parsed;
+    } catch (_) {
+        return null;
+    }
+}
+
+function updateSaveStatusBadge(mode, timestamp = null) {
+    const saveBadge = document.getElementById('annex-save-status-badge');
+    if (!saveBadge) return;
+    if (mode === 'unsaved') {
+        saveBadge.innerHTML = '<i class="icon-alert-circle" style="font-size: 13px;"></i> Unsaved changes';
+        saveBadge.style.background = 'rgba(245,158,11,0.12)';
+        saveBadge.style.color = '#d97706';
+        saveBadge.style.display = 'inline-flex';
+    } else if (mode === 'saved') {
+        const timeStr = timestamp ? ` (${new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : '';
+        saveBadge.innerHTML = `<i class="icon-check-circle" style="font-size: 13px;"></i> Saved${timeStr}`;
+        saveBadge.style.background = 'rgba(16,185,129,0.1)';
+        saveBadge.style.color = '#059669';
+        saveBadge.style.display = 'inline-flex';
+    } else {
+        saveBadge.style.display = 'none';
+    }
+}
+
+function saveRegistrarDraftState({
+    form2List = verifiedForm2List,
+    form3List = verifiedForm3List,
+    needsReviewList: revList = needsReviewList,
+    academicYear = selectedAcademicYear,
+    semester = selectedSemester,
+    markUnsaved = true
+} = {}) {
+    const deduped = AnnexSyncService.deduplicateLists(form2List || [], form3List || [], revList || []);
+    try {
+        localStorage.setItem(getRegistrarDraftKey(academicYear, semester), JSON.stringify({
+            timestamp: Date.now(),
+            academicYear,
+            semester,
+            form2List: deduped.form2List,
+            form3List: deduped.form3List,
+            needsReviewList: deduped.needsReviewList
+        }));
+    } catch (_) { }
+
+    if (markUnsaved) {
+        if (deduped.form2List.length > 0 || deduped.form3List.length > 0 || deduped.needsReviewList.length > 0) {
+            updateSaveStatusBadge('unsaved');
+        }
+    }
+    return deduped;
+}
+
+function clearRegistrarDraftState(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        localStorage.removeItem(getRegistrarDraftKey(ay, sem));
+    } catch (_) { }
+}
+
 // ── Database Realtime Listener Setup ────────────────────────────────
 let suppressAnnexRealtimeUntil = 0;
 let adminAnnexRealtimeTimer = null;
@@ -1448,14 +1531,12 @@ function scheduleAdminAnnexRealtimeRefresh() {
         });
         if (dbSync && dbSync.fromDb) {
             if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
-                AnnexSyncService.clearVerifiedData({
-                    clearSupabase: false,
-                    academicYear: selectedAcademicYear,
-                    semester: selectedSemester
-                });
+                lastSavedDbSignature = null;
+                clearRegistrarDraftState(selectedAcademicYear, selectedSemester);
                 verifiedForm2List = [];
                 verifiedForm3List = [];
                 needsReviewList = [];
+                updateSaveStatusBadge('hidden');
                 updateKPIMetrics();
                 renderForm2Table(verifiedForm2List);
                 renderForm3Table(verifiedForm3List);
@@ -1463,15 +1544,16 @@ function scheduleAdminAnnexRealtimeRefresh() {
             } else {
                 verifiedForm2List = dbSync.form2List || [];
                 verifiedForm3List = dbSync.form3List || [];
-                AnnexSyncService.saveVerifiedData({
+                lastSavedDbSignature = computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, needsReviewList);
+                saveRegistrarDraftState({
                     form2List: verifiedForm2List,
                     form3List: verifiedForm3List,
                     needsReviewList: needsReviewList,
-                    updatedBy: 'Supabase Realtime Sync',
-                    syncToDb: false,
                     academicYear: selectedAcademicYear,
-                    semester: selectedSemester
+                    semester: selectedSemester,
+                    markUnsaved: false
                 });
+                updateSaveStatusBadge('saved');
                 updateKPIMetrics();
                 renderForm2Table(verifiedForm2List);
                 renderForm3Table(verifiedForm3List);
@@ -2945,12 +3027,13 @@ function parseTextLinesToStudents(text) {
 
 // ── 4. Cross-Verification Engine Execution ──────────────────────────
 function runCrossVerification(forceFresh = false) {
-    // If either table is empty or deleted from Supabase, clear verification results
+    // If either table is empty or deleted from Supabase, clear local verification results (without pushing to Super Admin)
     if (!rawSuperAdminGrantees || rawSuperAdminGrantees.length === 0 || !rawSchoolStudents || rawSchoolStudents.length === 0) {
         verifiedForm2List = [];
         verifiedForm3List = [];
         needsReviewList = [];
-        AnnexSyncService.clearVerifiedData({ clearSupabase: false, academicYear: selectedAcademicYear, semester: selectedSemester });
+        clearRegistrarDraftState(selectedAcademicYear, selectedSemester);
+        updateSaveStatusBadge('hidden');
         updateKPIMetrics();
         renderForm2Table(verifiedForm2List);
         renderForm3Table(verifiedForm3List);
@@ -2960,8 +3043,8 @@ function runCrossVerification(forceFresh = false) {
 
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
-    // Check if we have previously verified/resolved data from Admin Review Queue or Database (bypassed if forceFresh)
-    const savedSync = forceFresh ? null : AnnexSyncService.getVerifiedData(selectedAcademicYear, selectedSemester);
+    // Check if we have previously verified/resolved data in Registrar's local draft or loaded DB state (bypassed if forceFresh)
+    const savedSync = forceFresh ? null : getRegistrarDraftState(selectedAcademicYear, selectedSemester);
     if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
         const resolvedForm2Map = new Map(savedSync.form2List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
         const resolvedForm3Map = new Map(savedSync.form3List.map(item => [AnnexSyncService.getUniqueKey(item), item]));
@@ -3039,16 +3122,20 @@ function runCrossVerification(forceFresh = false) {
         needsReviewList = deduped.needsReviewList;
     }
 
-    // Persist and broadcast verified Form 2 / Form 3 state to Supabase so Student Grantees stays in sync
-    AnnexSyncService.saveVerifiedData({
+    // Keep working verification state strictly in Registrar's local draft until Registrar explicitly clicks Save
+    const currentSig = computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, needsReviewList);
+    const matchesSavedDb = Boolean(lastSavedDbSignature && currentSig === lastSavedDbSignature);
+    saveRegistrarDraftState({
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
-        updatedBy: window.currentAdmin?.username || 'Admin',
-        syncToDb: (verifiedForm2List.length > 0 || verifiedForm3List.length > 0),
         academicYear: selectedAcademicYear,
-        semester: selectedSemester
+        semester: selectedSemester,
+        markUnsaved: !matchesSavedDb
     });
+    if (matchesSavedDb) {
+        updateSaveStatusBadge('saved');
+    }
 
     updateKPIMetrics();
     renderForm2Table(verifiedForm2List);
@@ -3400,14 +3487,14 @@ function resolveReviewItem(reviewIndex, targetForm, specialReason = 'Not enrolle
         showToast(`Categorized ${item.grantee?.name || 'Grantee'} to Form 3 (${specialReason})`, 'tag');
     }
 
-    // Save and broadcast synchronized state across views
-    const synced = AnnexSyncService.saveVerifiedData({
+    // Save locally in Registrar's draft only — do not sync to Supabase or Super Admin until Registrar clicks Save
+    const synced = saveRegistrarDraftState({
         form2List: verifiedForm2List,
         form3List: verifiedForm3List,
         needsReviewList: needsReviewList,
-        updatedBy: window.currentAdmin?.username || 'Admin',
         academicYear: selectedAcademicYear,
-        semester: selectedSemester
+        semester: selectedSemester,
+        markUnsaved: true
     });
     if (synced) {
         verifiedForm2List = synced.form2List;
@@ -3546,14 +3633,14 @@ function executeClassifyUnderForm3() {
             verifiedForm3List.push(item);
         }
 
-        // Persist to sync storage & Supabase
-        AnnexSyncService.saveVerifiedData({
+        // Keep locally in Registrar's draft only — do not sync to Supabase or Super Admin until Registrar clicks Save
+        saveRegistrarDraftState({
             form2List: verifiedForm2List,
             form3List: verifiedForm3List,
             needsReviewList: needsReviewList,
-            updatedBy: window.currentAdmin?.username || 'Admin',
             academicYear: selectedAcademicYear,
-            semester: selectedSemester
+            semester: selectedSemester,
+            markUnsaved: true
         });
 
         const displayName = getItemDisplayName(item);
@@ -3622,13 +3709,14 @@ function executeReclassifyToForm2() {
             verifiedForm2List.push(item);
         }
 
-        AnnexSyncService.saveVerifiedData({
+        // Keep locally in Registrar's draft only — do not sync to Supabase or Super Admin until Registrar clicks Save
+        saveRegistrarDraftState({
             form2List: verifiedForm2List,
             form3List: verifiedForm3List,
             needsReviewList: needsReviewList,
-            updatedBy: window.currentAdmin?.username || 'Admin',
             academicYear: selectedAcademicYear,
-            semester: selectedSemester
+            semester: selectedSemester,
+            markUnsaved: true
         });
 
         const displayName = getItemDisplayName(item);
@@ -3849,13 +3937,13 @@ if (btnConfirmRes) {
             if (idx !== -1) {
                 const item = verifiedForm2List[idx];
                 item.remarks = modalRemarks ? modalRemarks.value.trim() : '';
-                AnnexSyncService.saveVerifiedData({
+                saveRegistrarDraftState({
                     form2List: verifiedForm2List,
                     form3List: verifiedForm3List,
                     needsReviewList: needsReviewList,
-                    updatedBy: window.currentAdmin?.username || 'Admin',
                     academicYear: selectedAcademicYear,
-                    semester: selectedSemester
+                    semester: selectedSemester,
+                    markUnsaved: true
                 });
                 refreshFormTables();
                 showToast(`Updated details for ${getItemDisplayName(item)}`, 'check-circle');
@@ -3894,13 +3982,13 @@ if (btnAutoResolveAll) {
             verifiedForm3List.push(item);
         }
 
-        const synced = AnnexSyncService.saveVerifiedData({
+        const synced = saveRegistrarDraftState({
             form2List: verifiedForm2List,
             form3List: verifiedForm3List,
             needsReviewList: needsReviewList,
-            updatedBy: window.currentAdmin?.username || 'Admin',
             academicYear: selectedAcademicYear,
-            semester: selectedSemester
+            semester: selectedSemester,
+            markUnsaved: true
         });
         if (synced) {
             verifiedForm2List = synced.form2List;
@@ -3946,8 +4034,19 @@ async function saveAnnexTransaction() {
         return;
     }
 
+    // Require completing the Needs Review Queue before committing and syncing the transaction to Super Admin
+    if (Array.isArray(needsReviewList) && needsReviewList.length > 0) {
+        if (typeof activateTab === 'function' && tabBtnRev && tabPaneRev) {
+            activateTab(tabBtnRev, tabPaneRev);
+        }
+        showToast(
+            `Please categorize all ${needsReviewList.length} pending item(s) in the Needs Review Queue to complete the transaction before saving.`,
+            'alert-triangle'
+        );
+        return;
+    }
+
     const btnSave = document.getElementById('btn-save-annex-transaction');
-    const saveBadge = document.getElementById('annex-save-status-badge');
 
     isSavingAnnexTransaction = true;
     suppressAnnexRealtimeUntil = Date.now() + 5000;
@@ -3999,12 +4098,23 @@ async function saveAnnexTransaction() {
             throw new Error(dbRes?.error || 'Failed to persist Annex 5 records to Supabase.');
         }
 
+        // Update Registrar local saved snapshot & draft state
+        lastSavedDbSignature = computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, []);
+        saveRegistrarDraftState({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            needsReviewList: [],
+            academicYear: targetAy,
+            semester: targetSem,
+            markUnsaved: false
+        });
+
         // 2. Broadcast committed transaction to Super Admin (localStorage, BroadcastChannel, CustomEvent)
         const actorName = window.currentAdmin?.username || 'Registrar';
         const savedPayload = AnnexSyncService.saveVerifiedData({
             form2List: verifiedForm2List,
             form3List: verifiedForm3List,
-            needsReviewList: needsReviewList,
+            needsReviewList: [],
             updatedBy: `${actorName} (Saved)`,
             syncToDb: false,
             academicYear: targetAy,
@@ -4061,14 +4171,8 @@ async function saveAnnexTransaction() {
         renderForm3Table(verifiedForm3List);
         renderReviewQueue(needsReviewList);
 
-        if (saveBadge) {
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            saveBadge.innerHTML = `<i class="icon-check-circle" style="font-size: 13px;"></i> Saved (${timeStr})`;
-            saveBadge.style.display = 'inline-flex';
-        }
-
-        const pendingNote = revCount > 0 ? ` (${revCount} item(s) still in Needs Review Queue)` : '';
-        showToast(`Saved ${f2Count} Form 2 and ${f3Count} Form 3 record(s) and synced to Super Admin!${pendingNote}`, 'check-circle');
+        updateSaveStatusBadge('saved', Date.now());
+        showToast(`Saved ${f2Count} Form 2 and ${f3Count} Form 3 record(s) and synced to Super Admin!`, 'check-circle');
     } catch (err) {
         console.error('Error saving Annex 5 transaction:', err);
         showToast('Failed to save changes: ' + (err.message || err), 'alert-triangle');
@@ -4258,15 +4362,18 @@ const refreshAdminFromDb = async () => {
             verifiedForm2List = dbSync.form2List || [];
             verifiedForm3List = dbSync.form3List || [];
             needsReviewList = [];
-            AnnexSyncService.saveVerifiedData({
+            lastSavedDbSignature = (verifiedForm2List.length > 0 || verifiedForm3List.length > 0)
+                ? computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, [])
+                : null;
+            saveRegistrarDraftState({
                 form2List: verifiedForm2List,
                 form3List: verifiedForm3List,
                 needsReviewList: [],
-                updatedBy: 'Supabase Manual Refresh',
-                syncToDb: false,
                 academicYear: selectedAcademicYear,
-                semester: selectedSemester
+                semester: selectedSemester,
+                markUnsaved: false
             });
+            updateSaveStatusBadge(lastSavedDbSignature ? 'saved' : 'hidden');
             updateKPIMetrics();
             renderForm2Table(verifiedForm2List);
             renderForm3Table(verifiedForm3List);
