@@ -1434,6 +1434,53 @@ async function loadInitialData() {
 }
 
 // ── Database Realtime Listener Setup ────────────────────────────────
+let suppressAnnexRealtimeUntil = 0;
+let adminAnnexRealtimeTimer = null;
+
+function scheduleAdminAnnexRealtimeRefresh() {
+    if (adminAnnexRealtimeTimer) clearTimeout(adminAnnexRealtimeTimer);
+    adminAnnexRealtimeTimer = setTimeout(async () => {
+        if (AnnexSyncService.isSavingToDb || Date.now() < suppressAnnexRealtimeUntil) return;
+        const dbSync = await AnnexSyncService.loadFromSupabase({
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester,
+            fallbackToLatest: false
+        });
+        if (dbSync && dbSync.fromDb) {
+            if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
+                AnnexSyncService.clearVerifiedData({
+                    clearSupabase: false,
+                    academicYear: selectedAcademicYear,
+                    semester: selectedSemester
+                });
+                verifiedForm2List = [];
+                verifiedForm3List = [];
+                needsReviewList = [];
+                updateKPIMetrics();
+                renderForm2Table(verifiedForm2List);
+                renderForm3Table(verifiedForm3List);
+                renderReviewQueue(needsReviewList);
+            } else {
+                verifiedForm2List = dbSync.form2List || [];
+                verifiedForm3List = dbSync.form3List || [];
+                AnnexSyncService.saveVerifiedData({
+                    form2List: verifiedForm2List,
+                    form3List: verifiedForm3List,
+                    needsReviewList: needsReviewList,
+                    updatedBy: 'Supabase Realtime Sync',
+                    syncToDb: false,
+                    academicYear: selectedAcademicYear,
+                    semester: selectedSemester
+                });
+                updateKPIMetrics();
+                renderForm2Table(verifiedForm2List);
+                renderForm3Table(verifiedForm3List);
+                renderReviewQueue(needsReviewList);
+            }
+        }
+    }, 600);
+}
+
 function setupDatabaseRealtimeListeners() {
     if (!supabase || typeof supabase.channel !== 'function') return;
 
@@ -1529,49 +1576,16 @@ function setupDatabaseRealtimeListeners() {
             renderSuperAdminGranteesTable(rawSuperAdminGrantees);
             runCrossVerification();
         })
-        // 3. Listen for annex_form_2 changes
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_2' }, async (payload) => {
+        // 3 & 4. Listen for annex_form_2 & annex_form_3 changes (debounced & strictly term-isolated)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_2' }, (payload) => {
             console.log('[Realtime] annex_form_2 change event:', payload.eventType);
-            if (AnnexSyncService.isSavingToDb) return;
-            const dbSync = await AnnexSyncService.loadFromSupabase();
-            if (dbSync && dbSync.fromDb) {
-                if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
-                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
-                    verifiedForm2List = [];
-                    verifiedForm3List = [];
-                    needsReviewList = [];
-                    updateKPIMetrics();
-                    renderForm2Table(verifiedForm2List);
-                    renderForm3Table(verifiedForm3List);
-                    renderReviewQueue(needsReviewList);
-                } else {
-                    verifiedForm2List = dbSync.form2List || [];
-                    if (dbSync.form3List && dbSync.form3List.length > 0) verifiedForm3List = dbSync.form3List;
-                    runCrossVerification();
-                }
-            }
+            if (AnnexSyncService.isSavingToDb || Date.now() < suppressAnnexRealtimeUntil) return;
+            scheduleAdminAnnexRealtimeRefresh();
         })
-        // 4. Listen for annex_form_3 changes
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_3' }, async (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_3' }, (payload) => {
             console.log('[Realtime] annex_form_3 change event:', payload.eventType);
-            if (AnnexSyncService.isSavingToDb) return;
-            const dbSync = await AnnexSyncService.loadFromSupabase();
-            if (dbSync && dbSync.fromDb) {
-                if (dbSync.form2List.length === 0 && dbSync.form3List.length === 0) {
-                    AnnexSyncService.clearVerifiedData({ clearSupabase: false });
-                    verifiedForm2List = [];
-                    verifiedForm3List = [];
-                    needsReviewList = [];
-                    updateKPIMetrics();
-                    renderForm2Table(verifiedForm2List);
-                    renderForm3Table(verifiedForm3List);
-                    renderReviewQueue(needsReviewList);
-                } else {
-                    verifiedForm3List = dbSync.form3List || [];
-                    if (dbSync.form2List && dbSync.form2List.length > 0) verifiedForm2List = dbSync.form2List;
-                    runCrossVerification();
-                }
-            }
+            if (AnnexSyncService.isSavingToDb || Date.now() < suppressAnnexRealtimeUntil) return;
+            scheduleAdminAnnexRealtimeRefresh();
         })
         // 5. Listen for students table changes
         .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, async (payload) => {
@@ -3919,6 +3933,161 @@ if (btnAutoResolveAll) {
     });
 }
 
+// ── Save & Sync Completed Annex 5 Transaction to Super Admin ─────────
+let isSavingAnnexTransaction = false;
+
+async function saveAnnexTransaction() {
+    if (isSavingAnnexTransaction) return;
+
+    const targetAy = selectedAcademicYear;
+    const targetSem = selectedSemester;
+    if (!targetAy || targetAy === 'All' || !targetSem || targetSem === 'All') {
+        showToast('Please select a specific Academic Year and Semester before saving.', 'alert-triangle');
+        return;
+    }
+
+    const btnSave = document.getElementById('btn-save-annex-transaction');
+    const saveBadge = document.getElementById('annex-save-status-badge');
+
+    isSavingAnnexTransaction = true;
+    suppressAnnexRealtimeUntil = Date.now() + 5000;
+
+    if (btnSave) {
+        btnSave.disabled = true;
+        btnSave.style.opacity = '0.75';
+        btnSave.innerHTML = '<i class="icon-loader" style="font-size: 15px; animation: spin 1s linear infinite;"></i> Saving...';
+    }
+
+    try {
+        const tagWithActiveTerm = (list) => (Array.isArray(list) ? list : []).map(item => {
+            if (!item) return item;
+            const tagged = {
+                ...item,
+                academic_year: targetAy,
+                semester: targetSem
+            };
+            if (tagged.grantee) {
+                tagged.grantee = { ...tagged.grantee, academic_year: targetAy, semester: targetSem };
+            }
+            if (tagged.matchedStudent) {
+                tagged.matchedStudent = { ...tagged.matchedStudent, academic_year: targetAy, semester: targetSem };
+            }
+            return tagged;
+        });
+
+        const deduped = AnnexSyncService.deduplicateLists(
+            tagWithActiveTerm(verifiedForm2List),
+            tagWithActiveTerm(verifiedForm3List),
+            needsReviewList
+        );
+        verifiedForm2List = deduped.form2List || [];
+        verifiedForm3List = deduped.form3List || [];
+        needsReviewList = deduped.needsReviewList || [];
+
+        // 1. Commit verified Form 2 & Form 3 lists directly to Supabase (including emptied lists)
+        const dbRes = await AnnexSyncService.saveToSupabase({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            academicYear: targetAy,
+            semester: targetSem,
+            allowEmptyForm2: true,
+            allowEmptyForm3: true
+        });
+        suppressAnnexRealtimeUntil = Date.now() + 3000;
+
+        if (!dbRes || !dbRes.success) {
+            throw new Error(dbRes?.error || 'Failed to persist Annex 5 records to Supabase.');
+        }
+
+        // 2. Broadcast committed transaction to Super Admin (localStorage, BroadcastChannel, CustomEvent)
+        const actorName = window.currentAdmin?.username || 'Registrar';
+        const savedPayload = AnnexSyncService.saveVerifiedData({
+            form2List: verifiedForm2List,
+            form3List: verifiedForm3List,
+            needsReviewList: needsReviewList,
+            updatedBy: `${actorName} (Saved)`,
+            syncToDb: false,
+            academicYear: targetAy,
+            semester: targetSem
+        });
+        if (savedPayload) {
+            verifiedForm2List = savedPayload.form2List || [];
+            verifiedForm3List = savedPayload.form3List || [];
+            needsReviewList = savedPayload.needsReviewList || [];
+        }
+
+        const f2Count = verifiedForm2List.length;
+        const f3Count = verifiedForm3List.length;
+        const revCount = needsReviewList.length;
+        const termSummary = `${targetAy} • ${targetSem}`;
+
+        // 3. Log audit trail & notify Super Admin (also triggers cross-browser Realtime sync in Super Admin)
+        try {
+            await supabase.from('audit_logs').insert([{
+                userName: actorName,
+                role: window.currentAdmin?.role || 'Registrar',
+                action: `Saved and synced Annex 5 transaction (${termSummary}): ${f2Count} Form 2, ${f3Count} Form 3${revCount > 0 ? `, ${revCount} pending review` : ''}`,
+                studentId: 'ANNEX5_SAVE_SYNC'
+            }]);
+        } catch (auditErr) {
+            console.warn('Could not write Annex 5 save audit log:', auditErr);
+        }
+
+        try {
+            await AdminNotificationService.notifyRecordUpdate({
+                title: 'Annex 5 Verification Saved',
+                message: `Saved ${f2Count} Form 2 and ${f3Count} Form 3 record(s) for ${termSummary} and synchronized with Super Admin.`,
+                type: 'success',
+                metadata: { academicYear: targetAy, semester: targetSem, form2Count: f2Count, form3Count: f3Count, reviewCount: revCount }
+            });
+        } catch (_) { }
+
+        try {
+            await supabase.from('notifications').insert([{
+                studentId: 'superadmin',
+                title: 'Annex 5 Verification Saved by Registrar',
+                message: `Registrar saved Annex 5 verification for ${termSummary}: ${f2Count} Form 2 enrolled grantee(s) and ${f3Count} Form 3 record(s).`,
+                type: 'success',
+                isRead: false,
+                timestamp: new Date().toISOString()
+            }]);
+        } catch (notifErr) {
+            console.warn('Could not notify Super Admin of Annex 5 save:', notifErr);
+        }
+
+        // 4. Refresh UI & update Saved status indicator
+        updateKPIMetrics();
+        renderForm2Table(verifiedForm2List);
+        renderForm3Table(verifiedForm3List);
+        renderReviewQueue(needsReviewList);
+
+        if (saveBadge) {
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            saveBadge.innerHTML = `<i class="icon-check-circle" style="font-size: 13px;"></i> Saved (${timeStr})`;
+            saveBadge.style.display = 'inline-flex';
+        }
+
+        const pendingNote = revCount > 0 ? ` (${revCount} item(s) still in Needs Review Queue)` : '';
+        showToast(`Saved ${f2Count} Form 2 and ${f3Count} Form 3 record(s) and synced to Super Admin!${pendingNote}`, 'check-circle');
+    } catch (err) {
+        console.error('Error saving Annex 5 transaction:', err);
+        showToast('Failed to save changes: ' + (err.message || err), 'alert-triangle');
+    } finally {
+        isSavingAnnexTransaction = false;
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.innerHTML = '<i class="icon-check-circle" style="font-size: 15px;"></i> Save';
+        }
+    }
+}
+
+const btnSaveAnnexTransaction = document.getElementById('btn-save-annex-transaction');
+if (btnSaveAnnexTransaction) {
+    btnSaveAnnexTransaction.addEventListener('click', saveAnnexTransaction);
+}
+window.saveAnnexTransaction = saveAnnexTransaction;
+
 // ── 11. Tab Switching Navigation ────────────────────────────────────
 const tabBtnRev = document.getElementById('tab-btn-review');
 const tabBtn2 = document.getElementById('tab-btn-form2');
@@ -4277,11 +4446,15 @@ function showToast(message, icon = 'check-circle') {
 }
 
 // Live sync subscription
-AnnexSyncService.onSync((synced) => {
+if (typeof window.__adminAnnexOnSyncUnsub === 'function') {
+    try { window.__adminAnnexOnSyncUnsub(); } catch (_) { }
+    window.__adminAnnexOnSyncUnsub = null;
+}
+window.__adminAnnexOnSyncUnsub = AnnexSyncService.onSync((synced) => {
     if (!synced) return;
     // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
-    if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && synced.academicYear !== selectedAcademicYear) return;
-    if (synced.semester && selectedSemester && selectedSemester !== 'All' && synced.semester !== selectedSemester) return;
+    if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && !isAcademicYearTermMatch(synced.academicYear, selectedAcademicYear)) return;
+    if (synced.semester && selectedSemester && selectedSemester !== 'All' && !isSemesterTermMatch(synced.semester, selectedSemester)) return;
 
     if (Array.isArray(synced.form2List) && Array.isArray(synced.form3List)) {
         verifiedForm2List = synced.form2List;
@@ -4430,6 +4603,9 @@ async function handleRegistrarTermChange(newAy, newSem) {
     if (fileInput) fileInput.value = '';
     if (uploadPrompt) uploadPrompt.style.display = 'flex';
     if (fileInfo) fileInfo.style.display = 'none';
+
+    const saveBadge = document.getElementById('annex-save-status-badge');
+    if (saveBadge) saveBadge.style.display = 'none';
 
     updateRegistrarActiveTermLabel();
     await loadInitialData();

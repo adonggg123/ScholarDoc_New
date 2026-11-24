@@ -7625,28 +7625,152 @@ export function initMasterlistImport() {
         });
     }
 
-    // Subscribe to live synchronization with Admin Review Queue
-    AnnexSyncService.onSync((synced) => {
-        if (!synced) return;
-        // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
-        if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && synced.academicYear !== selectedAcademicYear) return;
-        if (synced.semester && selectedSemester && selectedSemester !== 'All' && synced.semester !== selectedSemester) return;
+    // Helper: Apply synced/loaded Annex 5 data consistently across KPIs, filters, tables, and StudentSyncService
+    let lastAppliedAnnexSyncTs = 0;
+    let saAnnexRealtimeTimer = null;
 
-        verifiedForm2List = synced.form2List || [];
-        verifiedForm3List = synced.form3List || [];
-        needsReviewList = synced.needsReviewList || [];
+    const applySyncedAnnexDataToSuperAdmin = (rawF2, rawF3, rawRev, {
+        sourceLabel = 'Registrar',
+        timestamp = Date.now(),
+        showNotification = false,
+        updateLocalCache = false
+    } = {}) => {
+        const filterByActiveTerm = (list) => (Array.isArray(list) ? list : []).filter(item => {
+            if (!item) return false;
+            const iAy = item.academic_year || item.grantee?.academic_year || item.matchedStudent?.academic_year;
+            const iSem = item.semester || item.grantee?.semester || item.matchedStudent?.semester;
+            if (selectedAcademicYear && selectedAcademicYear !== 'All' && iAy && !isAcademicYearMatch(iAy, selectedAcademicYear)) return false;
+            if (selectedSemester && selectedSemester !== 'All' && iSem && !isSemesterMatch(iSem, selectedSemester)) return false;
+            return true;
+        });
 
-        updateAnnexKPIs();
-        renderAnnexForm2Table(verifiedForm2List);
-        renderAnnexForm3Table(verifiedForm3List);
+        const currentExist = studentExistList || loadStudentExistList(selectedAcademicYear, selectedSemester) || [];
+        const existPool = currentExist.map(e => getComparableName(e));
+        const dupPool = (extractedRecords || []).filter(r => r.isDuplicate || r.hasScholarshipConflict).map(d => getComparableName(d));
+        const allExcludePool = [...existPool, ...dupPool];
+
+        const termF2 = filterByActiveTerm(rawF2);
+        const termF3 = filterByActiveTerm(rawF3).filter(item => {
+            if (!item) return false;
+            if (item.isDuplicate || item.grantee?.isDuplicate || item.matchedStudent?.isDuplicate) return false;
+            const r = item?.matchedStudent?.remarks || item?.remarks || item?.specialStatusReason || '';
+            if (String(r).includes('Categorized from Student Exist')) return false;
+            if (currentExist.some(ex => AnnexSyncService.isSameStudent(ex, item))) return false;
+            const cand = getComparableName(item.grantee || item.matchedStudent || item);
+            if (allExcludePool.some(ex => areNamesMatching(cand, ex))) return false;
+            return true;
+        });
+        const termRev = Array.isArray(rawRev) ? rawRev : [];
+
+        const deduped = AnnexSyncService.deduplicateLists(termF2, termF3, termRev, currentExist);
+        verifiedForm2List = deduped.form2List || [];
+        verifiedForm3List = deduped.form3List || [];
+        needsReviewList = deduped.needsReviewList || [];
+
+        if (updateLocalCache) {
+            const cachedPayload = AnnexSyncService.saveVerifiedData({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                studentExistList: currentExist,
+                needsReviewList: needsReviewList,
+                updatedBy: 'Super Admin (Realtime Sync)',
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
+            });
+            if (cachedPayload && cachedPayload.timestamp) {
+                lastAppliedAnnexSyncTs = cachedPayload.timestamp;
+            }
+        }
+
+        populateScholarshipAndBatchFilters();
+        refreshFilteredAnnexViews();
         renderAnnexReviewQueue(needsReviewList);
+
+        if (StudentSyncService && typeof StudentSyncService.loadAndSyncStudents === 'function') {
+            StudentSyncService.loadAndSyncStudents().catch(() => { });
+        }
 
         const syncBadge = document.getElementById('sa-sync-status-badge');
         if (syncBadge) {
-            const timeStr = new Date(synced.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced with Admin (${timeStr})`;
+            const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            syncBadge.innerHTML = `<i class="icon-check-circle-2" style="font-size: 13px;"></i> Synced with ${sourceLabel} (${timeStr})`;
             syncBadge.style.display = 'inline-flex';
         }
+
+        if (showNotification && window.showToast) {
+            window.showToast(
+                `Synced with ${sourceLabel}: ${verifiedForm2List.length} Form 2 and ${verifiedForm3List.length} Form 3 record(s) updated.`,
+                'check-circle'
+            );
+        }
+    };
+
+    const scheduleSuperAdminAnnexRefresh = (sourceLabel = 'Registrar', showNotification = false) => {
+        if (saAnnexRealtimeTimer) clearTimeout(saAnnexRealtimeTimer);
+        saAnnexRealtimeTimer = setTimeout(async () => {
+            if (AnnexSyncService.isSavingToDb) return;
+            try {
+                const dbSync = await AnnexSyncService.loadFromSupabase({
+                    academicYear: selectedAcademicYear,
+                    semester: selectedSemester,
+                    fallbackToLatest: false
+                });
+                if (dbSync && dbSync.fromDb) {
+                    applySyncedAnnexDataToSuperAdmin(
+                        dbSync.form2List || [],
+                        dbSync.form3List || [],
+                        [],
+                        {
+                            sourceLabel,
+                            timestamp: Date.now(),
+                            showNotification,
+                            updateLocalCache: true
+                        }
+                    );
+                }
+            } catch (err) {
+                console.warn('Super Admin realtime Annex 5 refresh error:', err);
+            }
+        }, 600);
+    };
+
+    // Subscribe to live synchronization with Registrar / Admin Review Queue (same-browser instant sync)
+    if (typeof window.__saAnnexOnSyncUnsub === 'function') {
+        try { window.__saAnnexOnSyncUnsub(); } catch (_) { }
+        window.__saAnnexOnSyncUnsub = null;
+    }
+    window.__saAnnexOnSyncUnsub = AnnexSyncService.onSync((synced) => {
+        if (!synced) return;
+        // Deduplicate rapid BroadcastChannel + storage events for the same commit
+        if (synced.timestamp && synced.timestamp === lastAppliedAnnexSyncTs) return;
+        const updatedByStr = String(synced.updatedBy || '');
+        if (updatedByStr === 'Super Admin (Realtime Sync)') return;
+
+        // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
+        if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && !isAcademicYearMatch(synced.academicYear, selectedAcademicYear)) return;
+        if (synced.semester && selectedSemester && selectedSemester !== 'All' && !isSemesterMatch(synced.semester, selectedSemester)) return;
+
+        if (synced.timestamp) lastAppliedAnnexSyncTs = synced.timestamp;
+
+        const isExplicitRegistrarSave = updatedByStr.includes('(Saved)');
+        // If Super Admin is currently viewing "All" years or semesters, reload full DB set instead of replacing with a single term
+        if (selectedAcademicYear === 'All' || selectedSemester === 'All') {
+            scheduleSuperAdminAnnexRefresh('Registrar', isExplicitRegistrarSave);
+            return;
+        }
+
+        applySyncedAnnexDataToSuperAdmin(
+            synced.form2List || [],
+            synced.form3List || [],
+            synced.needsReviewList || [],
+            {
+                sourceLabel: isExplicitRegistrarSave ? 'Registrar' : 'Admin',
+                timestamp: synced.timestamp || Date.now(),
+                showNotification: isExplicitRegistrarSave,
+                updateLocalCache: false
+            }
+        );
     });
 
     // Initialize academic years dropdown, then load masterlist and active term data
@@ -7657,8 +7781,8 @@ export function initMasterlistImport() {
         console.warn('Error during initMasterlistImport startup:', e);
     });
 
-    // Subscribe to Realtime updates for school_students table & shared school term registry
-    // Debounced so batch imports of 1,500+ rows trigger a single clean refresh instead of a burst
+    // Subscribe to Realtime updates for school_students, shared school term registry, and Registrar Annex 5 saves
+    // Debounced so batch imports / saves trigger a single clean refresh instead of a burst
     let saSchoolRealtimeTimer = null;
     const scheduleSuperAdminSchoolRefresh = () => {
         if (saSchoolRealtimeTimer) clearTimeout(saSchoolRealtimeTimer);
@@ -7681,6 +7805,23 @@ export function initMasterlistImport() {
                 })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `studentId=eq.${SCHOOL_TERM_REGISTRY_STUDENT_ID}` }, () => {
                     scheduleSuperAdminSchoolRefresh();
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_2' }, (payload) => {
+                    if (AnnexSyncService.isSavingToDb) return;
+                    console.log('[Realtime] annex_form_2 change event in Superadmin:', payload.eventType);
+                    scheduleSuperAdminAnnexRefresh('Registrar', false);
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'annex_form_3' }, (payload) => {
+                    if (AnnexSyncService.isSavingToDb) return;
+                    console.log('[Realtime] annex_form_3 change event in Superadmin:', payload.eventType);
+                    scheduleSuperAdminAnnexRefresh('Registrar', false);
+                })
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'studentId=eq.superadmin' }, (payload) => {
+                    const notif = payload?.new;
+                    if (notif && String(notif.title || '').includes('Annex 5 Verification Saved')) {
+                        console.log('[Realtime] Registrar Annex 5 save notification received in Superadmin');
+                        scheduleSuperAdminAnnexRefresh('Registrar', true);
+                    }
                 })
                 .subscribe();
             window.__saSchoolStudentsRealtimeChannel = saSchoolChannel;
