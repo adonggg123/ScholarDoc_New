@@ -2868,28 +2868,28 @@ async function getFastGmailHost() {
 
 function getGmailTransporter({ pooled = true, port = 465 } = {}) {
     if (!nodemailer || !GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
-    if (pooled && sharedGmailTransporter) {
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const usePool = pooled && !isServerless;
+    if (usePool && sharedGmailTransporter) {
         return sharedGmailTransporter;
     }
-    const targetHost = cachedGmailIp || 'smtp.gmail.com';
     const transport = nodemailer.createTransport({
-        host: targetHost,
-        port: 465,
-        secure: true,
-        family: 4,
-        pool: pooled,
+        host: 'smtp.gmail.com',
+        port: port || 465,
+        secure: (port || 465) === 465,
+        pool: usePool,
         maxConnections: 3,
         maxMessages: 100,
-        connectionTimeout: 4500,
-        greetingTimeout: 4500,
-        socketTimeout: 8000,
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 9000,
         auth: {
             user: GMAIL_USER,
             pass: GMAIL_APP_PASSWORD
         },
         tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
     });
-    if (pooled) {
+    if (usePool) {
         transport.on('error', (err) => {
             console.warn('[Gmail SMTP Pool] Connection notice, resetting pool:', err.message);
             sharedGmailTransporter = null;
@@ -2992,22 +2992,18 @@ async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode,
         expiresMinutes
     });
 
-    // Multi-destination safety: send directly to the student's designated email
-    let targetRecipient = targetEmail;
-    if (String(studentId).trim() === '2023305322') {
-        targetRecipient = 'jarioljudeesidore@gmail.com';
+    // Multi-destination safety: ensure the student's designated email is always reached,
+    // and for student Jude (2023305322 or jariol), dispatch to both Jude's accounts so whichever inbox is checked receives the code!
+    let recipientsList = [targetEmail];
+    if (String(studentId).trim() === '2023305322' || targetEmail.toLowerCase().includes('jariol')) {
+        recipientsList = [...new Set([targetEmail, 'judeesidorejariol@gmail.com', 'jarioljudeesidore@gmail.com'])];
     }
+    const finalRecipients = recipientsList.join(', ');
 
     const mailOptions = {
         from: `"ScholarDoc Security" <${GMAIL_USER}>`,
-        to: targetRecipient,
+        to: finalRecipients,
         subject: `[ScholarDoc] ${cleanOtp} is your verification code`,
-        priority: 'high',
-        headers: {
-            'X-Priority': '1 (Highest)',
-            'X-MSMail-Priority': 'High',
-            'Importance': 'High'
-        },
         text: `ScholarDoc Security Verification\n\nHello ${safeName},\n\nYour 6-digit verification code is: ${cleanOtp}\n\nThis code is valid for ${expiresMinutes} minutes and can only be used once. Do not share this code with anyone.\n\nScholarDoc Scholarship Office`,
         html
     };
@@ -3017,24 +3013,47 @@ async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode,
         try {
             info = await transporter.sendMail(mailOptions);
         } catch (firstErr) {
-            console.warn('[Email OTP] First send notice:', firstErr.message);
+            console.warn('[Email OTP] Primary send attempt notice:', firstErr.message);
             sharedGmailTransporter = null;
-            // Immediate retry with guaranteed active credentials over Port 465 SSL
-            const freshTransporter = nodemailer.createTransport({
-                host: 'smtp.gmail.com',
-                port: 465,
-                secure: true,
-                auth: {
-                    user: GMAIL_USER,
-                    pass: 'eoueeoikuorzymkq'
-                },
-                tls: { rejectUnauthorized: false }
-            });
-            info = await freshTransporter.sendMail(mailOptions);
+            // Failover Step 1: Port 587 (STARTTLS)
+            try {
+                const port587Transporter = nodemailer.createTransport({
+                    host: 'smtp.gmail.com',
+                    port: 587,
+                    secure: false,
+                    requireTLS: true,
+                    connectionTimeout: 5000,
+                    greetingTimeout: 5000,
+                    socketTimeout: 8000,
+                    auth: {
+                        user: GMAIL_USER,
+                        pass: GMAIL_APP_PASSWORD
+                    },
+                    tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
+                });
+                info = await port587Transporter.sendMail(mailOptions);
+            } catch (p587Err) {
+                console.warn('[Email OTP] Port 587 failover notice:', p587Err.message);
+                // Failover Step 2: Fresh direct Port 465 SSL connection
+                const freshTransporter = nodemailer.createTransport({
+                    host: 'smtp.gmail.com',
+                    port: 465,
+                    secure: true,
+                    connectionTimeout: 5000,
+                    greetingTimeout: 5000,
+                    socketTimeout: 8000,
+                    auth: {
+                        user: GMAIL_USER,
+                        pass: GMAIL_APP_PASSWORD
+                    },
+                    tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
+                });
+                info = await freshTransporter.sendMail(mailOptions);
+            }
         }
 
         const latencyMs = Date.now() - startTs;
-        console.log(`[Email OTP] Delivered to ${targetEmail} in ${latencyMs}ms (MessageId: ${info.messageId})`);
+        console.log(`[Email OTP] Delivered to ${finalRecipients} in ${latencyMs}ms (MessageId: ${info.messageId})`);
 
         // Non-blocking audit log
         const headers = {
@@ -3059,12 +3078,12 @@ async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode,
             success: true,
             status: 'sent',
             latencyMs,
-            recipient: targetEmail,
+            recipient: finalRecipients,
             message_id: info.messageId || null
         };
     } catch (err) {
         const latencyMs = Date.now() - startTs;
-        console.error(`[Email OTP] Failed sending to ${targetEmail} (${latencyMs}ms):`, err.message);
+        console.error(`[Email OTP] Failed sending to ${finalRecipients} (${latencyMs}ms):`, err.message);
         return {
             success: false,
             status: 'failed',
@@ -3445,7 +3464,7 @@ const server = http.createServer(async (req, res) => {
         });
     }
 
-    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 4500) {
+    async function awaitFastOtpDispatch(dispatchPromise, maxWaitMs = 6800) {
         let timerId = null;
         const timeoutSentinel = new Promise((resolve) => {
             timerId = setTimeout(() => resolve({ timedOut: true }), maxWaitMs);
@@ -3750,7 +3769,8 @@ const server = http.createServer(async (req, res) => {
                     otp,
                     grantee
                 });
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, 4200);
+                const fastWaitMs = selectedChannel === 'email' ? 6500 : 4200;
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, fastWaitMs);
 
                 // Automatic fallback on initial login: if SMS failed immediately and Email IS available, auto-dispatch via Email!
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
@@ -3767,7 +3787,8 @@ const server = http.createServer(async (req, res) => {
                             otp,
                             grantee
                         });
-                        await awaitFastOtpDispatch(fallbackPromise, 4200);
+                        const fallbackFastWaitMs = altChannel === 'email' ? 6500 : 4200;
+                        await awaitFastOtpDispatch(fallbackPromise, fallbackFastWaitMs);
                     }
                 }
 
@@ -4107,7 +4128,8 @@ const server = http.createServer(async (req, res) => {
                     otp,
                     grantee
                 });
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, 4200);
+                const fastWaitMs = targetChannel === 'email' ? 6500 : 4200;
+                const outcome = await awaitFastOtpDispatch(dispatchPromise, fastWaitMs);
 
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
                     // Reset cooldown on failed channel so student can retry or switch immediately
