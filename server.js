@@ -4512,6 +4512,36 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // ── API: Public Scholarship Programs ─────────────────────────────
+    if ((urlPath === '/api/public/scholarships' || urlPath === '/api/scholarships/public') && req.method === 'GET') {
+        try {
+            const headers = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            };
+            const resSup = await fetch(`${SUPABASE_REST_URL}/scholarships?select=*&order=name.asc`, {
+                headers,
+                signal: AbortSignal.timeout(6000)
+            });
+            if (!resSup.ok) throw new Error(`Supabase error: ${resSup.status}`);
+            const data = await resSup.json();
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=15, stale-while-revalidate=30'
+            });
+            res.end(JSON.stringify({ success: true, scholarships: data }));
+        } catch (err) {
+            res.writeHead(500, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: err.message, scholarships: [] }));
+        }
+        return;
+    }
+
     // ── API: Push Notification Broadcast for Announcements ───────────────
     if (urlPath === '/api/notifications/broadcast-announcement' && req.method === 'POST') {
         let body = '';
