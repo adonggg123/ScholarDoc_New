@@ -11,7 +11,11 @@ import 'announcement_service.dart';
 import '../screens/dashboard/widgets/announcement_detail_dialog.dart';
 import '../screens/notifications/notification_screen.dart';
 import '../screens/submissions/upload_workflow_screen.dart';
+import '../screens/submissions/submission_history_screen.dart';
 import '../screens/submissions/status_tracking_screen.dart';
+import '../screens/profile/profile_screen.dart';
+import '../screens/profile/change_password_screen.dart';
+import '../screens/profile/student_activity_log_screen.dart';
 
 /// Top-level background message handler for Firebase Messaging
 @pragma('vm:entry-point')
@@ -151,6 +155,9 @@ class PushNotificationService {
   );
 
   final Set<String> _recentNotificationKeys = {};
+
+  /// Optional hook for active admin layout to intercept notification clicks and switch tabs
+  static void Function(Map<String, dynamic> data)? onAdminNotificationTap;
 
   bool _isDuplicate(String key) {
     if (key.isEmpty) return false;
@@ -558,6 +565,19 @@ class PushNotificationService {
     String? announcementId,
     Map<String, dynamic>? data,
   }) {
+    // If Admin layout is active, let it handle the notification by switching to the relevant admin tab
+    if (onAdminNotificationTap != null) {
+      final payload = Map<String, dynamic>.from(data ?? {});
+      if (title != null && !payload.containsKey('title')) payload['title'] = title;
+      if (message != null && !payload.containsKey('message')) payload['message'] = message;
+      if (type != null && !payload.containsKey('type')) payload['type'] = type;
+      if (announcementId != null && !payload.containsKey('announcementId')) {
+        payload['announcementId'] = announcementId;
+      }
+      onAdminNotificationTap!(payload);
+      return;
+    }
+
     final ctx = context ?? _navigatorKey?.currentContext;
     if (ctx == null || !ctx.mounted) {
       debugPrint('ScholarDoc Push: Context is not mounted for navigation');
@@ -571,24 +591,69 @@ class PushNotificationService {
     }
 
     final combinedText =
-        '${title ?? ''} ${message ?? ''} ${type ?? ''} ${data?['target'] ?? ''}'
+        '${title ?? ''} ${message ?? ''} ${type ?? ''} ${data?['target'] ?? ''} ${data?['route'] ?? ''}'
             .toLowerCase();
 
-    // 2. Document Submission Update / Missing Documents / Resubmission
+    // 2. Password Update / Security Alert
+    if (combinedText.contains('password') ||
+        combinedText.contains('security alert') ||
+        combinedText.contains('credentials')) {
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const ChangePasswordScreen()));
+      return;
+    }
+
+    // 3. Profile Updates / Personal Information
+    if (combinedText.contains('profile updated') ||
+        combinedText.contains('personal details') ||
+        combinedText.contains('personal info') ||
+        combinedText.contains('contact information')) {
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+      return;
+    }
+
+    // 4. Student Activity Log
+    if (combinedText.contains('activity log') ||
+        combinedText.contains('login activity') ||
+        combinedText.contains('security log')) {
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const StudentActivityLogScreen()));
+      return;
+    }
+
+    // 5. Successful Document Submission / Submission History
+    if (combinedText.contains('submitted successfully') ||
+        combinedText.contains('submission confirmed') ||
+        combinedText.contains('submission history') ||
+        combinedText.contains('documents submitted') ||
+        combinedText.contains('document history') ||
+        combinedText.contains('requirements received')) {
+      Navigator.of(
+        ctx,
+      ).push(MaterialPageRoute(builder: (_) => const SubmissionHistoryScreen()));
+      return;
+    }
+
+    // 6. Document Submission Update / Missing Documents / Resubmission / Upload Workflow
     if (combinedText.contains('missing documents') ||
         combinedText.contains('missing document') ||
         combinedText.contains('resubmission') ||
         combinedText.contains('re-upload') ||
         combinedText.contains('requires revision') ||
         combinedText.contains('document submission') ||
-        combinedText.contains('upload documents')) {
+        combinedText.contains('upload documents') ||
+        combinedText.contains('submit requirements')) {
       Navigator.of(
         ctx,
       ).push(MaterialPageRoute(builder: (_) => const UploadWorkflowScreen()));
       return;
     }
 
-    // 3. SA Verification, ID Validation, Application Status Updates (Pending, Verified, Approved, Rejected)
+    // 7. SA Verification, ID Validation, Application Status Updates (Pending, Verified, Approved, Rejected, Payout)
     if (combinedText.contains('sa verification') ||
         combinedText.contains('sa number') ||
         combinedText.contains('id validation') ||
@@ -597,14 +662,16 @@ class PushNotificationService {
         combinedText.contains('application rejected') ||
         combinedText.contains('verified') ||
         combinedText.contains('status') ||
-        combinedText.contains('grantee')) {
+        combinedText.contains('grantee') ||
+        combinedText.contains('payout') ||
+        combinedText.contains('disbursement')) {
       Navigator.of(
         ctx,
       ).push(MaterialPageRoute(builder: (_) => const StatusTrackingScreen()));
       return;
     }
 
-    // 4. Default fallback: Notifications Screen
+    // 8. Default fallback: Notifications Screen
     if (ModalRoute.of(ctx)?.settings.name != '/notifications') {
       navigateToNotificationsScreen(context: ctx);
     }

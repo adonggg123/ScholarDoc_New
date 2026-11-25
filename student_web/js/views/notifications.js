@@ -74,7 +74,7 @@ async function loadNotifications() {
                 return `
                     <div class="card notification-item ${isRead ? 'read' : 'unread'}" 
                          data-id="${n.id}"
-                         style="transition: all 0.25s ease; ${!isRead ? 'border-left: 4px solid ' + accentColor + ';' : ''}">
+                         style="cursor: pointer; transition: all 0.25s ease; ${!isRead ? 'border-left: 4px solid ' + accentColor + ';' : ''}">
                         <div class="card-body" style="padding: 18px 22px; display: flex; align-items: flex-start; gap: 16px;">
                             <div style="width: 42px; height: 42px; border-radius: var(--radius-lg); background: var(--bg-alt); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 <i data-lucide="${typeIcon}" style="width: 20px; height: 20px; color: ${accentColor};"></i>
@@ -118,18 +118,24 @@ async function loadNotifications() {
                 });
             });
 
-            // Click on notification to mark as read
-            document.querySelectorAll('.notification-item.unread').forEach(item => {
+            // Click on notification to mark as read and navigate to corresponding screen
+            document.querySelectorAll('.notification-item').forEach(item => {
                 item.addEventListener('click', async () => {
                     const id = item.dataset.id;
-                    if (id) {
-                        if (uid && sb) {
-                            await sb.from('notifications').update({ isRead: true }).eq('id', id);
+                    const notifObj = items.find(x => String(x.id) === String(id));
+                    if (id && uid && sb) {
+                        sb.from('notifications').update({ isRead: true }).eq('id', id).then(() => {});
+                    }
+                    item.classList.remove('unread');
+                    item.classList.add('read');
+                    item.style.borderLeft = 'none';
+                    item.querySelector('.mark-read-btn')?.remove();
+
+                    if (notifObj && typeof window.resolveNotificationTarget === 'function' && typeof window.loadView === 'function') {
+                        const targetView = window.resolveNotificationTarget(notifObj);
+                        if (targetView && targetView !== 'notifications') {
+                            window.loadView(targetView);
                         }
-                        item.classList.remove('unread');
-                        item.classList.add('read');
-                        item.style.borderLeft = 'none';
-                        item.querySelector('.mark-read-btn')?.remove();
                     }
                 });
             });

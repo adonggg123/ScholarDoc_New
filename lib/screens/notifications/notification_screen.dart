@@ -478,6 +478,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         data['type'] ?? 'info',
                         !(data['isRead'] ?? true),
                         announcementId: data['announcementId']?.toString(),
+                        data: data,
                       );
                     },
                   );
@@ -499,6 +500,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     String type,
     bool isNew, {
     String? announcementId,
+    Map<String, dynamic>? data,
   }) {
     IconData icon = LucideIcons.info;
     Color color = AppTheme.primaryColor;
@@ -575,6 +577,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             message: message,
             type: type,
             announcementId: announcementId,
+            data: data,
           );
         },
         borderRadius: BorderRadius.circular(20),

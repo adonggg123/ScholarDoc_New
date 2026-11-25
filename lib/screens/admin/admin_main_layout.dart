@@ -54,11 +54,15 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   @override
   void initState() {
     super.initState();
+    PushNotificationService.onAdminNotificationTap = (data) {
+      if (mounted) _handleNotificationClick(data);
+    };
     _setupNotificationListener();
   }
 
   @override
   void dispose() {
+    PushNotificationService.onAdminNotificationTap = null;
     super.dispose();
   }
 
@@ -135,24 +139,80 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   }
 
   void _handleNotificationClick(Map<String, dynamic> notification) async {
-    final String title = notification['title'] ?? '';
-    final String id = notification['id'] ?? '';
+    final String title = notification['title']?.toString() ?? '';
+    final String msg = (notification['message'] ?? notification['body'])?.toString() ?? '';
+    final String id = notification['id']?.toString() ?? '';
+    final String combined = '$title $msg ${notification['type'] ?? ''}'.toLowerCase();
 
-    await NotificationService().markAsRead(id);
-
-    if (title.contains('SA Number')) {
-      setState(() {
-        _selectedIndex = 3;
-      });
-    } else if (title.contains('ID Validation')) {
-      setState(() {
-        _selectedIndex = 8;
-      });
-    } else if (title.contains('Student Registered')) {
-      setState(() {
-        _selectedIndex = 1;
-      });
+    if (id.isNotEmpty) {
+      await NotificationService().markAsRead(id);
     }
+
+    if (!mounted) return;
+
+    setState(() {
+      // 1. SA Number Verification / Annex 5 Matching
+      if (combined.contains('sa number') ||
+          combined.contains('sa verification') ||
+          combined.contains('atm proof') ||
+          combined.contains('atm card') ||
+          combined.contains('annex 5') ||
+          combined.contains('masterlist match')) {
+        _selectedIndex = 3;
+        _isValidationExpanded = true;
+      }
+      // 2. ID Validation
+      else if (combined.contains('id validation') ||
+          combined.contains('school id') ||
+          combined.contains('sticker') ||
+          combined.contains('cor/coe')) {
+        _selectedIndex = 8;
+        _isValidationExpanded = true;
+      }
+      // 3. Student Registered / Directory / Enrollment / Grantees
+      else if (combined.contains('student registered') ||
+          combined.contains('student record') ||
+          combined.contains('new student') ||
+          combined.contains('grantee approved') ||
+          combined.contains('application rejected') ||
+          combined.contains('enrollment list')) {
+        _selectedIndex = 1;
+      }
+      // 4. Announcements
+      else if (combined.contains('announcement')) {
+        _selectedIndex = 4;
+      }
+      // 5. Audit & Activity Logs
+      else if (combined.contains('audit') ||
+          combined.contains('activity log') ||
+          combined.contains('security log') ||
+          combined.contains('history log')) {
+        _selectedIndex = 5;
+      }
+      // 6. Reports & Analytics
+      else if (combined.contains('report') ||
+          combined.contains('analytics') ||
+          combined.contains('summary') ||
+          combined.contains('export')) {
+        _selectedIndex = 6;
+      }
+      // 7. Scholarships
+      else if (combined.contains('scholarship') ||
+          combined.contains('grant program')) {
+        _selectedIndex = 2;
+      }
+      // 8. Settings & Profile
+      else if (combined.contains('setting') ||
+          combined.contains('password') ||
+          combined.contains('security') ||
+          combined.contains('profile')) {
+        _selectedIndex = 7;
+      }
+      // 9. Default Overview
+      else {
+        _selectedIndex = 0;
+      }
+    });
   }
 
   void _showNotificationsDialog() {

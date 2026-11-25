@@ -764,7 +764,7 @@ class AuthService {
     try {
       final existingDocs = Map<String, dynamic>.from(
         (profile != null && profile['documents'] is Map)
-            ? profile!['documents'] as Map
+            ? profile['documents'] as Map
             : {},
       );
       existingDocs['first_login_completed'] = true;

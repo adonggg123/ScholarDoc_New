@@ -482,7 +482,8 @@ async function handleNotificationChange(payload, uid) {
                 showToast(
                     newNotif.title || 'Notification',
                     newNotif.message || '',
-                    newNotif.type || 'info'
+                    newNotif.type || 'info',
+                    newNotif
                 );
             }
         }
@@ -508,8 +509,54 @@ function updateNotificationBadge(notifications) {
     }
 }
 
+// ─── Notification Target Resolver ───
+function resolveNotificationTarget(item) {
+    if (!item) return 'notifications';
+    const text = `${item.title || ''} ${item.message || ''} ${item.type || ''}`.toLowerCase();
+    if (item.announcementId || text.includes('announcement')) {
+        return 'home';
+    }
+    if (text.includes('missing document') ||
+        text.includes('missing requirements') ||
+        text.includes('resubmission') ||
+        text.includes('re-upload') ||
+        text.includes('requires revision') ||
+        text.includes('document submission') ||
+        text.includes('upload document') ||
+        text.includes('submit requirements')) {
+        return 'submit';
+    }
+    if (text.includes('submitted successfully') ||
+        text.includes('submission confirmed') ||
+        text.includes('documents submitted') ||
+        text.includes('submission history') ||
+        text.includes('submitted documentary requirements')) {
+        return 'history';
+    }
+    if (text.includes('sa verification') ||
+        text.includes('sa number') ||
+        text.includes('id validation') ||
+        text.includes('school id') ||
+        text.includes('status') ||
+        text.includes('grantee') ||
+        text.includes('approved') ||
+        text.includes('rejected') ||
+        text.includes('verified') ||
+        text.includes('payout') ||
+        text.includes('disbursement')) {
+        return 'status';
+    }
+    if (text.includes('password') ||
+        text.includes('security') ||
+        text.includes('profile') ||
+        text.includes('contact information')) {
+        return 'profile';
+    }
+    return 'notifications';
+}
+
 // ─── Toast Helper ───
-function showToast(title, message, type = 'info') {
+function showToast(title, message, type = 'info', notifData = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
@@ -522,6 +569,7 @@ function showToast(title, message, type = 'info') {
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
+    toast.style.cursor = 'pointer';
     toast.innerHTML = `
         <div class="toast-icon">
             <i data-lucide="${iconMap[type] || 'bell-ring'}"></i>
@@ -534,7 +582,8 @@ function showToast(title, message, type = 'info') {
 
     toast.addEventListener('click', () => {
         toast.remove();
-        loadView('notifications');
+        const targetView = resolveNotificationTarget(notifData || { title, message, type });
+        loadView(targetView);
     });
 
     container.appendChild(toast);
@@ -549,8 +598,10 @@ function showToast(title, message, type = 'info') {
     }, 5000);
 }
 
-// Make showToast globally available for views
+// Make globals available for views
+window.loadView = loadView;
 window.showToast = showToast;
+window.resolveNotificationTarget = resolveNotificationTarget;
 
 // ─── Initialize ───
 (async () => {
