@@ -945,9 +945,228 @@ function loadStudentExistList(ay = selectedAcademicYear, sem = selectedSemester)
 
 // ── Intelligent Duplicate & Name Matching Engine ────────────────────────
 let cachedStudentGranteesList = [];
+let cachedStudentGranteesOnly = [];
+let cachedAnnexForm2List = [];
+
+const PLACEHOLDER_NAME_REGEX = /^(n\/?a|n\.a\.?|none|null|undefined|-+|--+)$/i;
+
+function stripPlaceholderToken(str) {
+    const cleaned = String(str || '').trim();
+    if (!cleaned || PLACEHOLDER_NAME_REGEX.test(cleaned)) return '';
+    return cleaned;
+}
+
+function stripPlaceholdersFromFullName(str) {
+    return String(str || '')
+        .replace(/\bN\/A\b/gi, '')
+        .replace(/\bN\.A\.?\b/gi, '')
+        .replace(/\bNONE\b/gi, '')
+        .replace(/\bNULL\b/gi, '')
+        .replace(/\bUNDEFINED\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^,\s*|,\s*$/g, '')
+        .trim();
+}
 
 function cleanAlpha(str) {
-    return String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return String(str || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
+
+function parseDocumentsField(docs) {
+    if (!docs) return {};
+    if (typeof docs === 'object') return docs;
+    if (typeof docs === 'string') {
+        try {
+            return JSON.parse(docs) || {};
+        } catch (_) {
+            return {};
+        }
+    }
+    return {};
+}
+
+function extractNameSuffix(str) {
+    const tokens = String(str || '').trim().split(/\s+/).filter(Boolean);
+    const suffixes = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI']);
+    let suffix = '';
+    while (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1].toUpperCase())) {
+        suffix = tokens.pop().replace(/\.$/, '').toLowerCase();
+    }
+    return { base: tokens.join(' ').trim(), suffix };
+}
+
+async function fetchAllRowsFromTable(tableName, primarySelect, fallbackSelect = '*') {
+    if (!window.supabaseClient) return { rows: [], ok: false };
+
+    const fetchPaginated = async (selectCols) => {
+        const rows = [];
+        const pageSize = 1000;
+        let page = 0;
+        while (true) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+            const { data, error } = await window.supabaseClient
+                .from(tableName)
+                .select(selectCols)
+                .range(from, to);
+            if (error) {
+                return { rows: null, error };
+            }
+            if (Array.isArray(data) && data.length > 0) {
+                rows.push(...data);
+            }
+            if (!Array.isArray(data) || data.length < pageSize) {
+                break;
+            }
+            page++;
+        }
+        return { rows, error: null };
+    };
+
+    const primaryRes = await fetchPaginated(primarySelect);
+    if (!primaryRes.error && Array.isArray(primaryRes.rows)) {
+        return { rows: primaryRes.rows, ok: true };
+    }
+
+    if (fallbackSelect && fallbackSelect !== primarySelect) {
+        console.warn(`[Duplicate Check] Retrying ${tableName} with fallback select due to:`, primaryRes.error);
+        const fallbackRes = await fetchPaginated(fallbackSelect);
+        if (!fallbackRes.error && Array.isArray(fallbackRes.rows)) {
+            return { rows: fallbackRes.rows, ok: true };
+        }
+        console.warn(`[Duplicate Check] Failed to query ${tableName}:`, fallbackRes.error);
+    } else if (primaryRes.error) {
+        console.warn(`[Duplicate Check] Failed to query ${tableName}:`, primaryRes.error);
+    }
+
+    return { rows: [], ok: false };
+}
+
+function mapStudentGranteeRowsForPool(sgRows = []) {
+    return (sgRows || []).map(sg => {
+        const docs = parseDocumentsField(sg.documents);
+        const fullName = stripPlaceholdersFromFullName(sg.full_name || sg.fullName || '');
+        const parsed = splitFullName(fullName);
+        const explicitSch = sg.scholarship_name || sg.scholarshipProgram || docs.scholarshipName || '';
+        const sch = String(explicitSch || 'CHED TES').trim();
+        return {
+            id: sg.id,
+            studentId: sg.student_no || sg.studentId || '',
+            lastName: stripPlaceholderToken(sg.last_name || parsed.lastName),
+            firstName: stripPlaceholderToken(sg.first_name || parsed.firstName),
+            middleName: stripPlaceholderToken(sg.middle_name || parsed.middleName),
+            name: fullName,
+            full_name: fullName,
+            batch: docs.batch || sg.batch || 'Batch 1.2',
+            academicYear: sg.academic_year || sg.academicYear || '',
+            semester: sg.semester || '',
+            scholarshipProgram: sch,
+            hasExplicitScholarship: Boolean(String(explicitSch || '').trim()),
+            documents: docs,
+            source: 'student_grantees'
+        };
+    });
+}
+
+function mapAnnexForm2RowsForPool(f2Rows = [], mappedSgList = []) {
+    const sgCompList = (mappedSgList || []).map(s => getComparableName(s));
+    return (f2Rows || []).map(f2 => {
+        const ln = stripPlaceholderToken(f2.last_name);
+        const fn = stripPlaceholderToken(f2.given_name);
+        const mn = stripPlaceholderToken(f2.middle_initial);
+        const f2Base = {
+            id: f2.id,
+            studentId: f2.student_number || '',
+            lastName: ln,
+            firstName: fn,
+            middleName: mn,
+            name: `${ln}, ${fn}${mn ? ' ' + mn : ''}`.trim(),
+            batch: f2.tes_batch || 'Batch 1.2',
+            academicYear: f2.academic_year || '',
+            semester: f2.semester || '',
+            source: 'annex_form_2'
+        };
+        const f2Comp = getComparableName(f2Base);
+        const linkedSg = sgCompList.find(s => areNamesMatching(f2Comp, s));
+        const remoteMeta = getMasterlistMetaForRecord(f2, ln, fn, mn);
+        const cachedSch = getCachedGranteeScholarship(f2Base);
+        const explicitSch =
+            (f2.scholarship_name && String(f2.scholarship_name).trim()) ||
+            (linkedSg && linkedSg.hasExplicitScholarship && linkedSg.scholarship) ||
+            (remoteMeta && remoteMeta.scholarshipProgram) ||
+            cachedSch ||
+            '';
+        return {
+            ...f2Base,
+            scholarshipProgram: String(explicitSch || 'CHED TES').trim(),
+            hasExplicitScholarship: Boolean(explicitSch)
+        };
+    });
+}
+
+async function fetchDuplicateReferencePools() {
+    const [sgRes, f2Res] = await Promise.all([
+        fetchAllRowsFromTable(
+            'student_grantees',
+            'id, full_name, fullName, student_no, studentId, documents, academic_year, academicYear, semester, scholarship_name',
+            '*'
+        ),
+        fetchAllRowsFromTable(
+            'annex_form_2',
+            'id, student_number, last_name, given_name, middle_initial, tes_batch, academic_year, semester',
+            '*'
+        )
+    ]);
+
+    const mappedSg = sgRes.ok
+        ? mapStudentGranteeRowsForPool(sgRes.rows)
+        : (cachedStudentGranteesOnly || []);
+    const mappedF2 = f2Res.ok
+        ? mapAnnexForm2RowsForPool(f2Res.rows, mappedSg)
+        : (cachedAnnexForm2List || []);
+
+    if (sgRes.ok) cachedStudentGranteesOnly = mappedSg;
+    if (f2Res.ok) cachedAnnexForm2List = mappedF2;
+    cachedStudentGranteesList = [...cachedStudentGranteesOnly, ...cachedAnnexForm2List];
+
+    return {
+        sgRows: cachedStudentGranteesOnly,
+        f2Rows: cachedAnnexForm2List,
+        sgPool: cachedStudentGranteesOnly.map(s => getComparableName(s)),
+        f2Pool: cachedAnnexForm2List.map(f => getComparableName(f))
+    };
+}
+
+function findExistingGranteeMatch(cand, sgPool, f2Pool) {
+    const sgMatch = (sgPool || []).find(exist => areNamesMatching(cand, exist)) || null;
+    const f2Match = (f2Pool || []).find(exist => areNamesMatching(cand, exist)) || null;
+    if (!sgMatch && !f2Match) return null;
+
+    const sources = [];
+    if (sgMatch) sources.push('Student Grantees');
+    if (f2Match) sources.push('Annex Form 2');
+
+    const scholarship =
+        (sgMatch && sgMatch.scholarship) ||
+        (f2Match && f2Match.scholarship) ||
+        'CHED TES';
+    const batch =
+        (f2Match && f2Match.batch) ||
+        (sgMatch && sgMatch.batch) ||
+        'Batch 1.2';
+
+    return {
+        sgMatch,
+        f2Match,
+        sources,
+        sourceLabel: sources.join(' & '),
+        scholarship,
+        batch
+    };
 }
 
 function getComparableName(rec) {
@@ -956,7 +1175,9 @@ function getComparableName(rec) {
             id: '',
             last: '',
             first: '',
+            middle: '',
             mi: '',
+            suffix: '',
             cleanFull: '',
             revCleanFull: '',
             fTokens: [],
@@ -964,41 +1185,62 @@ function getComparableName(rec) {
             rawName: '',
             batch: 'Batch 1.2',
             scholarship: 'CHED TES',
+            hasExplicitScholarship: false,
+            source: '',
             record: null
         };
     }
 
-    let l = rec.lastName || rec.last_name || '';
-    let f = rec.firstName || rec.first_name || rec.given_name || '';
-    let m = rec.middleName || rec.middle_name || rec.middle_initial || '';
-    let raw = rec.name || rec.full_name || rec.fullName || '';
+    let l = stripPlaceholderToken(rec.lastName || rec.last_name || '');
+    let f = stripPlaceholderToken(rec.firstName || rec.first_name || rec.given_name || '');
+    let m = stripPlaceholderToken(rec.middleName || rec.middle_name || rec.middle_initial || '');
+    let raw = stripPlaceholdersFromFullName(rec.name || rec.full_name || rec.fullName || '');
 
-    if ((!l || !l.trim()) && raw) {
+    if (!l && raw) {
         const parsed = splitFullName(raw);
-        l = parsed.lastName;
-        f = parsed.firstName;
-        m = parsed.middleName || m;
+        l = stripPlaceholderToken(parsed.lastName);
+        f = stripPlaceholderToken(parsed.firstName) || f;
+        m = stripPlaceholderToken(parsed.middleName) || m;
+    } else if (!l && f && f.includes(' ')) {
+        const parsed = splitFullName(f);
+        l = stripPlaceholderToken(parsed.lastName);
+        f = stripPlaceholderToken(parsed.firstName);
+        m = stripPlaceholderToken(parsed.middleName) || m;
     }
 
+    // Extract suffixes consistently whether attached to last name or first name
+    const lParsed = extractNameSuffix(l);
+    const fParsed = extractNameSuffix(f);
+    l = lParsed.base;
+    f = fParsed.base;
+    const suffix = lParsed.suffix || fParsed.suffix || '';
+
     if (!raw && (l || f)) {
-        raw = `${l}, ${f} ${m}`.trim();
+        raw = `${l}, ${f}${m ? ' ' + m : ''}`.trim();
     }
 
     const cleanL = cleanAlpha(l);
     const cleanF = cleanAlpha(f);
+    const cleanMiddle = cleanAlpha(m);
 
     let mi = '';
-    const cleanM = String(m || '').trim();
+    const cleanM = stripPlaceholderToken(m);
     if (cleanM) {
-        const mLetter = cleanM.replace(/[^a-zA-Z]/g, '').charAt(0);
+        const mLetter = cleanM
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z]/g, '')
+            .charAt(0);
         if (mLetter) mi = mLetter.toUpperCase();
     }
 
     const cleanFull = cleanAlpha(raw || `${l} ${f} ${m}`);
     const revCleanFull = cleanAlpha(`${f} ${m} ${l}`);
 
-    const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v']);
+    const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v', 'vi']);
     const fTokens = String(f || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
@@ -1008,16 +1250,20 @@ function getComparableName(rec) {
     const cleanId = cleanAlpha(sId);
     const validId = (cleanId.length >= 5 && cleanId !== 'null' && cleanId !== 'undefined' && cleanId !== 'none' && cleanId !== 'unassigned') ? cleanId : '';
 
-    const rawBatch = rec.batch || rec.tes_batch || (rec.documents && rec.documents.batch) || 'Batch 1.2';
+    const docs = parseDocumentsField(rec.documents);
+    const rawBatch = rec.batch || rec.tes_batch || (docs && docs.batch) || 'Batch 1.2';
     const cleanBatch = String(rawBatch).startsWith('Batch') ? rawBatch : `Batch ${String(rawBatch).replace(/^batch\s*/i, '').trim() || '1.2'}`;
 
-    const rawSch = rec.scholarshipProgram || rec.scholarship_name || rec.scholarship || (rec.documents && rec.documents.scholarshipName) || 'CHED TES';
+    const explicitSch = rec.scholarshipProgram || rec.scholarship_name || rec.scholarship || (docs && docs.scholarshipName) || '';
+    const rawSch = explicitSch || 'CHED TES';
 
     return {
         id: String(rec.id || rec.uid || '').trim(),
         last: cleanL,
         first: cleanF,
+        middle: cleanMiddle,
         mi,
+        suffix,
         cleanFull,
         revCleanFull,
         fTokens,
@@ -1025,6 +1271,8 @@ function getComparableName(rec) {
         rawName: raw,
         batch: cleanBatch,
         scholarship: String(rawSch || 'CHED TES').trim(),
+        hasExplicitScholarship: rec.hasExplicitScholarship !== undefined ? Boolean(rec.hasExplicitScholarship) : Boolean(String(explicitSch || '').trim()),
+        source: rec.source || '',
         record: rec
     };
 }
@@ -1060,6 +1308,21 @@ function areNamesMatching(cand, exist) {
         const isLastMatching = cand.last === exist.last || lastSim >= 0.88;
 
         if (isLastMatching) {
+            // If BOTH records have explicit, conflicting generational suffixes (e.g. Jr. vs Sr.), they are different people
+            if (cand.suffix && exist.suffix && cand.suffix !== exist.suffix) {
+                return false;
+            }
+
+            // Handle compound two-word given names where one side lacked a middle name and splitFullName put the 2nd given name in `middle`
+            // e.g. "CALUNOD, APRIL JOY" (first="april", middle="joy") vs "CALUNOD, APRIL JOY D" (first="apriljoy", mi="D")
+            const isCompoundFirstSplit =
+                (cand.middle && cand.middle.length >= 2 && `${cand.first}${cand.middle}` === exist.first) ||
+                (exist.middle && exist.middle.length >= 2 && `${exist.first}${exist.middle}` === cand.first);
+
+            if (isCompoundFirstSplit) {
+                return true;
+            }
+
             // If BOTH records have explicit, conflicting middle initials, they are different people
             if (cand.mi && exist.mi && cand.mi !== exist.mi) {
                 return false;
@@ -1101,9 +1364,11 @@ function areNamesMatching(cand, exist) {
         }
     }
 
-    // 4. Fallback to StudentSyncService.isMatch if available
+    // 4. Fallback to StudentSyncService.isMatch if available (using normalized full_name so camelCase records match too)
     if (typeof StudentSyncService !== 'undefined' && StudentSyncService.isMatch) {
-        if (StudentSyncService.isMatch(cand.record, exist.record)) {
+        const candFallback = cand.record ? { ...cand.record, full_name: cand.record.full_name || cand.rawName } : null;
+        const existFallback = exist.record ? { ...exist.record, full_name: exist.record.full_name || exist.rawName } : null;
+        if (candFallback && existFallback && StudentSyncService.isMatch(candFallback, existFallback)) {
             return true;
         }
     }
@@ -1116,7 +1381,14 @@ function detectAndMarkMasterlistDuplicates(records) {
 
     loadStudentExistList();
     const studentExistPool = (studentExistList || []).map(e => getComparableName(e));
-    const studentGranteesPool = (cachedStudentGranteesList || []).map(s => getComparableName(s));
+    const sgPool = (cachedStudentGranteesOnly.length > 0
+        ? cachedStudentGranteesOnly
+        : (cachedStudentGranteesList || []).filter(s => s.source !== 'annex_form_2')
+    ).map(s => getComparableName(s));
+    const f2Pool = (cachedAnnexForm2List.length > 0
+        ? cachedAnnexForm2List
+        : (cachedStudentGranteesList || []).filter(s => s.source === 'annex_form_2')
+    ).map(f => getComparableName(f));
     const masterPool = (allMasterlistRecords || []).map(m => getComparableName(m));
 
     const seenInList = [];
@@ -1135,20 +1407,30 @@ function detectAndMarkMasterlistDuplicates(records) {
         const cand = getComparableName(r);
         const isSavedMasterRecord = Boolean(r.id);
 
-        // 1. Check Student Grantees table (student_grantees, annex_form_2)
+        // 1. Check both Student Grantees (student_grantees) and Annex Form 2 (annex_form_2) tables
         // Skip for records already saved in new_grantees_masterlist (their Student Grantees / Form 2 entry is their own synced record)
-        if (!isSavedMasterRecord && studentGranteesPool.length > 0) {
-            const sgMatch = studentGranteesPool.find(exist => areNamesMatching(cand, exist));
-            if (sgMatch && masterPool.some(m => (!r.id || !m.id || m.id !== r.id) && areNamesMatching(cand, m))) {
-                r.isDuplicate = true;
-                const matchBatch = sgMatch.batch || r.batch || 'Batch 1.2';
-                r.duplicateReason = `Already exists in Student Grantees (${matchBatch})`;
+        if (!isSavedMasterRecord && (sgPool.length > 0 || f2Pool.length > 0)) {
+            const existingMatch = findExistingGranteeMatch(cand, sgPool, f2Pool);
+            if (existingMatch) {
+                const regSchNorm = normalizeScholarshipName(existingMatch.scholarship);
+                const targetSchNorm = normalizeScholarshipName(r.scholarshipProgram || selectedScholarshipProgram || 'CHED TES');
+                if (regSchNorm && targetSchNorm && regSchNorm !== targetSchNorm) {
+                    r.hasScholarshipConflict = true;
+                    r.existingScholarship = existingMatch.scholarship || 'Another Scholarship';
+                    r.conflictReason = `Already registered under ${r.existingScholarship}`;
+                    r.isDuplicate = true;
+                    r.duplicateReason = r.conflictReason;
+                } else {
+                    r.isDuplicate = true;
+                    const matchBatch = existingMatch.batch || r.batch || 'Batch 1.2';
+                    r.duplicateReason = `Already exists in ${existingMatch.sourceLabel} (${matchBatch})`;
+                }
                 return;
             }
         }
 
-        // 2. Check Student Exist table
-        if (studentExistPool.length > 0) {
+        // 2. Check Student Exist table (for unsaved records)
+        if (!isSavedMasterRecord && studentExistPool.length > 0) {
             const existMatch = studentExistPool.find(exist => areNamesMatching(cand, exist));
             if (existMatch) {
                 r.isDuplicate = true;
@@ -1208,8 +1490,7 @@ async function moveRecordToStudentExist(index) {
     saveStudentExistList();
 
     extractedRecords.splice(index, 1);
-    const recCand = getComparableName(record);
-    const mIdx = allMasterlistRecords.findIndex(x => (record.id && x.id === record.id) || areNamesMatching(getComparableName(x), recCand));
+    const mIdx = allMasterlistRecords.findIndex(x => x === record || (record.id && x.id && x.id === record.id));
     if (mIdx !== -1) {
         allMasterlistRecords.splice(mIdx, 1);
     }
@@ -1287,12 +1568,8 @@ async function moveAllDuplicatesToStudentExist() {
     saveStudentExistList();
 
     extractedRecords = extractedRecords.filter(r => !r.isDuplicate && !r.hasScholarshipConflict);
-    const dupPool = dups.map(d => getComparableName(d));
-    allMasterlistRecords = allMasterlistRecords.filter(r => {
-        if (r.id && idsToDelete.includes(r.id)) return false;
-        const cand = getComparableName(r);
-        return !dupPool.some(d => areNamesMatching(cand, d));
-    });
+    const dupObjSet = new Set(dups);
+    allMasterlistRecords = allMasterlistRecords.filter(r => !dupObjSet.has(r) && !(r.id && idsToDelete.includes(r.id)));
 
     if (idsToDelete.length > 0 && window.supabaseClient) {
         try {
@@ -1342,8 +1619,7 @@ async function deleteMasterlistRecord(index) {
     }
 
     extractedRecords.splice(index, 1);
-    const recCand = getComparableName(record);
-    const mIdx = allMasterlistRecords.findIndex(x => (record.id && x.id === record.id) || areNamesMatching(getComparableName(x), recCand));
+    const mIdx = allMasterlistRecords.findIndex(x => x === record || (record.id && x.id && x.id === record.id));
     if (mIdx !== -1) {
         allMasterlistRecords.splice(mIdx, 1);
     }
@@ -1842,9 +2118,11 @@ async function extractExcelOrCsv(file, selectedBatch) {
                     if (isHeader) {
                         headerRowIdx = r;
                         normRow.forEach((col, idx) => {
-                            if (col.includes('first') || col.includes('given') || col === 'fname') {
+                            if (col.includes('studentno') || col.includes('studentid') || col.includes('studentnumber') || col === 'id') {
+                                colMap.studentId = idx;
+                            } else if (col.includes('first') || col.includes('given') || col === 'fname') {
                                 colMap.firstName = idx;
-                            } else if (col.includes('middle') || col.includes('mi') || col === 'mname') {
+                            } else if (col.includes('middle') || col === 'mi' || col === 'mname') {
                                 colMap.middleName = idx;
                             } else if (col.includes('last') || col.includes('surname') || col === 'lname') {
                                 colMap.lastName = idx;
@@ -1854,8 +2132,6 @@ async function extractExcelOrCsv(file, selectedBatch) {
                                 colMap.course = idx;
                             } else if (col.includes('batch')) {
                                 colMap.batch = idx;
-                            } else if (col.includes('studentno') || col.includes('studentid') || col === 'id') {
-                                colMap.studentId = idx;
                             }
                         });
                         break;
@@ -2131,69 +2407,43 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
     const targetBatch = selectedBatch || 'Batch 1.2';
 
     let masterDbRows = [];
-    let sgRows = [];
-    let f2Rows = [];
+    let sgPool = [];
+    let f2Pool = [];
 
     try {
-        const [masterRes, sgRes, f2Res] = await Promise.all([
-            window.supabaseClient
-                .from(getTableName())
-                .select('*'),
-            window.supabaseClient
-                .from('student_grantees')
-                .select('id, full_name, student_no, studentId, documents, academic_year, semester, scholarship_name, scholarshipProgram, last_name, first_name, middle_name'),
-            window.supabaseClient
-                .from('annex_form_2')
-                .select('id, student_number, last_name, given_name, middle_initial, tes_batch, scholarship_name')
+        const [masterRes, refPools] = await Promise.all([
+            fetchAllRowsFromTable(getTableName(), '*', '*'),
+            fetchDuplicateReferencePools()
         ]);
 
-        masterDbRows = masterRes?.data || [];
-        sgRows = sgRes?.data || [];
-        f2Rows = f2Res?.data || [];
+        masterDbRows = masterRes.ok ? masterRes.rows : [];
+        sgPool = refPools.sgPool || [];
+        f2Pool = refPools.f2Pool || [];
     } catch (e) {
         console.warn('Could not query databases for duplicate & scholarship conflict check:', e);
+        sgPool = (cachedStudentGranteesOnly || []).map(s => getComparableName(s));
+        f2Pool = (cachedAnnexForm2List || []).map(f => getComparableName(f));
     }
 
-    // Refresh cachedStudentGranteesList with comprehensive records
-    const combinedSg = [
-        ...sgRows,
-        ...f2Rows.map(f2 => ({
-            id: f2.id,
-            studentId: f2.student_number,
-            lastName: f2.last_name,
-            firstName: f2.given_name,
-            middleName: f2.middle_initial,
-            name: `${f2.last_name}, ${f2.given_name} ${f2.middle_initial || ''}`.trim(),
-            batch: f2.tes_batch || 'Batch 1.2',
-            scholarshipProgram: f2.scholarship_name || 'CHED TES',
-            source: 'annex_form_2'
-        }))
-    ];
-
-    if (typeof StudentSyncService !== 'undefined' && StudentSyncService.getAllStudents) {
-        try {
-            const syncList = StudentSyncService.getAllStudents();
-            if (Array.isArray(syncList)) {
-                syncList.forEach(s => combinedSg.push(s));
-            }
-        } catch (_) { }
-    }
-
-    if (cachedStudentGranteesList && cachedStudentGranteesList.length > 0) {
-        cachedStudentGranteesList.forEach(c => {
-            if (!combinedSg.some(x => x.id && c.id && x.id === c.id)) {
-                combinedSg.push(c);
-            }
-        });
-    }
-    cachedStudentGranteesList = combinedSg;
-
-    // Build comparable pools
-    const studentGranteesPool = (cachedStudentGranteesList || []).map(s => getComparableName(s));
-
-    const combinedMaster = [...masterDbRows];
+    // Build masterlist pool (preferring enriched allMasterlistRecords metadata for batch/scholarship)
+    const masterById = new Map();
     (allMasterlistRecords || []).forEach(m => {
-        if (!combinedMaster.some(x => x.id && m.id && x.id === m.id)) {
+        if (m && m.id) masterById.set(String(m.id), m);
+    });
+    const combinedMaster = masterDbRows.map(row => {
+        const enriched = row.id ? masterById.get(String(row.id)) : null;
+        if (enriched) return enriched;
+        const cachedBatch = getCachedGranteeBatch(row);
+        const cachedSch = getCachedGranteeScholarship(row);
+        const remoteMeta = getMasterlistMetaForRecord(row, row.last_name, row.first_name, row.middle_name);
+        return {
+            ...row,
+            batch: row.batch || (remoteMeta && remoteMeta.batch) || cachedBatch || 'Batch 1.2',
+            scholarshipProgram: row.scholarship_name || (remoteMeta && remoteMeta.scholarshipProgram) || cachedSch || 'CHED TES'
+        };
+    });
+    (allMasterlistRecords || []).forEach(m => {
+        if (!combinedMaster.some(x => x.id && m.id && String(x.id) === String(m.id))) {
             combinedMaster.push(m);
         }
     });
@@ -2206,8 +2456,15 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
     let skippedCount = 0;
     let importedCount = 0;
     let conflictCount = 0;
+    let evaluatedCount = 0;
 
-    extractedRecords = (records || []).map((r, rIdx) => {
+    extractedRecords = (records || []).map((r) => {
+        // Preserve already-saved masterlist records intact when re-evaluating unsaved rows (e.g. on Step 1 scholarship dropdown change)
+        if (r && r.id) {
+            return r;
+        }
+
+        evaluatedCount++;
         const recordBatch = r.batch || targetBatch;
         const cand = getComparableName({ ...r, batch: recordBatch, scholarship: targetScholarship });
 
@@ -2231,30 +2488,27 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
             }
         }
 
-        // 2. Check Student Grantees table (student_grantees & annex_form_2)
+        // 2. Check both Student Grantees (student_grantees) and Annex Form 2 (annex_form_2) tables
         if (!isDuplicate) {
-            const sgMatch = studentGranteesPool.find(exist => areNamesMatching(cand, exist));
-            if (sgMatch) {
-                const regSchNorm = normalizeScholarshipName(sgMatch.scholarship);
+            const existingMatch = findExistingGranteeMatch(cand, sgPool, f2Pool);
+            if (existingMatch) {
+                const regSchNorm = normalizeScholarshipName(existingMatch.scholarship);
                 if (regSchNorm && normTargetSch && regSchNorm !== normTargetSch) {
                     hasScholarshipConflict = true;
-                    existingScholarship = sgMatch.scholarship || 'Another Scholarship';
+                    existingScholarship = existingMatch.scholarship || 'Another Scholarship';
                     conflictReason = `Already registered under ${existingScholarship}`;
                     isDuplicate = true;
                     duplicateReason = conflictReason;
-                } else if (!r.id) {
-                    const existsInMaster = masterPool.some(exist => (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
-                    if (existsInMaster) {
-                        isDuplicate = true;
-                        const mBatch = sgMatch.batch || recordBatch;
-                        duplicateReason = `Already exists in Student Grantees (${mBatch})`;
-                    }
+                } else {
+                    isDuplicate = true;
+                    const mBatch = existingMatch.batch || recordBatch;
+                    duplicateReason = `Already exists in ${existingMatch.sourceLabel} (${mBatch})`;
                 }
             }
         }
 
         // 3. Check New Grantees Master List (new_grantees_masterlist & allMasterlistRecords)
-        if (!isDuplicate && !r.id) {
+        if (!isDuplicate) {
             const mlMatch = masterPool.find(exist => (!r.id || !exist.id || exist.id !== r.id) && areNamesMatching(cand, exist));
             if (mlMatch) {
                 isDuplicate = true;
@@ -2295,7 +2549,7 @@ async function checkAndFlagDuplicates(records, selectedBatch, selectedScholarshi
         };
     });
 
-    if (summaryExtracted) summaryExtracted.textContent = extractedRecords.length;
+    if (summaryExtracted) summaryExtracted.textContent = evaluatedCount;
     if (summaryImported) summaryImported.textContent = importedCount;
     if (summarySkipped) summarySkipped.textContent = skippedCount;
     if (!summaryConflicts) summaryConflicts = document.getElementById('summary-conflicts');
@@ -2705,10 +2959,10 @@ async function executeAutoImportPipeline(file, explicitBatch, explicitTerm, expl
                     window.showToast(`${conflictCount} student${conflictCount > 1 ? 's were' : ' was'} excluded due to existing scholarship registrations.${dupMsg}`, 'alert-triangle');
                 }
             } else if (skippedCount > 0) {
-                if (ocrStatusText) ocrStatusText.textContent = `Completed: All ${extractedRecords.length} records already exist in Student Grantees / Master List. Flagged in red (0 duplicates saved).`;
+                if (ocrStatusText) ocrStatusText.textContent = `Completed: All ${extractedRecords.length} records already exist in Student Grantees / Annex Form 2 / Master List. Flagged in red (0 duplicates saved).`;
                 if (ocrProgressBar) ocrProgressBar.style.width = '100%';
                 if (window.showToast) {
-                    window.showToast(`All ${extractedRecords.length} student(s) already exist in Student Grantees / Master List. Flagged in red (0 duplicate records saved).`, 'alert-circle');
+                    window.showToast(`All ${extractedRecords.length} student(s) already exist in Student Grantees / Annex Form 2 / Master List. Flagged in red (0 duplicate records saved).`, 'alert-circle');
                 }
             } else {
                 if (ocrStatusText) ocrStatusText.textContent = `Completed: No new unique records to import.`;
@@ -5289,15 +5543,19 @@ async function fetchExistingMasterlist() {
                 .from(tableName)
                 .select('*')
                 .order('created_at', { ascending: false }),
-            window.supabaseClient
-                .from('annex_form_2')
-                .select('id, last_name, given_name, middle_initial, academic_year, semester, tes_batch, student_number'),
+            fetchAllRowsFromTable(
+                'annex_form_2',
+                'id, last_name, given_name, middle_initial, academic_year, semester, tes_batch, student_number',
+                '*'
+            ),
             window.supabaseClient
                 .from('annex_form_3')
                 .select('id, last_name, given_name, middle_initial, academic_year, semester'),
-            window.supabaseClient
-                .from('student_grantees')
-                .select('id, full_name, student_no, studentId, documents, academic_year, semester, scholarship_name'),
+            fetchAllRowsFromTable(
+                'student_grantees',
+                'id, full_name, fullName, student_no, studentId, documents, academic_year, academicYear, semester, scholarship_name',
+                '*'
+            ),
             loadMasterlistMetaRegistryFromSupabase()
         ]);
 
@@ -5307,47 +5565,18 @@ async function fetchExistingMasterlist() {
             return;
         }
 
-        const f2Rows = Array.isArray(f2Res?.data) ? f2Res.data : [];
+        const f2Rows = f2Res.ok ? f2Res.rows : [];
         const f3Rows = Array.isArray(f3Res?.data) ? f3Res.data : [];
-        const sgRows = Array.isArray(sgRes?.data) ? sgRes.data : [];
+        const sgRows = sgRes.ok ? sgRes.rows : [];
 
-        // Refresh cachedStudentGranteesList
-        cachedStudentGranteesList = [
-            ...sgRows.map(sg => {
-                const parsed = splitFullName(sg.full_name || sg.fullName || '');
-                return {
-                    id: sg.id,
-                    studentId: sg.student_no || sg.studentId || '',
-                    lastName: parsed.lastName,
-                    firstName: parsed.firstName,
-                    middleName: parsed.middleName,
-                    name: sg.full_name || sg.fullName || '',
-                    batch: (sg.documents && sg.documents.batch) || 'Batch 1.2',
-                    scholarshipProgram: sg.scholarship_name || 'CHED TES',
-                    source: 'student_grantees'
-                };
-            }),
-            ...f2Rows.map(f2 => ({
-                id: f2.id,
-                studentId: f2.student_number,
-                lastName: f2.last_name,
-                firstName: f2.given_name,
-                middleName: f2.middle_initial,
-                name: `${f2.last_name}, ${f2.given_name} ${f2.middle_initial || ''}`.trim(),
-                batch: f2.tes_batch || 'Batch 1.2',
-                scholarshipProgram: 'CHED TES',
-                source: 'annex_form_2'
-            }))
-        ];
-
-        if (typeof StudentSyncService !== 'undefined' && StudentSyncService.getAllStudents) {
-            try {
-                const syncList = StudentSyncService.getAllStudents();
-                if (Array.isArray(syncList)) {
-                    syncList.forEach(s => cachedStudentGranteesList.push(s));
-                }
-            } catch (_) { }
+        // Refresh separate and combined reference pools from Student Grantees & Annex Form 2
+        if (sgRes.ok) {
+            cachedStudentGranteesOnly = mapStudentGranteeRowsForPool(sgRows);
         }
+        if (f2Res.ok) {
+            cachedAnnexForm2List = mapAnnexForm2RowsForPool(f2Rows, cachedStudentGranteesOnly);
+        }
+        cachedStudentGranteesList = [...cachedStudentGranteesOnly, ...cachedAnnexForm2List];
 
         // Build term lookup maps from Annex Form 2, Form 3, and student_grantees
         const f2Lookup = new Map();
@@ -6685,36 +6914,41 @@ export function initMasterlistImport() {
             const batchClean = formatCleanBatchNumber(rawBatch);
             const fullNameFormatted = `${lastName}, ${firstName}${middleName ? ' ' + middleName : ''}`.trim();
 
-            // Check duplicate / cross-scholarship conflict before saving
+            // Check duplicate / cross-scholarship conflict against live Student Grantees & Annex Form 2 before saving
             const cand = getComparableName({ firstName, middleName, lastName, studentId, name: fullNameFormatted, batch: batchDisplay, scholarship });
             const normTargetSch = normalizeScholarshipName(scholarship);
 
-            const sgConflict = (cachedStudentGranteesList || []).map(s => getComparableName(s)).find(exist => areNamesMatching(cand, exist));
-            if (sgConflict) {
-                const regSchNorm = normalizeScholarshipName(sgConflict.scholarship);
-                if (regSchNorm && normTargetSch && regSchNorm !== normTargetSch) {
-                    showAddGranteeError(`Scholarship conflict: ${fullNameFormatted} is already registered under ${sgConflict.scholarship}.`);
-                    return;
-                }
-            }
-
-            const existingInTerm = (allMasterlistRecords || []).find(m =>
-                isAcademicYearMatch(m.academicYear || m.academic_year, ay) &&
-                isSemesterMatch(m.semester, sem) &&
-                areNamesMatching(cand, getComparableName(m))
-            );
-            if (existingInTerm) {
-                const existSch = existingInTerm.scholarshipProgram || 'CHED TES';
-                const existBatch = formatBatchDisplay(existingInTerm.batch || '1.2');
-                showAddGranteeError(`${fullNameFormatted} already exists in ${ay} • ${sem} (${existSch} • ${existBatch}).`);
-                return;
-            }
-
             const origHtml = btnConfirmAddGrantee.innerHTML;
             btnConfirmAddGrantee.disabled = true;
-            btnConfirmAddGrantee.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Saving...';
+            btnConfirmAddGrantee.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Checking...';
 
             try {
+                const { sgPool, f2Pool } = await fetchDuplicateReferencePools();
+                const existingGranteeMatch = findExistingGranteeMatch(cand, sgPool, f2Pool);
+                if (existingGranteeMatch) {
+                    const regSchNorm = normalizeScholarshipName(existingGranteeMatch.scholarship);
+                    if (regSchNorm && normTargetSch && regSchNorm !== normTargetSch) {
+                        showAddGranteeError(`Scholarship conflict: ${fullNameFormatted} is already registered under ${existingGranteeMatch.scholarship} (${existingGranteeMatch.sourceLabel}).`);
+                    } else {
+                        showAddGranteeError(`${fullNameFormatted} already exists in ${existingGranteeMatch.sourceLabel} (${existingGranteeMatch.batch}).`);
+                    }
+                    return;
+                }
+
+                const existingInTerm = (allMasterlistRecords || []).find(m =>
+                    isAcademicYearMatch(m.academicYear || m.academic_year, ay) &&
+                    isSemesterMatch(m.semester, sem) &&
+                    areNamesMatching(cand, getComparableName(m))
+                );
+                if (existingInTerm) {
+                    const existSch = existingInTerm.scholarshipProgram || 'CHED TES';
+                    const existBatch = formatBatchDisplay(existingInTerm.batch || '1.2');
+                    showAddGranteeError(`${fullNameFormatted} already exists in ${ay} • ${sem} (${existSch} • ${existBatch}).`);
+                    return;
+                }
+
+                btnConfirmAddGrantee.innerHTML = '<i class="icon-loader" style="animation: spin 1s linear infinite;"></i> Saving...';
+
                 const tableName = getTableName();
                 let insertedRow = null;
 
@@ -7272,6 +7506,8 @@ export function initMasterlistImport() {
                 if (window.supabaseClient) {
                     try {
                         await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                        cachedAnnexForm2List = [];
+                        cachedStudentGranteesList = [...cachedStudentGranteesOnly];
                     } catch (dbErr) {
                         console.warn('Error deleting annex_form_2 in Supabase:', dbErr);
                     }
@@ -7350,6 +7586,8 @@ export function initMasterlistImport() {
         });
         if (window.supabaseClient) {
             await window.supabaseClient.from('annex_form_2').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            cachedAnnexForm2List = [];
+            cachedStudentGranteesList = [...cachedStudentGranteesOnly];
         }
         updateAnnexKPIs();
         renderAnnexForm2Table(verifiedForm2List);
