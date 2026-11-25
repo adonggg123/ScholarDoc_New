@@ -7709,6 +7709,16 @@ export function initMasterlistImport() {
             StudentSyncService.loadAndSyncStudents().catch(() => { });
         }
 
+        // Keep in-memory annex_form_2 duplicate-check cache synchronized after Registrar saves or deletions
+        if (window.supabaseClient) {
+            window.supabaseClient.from('annex_form_2').select('*').then(({ data, error }) => {
+                if (!error && Array.isArray(data)) {
+                    cachedAnnexForm2List = mapAnnexForm2RowsForPool(data, cachedStudentGranteesOnly);
+                    cachedStudentGranteesList = [...cachedStudentGranteesOnly, ...cachedAnnexForm2List];
+                }
+            }).catch(() => { });
+        }
+
         const syncBadge = document.getElementById('sa-sync-status-badge');
         if (syncBadge) {
             const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

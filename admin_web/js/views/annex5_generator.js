@@ -1516,6 +1516,70 @@ function clearRegistrarDraftState(ay = selectedAcademicYear, sem = selectedSemes
     } catch (_) { }
 }
 
+const REGISTRAR_DELETED_STORAGE_PREFIX = 'scholardoc_registrar_annex5_deleted';
+
+function getRegistrarDeletedKey(ay = selectedAcademicYear, sem = selectedSemester) {
+    if (ay && sem && ay !== 'All' && sem !== 'All') {
+        return `${REGISTRAR_DELETED_STORAGE_PREFIX}_${ay}_${sem}`;
+    }
+    return REGISTRAR_DELETED_STORAGE_PREFIX;
+}
+
+function getRegistrarDeletedItems(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        const raw = localStorage.getItem(getRegistrarDeletedKey(ay, sem));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function recordRegistrarDeletedItems(items = [], ay = selectedAcademicYear, sem = selectedSemester) {
+    if (!Array.isArray(items) || items.length === 0) return;
+    const existing = getRegistrarDeletedItems(ay, sem);
+    const next = [...existing];
+    items.forEach(item => {
+        if (!item) return;
+        const key = AnnexSyncService.getUniqueKey(item);
+        const g = item.grantee || {};
+        const s = item.matchedStudent || {};
+        const stub = {
+            key,
+            grantee: {
+                student_id: g.student_id || g.studentId || s.studentId || s.student_no || '',
+                name: g.name || s.fullName || '',
+                last_name: g.last_name || g.lastName || s.lastName || '',
+                first_name: g.first_name || g.firstName || s.firstName || ''
+            },
+            matchedStudent: {
+                studentId: s.studentId || s.student_no || g.student_id || '',
+                fullName: s.fullName || g.name || '',
+                lastName: s.lastName || g.last_name || '',
+                firstName: s.firstName || g.first_name || ''
+            }
+        };
+        const alreadyRecorded = next.some(ex => (key && ex.key === key) || AnnexSyncService.isSameStudent(ex, stub));
+        if (!alreadyRecorded) next.push(stub);
+    });
+    try {
+        localStorage.setItem(getRegistrarDeletedKey(ay, sem), JSON.stringify(next));
+    } catch (_) { }
+}
+
+function clearRegistrarDeletedItems(ay = selectedAcademicYear, sem = selectedSemester) {
+    try {
+        localStorage.removeItem(getRegistrarDeletedKey(ay, sem));
+    } catch (_) { }
+}
+
+function isItemDeletedInTerm(item, deletedItems) {
+    if (!item || !Array.isArray(deletedItems) || deletedItems.length === 0) return false;
+    const key = AnnexSyncService.getUniqueKey(item);
+    return deletedItems.some(del => (key && del.key === key) || AnnexSyncService.isSameStudent(del, item));
+}
+
 // ── Database Realtime Listener Setup ────────────────────────────────
 let suppressAnnexRealtimeUntil = 0;
 let adminAnnexRealtimeTimer = null;
@@ -3043,6 +3107,17 @@ function runCrossVerification(forceFresh = false) {
 
     const result = VerificationService.runBatchVerification(rawSuperAdminGrantees, rawSchoolStudents);
 
+    // Clear per-term deleted exclusions only on explicit manual re-verification; otherwise respect deleted records
+    if (forceFresh) {
+        clearRegistrarDeletedItems(selectedAcademicYear, selectedSemester);
+    }
+    const deletedInTerm = forceFresh ? [] : getRegistrarDeletedItems(selectedAcademicYear, selectedSemester);
+    const filterNotDeleted = (list) => (Array.isArray(list) ? list : []).filter(it => !isItemDeletedInTerm(it, deletedInTerm));
+
+    const filteredResultF2 = filterNotDeleted(result.form2List);
+    const filteredResultF3 = filterNotDeleted(result.form3List);
+    const filteredResultRev = filterNotDeleted(result.needsReviewList);
+
     // Check if we have previously verified/resolved data in Registrar's local draft or loaded DB state (bypassed if forceFresh)
     const savedSync = forceFresh ? null : getRegistrarDraftState(selectedAcademicYear, selectedSemester);
     if (savedSync && (savedSync.form2List.length > 0 || savedSync.form3List.length > 0)) {
@@ -3054,7 +3129,7 @@ function runCrossVerification(forceFresh = false) {
         const remainingReview = [];
         const processedKeys = new Set();
 
-        const allItems = [...result.form2List, ...result.form3List, ...result.needsReviewList];
+        const allItems = [...filteredResultF2, ...filteredResultF3, ...filteredResultRev];
         for (const item of allItems) {
             const key = AnnexSyncService.getUniqueKey(item);
             if (processedKeys.has(key)) continue;
@@ -3111,12 +3186,16 @@ function runCrossVerification(forceFresh = false) {
             }
         }
 
-        const deduped = AnnexSyncService.deduplicateLists(combinedForm2, combinedForm3, remainingReview);
+        const deduped = AnnexSyncService.deduplicateLists(
+            filterNotDeleted(combinedForm2),
+            filterNotDeleted(combinedForm3),
+            filterNotDeleted(remainingReview)
+        );
         verifiedForm2List = deduped.form2List;
         verifiedForm3List = deduped.form3List;
         needsReviewList = deduped.needsReviewList;
     } else {
-        const deduped = AnnexSyncService.deduplicateLists(result.form2List, result.form3List, result.needsReviewList);
+        const deduped = AnnexSyncService.deduplicateLists(filteredResultF2, filteredResultF3, filteredResultRev);
         verifiedForm2List = deduped.form2List;
         verifiedForm3List = deduped.form3List;
         needsReviewList = deduped.needsReviewList;
@@ -3178,13 +3257,71 @@ function updateKPIMetrics() {
     if (statF3Count) statF3Count.textContent = `${f3Count} Not Included Grantees`;
 }
 
+// ── Form 2 & Form 3 Selection State & Control Helpers ───────────────
+const selectedForm2Keys = new Set();
+const selectedForm3Keys = new Set();
+
+function escapeHtmlAttr(val) {
+    return String(val || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function updateFormSelectionControls(formType) {
+    const isForm2 = formType === 'form2';
+    const selectedSet = isForm2 ? selectedForm2Keys : selectedForm3Keys;
+    const masterList = isForm2 ? verifiedForm2List : verifiedForm3List;
+    const rowSelector = isForm2 ? '.form2-row-checkbox' : '.form3-row-checkbox';
+    const selectAllEl = document.getElementById(isForm2 ? 'form2-select-all' : 'form3-select-all');
+    const deleteBtn = document.getElementById(isForm2 ? 'btn-delete-selected-form2' : 'btn-delete-selected-form3');
+    const deleteLabel = document.getElementById(isForm2 ? 'label-delete-selected-form2' : 'label-delete-selected-form3');
+
+    // Prune any selected keys that are no longer present in the master list
+    const validKeys = new Set((masterList || []).map(it => AnnexSyncService.getUniqueKey(it)));
+    Array.from(selectedSet).forEach(k => {
+        if (!validKeys.has(k)) selectedSet.delete(k);
+    });
+
+    const visibleCheckboxes = Array.from(document.querySelectorAll(rowSelector));
+    const checkedVisibleCount = visibleCheckboxes.filter(cb => cb.checked).length;
+
+    if (selectAllEl) {
+        selectAllEl.checked = visibleCheckboxes.length > 0 && checkedVisibleCount === visibleCheckboxes.length;
+        selectAllEl.indeterminate = checkedVisibleCount > 0 && checkedVisibleCount < visibleCheckboxes.length;
+        selectAllEl.disabled = visibleCheckboxes.length === 0;
+    }
+
+    const totalSelected = selectedSet.size;
+    if (deleteLabel) {
+        deleteLabel.textContent = totalSelected > 0 ? `Delete Selected (${totalSelected})` : 'Delete Selected';
+    }
+    if (deleteBtn) {
+        if (totalSelected > 0) {
+            deleteBtn.disabled = false;
+            deleteBtn.style.opacity = '1';
+            deleteBtn.style.cursor = 'pointer';
+            deleteBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+            deleteBtn.style.color = '#ffffff';
+            deleteBtn.style.border = 'none';
+            deleteBtn.style.boxShadow = '0 2px 8px rgba(239,68,68,0.28)';
+        } else {
+            deleteBtn.disabled = true;
+            deleteBtn.style.opacity = '0.55';
+            deleteBtn.style.cursor = 'not-allowed';
+            deleteBtn.style.background = 'rgba(239,68,68,0.1)';
+            deleteBtn.style.color = '#dc2626';
+            deleteBtn.style.border = '1px solid rgba(239,68,68,0.28)';
+            deleteBtn.style.boxShadow = 'none';
+        }
+    }
+}
+
 // ── 6. Render Form 2 Table (Enrolled / Eligible Grantees) ───────────
 function renderForm2Table(items) {
     const tbody = document.getElementById('tbody-form2');
     if (!tbody) return;
 
     if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; padding: 36px; color: var(--text-secondary);">No verified enrolled grantees for Form 2.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; padding: 36px; color: var(--text-secondary);">No verified enrolled grantees for Form 2.</td></tr>`;
+        updateFormSelectionControls('form2');
         return;
     }
 
@@ -3208,9 +3345,15 @@ function renderForm2Table(items) {
         const studentId = student.studentId || student.student_no || student.studentNo || grantee.student_id || grantee.studentNo || 'N/A';
         const degree = student.program_name || student.programName || student.course || grantee.course || grantee.program_name || 'BSIT';
         const itemKey = AnnexSyncService.getUniqueKey(item);
+        const safeKey = escapeHtmlAttr(itemKey);
+        const isChecked = selectedForm2Keys.has(itemKey) ? 'checked' : '';
 
         return `
-            <tr class="annex-clickable-row" data-index="${idx}" data-key="${itemKey}" style="cursor: pointer;" title="Click to view student details and categorization">
+            <tr class="annex-clickable-row" data-index="${idx}" data-key="${safeKey}" style="cursor: pointer;" title="Click to view student details and categorization">
+                <td class="annex-checkbox-cell" style="text-align: center; width: 42px;">
+                    <input type="checkbox" class="form2-row-checkbox" data-key="${safeKey}" ${isChecked}
+                        style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
+                </td>
                 <td style="font-weight: 700; color: var(--primary-color);">${ctrl}</td>
                 <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(15,50,96,0.06); font-family: monospace; font-size: 11px;">N/A</span></td>
@@ -3231,8 +3374,22 @@ function renderForm2Table(items) {
         `;
     }).join('');
 
+    tbody.querySelectorAll('.annex-checkbox-cell').forEach(cell => {
+        cell.addEventListener('click', (e) => e.stopPropagation());
+    });
+    tbody.querySelectorAll('.form2-row-checkbox').forEach(cb => {
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', (e) => {
+            const key = e.currentTarget.getAttribute('data-key');
+            if (e.currentTarget.checked && key) selectedForm2Keys.add(key);
+            else if (key) selectedForm2Keys.delete(key);
+            updateFormSelectionControls('form2');
+        });
+    });
+
     tbody.querySelectorAll('.annex-clickable-row').forEach(row => {
-        row.addEventListener('click', () => {
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('.annex-checkbox-cell') || e.target.type === 'checkbox') return;
             const idx = parseInt(row.getAttribute('data-index'), 10);
             const clickedItem = items[idx];
             if (clickedItem) {
@@ -3240,6 +3397,8 @@ function renderForm2Table(items) {
             }
         });
     });
+
+    updateFormSelectionControls('form2');
 }
 
 // ── 7. Render Form 3 Table (Not Included / Special Status) ──────────
@@ -3248,7 +3407,8 @@ function renderForm3Table(items) {
     if (!tbody) return;
 
     if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 36px; color: var(--text-secondary);">No Form 3 special status records.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align: center; padding: 36px; color: var(--text-secondary);">No Form 3 special status records.</td></tr>`;
+        updateFormSelectionControls('form3');
         return;
     }
 
@@ -3272,13 +3432,19 @@ function renderForm3Table(items) {
         const reason = item.specialStatusReason || 'Not enrolled';
         const remarks = item.remarks || (reason === 'On Leave of Absence (LOA)' ? 'On approved Leave of Absence' : `Categorized: ${reason}`);
         const itemKey = AnnexSyncService.getUniqueKey(item);
+        const safeKey = escapeHtmlAttr(itemKey);
+        const isChecked = selectedForm3Keys.has(itemKey) ? 'checked' : '';
 
         let badgeStyle = 'background: rgba(255,152,0,0.12); color: #E65100;';
         if (reason === 'Dropped' || reason === 'Waived') badgeStyle = 'background: rgba(244,67,54,0.12); color: #D32F2F;';
         if (reason === 'Graduated') badgeStyle = 'background: rgba(76,175,80,0.12); color: #2E7D32;';
 
         return `
-            <tr class="annex-clickable-row" data-index="${idx}" data-key="${itemKey}" style="cursor: pointer;" title="Click to view student details and categorization">
+            <tr class="annex-clickable-row" data-index="${idx}" data-key="${safeKey}" style="cursor: pointer;" title="Click to view student details and categorization">
+                <td class="annex-checkbox-cell" style="text-align: center; width: 42px;">
+                    <input type="checkbox" class="form3-row-checkbox" data-key="${safeKey}" ${isChecked}
+                        style="width: 15px; height: 15px; accent-color: #FF8F00; cursor: pointer;">
+                </td>
                 <td style="font-weight: 700; color: #E65100;">${ctrl}</td>
                 <td><span style="font-weight: 600;">${studentId}</span></td>
                 <td><span style="padding: 2px 8px; border-radius: 6px; background: rgba(255,143,0,0.08); font-family: monospace; font-size: 11px;">${sa}</span></td>
@@ -3299,8 +3465,22 @@ function renderForm3Table(items) {
         `;
     }).join('');
 
+    tbody.querySelectorAll('.annex-checkbox-cell').forEach(cell => {
+        cell.addEventListener('click', (e) => e.stopPropagation());
+    });
+    tbody.querySelectorAll('.form3-row-checkbox').forEach(cb => {
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', (e) => {
+            const key = e.currentTarget.getAttribute('data-key');
+            if (e.currentTarget.checked && key) selectedForm3Keys.add(key);
+            else if (key) selectedForm3Keys.delete(key);
+            updateFormSelectionControls('form3');
+        });
+    });
+
     tbody.querySelectorAll('.annex-clickable-row').forEach(row => {
-        row.addEventListener('click', () => {
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('.annex-checkbox-cell') || e.target.type === 'checkbox') return;
             const idx = parseInt(row.getAttribute('data-index'), 10);
             const clickedItem = items[idx];
             if (clickedItem) {
@@ -3308,6 +3488,8 @@ function renderForm3Table(items) {
             }
         });
     });
+
+    updateFormSelectionControls('form3');
 }
 
 // ── 8. Render Needs Review Queue ────────────────────────────────────
@@ -4270,6 +4452,271 @@ if (searchF3) {
     });
 }
 
+// ── Delete Selected Records from Annex Form 2 / Form 3 (Supabase + Cross-Interface Sync) ──
+let isDeletingAnnexRecords = false;
+
+async function deleteSelectedAnnexRecords(formType) {
+    if (isDeletingAnnexRecords) return;
+
+    const isForm2 = formType === 'form2';
+    const formLabel = isForm2 ? 'Form 2' : 'Form 3';
+    const tableName = isForm2 ? 'annex_form_2' : 'annex_form_3';
+    const selectedSet = isForm2 ? selectedForm2Keys : selectedForm3Keys;
+    const sourceList = isForm2 ? verifiedForm2List : verifiedForm3List;
+
+    if (selectedSet.size === 0) {
+        showToast(`Please select at least one Annex ${formLabel} record to delete.`, 'info');
+        return;
+    }
+
+    const itemsToDelete = sourceList.filter(item => selectedSet.has(AnnexSyncService.getUniqueKey(item)));
+    if (itemsToDelete.length === 0) {
+        selectedSet.clear();
+        updateFormSelectionControls(formType);
+        return;
+    }
+
+    const count = itemsToDelete.length;
+    const confirmed = confirm(
+        `Are you sure you want to delete ${count} selected record${count > 1 ? 's' : ''} from Annex ${formLabel}?\n\nThis will permanently remove ${count > 1 ? 'them' : 'it'} from Supabase and update both the Registrar and Super Admin interfaces.`
+    );
+    if (!confirmed) return;
+
+    const deleteBtn = document.getElementById(isForm2 ? 'btn-delete-selected-form2' : 'btn-delete-selected-form3');
+    isDeletingAnnexRecords = true;
+    suppressAnnexRealtimeUntil = Date.now() + 5000;
+
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.style.opacity = '0.75';
+        deleteBtn.innerHTML = '<i class="icon-loader" style="font-size: 14px; animation: spin 1s linear infinite;"></i> Deleting...';
+    }
+
+    try {
+        let deletedFromSupabaseCount = 0;
+
+        // 1. Delete matching rows directly from Supabase (by primary key id or student/term match)
+        if (supabase) {
+            let query = supabase
+                .from(tableName)
+                .select('id, student_number, last_name, given_name, middle_initial, academic_year, semester');
+            if (selectedAcademicYear && selectedAcademicYear !== 'All') {
+                query = query.eq('academic_year', selectedAcademicYear);
+            }
+            if (selectedSemester && selectedSemester !== 'All') {
+                query = query.eq('semester', selectedSemester);
+            }
+
+            const { data: dbRows, error: fetchErr } = await query;
+            if (fetchErr) throw fetchErr;
+
+            const dbIdsToDelete = [];
+            const seenDbIds = new Set();
+
+            for (const row of (dbRows || [])) {
+                if (!row || !row.id || seenDbIds.has(row.id)) continue;
+                const rowAsItem = {
+                    academic_year: row.academic_year,
+                    semester: row.semester,
+                    grantee: {
+                        id: row.id,
+                        student_id: row.student_number,
+                        name: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
+                        last_name: row.last_name,
+                        first_name: row.given_name,
+                        middle_name: row.middle_initial
+                    },
+                    matchedStudent: {
+                        studentId: row.student_number,
+                        fullName: `${row.last_name || ''}, ${row.given_name || ''} ${row.middle_initial || ''}`.trim(),
+                        lastName: row.last_name,
+                        firstName: row.given_name,
+                        mi: row.middle_initial
+                    }
+                };
+
+                const isMatch = itemsToDelete.some(target => {
+                    const targetId = target.grantee?.id || target.id;
+                    if (targetId && targetId === row.id) return true;
+                    const tAy = target.academic_year || target.grantee?.academic_year || target.matchedStudent?.academic_year;
+                    const tSem = target.semester || target.grantee?.semester || target.matchedStudent?.semester;
+                    if (selectedAcademicYear === 'All' && tAy && row.academic_year && !isAcademicYearTermMatch(row.academic_year, tAy)) return false;
+                    if (selectedSemester === 'All' && tSem && row.semester && !isSemesterTermMatch(row.semester, tSem)) return false;
+                    return AnnexSyncService.isSameStudent(rowAsItem, target);
+                });
+
+                if (isMatch) {
+                    seenDbIds.add(row.id);
+                    dbIdsToDelete.push(row.id);
+                }
+            }
+
+            if (dbIdsToDelete.length > 0) {
+                const { error: delErr } = await supabase.from(tableName).delete().in('id', dbIdsToDelete);
+                if (delErr) throw delErr;
+                deletedFromSupabaseCount = dbIdsToDelete.length;
+            }
+        }
+
+        suppressAnnexRealtimeUntil = Date.now() + 3000;
+
+        // 2. Remove deleted records from Registrar memory, selection set, and record per-term exclusion
+        const deletedKeySet = new Set(itemsToDelete.map(it => AnnexSyncService.getUniqueKey(it)));
+        if (isForm2) {
+            verifiedForm2List = verifiedForm2List.filter(it => !deletedKeySet.has(AnnexSyncService.getUniqueKey(it)));
+        } else {
+            verifiedForm3List = verifiedForm3List.filter(it => !deletedKeySet.has(AnnexSyncService.getUniqueKey(it)));
+        }
+        selectedSet.clear();
+        recordRegistrarDeletedItems(itemsToDelete, selectedAcademicYear, selectedSemester);
+
+        // 3. Synchronize with Super Admin whenever saved Supabase rows were deleted (never leak unsaved drafts)
+        const actorName = window.currentAdmin?.username || 'Registrar';
+        const termSummary = `${selectedAcademicYear} • ${selectedSemester}`;
+
+        if (deletedFromSupabaseCount > 0) {
+            const dbAfter = await AnnexSyncService.loadFromSupabase({
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                fallbackToLatest: false
+            });
+            const committedF2 = (dbAfter && dbAfter.fromDb) ? (dbAfter.form2List || []) : verifiedForm2List;
+            const committedF3 = (dbAfter && dbAfter.fromDb) ? (dbAfter.form3List || []) : verifiedForm3List;
+
+            const committedSig = computeAnnexStateSignature(committedF2, committedF3, []);
+            lastSavedDbSignature = (committedF2.length > 0 || committedF3.length > 0) ? committedSig : null;
+
+            const currentSig = computeAnnexStateSignature(verifiedForm2List, verifiedForm3List, needsReviewList);
+            const matchesDb = Boolean(currentSig === committedSig);
+            saveRegistrarDraftState({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                markUnsaved: !matchesDb
+            });
+            if (matchesDb) {
+                updateSaveStatusBadge((committedF2.length > 0 || committedF3.length > 0) ? 'saved' : 'hidden', Date.now());
+            }
+
+            // Broadcast updated DB state to same-browser Super Admin tabs immediately
+            AnnexSyncService.saveVerifiedData({
+                form2List: committedF2,
+                form3List: committedF3,
+                needsReviewList: [],
+                updatedBy: `${actorName} (Saved)`,
+                syncToDb: false,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester
+            });
+
+            // Write audit trail & notify Super Admin (triggers cross-browser Realtime reload)
+            try {
+                await supabase.from('audit_logs').insert([{
+                    userName: actorName,
+                    role: window.currentAdmin?.role || 'Registrar',
+                    action: `Deleted ${count} selected record(s) from Annex ${formLabel} (${termSummary})`,
+                    studentId: 'ANNEX5_DELETE_SELECTED'
+                }]);
+            } catch (auditErr) {
+                console.warn('Could not write delete audit log:', auditErr);
+            }
+
+            try {
+                await AdminNotificationService.notifyRecordUpdate({
+                    title: `Annex ${formLabel} Records Deleted`,
+                    message: `Deleted ${count} selected record(s) from Annex ${formLabel} (${termSummary}) and synced with Super Admin.`,
+                    type: 'warning',
+                    metadata: { form: formLabel, deletedCount: count, academicYear: selectedAcademicYear, semester: selectedSemester }
+                });
+            } catch (_) { }
+
+            try {
+                await supabase.from('notifications').insert([{
+                    studentId: 'superadmin',
+                    title: 'Annex 5 Verification Saved — Records Deleted',
+                    message: `Registrar deleted ${count} record(s) from Annex ${formLabel} for ${termSummary}.`,
+                    type: 'warning',
+                    isRead: false,
+                    timestamp: new Date().toISOString()
+                }]);
+            } catch (notifErr) {
+                console.warn('Could not notify Super Admin of Annex deletion:', notifErr);
+            }
+        } else {
+            // Unsaved draft records only: update Registrar local draft without pushing unsaved items to Super Admin
+            saveRegistrarDraftState({
+                form2List: verifiedForm2List,
+                form3List: verifiedForm3List,
+                needsReviewList: needsReviewList,
+                academicYear: selectedAcademicYear,
+                semester: selectedSemester,
+                markUnsaved: (verifiedForm2List.length > 0 || verifiedForm3List.length > 0 || needsReviewList.length > 0)
+            });
+            if (verifiedForm2List.length === 0 && verifiedForm3List.length === 0 && needsReviewList.length === 0) {
+                updateSaveStatusBadge('hidden');
+            }
+        }
+
+        // 4. Refresh Registrar KPIs & tables
+        updateKPIMetrics();
+        refreshFormTables();
+
+        const syncSuffix = deletedFromSupabaseCount > 0 ? ' and synced with Super Admin' : '';
+        showToast(`Deleted ${count} record${count > 1 ? 's' : ''} from Annex ${formLabel}${syncSuffix}.`, 'check-circle');
+    } catch (err) {
+        console.error(`Error deleting selected Annex ${formLabel} records:`, err);
+        showToast(`Failed to delete selected ${formLabel} records: ${err.message || err}`, 'alert-triangle');
+    } finally {
+        isDeletingAnnexRecords = false;
+        if (deleteBtn) {
+            deleteBtn.innerHTML = `<i class="icon-trash-2" style="font-size: 14px;"></i> <span id="label-delete-selected-${formType}">Delete Selected</span>`;
+        }
+        updateFormSelectionControls(formType);
+    }
+}
+
+const form2SelectAllCb = document.getElementById('form2-select-all');
+if (form2SelectAllCb) {
+    form2SelectAllCb.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('.form2-row-checkbox').forEach(cb => {
+            cb.checked = isChecked;
+            const key = cb.getAttribute('data-key');
+            if (isChecked && key) selectedForm2Keys.add(key);
+            else if (key) selectedForm2Keys.delete(key);
+        });
+        updateFormSelectionControls('form2');
+    });
+}
+
+const form3SelectAllCb = document.getElementById('form3-select-all');
+if (form3SelectAllCb) {
+    form3SelectAllCb.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('.form3-row-checkbox').forEach(cb => {
+            cb.checked = isChecked;
+            const key = cb.getAttribute('data-key');
+            if (isChecked && key) selectedForm3Keys.add(key);
+            else if (key) selectedForm3Keys.delete(key);
+        });
+        updateFormSelectionControls('form3');
+    });
+}
+
+const btnDeleteSelectedForm2 = document.getElementById('btn-delete-selected-form2');
+if (btnDeleteSelectedForm2) {
+    btnDeleteSelectedForm2.addEventListener('click', () => deleteSelectedAnnexRecords('form2'));
+}
+
+const btnDeleteSelectedForm3 = document.getElementById('btn-delete-selected-form3');
+if (btnDeleteSelectedForm3) {
+    btnDeleteSelectedForm3.addEventListener('click', () => deleteSelectedAnnexRecords('form3'));
+}
+
+window.deleteSelectedAnnexRecords = deleteSelectedAnnexRecords;
+
 // Form 2 Clear Action
 const btnClearForm2 = document.getElementById('btn-clear-form2-data');
 if (btnClearForm2) {
@@ -4559,6 +5006,7 @@ if (typeof window.__adminAnnexOnSyncUnsub === 'function') {
 }
 window.__adminAnnexOnSyncUnsub = AnnexSyncService.onSync((synced) => {
     if (!synced) return;
+    if (isDeletingAnnexRecords || isSavingAnnexTransaction) return;
     // Strictly ignore sync broadcasts for other academic periods to preserve term isolation
     if (synced.academicYear && selectedAcademicYear && selectedAcademicYear !== 'All' && !isAcademicYearTermMatch(synced.academicYear, selectedAcademicYear)) return;
     if (synced.semester && selectedSemester && selectedSemester !== 'All' && !isSemesterTermMatch(synced.semester, selectedSemester)) return;
@@ -4710,6 +5158,11 @@ async function handleRegistrarTermChange(newAy, newSem) {
     if (fileInput) fileInput.value = '';
     if (uploadPrompt) uploadPrompt.style.display = 'flex';
     if (fileInfo) fileInfo.style.display = 'none';
+
+    selectedForm2Keys.clear();
+    selectedForm3Keys.clear();
+    updateFormSelectionControls('form2');
+    updateFormSelectionControls('form3');
 
     const saveBadge = document.getElementById('annex-save-status-badge');
     if (saveBadge) saveBadge.style.display = 'none';

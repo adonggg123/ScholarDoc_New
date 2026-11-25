@@ -558,6 +558,12 @@
                         <i class="icon-coins" style="font-size: 14px;"></i> <span id="stat-form2-amount">&#8369;0.00 Total
                             Billing</span>
                     </div>
+                    <button id="btn-delete-selected-form2" type="button" disabled
+                        title="Delete selected Form 2 records from Registrar, Supabase, and Super Admin"
+                        style="background: rgba(239,68,68,0.1); color: #dc2626; border: 1px solid rgba(239,68,68,0.28); padding: 9px 15px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: not-allowed; opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+                        <i class="icon-trash-2" style="font-size: 14px;"></i>
+                        <span id="label-delete-selected-form2">Delete Selected</span>
+                    </button>
                     <button id="btn-export-form2-top"
                         style="background: linear-gradient(135deg, #0F3260, #1E88E5); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(15,50,96,0.25); transition: all 0.2s ease;">
                         <i class="icon-file-spreadsheet" style="font-size: 15px;"></i> Export Form 2 (.xlsx)
@@ -570,6 +576,10 @@
                 <table class="annex-table">
                     <thead>
                         <tr>
+                            <th style="width: 42px; text-align: center;">
+                                <input type="checkbox" id="form2-select-all" title="Select all visible Form 2 records"
+                                    style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
+                            </th>
                             <th style="width: 70px;">Control No.</th>
                             <th>Student ID</th>
                             <th>TES App No. (SA)</th>
@@ -590,7 +600,7 @@
                     </thead>
                     <tbody id="tbody-form2">
                         <tr>
-                            <td colspan="16" style="text-align: center; padding: 36px; color: var(--text-secondary);">
+                            <td colspan="17" style="text-align: center; padding: 36px; color: var(--text-secondary);">
                                 No verified enrolled grantees for Form 2.</td>
                         </tr>
                     </tbody>
@@ -616,6 +626,12 @@
                         <i class="icon-user-x" style="font-size: 14px;"></i> <span id="stat-form3-count">0 Not Included
                             Grantees</span>
                     </div>
+                    <button id="btn-delete-selected-form3" type="button" disabled
+                        title="Delete selected Form 3 records from Registrar, Supabase, and Super Admin"
+                        style="background: rgba(239,68,68,0.1); color: #dc2626; border: 1px solid rgba(239,68,68,0.28); padding: 9px 15px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: not-allowed; opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+                        <i class="icon-trash-2" style="font-size: 14px;"></i>
+                        <span id="label-delete-selected-form3">Delete Selected</span>
+                    </button>
                     <button id="btn-export-form3-top"
                         style="background: linear-gradient(135deg, #FF8F00, #F57C00); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 2px 8px rgba(255,143,0,0.25); transition: all 0.2s ease;">
                         <i class="icon-file-text" style="font-size: 15px;"></i> Export Form 3 (.xlsx)
@@ -628,6 +644,10 @@
                 <table class="annex-table">
                     <thead>
                         <tr>
+                            <th style="width: 42px; text-align: center;">
+                                <input type="checkbox" id="form3-select-all" title="Select all visible Form 3 records"
+                                    style="width: 15px; height: 15px; accent-color: #FF8F00; cursor: pointer;">
+                            </th>
                             <th style="width: 70px;">Control No.</th>
                             <th>Student ID</th>
                             <th>TES App No. (SA)</th>
@@ -644,7 +664,7 @@
                     </thead>
                     <tbody id="tbody-form3">
                         <tr>
-                            <td colspan="12" style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                            <td colspan="13" style="text-align: center; padding: 30px; color: var(--text-secondary);">
                                 Loading Form 3 records...</td>
                         </tr>
                     </tbody>
