@@ -6347,6 +6347,17 @@ async function startGranteeMessagingWatcher() {
 const pollNewGranteesAndSendEmail = pollNewGranteesAndMessage;
 const startGranteeEmailWatcher = startGranteeMessagingWatcher;
 
+// Global error safety handlers to keep the server resilient against transient network drops
+process.on('unhandledRejection', (reason) => {
+    const msg = (reason && reason.message) ? reason.message : String(reason);
+    console.warn('[ScholarDoc Server] Unhandled Promise Rejection (safely caught):', msg);
+});
+
+process.on('uncaughtException', (err) => {
+    const msg = (err && err.message) ? err.message : String(err);
+    console.error('[ScholarDoc Server] Uncaught Exception (safely caught):', msg);
+});
+
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         console.error(`\n❌ [ScholarDoc] Port ${PORT} is already in use!`);
