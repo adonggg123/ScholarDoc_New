@@ -38,6 +38,42 @@ class AuthService {
   /// Default server URL dynamically resolved via ApiConfig
   static String get serverBaseUrl => ApiConfig.baseUrl;
 
+  /// Identifies whether [identifier] refers to an Admin/SuperAdmin account.
+  /// Student internal auth emails (`<studentId>@scholardoc.com`) MUST NOT match.
+  static bool isAdminIdentifier(String identifier) {
+    final cleanLower = identifier.trim().toLowerCase();
+    return cleanLower == 'admin' ||
+        cleanLower == 'superadmin' ||
+        cleanLower.contains('admin@');
+  }
+
+  /// Evaluates whether a `student_grantees` record has completed first-login OTP
+  /// verification. Respects explicit `first_login_completed == false` resets.
+  static bool isFirstLoginRecordCompleted(Map<String, dynamic>? record) {
+    if (record == null) return false;
+    final docs = record['documents'] is Map ? record['documents'] as Map : null;
+
+    final explicitlyReset = record['first_login_completed'] == false ||
+        (docs != null &&
+            docs['first_login_completed'] == false &&
+            docs['otp_verified_at'] == null &&
+            docs['has_custom_password'] != true);
+    if (explicitlyReset) return false;
+
+    if (record['first_login_completed'] == true ||
+        record['has_custom_password'] == true ||
+        record['otp_verified_at'] != null) {
+      return true;
+    }
+    if (docs != null &&
+        (docs['first_login_completed'] == true ||
+            docs['has_custom_password'] == true ||
+            docs['otp_verified_at'] != null)) {
+      return true;
+    }
+    return false;
+  }
+
   /// Initiates student login:
   /// - Admin / SuperAdmin users bypass OTP verification.
   /// - Student Grantees are validated against the backend scholarship database.
@@ -50,14 +86,10 @@ class AuthService {
     String? preferredChannel,
   }) async {
     final cleanId = studentId.trim();
-    final cleanLower = cleanId.toLowerCase();
     final cleanPwd = password.trim();
 
     // 1. Admins and SuperAdmins bypass student OTP verification
-    final bool isAdmin = cleanLower == 'admin' ||
-        cleanLower == 'superadmin' ||
-        cleanLower.contains('admin@') ||
-        cleanId.contains('@scholardoc.com');
+    final bool isAdmin = isAdminIdentifier(cleanId);
 
     if (isAdmin) {
       return {
@@ -162,15 +194,8 @@ class AuthService {
     }
 
     final grantee = query.first;
-    final docs = grantee['documents'] is Map ? grantee['documents'] as Map : null;
     // Strict First-Login Check: Only consider completed if explicitly verified via first_login_completed, has_custom_password, or otp_verified_at
-    final isFirstCompleted = grantee['first_login_completed'] == true ||
-        grantee['has_custom_password'] == true ||
-        grantee['otp_verified_at'] != null ||
-        (docs != null &&
-            (docs['first_login_completed'] == true ||
-                docs['has_custom_password'] == true ||
-                docs['otp_verified_at'] != null));
+    final isFirstCompleted = isFirstLoginRecordCompleted(grantee);
 
     if (isFirstCompleted) {
       debugPrint('AuthService: Returning student verified directly via Supabase for $cleanId');
@@ -218,9 +243,11 @@ class AuthService {
     required String studentId,
     required String otp,
     required String password,
+    String? challengeToken,
   }) async {
     final cleanId = studentId.trim();
     final cleanOtp = otp.trim();
+    final cleanChallenge = challengeToken?.trim() ?? '';
     final candidates = await ApiConfig.resolveFastCandidates();
     dynamic lastErr;
 
@@ -229,15 +256,19 @@ class AuthService {
       http.Response res;
       try {
         final uri = Uri.parse('$candidate/api/auth/otp/verify');
+        final payload = <String, dynamic>{
+          'studentId': cleanId,
+          'otp': cleanOtp,
+          'password': password.trim(),
+        };
+        if (cleanChallenge.isNotEmpty) {
+          payload['challengeToken'] = cleanChallenge;
+        }
         res = await http
             .post(
               uri,
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'studentId': cleanId,
-                'otp': cleanOtp,
-                'password': password.trim(),
-              }),
+              body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 8));
       } catch (connErr) {
@@ -510,24 +541,41 @@ class AuthService {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
-    if (getPasswordSecurityInfo().hasCustomPassword) {
-      return true;
-    }
-
     final resolvedProfile = profile ?? await getStudentProfile(user.id);
     if (resolvedProfile != null) {
+      final docs = resolvedProfile['documents'] is Map
+          ? resolvedProfile['documents'] as Map
+          : null;
+
+      // Respect explicit admin/coordinator first-login reset in student_grantees
+      final explicitlyReset =
+          resolvedProfile['first_login_completed'] == false ||
+          (docs != null &&
+              docs['first_login_completed'] == false &&
+              docs['otp_verified_at'] == null &&
+              docs['has_custom_password'] != true);
+      if (explicitlyReset) {
+        return false;
+      }
+
       if (resolvedProfile['first_login_completed'] == true ||
           resolvedProfile['has_custom_password'] == true ||
           resolvedProfile['otp_verified_at'] != null) {
         return true;
       }
-      final docs = resolvedProfile['documents'];
-      if (docs is Map &&
+      if (docs != null &&
           (docs['first_login_completed'] == true ||
               docs['has_custom_password'] == true ||
               docs['otp_verified_at'] != null)) {
         return true;
       }
+    }
+
+    final meta = user.userMetadata;
+    if (getPasswordSecurityInfo().hasCustomPassword ||
+        meta?['first_login_completed'] == true ||
+        meta?['otp_verified_at'] != null) {
+      return true;
     }
 
     final resolvedId = _pickNonEmpty([
@@ -1466,14 +1514,8 @@ class AuthService {
           .trim();
 
       // STRICT SECURITY GATE: Enforce OTP verification on student first login
-      final bool firstLoginDone = otpJustVerified ||
-          firstRecord['first_login_completed'] == true ||
-          firstRecord['has_custom_password'] == true ||
-          firstRecord['otp_verified_at'] != null ||
-          (firstRecord['documents'] is Map &&
-              ((firstRecord['documents'] as Map)['first_login_completed'] == true ||
-                  (firstRecord['documents'] as Map)['has_custom_password'] == true ||
-                  (firstRecord['documents'] as Map)['otp_verified_at'] != null));
+      final bool firstLoginDone =
+          otpJustVerified || isFirstLoginRecordCompleted(firstRecord);
       if (!firstLoginDone) {
         bool isBackendVerified = false;
         final candidates = await ApiConfig.resolveFastCandidates();
@@ -1832,13 +1874,52 @@ class AuthService {
 
         final studentData = doc.first;
         // Cache uid on record in student_grantees ONLY if this record actually belongs to student_grantees
-        if (isGranteeRecord && studentData['id'] != null && (studentData['uid'] == null || studentData['uid'] != uid)) {
+        if (isGranteeRecord && studentData['id'] != null) {
+          final needsUidLink = studentData['uid'] == null || studentData['uid'] != uid;
+          final existingDocs = Map<String, dynamic>.from(
+            (studentData['documents'] is Map) ? studentData['documents'] as Map : {},
+          );
+          final needsOtpFlags = otpJustVerified &&
+              (existingDocs['first_login_completed'] != true ||
+                  existingDocs['otp_verified_at'] == null);
+
+          if (needsUidLink || needsOtpFlags) {
+            try {
+              final patchBody = <String, dynamic>{};
+              if (needsUidLink) patchBody['uid'] = uid;
+              if (needsOtpFlags) {
+                existingDocs['first_login_completed'] = true;
+                existingDocs['otp_verified_at'] ??=
+                    DateTime.now().toUtc().toIso8601String();
+                existingDocs.remove('first_login_otp');
+                patchBody['documents'] = existingDocs;
+              }
+              await _supabase
+                  .from('student_grantees')
+                  .update(patchBody)
+                  .eq('id', studentData['id']);
+            } catch (_) {}
+          }
+        }
+
+        // Persist first-login OTP completion into Supabase Auth metadata for SplashScreen verification
+        if (otpJustVerified) {
           try {
-            await _supabase
-                .from('student_grantees')
-                .update({'uid': uid})
-                .eq('id', studentData['id']);
-          } catch (_) {}
+            final currentMeta = Map<String, dynamic>.from(
+              authResponse.user?.userMetadata ?? {},
+            );
+            if (currentMeta['first_login_completed'] != true ||
+                currentMeta['otp_verified_at'] == null) {
+              currentMeta['first_login_completed'] = true;
+              currentMeta['otp_verified_at'] ??=
+                  DateTime.now().toUtc().toIso8601String();
+              await _supabase.auth.updateUser(
+                UserAttributes(data: currentMeta),
+              );
+            }
+          } catch (metaErr) {
+            debugPrint('AuthService: First-login metadata sync notice: $metaErr');
+          }
         }
 
         final String displayName =

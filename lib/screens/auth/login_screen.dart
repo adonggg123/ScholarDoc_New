@@ -364,8 +364,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final cleanLower = rawStudentId.toLowerCase();
         final bool isAdmin = cleanLower == 'admin' ||
             cleanLower == 'superadmin' ||
-            cleanLower.contains('admin@') ||
-            rawStudentId.contains('@scholardoc.com');
+            cleanLower.contains('admin@');
 
         // Admin flow: Bypass student SMS OTP verification
         if (isAdmin) {
@@ -389,8 +388,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
 
-        // If First Login: Require channel selection or navigate to OTP verification
-        if (initRes['requiresOtp'] == true) {
+        // If First Login: Strictly require OTP verification before granting app access
+        if (initRes['requiresOtp'] == true || initRes['isFirstLogin'] == true) {
           if (initRes['requiresChannelSelection'] == true) {
             _showOtpChannelSelectionModal(
               studentId: rawStudentId,
@@ -407,7 +406,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Returning Student: Standard login flow
+        if (initRes['success'] != true && initRes['isAdmin'] != true) {
+          throw Exception(
+            initRes['error'] ??
+                initRes['message'] ??
+                'Unable to verify your login status. Please try again.',
+          );
+        }
+
+        // Returning Student (already verified first-login OTP): Standard login flow
         await _authService.loginStudent(
           studentId: rawStudentId,
           password: rawPassword,
@@ -515,6 +522,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     final expiresIn = (res['expiresIn'] as num?)?.toInt() ?? 600;
     final resendCooldown = (res['resendCooldown'] as num?)?.toInt() ?? 30;
+    final challengeToken = res['challengeToken'] as String?;
 
     Navigator.push(
       context,
@@ -533,6 +541,7 @@ class _LoginScreenState extends State<LoginScreen> {
           initialChannelCooldowns: channelCooldowns,
           expiresIn: expiresIn,
           resendCooldown: resendCooldown,
+          initialChallengeToken: challengeToken,
         ),
       ),
     );
@@ -581,7 +590,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: SafeArea(
                 top: false,
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: EdgeInsets.only(
                     left: 24,
                     right: 24,
@@ -784,8 +793,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                       password: password,
                                       preferredChannel: selectedChannel,
                                     );
+                                    if (sendRes['requiresOtp'] != true) {
+                                      throw Exception(
+                                        sendRes['error'] ??
+                                            sendRes['message'] ??
+                                            'Unable to start OTP verification. Please try again.',
+                                      );
+                                    }
                                     if (!context.mounted) return;
                                     Navigator.pop(ctx);
+                                    if (!mounted) return;
                                     _navigateToOtpScreen(
                                       studentId: studentId,
                                       password: password,
@@ -793,6 +810,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       channelOverride: selectedChannel,
                                     );
                                   } catch (e) {
+                                    if (!context.mounted) return;
                                     setModalState(() {
                                       isSending = false;
                                       modalError = e.toString().replaceAll('Exception: ', '').trim();

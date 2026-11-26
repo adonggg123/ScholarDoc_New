@@ -56,22 +56,33 @@ class _SplashScreenState extends State<SplashScreen>
             return;
           }
 
-          // Student user: check if first-login OTP verification has been completed
+          // Student user: strictly verify first-login OTP completion (fail-closed)
+          Map<String, dynamic>? profile;
+          bool isCompleted = false;
           try {
-            final profile = await authService.getStudentProfile(session.user.id);
+            profile = await authService.getStudentProfile(session.user.id);
             final studentId = profile?['studentId'] ?? profile?['student_no'];
-            final isCompleted = profile?['first_login_completed'] == true || profile?['otp_verified_at'] != null;
+            isCompleted = await authService.hasCompletedFirstLogin(
+              profile: profile,
+              studentId: studentId?.toString(),
+            );
+          } catch (e) {
+            debugPrint('SplashScreen: Error verifying first-login OTP status: $e');
+            isCompleted = false;
+          }
 
-            if (!isCompleted) {
-              debugPrint('SplashScreen: Student has not completed first-login OTP. Redirecting to login.');
-              await authService.signOut();
-              if (!mounted) return;
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-              return;
-            }
+          if (!isCompleted) {
+            debugPrint('SplashScreen: Student has not completed first-login OTP. Redirecting to login.');
+            await authService.signOut();
+            if (!mounted) return;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+            return;
+          }
 
+          try {
+            final studentId = profile?['studentId'] ?? profile?['student_no'];
             await PushNotificationService().syncToken(
               session.user.id,
               studentId: studentId?.toString(),

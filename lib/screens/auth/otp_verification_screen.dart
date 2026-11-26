@@ -20,6 +20,7 @@ class OtpVerificationScreen extends StatefulWidget {
   final Map<String, int>? initialChannelCooldowns;
   final int expiresIn;
   final int resendCooldown;
+  final String? initialChallengeToken;
 
   const OtpVerificationScreen({
     super.key,
@@ -36,6 +37,7 @@ class OtpVerificationScreen extends StatefulWidget {
     this.initialChannelCooldowns,
     this.expiresIn = 300,
     this.resendCooldown = 60,
+    this.initialChallengeToken,
   });
 
   @override
@@ -68,6 +70,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   String? _deliveryMessage;
   String? _deliveryError;
   int? _deliveryLatencyMs;
+  String? _challengeToken;
 
   late int _expireRemaining;
   late int _smsCooldown;
@@ -106,6 +109,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     _deliveryStatus = widget.initialDeliveryStatus;
     _deliveryMessage = widget.initialDeliveryMessage;
     _deliveryError = widget.initialDeliveryError;
+    _challengeToken = widget.initialChallengeToken;
     _expireRemaining = widget.expiresIn;
 
     if (widget.initialChannelCooldowns != null) {
@@ -146,6 +150,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _deliveryStatus = widget.initialDeliveryStatus;
       _deliveryMessage = widget.initialDeliveryMessage;
       _deliveryError = widget.initialDeliveryError;
+      if (widget.initialChallengeToken != null &&
+          widget.initialChallengeToken!.trim().isNotEmpty) {
+        _challengeToken = widget.initialChallengeToken;
+      }
       _errorMessage = null;
       if (widget.initialChannelCooldowns != null) {
         _smsCooldown = widget.initialChannelCooldowns!['sms'] ?? 0;
@@ -376,6 +384,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         _deliveryStatus = respStatus;
         _deliveryError = res['deliveryError'] as String?;
         _deliveryLatencyMs = (res['deliveryLatencyMs'] as num?)?.toInt();
+        if (res['challengeToken'] is String &&
+            (res['challengeToken'] as String).trim().isNotEmpty) {
+          _challengeToken = (res['challengeToken'] as String).trim();
+        }
         _deliveryMessage = (res['deliveryMessage'] as String?) ??
             (channel == 'email'
                 ? 'OTP sent via Email • Check your inbox'
@@ -479,6 +491,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         studentId: widget.studentId,
         otp: otp,
         password: widget.password,
+        challengeToken: _challengeToken,
       );
 
       if (!mounted) return;

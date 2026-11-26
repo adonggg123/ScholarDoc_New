@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tesdoc_project/screens/auth/otp_verification_screen.dart';
+import 'package:tesdoc_project/services/auth_service.dart';
 
 void main() {
   setUpAll(() async {
@@ -205,5 +206,59 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Try Email'), findsOneWidget);
+  });
+
+  group('First-login OTP security gates', () {
+    test('student internal @scholardoc.com emails are NOT treated as admin', () {
+      expect(AuthService.isAdminIdentifier('admin'), isTrue);
+      expect(AuthService.isAdminIdentifier('superadmin'), isTrue);
+      expect(AuthService.isAdminIdentifier('admin@scholardoc.com'), isTrue);
+      expect(AuthService.isAdminIdentifier('superadmin@scholardoc.com'), isTrue);
+
+      expect(AuthService.isAdminIdentifier('2023305083'), isFalse);
+      expect(AuthService.isAdminIdentifier('2023305083@scholardoc.com'), isFalse);
+      expect(AuthService.isAdminIdentifier('2023305322_auth@scholardoc.com'), isFalse);
+    });
+
+    test('isFirstLoginRecordCompleted strictly requires OTP verification and respects resets', () {
+      // Brand new grantee with no OTP flags -> MUST require OTP
+      expect(
+        AuthService.isFirstLoginRecordCompleted({
+          'student_no': '2023305083',
+          'documents': {'batch': 'Batch 1.2', 'saNumber': 'N/A'},
+        }),
+        isFalse,
+      );
+
+      // Explicitly reset student -> MUST require OTP
+      expect(
+        AuthService.isFirstLoginRecordCompleted({
+          'student_no': '2023305083',
+          'documents': {'first_login_completed': false},
+        }),
+        isFalse,
+      );
+
+      // Verified via first-login OTP -> returning student allowed
+      expect(
+        AuthService.isFirstLoginRecordCompleted({
+          'student_no': '2023305083',
+          'documents': {
+            'first_login_completed': true,
+            'otp_verified_at': '2026-11-26T14:00:00Z',
+          },
+        }),
+        isTrue,
+      );
+
+      // Returning student with custom password -> returning student allowed
+      expect(
+        AuthService.isFirstLoginRecordCompleted({
+          'student_no': '2023305322',
+          'documents': {'has_custom_password': true},
+        }),
+        isTrue,
+      );
+    });
   });
 }

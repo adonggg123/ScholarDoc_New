@@ -1529,6 +1529,7 @@ async function validateGranteeEligibility(identifier) {
                 email_address: contacts.email || grantee.email_address || grantee.email || '',
                 email: contacts.email || grantee.email || grantee.email_address || '',
                 familyDetails: grantee.familyDetails || null,
+                documents: (grantee.documents && typeof grantee.documents === 'object') ? grantee.documents : null,
                 first_login_completed: !isFirst,
                 is_first_login: isFirst
             },
@@ -1621,6 +1622,7 @@ async function validateGranteeEligibility(identifier) {
 // ── Multi-Channel (SMS & Email) OTP Authentication State & Rate Limiter ──
 // In-memory active OTP sessions with cryptographic security and expiration
 const activeOtpSessions = new Map();
+const consumedFirstLoginChallenges = new Map(); // challengeId -> expiresAt
 
 // Dedicated state for student password-change OTP verification (isolated from first-login OTP)
 const passwordChangeOtpSessions = new Map();
@@ -1657,33 +1659,40 @@ function verifySignedPasswordChangePayload(token) {
 
 async function readGranteeDocumentsFresh(studentId, granteeUid = null) {
     const cleanId = String(studentId || '').trim();
-    let matchQuery = '';
+    const idQuery = cleanId ? buildStudentQueryFilter(cleanId) : '';
+    const queriesToTry = [];
     if (granteeUid && isUuidString(granteeUid)) {
-        matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
-    } else if (cleanId) {
-        matchQuery = buildStudentQueryFilter(cleanId);
+        queriesToTry.push(`uid=eq.${encodeURIComponent(granteeUid)}`);
     }
-    if (!matchQuery) return { matchQuery: '', documents: {} };
+    if (idQuery && !queriesToTry.includes(idQuery)) {
+        queriesToTry.push(idQuery);
+    }
+    if (queriesToTry.length === 0) return { matchQuery: '', documents: {} };
 
     const headers = {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json'
     };
-    try {
-        const docRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}&select=documents&limit=1`, {
-            headers,
-            signal: AbortSignal.timeout(4500)
-        });
-        if (!docRes.ok) return { matchQuery, documents: {} };
-        const docData = await docRes.json();
-        const existingDocs = (Array.isArray(docData) && docData[0] && docData[0].documents && typeof docData[0].documents === 'object')
-            ? { ...docData[0].documents }
-            : {};
-        return { matchQuery, documents: existingDocs };
-    } catch (_) {
-        return { matchQuery, documents: {} };
+    let lastQuery = queriesToTry[0];
+    for (const q of queriesToTry) {
+        lastQuery = q;
+        try {
+            const docRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${q}&select=documents&limit=1`, {
+                headers,
+                signal: AbortSignal.timeout(4500)
+            });
+            if (!docRes.ok) continue;
+            const docData = await docRes.json();
+            if (Array.isArray(docData) && docData.length > 0) {
+                const existingDocs = (docData[0] && docData[0].documents && typeof docData[0].documents === 'object')
+                    ? { ...docData[0].documents }
+                    : {};
+                return { matchQuery: q, documents: existingDocs };
+            }
+        } catch (_) { }
     }
+    return { matchQuery: lastQuery, documents: {} };
 }
 
 async function patchGranteeDocumentsField(studentId, granteeUid, updaterFn) {
@@ -1770,23 +1779,35 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
     const cleanId = String(studentId).trim();
     const cleanNo = cleanId.replace(/[- ]/g, '');
 
-    if (completedFirstLoginStudents.has(cleanId) || (cleanNo && completedFirstLoginStudents.has(cleanNo))) {
-        return true;
-    }
-
     if (granteeRecord) {
+        const docs = (granteeRecord.documents && typeof granteeRecord.documents === 'object')
+            ? granteeRecord.documents
+            : null;
+
+        // Explicit reset in DB overrides any stale in-memory cache
+        if (granteeRecord.first_login_completed === false ||
+            (docs && docs.first_login_completed === false && docs.otp_verified_at == null && docs.has_custom_password !== true)) {
+            completedFirstLoginStudents.delete(cleanId);
+            if (cleanNo) completedFirstLoginStudents.delete(cleanNo);
+            return false;
+        }
+
         if (granteeRecord.first_login_completed === true ||
             granteeRecord.has_custom_password === true ||
             granteeRecord.otp_verified_at != null ||
-            (granteeRecord.documents && (
-                granteeRecord.documents.first_login_completed === true ||
-                granteeRecord.documents.has_custom_password === true ||
-                granteeRecord.documents.otp_verified_at != null
+            (docs && (
+                docs.first_login_completed === true ||
+                docs.has_custom_password === true ||
+                docs.otp_verified_at != null
             ))) {
             completedFirstLoginStudents.add(cleanId);
             if (cleanNo) completedFirstLoginStudents.add(cleanNo);
             return true;
         }
+    }
+
+    if (completedFirstLoginStudents.has(cleanId) || (cleanNo && completedFirstLoginStudents.has(cleanNo))) {
+        return true;
     }
 
     return false;
@@ -1795,7 +1816,7 @@ function isFirstLoginCompleted(studentId, granteeRecord = null) {
 /**
  * Marks a student as having successfully completed their first-login OTP verification.
  */
-async function markFirstLoginCompleted(studentId, granteeUid, destination, verifiedChannel = 'sms') {
+async function markFirstLoginCompleted(studentId, granteeUid, destination, verifiedChannel = 'sms', verifiedChallengeId = null) {
     const cleanId = String(studentId).trim();
     completedFirstLoginStudents.add(cleanId);
     const cleanNo = cleanId.replace(/[- ]/g, '');
@@ -1812,36 +1833,18 @@ async function markFirstLoginCompleted(studentId, granteeUid, destination, verif
     const now = new Date().toISOString();
     const channelLabel = verifiedChannel === 'email' ? 'Email' : 'SMS';
 
-    // 1. Update student_grantees table immediately so returning-student flag is live
-    let matchQuery = '';
-    if (granteeUid && isUuidString(granteeUid)) {
-        matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
-    } else {
-        matchQuery = buildStudentQueryFilter(cleanId);
-    }
-
-    if (matchQuery) {
-        try {
-            let existingDocs = {};
-            try {
-                const docRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}&select=documents&limit=1`, { headers });
-                const docData = await docRes.json();
-                if (Array.isArray(docData) && docData[0] && docData[0].documents && typeof docData[0].documents === 'object') {
-                    existingDocs = { ...docData[0].documents };
-                }
-            } catch (_) {}
-            existingDocs.first_login_completed = true;
-            existingDocs.otp_verified_at = now;
-
-            await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
-                method: 'PATCH',
-                headers,
-                body: JSON.stringify({
-                    documents: existingDocs
-                })
-            });
-        } catch (_) { }
-    }
+    // 1. Atomically update student_grantees.documents so returning-student flag is live across serverless instances
+    try {
+        await patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+            docs.first_login_completed = true;
+            docs.otp_verified_at = now;
+            delete docs.first_login_otp;
+            if (verifiedChallengeId) {
+                docs.first_login_last_consumed_challenge = verifiedChallengeId;
+            }
+        });
+        invalidateGranteeCache(cleanId);
+    } catch (_) { }
 
     // 2 & 3. Record verified logs and audit_logs asynchronously in background
     const logTasks = [
@@ -1883,6 +1886,11 @@ setInterval(() => {
     for (const [id, session] of activeOtpSessions.entries()) {
         if (now > session.expiresAt) {
             activeOtpSessions.delete(id);
+        }
+    }
+    for (const [cid, exp] of consumedFirstLoginChallenges.entries()) {
+        if (now > exp) {
+            consumedFirstLoginChallenges.delete(cid);
         }
     }
     for (const [id, session] of passwordChangeOtpSessions.entries()) {
@@ -3818,13 +3826,18 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                // 3. First Login: Student ID must be used as initial credentials, or existing registered password
+                // 3. First Login: Student ID must be used as initial credentials.
+                //    Only check existing custom password when entered password differs from Student ID.
+                //    NEVER bypass first-login OTP when the student enters their initial Student ID as password!
+                const granteeStudentNo = grantee.student_no ? String(grantee.student_no).trim() : '';
+                const granteeStudentId = grantee.studentId ? String(grantee.studentId).trim() : '';
                 const matchesInitialId = (rawPassword === cleanId) ||
                     (cleanNo && rawPassword === cleanNo) ||
-                    (grantee.student_no && rawPassword === grantee.student_no);
+                    (granteeStudentNo && (rawPassword === granteeStudentNo || rawPassword === granteeStudentNo.replace(/[- ]/g, ''))) ||
+                    (granteeStudentId && (rawPassword === granteeStudentId || rawPassword === granteeStudentId.replace(/[- ]/g, '')));
 
                 let isRegisteredPassword = false;
-                if (rawPassword && rawPassword.length >= 6) {
+                if (!matchesInitialId && rawPassword && rawPassword.length >= 6) {
                     const candidateEmails = new Set();
                     candidateEmails.add(`${cleanId.replace(/[- ]/g, '_')}@scholardoc.com`);
                     candidateEmails.add(`${cleanId}@scholardoc.com`);
@@ -3872,24 +3885,11 @@ const server = http.createServer(async (req, res) => {
                     if (cleanNo) completedFirstLoginStudents.add(cleanNo);
                     saveOtpAuthState();
 
-                    // Persist returning student flags to Supabase so subsequent logins are instant
-                    try {
-                        const existingDocs = (grantee.documents && typeof grantee.documents === 'object') ? { ...grantee.documents } : {};
-                        existingDocs.first_login_completed = true;
-                        existingDocs.has_custom_password = true;
-                        const matchFilter = buildStudentQueryFilter(cleanId);
-                        if (matchFilter) {
-                            fetch(`${SUPABASE_REST_URL}/student_grantees?${matchFilter}`, {
-                                method: 'PATCH',
-                                headers: {
-                                    apikey: SUPABASE_ANON_KEY,
-                                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ documents: existingDocs })
-                            }).catch(() => {});
-                        }
-                    } catch (_) {}
+                    // Persist returning student flags to Supabase without overwriting existing documents fields
+                    patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                        docs.first_login_completed = true;
+                        docs.has_custom_password = true;
+                    }).catch(() => {});
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
@@ -4015,13 +4015,31 @@ const server = http.createServer(async (req, res) => {
                 }
                 }
 
-                // 5. Rate Limiting & Active Session Re-Entry Check
+                // 5. Rate Limiting & Active Session Re-Entry Check (Memory + Supabase Serverless Fallback)
                 const now = Date.now();
-                const prevSession = activeOtpSessions.get(cleanId);
+                let prevSession = activeOtpSessions.get(cleanId);
+                if (!prevSession) {
+                    const { documents } = await readGranteeDocumentsFresh(cleanId, grantee.uid);
+                    if (documents && documents.first_login_otp && typeof documents.first_login_otp === 'object') {
+                        prevSession = documents.first_login_otp;
+                        activeOtpSessions.set(cleanId, { ...prevSession });
+                    }
+                }
 
                 if (prevSession) {
                     const prevChannelCooldownUntil = (prevSession.channelCooldowns && prevSession.channelCooldowns[selectedChannel]) ||
                         (prevSession.channel === selectedChannel ? prevSession.resendAvailableAt : 0);
+
+                    const existingChallengeToken = prevSession.otpHash ? signPasswordChangePayload({
+                        purpose: 'first_login_otp_challenge',
+                        challengeId: prevSession.challengeId || crypto.randomBytes(8).toString('hex'),
+                        studentId: cleanId,
+                        granteeUid: grantee.uid || null,
+                        otpHash: prevSession.otpHash,
+                        validHashes: prevSession.validHashes || [],
+                        channel: prevSession.channel || selectedChannel,
+                        expiresAt: prevSession.expiresAt
+                    }) : null;
 
                     if (now < prevChannelCooldownUntil && now < prevSession.expiresAt) {
                         const waitSecs = Math.max(1, Math.ceil((prevChannelCooldownUntil - now) / 1000));
@@ -4043,12 +4061,13 @@ const server = http.createServer(async (req, res) => {
                             expiresIn: remExpire,
                             resendCooldown: waitSecs,
                             channelCooldowns: serializeChannelCooldowns(prevSession, now),
+                            challengeToken: existingChallengeToken,
                             message: `An active OTP was recently sent to ${activeDest}. Please enter it or switch delivery channel.`
                         }));
                         return;
                     }
 
-                    if (prevSession.resendCount >= 8 && (now - prevSession.resendWindowStart < 3600000)) {
+                    if (prevSession.resendCount >= 8 && (now - (prevSession.resendWindowStart || 0) < 3600000)) {
                         if (now < prevSession.expiresAt) {
                             const remExpire = Math.max(30, Math.ceil((prevSession.expiresAt - now) / 1000));
                             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -4066,6 +4085,7 @@ const server = http.createServer(async (req, res) => {
                                 expiresIn: remExpire,
                                 resendCooldown: 60,
                                 channelCooldowns: serializeChannelCooldowns(prevSession, now),
+                                challengeToken: existingChallengeToken,
                                 message: 'Please enter the active OTP code sent to you.'
                             }));
                             return;
@@ -4083,13 +4103,11 @@ const server = http.createServer(async (req, res) => {
                 const otp = String(crypto.randomInt(100000, 1000000));
                 const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
                 const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
+                const challengeId = crypto.randomBytes(12).toString('hex');
 
-                const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
-                    ? prevSession.resendWindowStart
-                    : now;
-                const resendCount = (prevSession && (now - prevSession.resendWindowStart < 3600000))
-                    ? prevSession.resendCount + 1
-                    : 1;
+                const withinWindow = prevSession && (now - (prevSession.resendWindowStart || 0) < 3600000);
+                const resendWindowStart = withinWindow ? prevSession.resendWindowStart : now;
+                const resendCount = withinWindow ? (prevSession.resendCount || 0) + 1 : 1;
 
                 const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
                     ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
@@ -4100,6 +4118,7 @@ const server = http.createServer(async (req, res) => {
                 prevCooldowns[selectedChannel] = now + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
 
                 const sessionObj = {
+                    challengeId,
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
@@ -4124,6 +4143,34 @@ const server = http.createServer(async (req, res) => {
                 };
                 activeOtpSessions.set(cleanId, sessionObj);
 
+                // Persist hashed OTP session to Supabase documents for Vercel serverless consistency
+                const buildPersistObj = () => ({
+                    challengeId: sessionObj.challengeId,
+                    studentId: cleanId,
+                    granteeUid: grantee.uid || null,
+                    otpHash: sessionObj.otpHash,
+                    validHashes: sessionObj.validHashes,
+                    channel: sessionObj.channel,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: sessionObj.deliveryStatus,
+                    deliveryMessage: sessionObj.deliveryMessage,
+                    deliveryError: sessionObj.deliveryError,
+                    deliveryLatencyMs: sessionObj.deliveryLatencyMs,
+                    expiresAt: sessionObj.expiresAt,
+                    attempts: sessionObj.attempts,
+                    resendAvailableAt: sessionObj.resendAvailableAt,
+                    channelCooldowns: sessionObj.channelCooldowns,
+                    resendCount: sessionObj.resendCount,
+                    resendWindowStart: sessionObj.resendWindowStart,
+                    createdAt: sessionObj.createdAt
+                });
+
+                const persistPromise = patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                    docs.first_login_otp = buildPersistObj();
+                });
+
                 const destDisplay = selectedChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                 console.log(`[OTP LOGIN] Generated ${selectedChannel.toUpperCase()} OTP for student ${cleanId} -> ${destDisplay}: ${otp} (valid 10m)`);
 
@@ -4135,15 +4182,21 @@ const server = http.createServer(async (req, res) => {
                     grantee
                 });
                 const fastWaitMs = selectedChannel === 'email' ? 6500 : 4200;
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, fastWaitMs);
+                const [outcome] = await Promise.all([
+                    awaitFastOtpDispatch(dispatchPromise, fastWaitMs),
+                    persistPromise
+                ]);
 
                 // Automatic fallback on initial login: if SMS failed immediately and Email IS available, auto-dispatch via Email!
+                let didFailover = false;
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
                     const altChannel = selectedChannel === 'sms' ? 'email' : 'sms';
                     const canFallback = (altChannel === 'email' && canSendEmail) || (altChannel === 'sms' && canSendSms);
                     if (canFallback && !requestedChannelRaw) {
                         console.warn(`[OTP LOGIN] Primary ${selectedChannel.toUpperCase()} failed (${outcome.result.error}); auto-failing over to ${altChannel.toUpperCase()} for ${cleanId}!`);
                         selectedChannel = altChannel;
+                        didFailover = true;
+                        sessionObj.channel = altChannel;
                         sessionObj.channelCooldowns[altChannel] = Date.now() + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
                         sessionObj.resendAvailableAt = sessionObj.channelCooldowns[altChannel];
                         const fallbackPromise = dispatchOtpViaChannel({
@@ -4156,6 +4209,24 @@ const server = http.createServer(async (req, res) => {
                         await awaitFastOtpDispatch(fallbackPromise, fallbackFastWaitMs);
                     }
                 }
+
+                // Update persisted delivery status/channel if failover occurred or dispatch resolved
+                if (didFailover || !outcome.timedOut) {
+                    patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                        docs.first_login_otp = buildPersistObj();
+                    }).catch(() => {});
+                }
+
+                const challengeToken = signPasswordChangePayload({
+                    purpose: 'first_login_otp_challenge',
+                    challengeId,
+                    studentId: cleanId,
+                    granteeUid: grantee.uid || null,
+                    otpHash,
+                    validHashes,
+                    channel: sessionObj.channel,
+                    expiresAt: newExpiresAt
+                });
 
                 const finalDest = sessionObj.channel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                 const channelName = sessionObj.channel === 'email' ? 'email address' : 'registered mobile number';
@@ -4177,6 +4248,7 @@ const server = http.createServer(async (req, res) => {
                     expiresIn: OTP_EXPIRY_SECONDS,
                     resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
                     channelCooldowns: serializeChannelCooldowns(sessionObj),
+                    challengeToken,
                     message: `A one-time password (OTP) has been sent to your ${channelName} ${finalDest}.`
                 }));
             } catch (err) {
@@ -4198,6 +4270,7 @@ const server = http.createServer(async (req, res) => {
                 const rawIdentifier = parsed.studentId || parsed.student_no || '';
                 const cleanId = String(rawIdentifier).trim();
                 const rawOtp = String(parsed.otp || parsed.otpCode || '').trim();
+                const challengeToken = typeof parsed.challengeToken === 'string' ? parsed.challengeToken.trim() : '';
 
                 if (!cleanId || !rawOtp) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -4211,8 +4284,52 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const session = activeOtpSessions.get(cleanId);
                 const now = Date.now();
+                let session = activeOtpSessions.get(cleanId);
+                let freshDocs = null;
+
+                // Serverless fallback: hydrate persisted OTP session from Supabase documents
+                if (!session) {
+                    const readRes = await readGranteeDocumentsFresh(cleanId);
+                    freshDocs = readRes.documents || {};
+                    if (freshDocs.first_login_otp && typeof freshDocs.first_login_otp === 'object') {
+                        session = { ...freshDocs.first_login_otp };
+                        activeOtpSessions.set(cleanId, session);
+                    }
+                }
+
+                // Signed challengeToken fallback if both memory & DB missed (blocks replayed/consumed challenges!)
+                if (!session && challengeToken) {
+                    const signedChallenge = verifySignedPasswordChangePayload(challengeToken);
+                    const normClean = cleanId.replace(/[- ]/g, '').toLowerCase();
+                    const normSigned = String(signedChallenge?.studentId || '').replace(/[- ]/g, '').toLowerCase();
+                    const cid = signedChallenge?.challengeId;
+                    const alreadyConsumedInMem = Boolean(cid && consumedFirstLoginChallenges.has(cid));
+                    const alreadyConsumedInDb = Boolean(
+                        cid &&
+                        freshDocs &&
+                        freshDocs.first_login_last_consumed_challenge === cid
+                    );
+                    if (
+                        signedChallenge &&
+                        signedChallenge.purpose === 'first_login_otp_challenge' &&
+                        normSigned === normClean &&
+                        !alreadyConsumedInMem &&
+                        !alreadyConsumedInDb
+                    ) {
+                        session = {
+                            challengeId: cid,
+                            studentId: cleanId,
+                            granteeUid: signedChallenge.granteeUid || null,
+                            otpHash: signedChallenge.otpHash,
+                            validHashes: signedChallenge.validHashes || [],
+                            channel: signedChallenge.channel || 'sms',
+                            expiresAt: signedChallenge.expiresAt,
+                            attempts: 0
+                        };
+                        activeOtpSessions.set(cleanId, session);
+                    }
+                }
 
                 // 1. Session exists check
                 if (!session) {
@@ -4227,6 +4344,9 @@ const server = http.createServer(async (req, res) => {
                 // 2. Expiration check
                 if (now > session.expiresAt) {
                     activeOtpSessions.delete(cleanId);
+                    patchGranteeDocumentsField(cleanId, session.granteeUid, (docs) => {
+                        delete docs.first_login_otp;
+                    }).catch(() => {});
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
@@ -4237,8 +4357,11 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 // 3. Max Attempts limit (Brute-force protection: max 5 attempts)
-                if (session.attempts >= 5) {
+                if ((session.attempts || 0) >= 5) {
                     activeOtpSessions.delete(cleanId);
+                    patchGranteeDocumentsField(cleanId, session.granteeUid, (docs) => {
+                        delete docs.first_login_otp;
+                    }).catch(() => {});
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
@@ -4267,10 +4390,13 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 if (!isMatch) {
-                    session.attempts++;
+                    session.attempts = (session.attempts || 0) + 1;
                     const remaining = 5 - session.attempts;
                     if (remaining <= 0) {
                         activeOtpSessions.delete(cleanId);
+                        await patchGranteeDocumentsField(cleanId, session.granteeUid, (docs) => {
+                            delete docs.first_login_otp;
+                        });
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({
                             success: false,
@@ -4279,6 +4405,11 @@ const server = http.createServer(async (req, res) => {
                         }));
                         return;
                     }
+                    await patchGranteeDocumentsField(cleanId, session.granteeUid, (docs) => {
+                        if (docs.first_login_otp && typeof docs.first_login_otp === 'object') {
+                            docs.first_login_otp.attempts = session.attempts;
+                        }
+                    });
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
@@ -4290,11 +4421,15 @@ const server = http.createServer(async (req, res) => {
 
                 // 5. SUCCESS: Enforce Single-Use by Immediately Deleting the Active Session
                 const verifiedChannel = session.channel || 'sms';
-                const verifiedDest = verifiedChannel === 'email' ? session.email : session.phone;
+                const verifiedDest = verifiedChannel === 'email' ? (session.email || session.maskedEmail) : (session.phone || session.maskedPhone);
+                const verifiedChallengeId = session.challengeId || null;
                 activeOtpSessions.delete(cleanId);
+                if (verifiedChallengeId) {
+                    consumedFirstLoginChallenges.set(verifiedChallengeId, Math.max(session.expiresAt || 0, now + OTP_EXPIRY_SECONDS * 1000));
+                }
 
                 // 6. Mark First Login as Completed (Local Store + Supabase student_grantees + audit_logs)
-                await markFirstLoginCompleted(cleanId, session.granteeUid, verifiedDest, verifiedChannel);
+                await markFirstLoginCompleted(cleanId, session.granteeUid, verifiedDest, verifiedChannel, verifiedChallengeId);
 
                 console.log(`[OTP VERIFY] Verification SUCCESS via ${verifiedChannel.toUpperCase()} for student ${cleanId} (${verifiedDest}). First login completed!`);
 
@@ -4344,7 +4479,13 @@ const server = http.createServer(async (req, res) => {
 
                 const grantee = eligibility.grantee;
                 const contacts = resolveGranteeOtpContacts(grantee);
-                const prevSession = activeOtpSessions.get(cleanId);
+                let prevSession = activeOtpSessions.get(cleanId);
+                if (!prevSession) {
+                    const { documents } = await readGranteeDocumentsFresh(cleanId, grantee.uid);
+                    if (documents && documents.first_login_otp && typeof documents.first_login_otp === 'object') {
+                        prevSession = documents.first_login_otp;
+                    }
+                }
 
                 const targetChannel = (requestedChannelRaw === 'email' || requestedChannelRaw === 'sms')
                     ? requestedChannelRaw
@@ -4438,13 +4579,11 @@ const server = http.createServer(async (req, res) => {
                 const otp = String(crypto.randomInt(100000, 1000000));
                 const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
                 const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
+                const challengeId = crypto.randomBytes(12).toString('hex');
 
-                const resendWindowStart = (prevSession && (now - prevSession.resendWindowStart < 3600000))
-                    ? prevSession.resendWindowStart
-                    : now;
-                const resendCount = (prevSession && (now - prevSession.resendWindowStart < 3600000))
-                    ? prevSession.resendCount + 1
-                    : 1;
+                const withinResendWindow = prevSession && (now - (prevSession.resendWindowStart || 0) < 3600000);
+                const resendWindowStart = withinResendWindow ? prevSession.resendWindowStart : now;
+                const resendCount = withinResendWindow ? (prevSession.resendCount || 0) + 1 : 1;
 
                 const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
                     ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
@@ -4459,6 +4598,7 @@ const server = http.createServer(async (req, res) => {
                 updatedCooldowns[targetChannel] = now + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
 
                 const sessionObj = {
+                    challengeId,
                     studentId: cleanId,
                     granteeUid: grantee.uid,
                     otpHash: otpHash,
@@ -4483,6 +4623,39 @@ const server = http.createServer(async (req, res) => {
                 };
                 activeOtpSessions.set(cleanId, sessionObj);
 
+                const persistResendPromise = patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                    docs.first_login_otp = {
+                        challengeId,
+                        studentId: cleanId,
+                        granteeUid: grantee.uid || null,
+                        otpHash,
+                        validHashes,
+                        channel: targetChannel,
+                        maskedPhone: displayMaskedPhone,
+                        maskedEmail: displayMaskedEmail,
+                        availableChannels,
+                        deliveryStatus: 'sending',
+                        expiresAt: newExpiresAt,
+                        attempts: 0,
+                        resendAvailableAt: updatedCooldowns[targetChannel],
+                        channelCooldowns: updatedCooldowns,
+                        resendCount,
+                        resendWindowStart,
+                        createdAt: now
+                    };
+                });
+
+                const challengeToken = signPasswordChangePayload({
+                    purpose: 'first_login_otp_challenge',
+                    challengeId,
+                    studentId: cleanId,
+                    granteeUid: grantee.uid || null,
+                    otpHash,
+                    validHashes,
+                    channel: targetChannel,
+                    expiresAt: newExpiresAt
+                });
+
                 const targetMasked = targetChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
                 console.log(`[OTP DISPATCH] New ${targetChannel.toUpperCase()} OTP for student ${cleanId} -> ${targetMasked}: ${otp} (valid 10m, pool: ${validHashes.length})`);
 
@@ -4494,11 +4667,21 @@ const server = http.createServer(async (req, res) => {
                     grantee
                 });
                 const fastWaitMs = targetChannel === 'email' ? 6500 : 4200;
-                const outcome = await awaitFastOtpDispatch(dispatchPromise, fastWaitMs);
+                const [outcome] = await Promise.all([
+                    awaitFastOtpDispatch(dispatchPromise, fastWaitMs),
+                    persistResendPromise
+                ]);
 
                 if (!outcome.timedOut && outcome.result && !outcome.result.success) {
                     // Reset cooldown on failed channel so student can retry or switch immediately
                     sessionObj.channelCooldowns[targetChannel] = 0;
+                    patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                        if (docs.first_login_otp && typeof docs.first_login_otp === 'object') {
+                            docs.first_login_otp.channelCooldowns = sessionObj.channelCooldowns;
+                            docs.first_login_otp.deliveryStatus = 'failed';
+                            docs.first_login_otp.deliveryError = sessionObj.deliveryError;
+                        }
+                    }).catch(() => {});
                     res.writeHead(502, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: false,
@@ -4512,6 +4695,16 @@ const server = http.createServer(async (req, res) => {
                         error: sessionObj.deliveryError || `Failed to send OTP via ${targetChannel.toUpperCase()}.`
                     }));
                     return;
+                }
+
+                if (!outcome.timedOut) {
+                    patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                        if (docs.first_login_otp && typeof docs.first_login_otp === 'object') {
+                            docs.first_login_otp.deliveryStatus = sessionObj.deliveryStatus;
+                            docs.first_login_otp.deliveryMessage = sessionObj.deliveryMessage;
+                            docs.first_login_otp.deliveryLatencyMs = sessionObj.deliveryLatencyMs;
+                        }
+                    }).catch(() => {});
                 }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -4529,6 +4722,7 @@ const server = http.createServer(async (req, res) => {
                     resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
                     channelCooldowns: serializeChannelCooldowns(sessionObj),
                     expiresIn: OTP_EXPIRY_SECONDS,
+                    challengeToken,
                     message: `A new OTP has been sent via ${targetChannel === 'email' ? 'Email' : 'SMS'} to ${targetMasked}.`
                 }));
             } catch (err) {
@@ -4549,7 +4743,13 @@ const server = http.createServer(async (req, res) => {
                 res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
                 return;
             }
-            const session = activeOtpSessions.get(cleanId);
+            let session = activeOtpSessions.get(cleanId);
+            if (!session) {
+                const { documents } = await readGranteeDocumentsFresh(cleanId);
+                if (documents && documents.first_login_otp && typeof documents.first_login_otp === 'object') {
+                    session = documents.first_login_otp;
+                }
+            }
             if (!session) {
                 const eligibility = await validateGranteeEligibility(cleanId);
                 const contacts = eligibility.isEligible ? resolveGranteeOtpContacts(eligibility.grantee) : null;
@@ -4630,19 +4830,14 @@ const server = http.createServer(async (req, res) => {
                 saveOtpAuthState();
 
                 try {
-                    const matchQuery = buildStudentQueryFilter(cleanId);
-                    if (matchQuery) {
-                        const headers = {
-                            'apikey': SUPABASE_ANON_KEY,
-                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                            'Content-Type': 'application/json'
-                        };
-                        await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
-                            method: 'PATCH',
-                            headers,
-                            body: JSON.stringify({ first_login_completed: false, otp_verified_at: null })
-                        });
-                    }
+                    await patchGranteeDocumentsField(cleanId, null, (docs) => {
+                        docs.first_login_completed = false;
+                        delete docs.otp_verified_at;
+                        delete docs.has_custom_password;
+                        delete docs.first_login_otp;
+                        delete docs.first_login_last_consumed_challenge;
+                    });
+                    invalidateGranteeCache(cleanId);
                 } catch (_) { }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });

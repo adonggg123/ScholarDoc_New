@@ -7,7 +7,6 @@ import '../../services/auth_service.dart';
 import '../../services/scholarship_service.dart';
 import '../../services/sms_service.dart';
 import 'login_screen.dart';
-import '../main_layout.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -716,11 +715,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 studentData: studentData,
                               );
 
+                              // Sign out so the student completes mandatory first-login OTP verification
+                              await _authService.signOut();
+
                               if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Account created! Please sign in with your Student ID to complete first-login OTP verification.',
+                                  ),
+                                  backgroundColor: AppTheme.success,
+                                ),
+                              );
                               Navigator.pushAndRemoveUntil(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const MainLayout(),
+                                  builder: (context) => const LoginScreen(),
                                 ),
                                 (route) => false,
                               );
