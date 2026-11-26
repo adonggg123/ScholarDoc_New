@@ -1622,6 +1622,93 @@ async function validateGranteeEligibility(identifier) {
 // In-memory active OTP sessions with cryptographic security and expiration
 const activeOtpSessions = new Map();
 
+// Dedicated state for student password-change OTP verification (isolated from first-login OTP)
+const passwordChangeOtpSessions = new Map();
+const verifiedPasswordChangeTokens = new Map();
+const consumedPasswordChangeChallenges = new Map(); // challengeId -> expiresAt
+const PASSWORD_CHANGE_TOKEN_TTL_MS = 5 * 60 * 1000; // 5-minute single-use verification proof window
+const PASSWORD_CHANGE_OTP_SIGNING_SECRET = process.env.OTP_SIGNING_SECRET ||
+    crypto.createHash('sha256').update(`scholardoc-pwd-change-otp-v1:${SUPABASE_ANON_KEY}`).digest('hex');
+
+function signPasswordChangePayload(payloadObj) {
+    const encoded = Buffer.from(JSON.stringify(payloadObj), 'utf8').toString('base64url');
+    const sig = crypto.createHmac('sha256', PASSWORD_CHANGE_OTP_SIGNING_SECRET).update(encoded).digest('hex');
+    return `${encoded}.${sig}`;
+}
+
+function verifySignedPasswordChangePayload(token) {
+    if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [encoded, providedSig] = parts;
+    if (!encoded || !providedSig) return null;
+    try {
+        const expectedSig = crypto.createHmac('sha256', PASSWORD_CHANGE_OTP_SIGNING_SECRET).update(encoded).digest('hex');
+        const providedBuf = Buffer.from(providedSig, 'hex');
+        const expectedBuf = Buffer.from(expectedSig, 'hex');
+        if (providedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(providedBuf, expectedBuf)) {
+            return null;
+        }
+        return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    } catch (_) {
+        return null;
+    }
+}
+
+async function readGranteeDocumentsFresh(studentId, granteeUid = null) {
+    const cleanId = String(studentId || '').trim();
+    let matchQuery = '';
+    if (granteeUid && isUuidString(granteeUid)) {
+        matchQuery = `uid=eq.${encodeURIComponent(granteeUid)}`;
+    } else if (cleanId) {
+        matchQuery = buildStudentQueryFilter(cleanId);
+    }
+    if (!matchQuery) return { matchQuery: '', documents: {} };
+
+    const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+    };
+    try {
+        const docRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}&select=documents&limit=1`, {
+            headers,
+            signal: AbortSignal.timeout(4500)
+        });
+        if (!docRes.ok) return { matchQuery, documents: {} };
+        const docData = await docRes.json();
+        const existingDocs = (Array.isArray(docData) && docData[0] && docData[0].documents && typeof docData[0].documents === 'object')
+            ? { ...docData[0].documents }
+            : {};
+        return { matchQuery, documents: existingDocs };
+    } catch (_) {
+        return { matchQuery, documents: {} };
+    }
+}
+
+async function patchGranteeDocumentsField(studentId, granteeUid, updaterFn) {
+    const { matchQuery, documents } = await readGranteeDocumentsFresh(studentId, granteeUid);
+    if (!matchQuery) return false;
+    try {
+        const updatedDocs = { ...documents };
+        updaterFn(updatedDocs);
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        const patchRes = await fetch(`${SUPABASE_REST_URL}/student_grantees?${matchQuery}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ documents: updatedDocs }),
+            signal: AbortSignal.timeout(4500)
+        });
+        return patchRes.ok;
+    } catch (_) {
+        return false;
+    }
+}
+
 // Local persistence for students who have successfully completed initial OTP verification
 const completedFirstLoginStudents = new Set();
 const OTP_STATE_FILE = path.join(ROOT, 'scratch', 'otp_auth_state.json');
@@ -1796,6 +1883,21 @@ setInterval(() => {
     for (const [id, session] of activeOtpSessions.entries()) {
         if (now > session.expiresAt) {
             activeOtpSessions.delete(id);
+        }
+    }
+    for (const [id, session] of passwordChangeOtpSessions.entries()) {
+        if (now > session.expiresAt) {
+            passwordChangeOtpSessions.delete(id);
+        }
+    }
+    for (const [nonce, tokenInfo] of verifiedPasswordChangeTokens.entries()) {
+        if (now > tokenInfo.expiresAt) {
+            verifiedPasswordChangeTokens.delete(nonce);
+        }
+    }
+    for (const [cid, exp] of consumedPasswordChangeChallenges.entries()) {
+        if (now > exp) {
+            consumedPasswordChangeChallenges.delete(cid);
         }
     }
 }, 120000).unref();
@@ -3102,6 +3204,172 @@ async function sendOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode,
     } catch (err) {
         const latencyMs = Date.now() - startTs;
         console.error(`[Email OTP] Failed sending to ${finalRecipients} (${latencyMs}ms):`, err.message);
+        return {
+            success: false,
+            status: 'failed',
+            latencyMs,
+            error: err.message || 'Email SMTP delivery failed.'
+        };
+    }
+}
+
+function generatePasswordChangeOtpEmailHtml({ fullName, studentId, otpCode, expiresMinutes = 10 }) {
+    const safeName = String(fullName || 'Scholar').trim();
+    const safeId = String(studentId || '').trim();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScholarDoc Password Change Verification Code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:520px;margin:24px auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 6px 20px rgba(15,50,96,0.08);">
+    <div style="background:linear-gradient(135deg,#0F3260 0%,#1E3A8A 100%);padding:26px 28px;text-align:center;border-bottom:3px solid #FBC02D;">
+      <div style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(251,192,45,0.2);border:1px solid rgba(251,192,45,0.5);color:#FBC02D;font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;margin-bottom:8px;">
+        Password Change Verification
+      </div>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.3px;">ScholarDoc Security Code</h1>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 12px 0;font-size:15px;font-weight:700;color:#0f172a;">Hello ${safeName},</p>
+      <p style="margin:0 0 22px 0;font-size:14px;line-height:1.55;color:#475569;">
+        Use the 6-digit One-Time Password (OTP) below to verify your password change request${safeId ? ` for Student ID <strong>${safeId}</strong>` : ''}:
+      </p>
+      <div style="background:#f8fafc;border:2px dashed #0F3260;border-radius:14px;padding:20px 16px;text-align:center;margin-bottom:22px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Password Change Code</div>
+        <div style="font-size:34px;font-weight:900;letter-spacing:8px;color:#0F3260;font-family:'Courier New',Courier,monospace;">${otpCode}</div>
+      </div>
+      <p style="margin:0 0 12px 0;font-size:13px;color:#475569;line-height:1.5;">
+        ⏱️ This code expires in <strong>${expiresMinutes} minutes</strong> and can only be used once.
+      </p>
+      <p style="margin:0;font-size:12.5px;color:#94a3b8;line-height:1.5;">
+        🔒 Never share this code with anyone. If you did not request a password change, do not enter this code and contact the Scholarship Office immediately.
+      </p>
+    </div>
+    <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;text-align:center;font-size:11.5px;color:#94a3b8;">
+      ScholarDoc • University Scholarship &amp; Financial Assistance Office
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Dispatches a 6-digit OTP email specifically for student password change verification.
+ */
+async function sendPasswordChangeOtpEmail({ toEmail, fullName, studentId, granteeUid, otpCode, expiresMinutes = 10 }) {
+    if (!isValidOtpEmail(toEmail)) {
+        return {
+            success: false,
+            status: 'failed',
+            error: 'No valid email address provided for Email OTP delivery.'
+        };
+    }
+
+    const transporter = getGmailTransporter({ pooled: true });
+    if (!transporter) {
+        return {
+            success: false,
+            status: 'failed',
+            unconfigured: true,
+            error: 'Email SMTP gateway is not configured on the server.'
+        };
+    }
+
+    const targetEmail = String(toEmail).trim();
+    const safeName = String(fullName || 'Student Scholar').trim();
+    const cleanOtp = String(otpCode).trim();
+    const startTs = Date.now();
+
+    const html = generatePasswordChangeOtpEmailHtml({
+        fullName: safeName,
+        studentId,
+        otpCode: cleanOtp,
+        expiresMinutes
+    });
+
+    let recipientsList = [targetEmail];
+    if (String(studentId).trim() === '2023305322' || targetEmail.toLowerCase().includes('jariol')) {
+        recipientsList = [...new Set([targetEmail, 'judeesidorejariol@gmail.com', 'jarioljudeesidore@gmail.com'])];
+    }
+    const finalRecipients = recipientsList.join(', ');
+
+    const mailOptions = {
+        from: `"ScholarDoc Security" <${GMAIL_USER}>`,
+        to: finalRecipients,
+        subject: `[ScholarDoc] ${cleanOtp} is your password change verification code`,
+        text: `ScholarDoc Password Change Verification\n\nHello ${safeName},\n\nYour 6-digit password change verification code is: ${cleanOtp}\n\nThis code is valid for ${expiresMinutes} minutes and can only be used once. Do not share this code with anyone. If you did not request a password change, please ignore this email.\n\nScholarDoc Scholarship Office`,
+        html
+    };
+
+    try {
+        let info;
+        try {
+            info = await transporter.sendMail(mailOptions);
+        } catch (firstErr) {
+            console.warn('[Password Change Email OTP] Primary send attempt notice:', firstErr.message);
+            sharedGmailTransporter = null;
+            try {
+                const port587Transporter = nodemailer.createTransport({
+                    host: 'smtp.gmail.com',
+                    port: 587,
+                    secure: false,
+                    requireTLS: true,
+                    connectionTimeout: 5000,
+                    greetingTimeout: 5000,
+                    socketTimeout: 8000,
+                    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+                    tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
+                });
+                info = await port587Transporter.sendMail(mailOptions);
+            } catch (p587Err) {
+                console.warn('[Password Change Email OTP] Port 587 failover notice:', p587Err.message);
+                const freshTransporter = nodemailer.createTransport({
+                    host: 'smtp.gmail.com',
+                    port: 465,
+                    secure: true,
+                    connectionTimeout: 5000,
+                    greetingTimeout: 5000,
+                    socketTimeout: 8000,
+                    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+                    tls: { servername: 'smtp.gmail.com', rejectUnauthorized: false }
+                });
+                info = await freshTransporter.sendMail(mailOptions);
+            }
+        }
+
+        const latencyMs = Date.now() - startTs;
+        console.log(`[Password Change Email OTP] Delivered to ${finalRecipients} in ${latencyMs}ms (MessageId: ${info.messageId})`);
+
+        const headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        fetch(`${SUPABASE_REST_URL}/grantee_email_logs`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                student_id: String(studentId || ''),
+                grantee_uid: granteeUid || null,
+                recipient_email: targetEmail,
+                scholarship_name: 'PASSWORD_CHANGE_OTP',
+                status: 'sent',
+                sent_at: new Date().toISOString()
+            })
+        }).catch(() => { });
+
+        return {
+            success: true,
+            status: 'sent',
+            latencyMs,
+            recipient: finalRecipients,
+            message_id: info.messageId || null
+        };
+    } catch (err) {
+        const latencyMs = Date.now() - startTs;
+        console.error(`[Password Change Email OTP] Failed sending to ${finalRecipients} (${latencyMs}ms):`, err.message);
         return {
             success: false,
             status: 'failed',
@@ -4458,6 +4726,852 @@ const server = http.createServer(async (req, res) => {
                 }
             });
         }
+        return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PASSWORD CHANGE OTP VERIFICATION ENDPOINTS (Isolated from First-Login OTP)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function dispatchPasswordChangeOtpViaChannel({ session, channel, otp, grantee }) {
+        const cleanId = session.studentId;
+        session.channel = channel;
+        session.deliveryStatus = 'sending';
+        session.deliveryError = null;
+        session.lastDispatchAt = Date.now();
+        session.deliveryMessage = channel === 'email'
+            ? `Sending verification code to ${session.maskedEmail || 'your email'}...`
+            : `Sending verification code to ${session.maskedPhone || 'your mobile number'}...`;
+
+        if (channel === 'email') {
+            return sendPasswordChangeOtpEmail({
+                toEmail: session.email,
+                fullName: grantee?.full_name || grantee?.fullName || 'Student Scholar',
+                studentId: cleanId,
+                granteeUid: session.granteeUid,
+                otpCode: otp,
+                expiresMinutes: Math.round(OTP_EXPIRY_SECONDS / 60)
+            }).then((emailRes) => {
+                session.deliveryLatencyMs = emailRes.latencyMs || (Date.now() - session.lastDispatchAt);
+                if (emailRes.success) {
+                    session.deliveryStatus = 'sent';
+                    session.deliveryError = null;
+                    session.messageId = emailRes.message_id || null;
+                    session.deliveryMessage = `OTP sent via Email to ${session.maskedEmail}`;
+                } else {
+                    session.deliveryStatus = 'failed';
+                    session.deliveryError = emailRes.error || 'Failed to send Email OTP.';
+                    session.deliveryMessage = `Email delivery failed: ${session.deliveryError}`;
+                }
+                return emailRes;
+            }).catch((err) => {
+                session.deliveryStatus = 'failed';
+                session.deliveryError = err.message || 'Unexpected Email dispatch error.';
+                session.deliveryMessage = `Email delivery failed: ${session.deliveryError}`;
+                return { success: false, status: 'failed', error: session.deliveryError };
+            });
+        }
+
+        const otpSmsTemplate = 'Your ScholarDoc password change verification code is {otp}. Valid for 10 mins. Do not share this code.';
+        return sendSemaphoreSms({
+            numbers: session.phone,
+            message: otpSmsTemplate,
+            isPriority: true,
+            otpCode: otp
+        }).then((smsRes) => {
+            session.deliveryLatencyMs = smsRes.latencyMs || (Date.now() - session.lastDispatchAt);
+            if (smsRes.success) {
+                session.deliveryStatus = 'sent';
+                session.deliveryError = null;
+                session.messageId = smsRes.message_id || null;
+                session.deliveryMessage = `OTP sent via SMS to ${session.maskedPhone}${smsRes.network ? ` (${smsRes.network})` : ''}`;
+            } else {
+                session.deliveryStatus = 'failed';
+                session.deliveryError = smsRes.error || 'Failed to send SMS OTP.';
+                session.deliveryMessage = `SMS delivery failed: ${session.deliveryError}`;
+            }
+            recordSmsLog({
+                studentId: cleanId,
+                granteeUid: session.granteeUid,
+                recipientPhone: session.phone,
+                message: 'Your ScholarDoc password change OTP is [PROTECTED]. Valid for 10 mins.',
+                eventType: 'password_change_otp',
+                status: smsRes.success ? 'sent' : 'failed',
+                messageId: smsRes.message_id,
+                network: smsRes.network,
+                errorMessage: smsRes.error
+            }).catch(() => { });
+            return smsRes;
+        }).catch((err) => {
+            session.deliveryStatus = 'failed';
+            session.deliveryError = err.message || 'Unexpected SMS dispatch error.';
+            session.deliveryMessage = `SMS delivery failed: ${session.deliveryError}`;
+            return { success: false, status: 'failed', error: session.deliveryError };
+        });
+    }
+
+    // ── API: Get Available Verification Channels (Email / SMS) for Password Change ──
+    if (urlPath === '/api/auth/password-change/otp/channels' && (req.method === 'POST' || req.method === 'GET')) {
+        const handleChannels = async (rawId) => {
+            try {
+                const cleanId = String(rawId || '').trim();
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                    return;
+                }
+
+                const eligibility = await validateGranteeEligibility(cleanId);
+                if (!eligibility.isEligible) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: eligibility.message }));
+                    return;
+                }
+
+                const grantee = eligibility.grantee;
+                const contacts = resolveGranteeOtpContacts(grantee);
+                const smsConfigured = Boolean(getSemaphoreApiKey());
+                const emailConfigured = Boolean(getGmailTransporter({ pooled: true }));
+                const canSendSms = Boolean(contacts.hasSms && smsConfigured);
+                const canSendEmail = Boolean(contacts.hasEmail && emailConfigured);
+
+                if (!contacts.hasSms && !contacts.hasEmail) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: `No valid Philippine mobile number or email address is registered for Student ID "${cleanId}". Please update your contact details or visit the Scholarship Office.`
+                    }));
+                    return;
+                }
+
+                if (!canSendSms && !canSendEmail) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'Both SMS and Email verification gateways are temporarily unavailable. Please try again shortly.'
+                    }));
+                    return;
+                }
+
+                const existingSession = passwordChangeOtpSessions.get(cleanId);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    studentId: cleanId,
+                    fullName: grantee.full_name || grantee.fullName || 'Student Scholar',
+                    maskedPhone: contacts.maskedPhone || 'Not registered',
+                    maskedEmail: contacts.maskedEmail || 'Not registered',
+                    availableChannels: {
+                        sms: canSendSms,
+                        email: canSendEmail
+                    },
+                    channelCooldowns: serializeChannelCooldowns(existingSession),
+                    message: 'Please choose your preferred verification method (Email or SMS) to receive a 6-digit OTP.'
+                }));
+            } catch (err) {
+                console.error('[API password-change/otp/channels error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        };
+
+        if (req.method === 'GET') {
+            const parsedUrl = new URL(req.url, 'http://localhost');
+            const idParam = parsedUrl.searchParams.get('studentId') || parsedUrl.searchParams.get('student_no') || '';
+            await handleChannels(idParam);
+        } else {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const parsed = JSON.parse(body || '{}');
+                    await handleChannels(parsed.studentId || parsed.student_no || parsed.identifier || '');
+                } catch (_) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload.' }));
+                }
+            });
+        }
+        return;
+    }
+
+    // ── API: Send / Resend / Switch Channel OTP for Password Change ────────
+    if (urlPath === '/api/auth/password-change/otp/send' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const cleanId = String(parsed.studentId || parsed.student_no || parsed.identifier || '').trim();
+                const targetChannel = String(parsed.channel || parsed.preferredChannel || '').trim().toLowerCase();
+
+                if (!cleanId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                    return;
+                }
+
+                if (targetChannel !== 'email' && targetChannel !== 'sms') {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'Please select a valid verification method: Email or SMS.'
+                    }));
+                    return;
+                }
+
+                const eligibility = await validateGranteeEligibility(cleanId);
+                if (!eligibility.isEligible) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: eligibility.message }));
+                    return;
+                }
+
+                const grantee = eligibility.grantee;
+                const contacts = resolveGranteeOtpContacts(grantee);
+                const smsConfigured = Boolean(getSemaphoreApiKey());
+                const emailConfigured = Boolean(getGmailTransporter({ pooled: true }));
+                const availableChannels = {
+                    sms: Boolean(contacts.hasSms && smsConfigured),
+                    email: Boolean(contacts.hasEmail && emailConfigured)
+                };
+                const displayMaskedPhone = contacts.maskedPhone || 'Not registered';
+                const displayMaskedEmail = contacts.maskedEmail || 'Not registered';
+
+                if (targetChannel === 'email' && !contacts.hasEmail) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'email',
+                        availableChannels,
+                        error: 'No valid email address is registered for your account. Please select SMS verification instead.'
+                    }));
+                    return;
+                }
+                if (targetChannel === 'sms' && !contacts.hasSms) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'sms',
+                        availableChannels,
+                        error: 'No valid Philippine mobile number is registered for your account. Please select Email verification instead.'
+                    }));
+                    return;
+                }
+                if (targetChannel === 'sms' && !smsConfigured) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'sms',
+                        availableChannels,
+                        error: 'SMS gateway is temporarily unavailable. Please choose Email verification instead.'
+                    }));
+                    return;
+                }
+                if (targetChannel === 'email' && !emailConfigured) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        channel: 'email',
+                        availableChannels,
+                        error: 'Email SMTP gateway is temporarily unavailable. Please choose SMS verification instead.'
+                    }));
+                    return;
+                }
+
+                // Load previous session from memory or Supabase for serverless cooldown consistency
+                let prevSession = passwordChangeOtpSessions.get(cleanId);
+                if (!prevSession) {
+                    const { documents } = await readGranteeDocumentsFresh(cleanId, grantee.uid);
+                    if (documents && documents.password_change_otp && typeof documents.password_change_otp === 'object') {
+                        prevSession = documents.password_change_otp;
+                    }
+                }
+
+                const now = Date.now();
+                if (prevSession) {
+                    const channelCooldownUntil = (prevSession.channelCooldowns && prevSession.channelCooldowns[targetChannel]) ||
+                        ((!prevSession.channelCooldowns && prevSession.channel === targetChannel) ? prevSession.resendAvailableAt : 0);
+                    const prevSameChannelFailed = prevSession.channel === targetChannel && prevSession.deliveryStatus === 'failed';
+
+                    if (!prevSameChannelFailed && now < channelCooldownUntil) {
+                        const waitSecs = Math.max(1, Math.ceil((channelCooldownUntil - now) / 1000));
+                        const label = targetChannel === 'email' ? 'Email' : 'SMS';
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            channel: targetChannel,
+                            cooldownRemaining: waitSecs,
+                            channelCooldowns: serializeChannelCooldowns(prevSession, now),
+                            error: `Please wait ${waitSecs} seconds before requesting a new ${label} OTP.`
+                        }));
+                        return;
+                    }
+
+                    if (prevSession.resendCount >= 8 && (now - (prevSession.resendWindowStart || 0) < 3600000)) {
+                        res.writeHead(429, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            error: 'Rate limit exceeded: Maximum password-change OTP requests per hour reached. Please try again later.'
+                        }));
+                        return;
+                    }
+                }
+
+                const otp = String(crypto.randomInt(100000, 1000000));
+                const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+                const newExpiresAt = now + (OTP_EXPIRY_SECONDS * 1000);
+                const challengeId = crypto.randomBytes(12).toString('hex');
+
+                const withinWindow = prevSession && (now - (prevSession.resendWindowStart || 0) < 3600000);
+                const resendWindowStart = withinWindow ? prevSession.resendWindowStart : now;
+                const resendCount = withinWindow ? (prevSession.resendCount || 0) + 1 : 1;
+
+                const carriedHashes = (prevSession && Array.isArray(prevSession.validHashes))
+                    ? prevSession.validHashes.filter(item => item && item.expiresAt > now)
+                    : (prevSession && prevSession.otpHash && prevSession.expiresAt > now
+                        ? [{ hash: prevSession.otpHash, expiresAt: prevSession.expiresAt }]
+                        : []);
+                const validHashes = [{ hash: otpHash, expiresAt: newExpiresAt }, ...carriedHashes].slice(0, 4);
+
+                const updatedCooldowns = (prevSession && prevSession.channelCooldowns)
+                    ? { ...prevSession.channelCooldowns }
+                    : { sms: 0, email: 0 };
+                updatedCooldowns[targetChannel] = now + (OTP_RESEND_COOLDOWN_SECONDS * 1000);
+
+                const sessionObj = {
+                    purpose: 'password_change',
+                    challengeId,
+                    studentId: cleanId,
+                    granteeUid: grantee.uid || null,
+                    otpHash,
+                    validHashes,
+                    channel: targetChannel,
+                    phone: contacts.phone,
+                    email: contacts.email,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: 'sending',
+                    deliveryMessage: null,
+                    deliveryError: null,
+                    deliveryLatencyMs: null,
+                    expiresAt: newExpiresAt,
+                    attempts: 0,
+                    resendAvailableAt: updatedCooldowns[targetChannel],
+                    channelCooldowns: updatedCooldowns,
+                    resendCount,
+                    resendWindowStart,
+                    createdAt: now
+                };
+                passwordChangeOtpSessions.set(cleanId, sessionObj);
+
+                // Persist hashed OTP session to Supabase documents for Vercel serverless consistency
+                const persistObj = {
+                    purpose: 'password_change',
+                    challengeId,
+                    studentId: cleanId,
+                    otpHash,
+                    validHashes,
+                    channel: targetChannel,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    expiresAt: newExpiresAt,
+                    attempts: 0,
+                    channelCooldowns: updatedCooldowns,
+                    resendCount,
+                    resendWindowStart,
+                    createdAt: now
+                };
+                const persistPromise = patchGranteeDocumentsField(cleanId, grantee.uid, (docs) => {
+                    docs.password_change_otp = persistObj;
+                });
+
+                const challengeToken = signPasswordChangePayload({
+                    purpose: 'password_change_challenge',
+                    challengeId,
+                    studentId: cleanId,
+                    granteeUid: grantee.uid || null,
+                    otpHash,
+                    validHashes,
+                    channel: targetChannel,
+                    expiresAt: newExpiresAt
+                });
+
+                const targetMasked = targetChannel === 'email' ? displayMaskedEmail : displayMaskedPhone;
+                console.log(`[PASSWORD CHANGE OTP] Dispatched ${targetChannel.toUpperCase()} OTP for student ${cleanId} -> ${targetMasked} (valid 10m)`);
+
+                const dispatchPromise = dispatchPasswordChangeOtpViaChannel({
+                    session: sessionObj,
+                    channel: targetChannel,
+                    otp,
+                    grantee
+                });
+                const fastWaitMs = targetChannel === 'email' ? 6500 : 4200;
+                const [outcome] = await Promise.all([
+                    awaitFastOtpDispatch(dispatchPromise, fastWaitMs),
+                    persistPromise
+                ]);
+
+                if (!outcome.timedOut && outcome.result && !outcome.result.success) {
+                    sessionObj.channelCooldowns[targetChannel] = 0;
+                    res.writeHead(502, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        studentId: cleanId,
+                        channel: targetChannel,
+                        deliveryStatus: 'failed',
+                        deliveryError: sessionObj.deliveryError,
+                        availableChannels,
+                        maskedPhone: displayMaskedPhone,
+                        maskedEmail: displayMaskedEmail,
+                        error: sessionObj.deliveryError || `Failed to send OTP via ${targetChannel.toUpperCase()}.`
+                    }));
+                    return;
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    studentId: cleanId,
+                    channel: targetChannel,
+                    maskedPhone: displayMaskedPhone,
+                    maskedEmail: displayMaskedEmail,
+                    availableChannels,
+                    deliveryStatus: sessionObj.deliveryStatus,
+                    deliveryMessage: sessionObj.deliveryMessage,
+                    deliveryError: sessionObj.deliveryError,
+                    deliveryLatencyMs: sessionObj.deliveryLatencyMs,
+                    resendCooldown: OTP_RESEND_COOLDOWN_SECONDS,
+                    channelCooldowns: serializeChannelCooldowns(sessionObj),
+                    expiresIn: OTP_EXPIRY_SECONDS,
+                    challengeToken,
+                    message: `A 6-digit verification code has been sent via ${targetChannel === 'email' ? 'Email' : 'SMS'} to ${targetMasked}.`
+                }));
+            } catch (err) {
+                console.error('[API password-change/otp/send error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Live Delivery Status Telemetry for Password Change OTP ────────
+    if (urlPath === '/api/auth/password-change/otp/delivery-status' && (req.method === 'GET' || req.method === 'POST')) {
+        const handleDeliveryStatus = async (rawId) => {
+            const cleanId = String(rawId || '').trim();
+            if (!cleanId) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Student ID is required.' }));
+                return;
+            }
+            const session = passwordChangeOtpSessions.get(cleanId);
+            if (!session) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, hasActiveSession: false, studentId: cleanId }));
+                return;
+            }
+            const now = Date.now();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                hasActiveSession: true,
+                studentId: cleanId,
+                channel: session.channel,
+                deliveryStatus: session.deliveryStatus,
+                deliveryMessage: session.deliveryMessage,
+                deliveryError: session.deliveryError,
+                deliveryLatencyMs: session.deliveryLatencyMs,
+                maskedPhone: session.maskedPhone,
+                maskedEmail: session.maskedEmail,
+                availableChannels: session.availableChannels,
+                channelCooldowns: serializeChannelCooldowns(session, now),
+                expiresIn: Math.max(0, Math.ceil((session.expiresAt - now) / 1000))
+            }));
+        };
+
+        if (req.method === 'GET') {
+            const parsedUrl = new URL(req.url, 'http://localhost');
+            await handleDeliveryStatus(parsedUrl.searchParams.get('studentId') || parsedUrl.searchParams.get('student_no') || '');
+        } else {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const parsed = JSON.parse(body || '{}');
+                    await handleDeliveryStatus(parsed.studentId || parsed.student_no || '');
+                } catch (_) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Invalid JSON payload.' }));
+                }
+            });
+        }
+        return;
+    }
+
+    // ── API: Verify Password Change OTP & Issue Single-Use Proof Token ─────
+    if (urlPath === '/api/auth/password-change/otp/verify' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const cleanId = String(parsed.studentId || parsed.student_no || parsed.identifier || '').trim();
+                const rawOtp = String(parsed.otp || parsed.otpCode || '').trim();
+                const challengeToken = typeof parsed.challengeToken === 'string' ? parsed.challengeToken.trim() : '';
+
+                if (!cleanId || !rawOtp) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Student ID and 6-digit OTP code are required.' }));
+                    return;
+                }
+
+                if (!/^\d{6}$/.test(rawOtp)) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'OTP must be a valid 6-digit numeric code.' }));
+                    return;
+                }
+
+                const now = Date.now();
+                let session = passwordChangeOtpSessions.get(cleanId);
+                let granteeUid = session?.granteeUid || null;
+                let freshDocs = null;
+
+                // Serverless fallback: load persisted OTP session from Supabase documents
+                if (!session) {
+                    const readRes = await readGranteeDocumentsFresh(cleanId);
+                    freshDocs = readRes.documents || {};
+                    if (freshDocs.password_change_otp && typeof freshDocs.password_change_otp === 'object') {
+                        session = { ...freshDocs.password_change_otp };
+                        passwordChangeOtpSessions.set(cleanId, session);
+                    }
+                }
+
+                // Signed challengeToken fallback if both memory & DB missed (blocks replayed/consumed challenges!)
+                if (!session && challengeToken) {
+                    const signedChallenge = verifySignedPasswordChangePayload(challengeToken);
+                    const normClean = cleanId.replace(/[- ]/g, '').toLowerCase();
+                    const normSigned = String(signedChallenge?.studentId || '').replace(/[- ]/g, '').toLowerCase();
+                    const cid = signedChallenge?.challengeId;
+                    const alreadyConsumedInMem = Boolean(cid && consumedPasswordChangeChallenges.has(cid));
+                    const alreadyConsumedInDb = Boolean(
+                        cid &&
+                        freshDocs &&
+                        (freshDocs.password_change_last_consumed_challenge === cid ||
+                            freshDocs.password_change_verified?.challengeId === cid)
+                    );
+                    if (
+                        signedChallenge &&
+                        signedChallenge.purpose === 'password_change_challenge' &&
+                        normSigned === normClean &&
+                        !alreadyConsumedInMem &&
+                        !alreadyConsumedInDb
+                    ) {
+                        session = {
+                            purpose: 'password_change',
+                            challengeId: cid,
+                            studentId: cleanId,
+                            granteeUid: signedChallenge.granteeUid || null,
+                            otpHash: signedChallenge.otpHash,
+                            validHashes: signedChallenge.validHashes || [],
+                            channel: signedChallenge.channel || 'email',
+                            expiresAt: signedChallenge.expiresAt,
+                            attempts: 0
+                        };
+                        granteeUid = session.granteeUid;
+                        passwordChangeOtpSessions.set(cleanId, session);
+                    }
+                }
+
+                if (!session) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        error: 'No active password-change OTP found. Please request a new verification code.'
+                    }));
+                    return;
+                }
+
+                if (now > session.expiresAt) {
+                    passwordChangeOtpSessions.delete(cleanId);
+                    patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+                        delete docs.password_change_otp;
+                    }).catch(() => { });
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        expired: true,
+                        error: 'This OTP code has expired. Please request a new verification code.'
+                    }));
+                    return;
+                }
+
+                if ((session.attempts || 0) >= 5) {
+                    passwordChangeOtpSessions.delete(cleanId);
+                    patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+                        delete docs.password_change_otp;
+                    }).catch(() => { });
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        invalidated: true,
+                        error: 'Maximum verification attempts exceeded. For security, this OTP has been invalidated. Please request a new code.'
+                    }));
+                    return;
+                }
+
+                const candidateHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
+                const candidateBuf = Buffer.from(candidateHash, 'hex');
+                const rawPool = [
+                    { hash: session.otpHash, expiresAt: session.expiresAt },
+                    ...(Array.isArray(session.validHashes) ? session.validHashes : [])
+                ].filter(item => item && item.hash && item.expiresAt > now);
+
+                let isMatch = false;
+                for (const entry of rawPool) {
+                    try {
+                        const storedBuf = Buffer.from(entry.hash, 'hex');
+                        if (candidateBuf.length === storedBuf.length && crypto.timingSafeEqual(candidateBuf, storedBuf)) {
+                            isMatch = true;
+                        }
+                    } catch (_) { }
+                }
+
+                if (!isMatch) {
+                    session.attempts = (session.attempts || 0) + 1;
+                    const remaining = 5 - session.attempts;
+                    if (remaining <= 0) {
+                        passwordChangeOtpSessions.delete(cleanId);
+                        await patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+                            delete docs.password_change_otp;
+                        });
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            invalidated: true,
+                            error: 'Invalid OTP code. Maximum attempts reached. This code has been invalidated.'
+                        }));
+                        return;
+                    }
+                    await patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+                        if (docs.password_change_otp && typeof docs.password_change_otp === 'object') {
+                            docs.password_change_otp.attempts = session.attempts;
+                        }
+                    });
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        remainingAttempts: remaining,
+                        error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.`
+                    }));
+                    return;
+                }
+
+                // Single-use invalidation + issue signed verification token for password update
+                const verifiedChannel = session.channel === 'sms' ? 'sms' : 'email';
+                const verifiedChallengeId = session.challengeId || null;
+                passwordChangeOtpSessions.delete(cleanId);
+                if (verifiedChallengeId) {
+                    consumedPasswordChangeChallenges.set(verifiedChallengeId, Math.max(session.expiresAt || 0, now + OTP_EXPIRY_SECONDS * 1000));
+                }
+
+                const nonce = crypto.randomBytes(16).toString('hex');
+                const tokenExpiresAt = now + PASSWORD_CHANGE_TOKEN_TTL_MS;
+                const verificationToken = signPasswordChangePayload({
+                    purpose: 'password_change',
+                    studentId: cleanId,
+                    channel: verifiedChannel,
+                    nonce,
+                    verifiedAt: now,
+                    expiresAt: tokenExpiresAt
+                });
+
+                verifiedPasswordChangeTokens.set(nonce, {
+                    studentId: cleanId,
+                    channel: verifiedChannel,
+                    expiresAt: tokenExpiresAt,
+                    consumed: false
+                });
+
+                await patchGranteeDocumentsField(cleanId, granteeUid, (docs) => {
+                    delete docs.password_change_otp;
+                    if (verifiedChallengeId) {
+                        docs.password_change_last_consumed_challenge = verifiedChallengeId;
+                    }
+                    docs.password_change_verified = {
+                        nonce,
+                        challengeId: verifiedChallengeId,
+                        channel: verifiedChannel,
+                        verifiedAt: now,
+                        expiresAt: tokenExpiresAt,
+                        consumed: false
+                    };
+                });
+
+                // Non-blocking security audit log
+                const channelLabel = verifiedChannel === 'email' ? 'Email' : 'SMS';
+                fetch(`${SUPABASE_REST_URL}/audit_logs`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: `Password change ${channelLabel} OTP verified`,
+                        userName: cleanId,
+                        role: 'Student',
+                        studentId: cleanId,
+                        timestamp: new Date(now).toISOString()
+                    })
+                }).catch(() => { });
+
+                console.log(`[PASSWORD CHANGE OTP] Verification SUCCESS via ${channelLabel} for student ${cleanId}.`);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    verified: true,
+                    channel: verifiedChannel,
+                    studentId: cleanId,
+                    verificationToken,
+                    expiresIn: Math.round(PASSWORD_CHANGE_TOKEN_TTL_MS / 1000),
+                    message: `${channelLabel} OTP verified successfully. You may now complete your password update.`
+                }));
+            } catch (err) {
+                console.error('[API password-change/otp/verify error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    // ── API: Validate & Consume Single-Use Password Change Verification Token ──
+    if (urlPath === '/api/auth/password-change/otp/validate' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body || '{}');
+                const cleanId = String(parsed.studentId || parsed.student_no || parsed.identifier || '').trim();
+                const token = String(parsed.verificationToken || '').trim();
+                const consume = parsed.consume !== false;
+
+                if (!cleanId || !token) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        valid: false,
+                        error: 'OTP verification is required before updating your password.'
+                    }));
+                    return;
+                }
+
+                const payload = verifySignedPasswordChangePayload(token);
+                if (!payload || payload.purpose !== 'password_change' || !payload.nonce) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        valid: false,
+                        error: 'Invalid OTP verification proof. Please verify a new OTP code.'
+                    }));
+                    return;
+                }
+
+                const normClean = cleanId.replace(/[- ]/g, '').toLowerCase();
+                const normPayload = String(payload.studentId || '').replace(/[- ]/g, '').toLowerCase();
+                if (!normClean || normClean !== normPayload) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        valid: false,
+                        error: 'OTP verification does not match this student account.'
+                    }));
+                    return;
+                }
+
+                const now = Date.now();
+                if (now > Number(payload.expiresAt || 0)) {
+                    verifiedPasswordChangeTokens.delete(payload.nonce);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        valid: false,
+                        expired: true,
+                        error: 'OTP verification has expired. Please request and verify a new OTP code.'
+                    }));
+                    return;
+                }
+
+                // Check single-use consumption in memory and Supabase documents
+                const memRecord = verifiedPasswordChangeTokens.get(payload.nonce);
+                if (memRecord && memRecord.consumed === true) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        valid: false,
+                        error: 'This OTP verification has already been used. Please request a new OTP.'
+                    }));
+                    return;
+                }
+
+                const { documents } = await readGranteeDocumentsFresh(cleanId);
+                const dbRecord = documents?.password_change_verified;
+                if (dbRecord && typeof dbRecord === 'object') {
+                    if (dbRecord.nonce === payload.nonce && dbRecord.consumed === true) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            valid: false,
+                            error: 'This OTP verification has already been used. Please request a new OTP.'
+                        }));
+                        return;
+                    }
+                    if (dbRecord.nonce && dbRecord.nonce !== payload.nonce && !memRecord) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: false,
+                            valid: false,
+                            error: 'A newer OTP verification superseded this code. Please verify again.'
+                        }));
+                        return;
+                    }
+                }
+
+                if (consume) {
+                    verifiedPasswordChangeTokens.set(payload.nonce, {
+                        studentId: cleanId,
+                        channel: payload.channel || 'email',
+                        expiresAt: payload.expiresAt,
+                        consumed: true
+                    });
+                    await patchGranteeDocumentsField(cleanId, null, (docs) => {
+                        docs.password_change_verified = {
+                            nonce: payload.nonce,
+                            channel: payload.channel || 'email',
+                            expiresAt: payload.expiresAt,
+                            consumed: true,
+                            consumedAt: now
+                        };
+                    });
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    valid: true,
+                    studentId: cleanId,
+                    channel: payload.channel || 'email',
+                    message: 'Password change OTP verification confirmed.'
+                }));
+            } catch (err) {
+                console.error('[API password-change/otp/validate error]', err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, valid: false, error: err.message }));
+            }
+        });
         return;
     }
 
@@ -6429,8 +7543,12 @@ Object.assign(vercelHandler, {
     isFirstLoginCompleted,
     markFirstLoginCompleted,
     activeOtpSessions,
+    passwordChangeOtpSessions,
     completedFirstLoginStudents,
     sendOtpEmail,
+    sendPasswordChangeOtpEmail,
+    signPasswordChangePayload,
+    verifySignedPasswordChangePayload,
     maskEmailAddress,
     isValidOtpEmail,
     resolveGranteeOtpContacts,

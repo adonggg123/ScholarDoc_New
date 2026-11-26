@@ -278,9 +278,42 @@ void main() {
       expect(firstLoginDocs['first_login_completed'] == true, isTrue);
       expect(unverifiedDocs['has_custom_password'] == true, isFalse);
     });
+
+    test('updateStudentPassword enforces non-empty OTP verification token', () async {
+      final authService = AuthService();
+      await expectLater(
+        authService.updateStudentPassword(
+          currentPassword: 'OldPassword1',
+          newPassword: 'NewPassword@2026',
+          confirmPassword: 'NewPassword@2026',
+          otpVerificationToken: '',
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('OTP verification is required'),
+          ),
+        ),
+      );
+    });
   });
 
-  group('ChangePasswordScreen widget tests', () {
+  group('ChangePasswordScreen OTP verification & widget tests', () {
+    Map<String, dynamic> mockChannels({
+      bool sms = true,
+      bool email = true,
+    }) =>
+        {
+          'success': true,
+          'studentId': '2024-00123',
+          'fullName': 'Test Scholar',
+          'maskedPhone': '0917 •••• 890',
+          'maskedEmail': 'sc••••ar@gmail.com',
+          'availableChannels': {'sms': sms, 'email': email},
+          'channelCooldowns': {'sms': 0, 'email': 0},
+        };
+
     testWidgets('renders fields, toggles visibility independently, and updates strength meter',
         (WidgetTester tester) async {
       await tester.pumpWidget(
@@ -324,20 +357,31 @@ void main() {
       expect(find.text('Strong'), findsOneWidget);
     });
 
-    testWidgets('validates form errors before invoking callback',
+    testWidgets('validates form errors before invoking prepare or update callbacks',
         (WidgetTester tester) async {
-      bool called = false;
+      bool prepareCalled = false;
+      bool updateCalled = false;
 
       await tester.pumpWidget(
         MaterialApp(
           home: ChangePasswordScreen(
             studentId: '2024-00123',
-            onUpdatePassword: ({
+            onPreparePasswordChange: ({
               required String currentPassword,
               required String newPassword,
               required String confirmPassword,
             }) async {
-              called = true;
+              prepareCalled = true;
+              return mockChannels();
+            },
+            onUpdatePassword: ({
+              required String currentPassword,
+              required String newPassword,
+              required String confirmPassword,
+              required String otpVerificationToken,
+              String? otpChannel,
+            }) async {
+              updateCalled = true;
             },
           ),
         ),
@@ -349,7 +393,8 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
-      expect(called, isFalse);
+      expect(prepareCalled, isFalse);
+      expect(updateCalled, isFalse);
       expect(find.text('Please enter your current password'), findsOneWidget);
       expect(find.text('Please enter a new password'), findsOneWidget);
       expect(find.text('Please confirm your new password'), findsOneWidget);
@@ -371,17 +416,20 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
-      expect(called, isFalse);
+      expect(prepareCalled, isFalse);
+      expect(updateCalled, isFalse);
       expect(find.text('Passwords do not match'), findsOneWidget);
     });
 
-    testWidgets('displays error banner when backend rejects current password',
+    testWidgets('displays error banner and does not send OTP when current password is rejected',
         (WidgetTester tester) async {
+      bool otpSent = false;
+
       await tester.pumpWidget(
         MaterialApp(
           home: ChangePasswordScreen(
             studentId: '2024-00123',
-            onUpdatePassword: ({
+            onPreparePasswordChange: ({
               required String currentPassword,
               required String newPassword,
               required String confirmPassword,
@@ -389,6 +437,13 @@ void main() {
               throw Exception(
                 'Current password is incorrect. Please check and try again.',
               );
+            },
+            onSendPasswordChangeOtp: ({
+              required String studentId,
+              required String channel,
+            }) async {
+              otpSent = true;
+              return {'success': true};
             },
           ),
         ),
@@ -413,6 +468,8 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
+      expect(otpSent, isFalse);
+      expect(find.byKey(const Key('pwd_otp_method_modal')), findsNothing);
       expect(
         find.byKey(const Key('change_password_error_banner')),
         findsOneWidget,
@@ -423,11 +480,15 @@ void main() {
       );
     });
 
-    testWidgets('submits valid password update and pops route with true',
+    testWidgets('requires choosing Email or SMS and verifying OTP before updating password (Email flow)',
         (WidgetTester tester) async {
+      String? sentChannel;
+      String? verifiedOtp;
       String? capturedCurrent;
       String? capturedNew;
       String? capturedConfirm;
+      String? capturedToken;
+      String? capturedChannel;
       bool? poppedResult;
 
       await tester.pumpWidget(
@@ -443,14 +504,55 @@ void main() {
                         builder: (_) => ChangePasswordScreen(
                           studentId: '2024-00123',
                           hasCustomPassword: false,
+                          onPreparePasswordChange: ({
+                            required String currentPassword,
+                            required String newPassword,
+                            required String confirmPassword,
+                          }) async =>
+                              mockChannels(sms: true, email: true),
+                          onSendPasswordChangeOtp: ({
+                            required String studentId,
+                            required String channel,
+                          }) async {
+                            sentChannel = channel;
+                            return {
+                              'success': true,
+                              'channel': channel,
+                              'maskedPhone': '0917 •••• 890',
+                              'maskedEmail': 'sc••••ar@gmail.com',
+                              'availableChannels': {'sms': true, 'email': true},
+                              'deliveryStatus': 'sent',
+                              'deliveryMessage': 'OTP sent via Email to sc••••ar@gmail.com',
+                              'challengeToken': 'signed-challenge-email',
+                              'expiresIn': 600,
+                              'resendCooldown': 30,
+                            };
+                          },
+                          onVerifyPasswordChangeOtp: ({
+                            required String studentId,
+                            required String otp,
+                            String? challengeToken,
+                          }) async {
+                            verifiedOtp = otp;
+                            return {
+                              'success': true,
+                              'verified': true,
+                              'channel': 'email',
+                              'verificationToken': 'signed-proof-email-123',
+                            };
+                          },
                           onUpdatePassword: ({
                             required String currentPassword,
                             required String newPassword,
                             required String confirmPassword,
+                            required String otpVerificationToken,
+                            String? otpChannel,
                           }) async {
                             capturedCurrent = currentPassword;
                             capturedNew = newPassword;
                             capturedConfirm = confirmPassword;
+                            capturedToken = otpVerificationToken;
+                            capturedChannel = otpChannel;
                           },
                         ),
                       ),
@@ -485,11 +587,219 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
+      // Method selection modal MUST appear and require choosing Email or SMS
+      expect(find.byKey(const Key('pwd_otp_method_modal')), findsOneWidget);
+      expect(find.text('Choose Verification Method'), findsOneWidget);
+      expect(find.text('Select Email or SMS to Continue'), findsOneWidget);
+      expect(capturedToken, isNull);
+
+      // Select Email method
+      await tester.tap(find.byKey(const Key('pwd_otp_method_email')));
+      await tester.pumpAndSettle();
+      expect(find.text('Send Code via Email'), findsOneWidget);
+
+      // Tap Send Code via Email
+      final sendBtn = find.byKey(const Key('pwd_otp_send_method_button'));
+      await tester.ensureVisible(sendBtn);
+      await tester.tap(sendBtn);
+      await tester.pumpAndSettle();
+
+      expect(sentChannel, equals('email'));
+      expect(find.text('Email OTP Verification'), findsOneWidget);
+      expect(capturedToken, isNull); // Still NOT updated before OTP verification!
+
+      // Enter 6-digit OTP (auto-verifies on 6th digit)
+      for (int i = 0; i < 6; i++) {
+        await tester.enterText(
+          find.byKey(Key('pwd_otp_digit_$i')),
+          '${i + 1}',
+        );
+      }
+      await tester.pumpAndSettle();
+
+      expect(verifiedOtp, equals('123456'));
       expect(capturedCurrent, equals('2024-00123'));
       expect(capturedNew, equals('Scholar@2026'));
       expect(capturedConfirm, equals('Scholar@2026'));
+      expect(capturedToken, equals('signed-proof-email-123'));
+      expect(capturedChannel, equals('email'));
       expect(poppedResult, isTrue);
       expect(find.text('Open'), findsOneWidget);
+    });
+
+    testWidgets('supports SMS verification method and blocks password update on invalid OTP',
+        (WidgetTester tester) async {
+      String? sentChannel;
+      bool updateCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangePasswordScreen(
+            studentId: '2024-00123',
+            onPreparePasswordChange: ({
+              required String currentPassword,
+              required String newPassword,
+              required String confirmPassword,
+            }) async =>
+                mockChannels(sms: true, email: true),
+            onSendPasswordChangeOtp: ({
+              required String studentId,
+              required String channel,
+            }) async {
+              sentChannel = channel;
+              return {
+                'success': true,
+                'channel': channel,
+                'maskedPhone': '0917 •••• 890',
+                'maskedEmail': 'sc••••ar@gmail.com',
+                'availableChannels': {'sms': true, 'email': true},
+                'deliveryStatus': 'sent',
+                'deliveryMessage': 'OTP sent via SMS to 0917 •••• 890',
+                'challengeToken': 'signed-challenge-sms',
+                'expiresIn': 600,
+                'resendCooldown': 30,
+              };
+            },
+            onVerifyPasswordChangeOtp: ({
+              required String studentId,
+              required String otp,
+              String? challengeToken,
+            }) async {
+              throw Exception('Invalid OTP code. You have 4 attempt(s) remaining.');
+            },
+            onUpdatePassword: ({
+              required String currentPassword,
+              required String newPassword,
+              required String confirmPassword,
+              required String otpVerificationToken,
+              String? otpChannel,
+            }) async {
+              updateCalled = true;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('current_password_field')),
+        '2024-00123',
+      );
+      await tester.enterText(
+        find.byKey(const Key('new_password_field')),
+        'Scholar@2026',
+      );
+      await tester.enterText(
+        find.byKey(const Key('confirm_password_field')),
+        'Scholar@2026',
+      );
+
+      final submitBtn = find.byKey(const Key('submit_change_password_button'));
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      // Choose SMS
+      await tester.tap(find.byKey(const Key('pwd_otp_method_sms')));
+      await tester.pumpAndSettle();
+      expect(find.text('Send Code via SMS'), findsOneWidget);
+
+      final sendBtn = find.byKey(const Key('pwd_otp_send_method_button'));
+      await tester.ensureVisible(sendBtn);
+      await tester.tap(sendBtn);
+      await tester.pumpAndSettle();
+
+      expect(sentChannel, equals('sms'));
+      expect(find.text('SMS OTP Verification'), findsOneWidget);
+
+      // Enter wrong 6-digit OTP
+      for (int i = 0; i < 6; i++) {
+        await tester.enterText(find.byKey(Key('pwd_otp_digit_$i')), '9');
+      }
+      await tester.pumpAndSettle();
+
+      // Error banner appears and password update is strictly blocked
+      expect(find.byKey(const Key('pwd_otp_error_banner')), findsOneWidget);
+      expect(
+        find.text('Invalid OTP code. You have 4 attempt(s) remaining.'),
+        findsOneWidget,
+      );
+      expect(updateCalled, isFalse);
+
+      // Cancel OTP screen -> returns to ChangePasswordScreen without updating
+      final cancelBtn = find.byKey(const Key('pwd_otp_cancel_button'));
+      await tester.ensureVisible(cancelBtn);
+      await tester.tap(cancelBtn);
+      await tester.pumpAndSettle();
+
+      expect(updateCalled, isFalse);
+      expect(find.text('Change Password'), findsOneWidget);
+    });
+
+    testWidgets('cancelling verification method modal does not send OTP or update password',
+        (WidgetTester tester) async {
+      bool otpSent = false;
+      bool updateCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangePasswordScreen(
+            studentId: '2024-00123',
+            onPreparePasswordChange: ({
+              required String currentPassword,
+              required String newPassword,
+              required String confirmPassword,
+            }) async =>
+                mockChannels(sms: true, email: true),
+            onSendPasswordChangeOtp: ({
+              required String studentId,
+              required String channel,
+            }) async {
+              otpSent = true;
+              return {'success': true};
+            },
+            onUpdatePassword: ({
+              required String currentPassword,
+              required String newPassword,
+              required String confirmPassword,
+              required String otpVerificationToken,
+              String? otpChannel,
+            }) async {
+              updateCalled = true;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('current_password_field')),
+        '2024-00123',
+      );
+      await tester.enterText(
+        find.byKey(const Key('new_password_field')),
+        'Scholar@2026',
+      );
+      await tester.enterText(
+        find.byKey(const Key('confirm_password_field')),
+        'Scholar@2026',
+      );
+
+      final submitBtn = find.byKey(const Key('submit_change_password_button'));
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pwd_otp_method_modal')), findsOneWidget);
+
+      final cancelBtn = find.byKey(const Key('pwd_otp_method_cancel_button'));
+      await tester.ensureVisible(cancelBtn);
+      await tester.tap(cancelBtn);
+      await tester.pumpAndSettle();
+
+      expect(otpSent, isFalse);
+      expect(updateCalled, isFalse);
+      expect(find.byKey(const Key('pwd_otp_method_modal')), findsNothing);
     });
 
     testWidgets('renders cleanly in dark mode with custom password status',

@@ -564,21 +564,306 @@ class AuthService {
     return false;
   }
 
-  /// Securely updates the authenticated student's password after their first login.
-  ///
-  /// Security checks enforced:
-  /// 1. Requires an active authenticated Supabase session.
-  /// 2. Confirms the student has completed first-login OTP verification.
-  /// 3. Enforces [PasswordPolicy] rules (length, complexity, no whitespace edges,
-  ///    confirmation match, different from current password & Student ID).
-  /// 4. Cryptographically re-authenticates the user's current password via
-  ///    Supabase Auth before permitting any password mutation.
-  /// 5. Updates the password atomically in Supabase Auth (bcrypt-hashed server-side)
-  ///    and records non-sensitive metadata (`has_custom_password`, `password_updated_at`).
-  /// 6. Revokes other device sessions (`SignOutScope.others`) while keeping the
-  ///    current device logged in.
-  /// 7. Writes an audit trail entry and dispatches a security alert notification.
-  Future<void> updateStudentPassword({
+  /// Fetches available OTP delivery methods (Email / SMS) and masked contact targets
+  /// for the authenticated student's password change verification.
+  Future<Map<String, dynamic>> getPasswordChangeOtpChannels({
+    required String studentId,
+  }) async {
+    final cleanId = studentId.trim();
+    if (cleanId.isEmpty) {
+      throw Exception('Unable to resolve your Student ID. Please sign in again.');
+    }
+    final candidates = await ApiConfig.resolveFastCandidates();
+    dynamic lastErr;
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/password-change/otp/channels');
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'studentId': cleanId}),
+            )
+            .timeout(const Duration(seconds: 8));
+      } catch (connErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = connErr;
+        continue;
+      }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200 && data['success'] == true) {
+        return data;
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'Unable to load verification methods.';
+      throw Exception(errMsg);
+    }
+
+    debugPrint('AuthService.getPasswordChangeOtpChannels error: $lastErr');
+    throw Exception(
+      'Unable to reach the verification server. Please check your internet connection and try again.',
+    );
+  }
+
+  /// Sends (or resends / switches) a 6-digit OTP via the student's chosen method
+  /// (`'email'` or `'sms'`) for password change verification.
+  Future<Map<String, dynamic>> sendPasswordChangeOtp({
+    required String studentId,
+    required String channel,
+  }) async {
+    final cleanId = studentId.trim();
+    final cleanChannel = channel.trim().toLowerCase();
+    if (cleanId.isEmpty) {
+      throw Exception('Student ID is required to send a verification code.');
+    }
+    if (cleanChannel != 'email' && cleanChannel != 'sms') {
+      throw Exception('Please select Email or SMS as your verification method.');
+    }
+
+    final candidates = await ApiConfig.resolveFastCandidates();
+    dynamic lastErr;
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/password-change/otp/send');
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'studentId': cleanId,
+                'channel': cleanChannel,
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+      } catch (connErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = connErr;
+        continue;
+      }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200 && data['success'] == true) {
+        return data;
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'Failed to send verification code.';
+      throw Exception(errMsg);
+    }
+
+    debugPrint('AuthService.sendPasswordChangeOtp error: $lastErr');
+    throw Exception(
+      'Unable to reach the verification server to send your OTP. Please check your connection and try again.',
+    );
+  }
+
+  /// Queries live OTP delivery telemetry for the password-change OTP session.
+  Future<Map<String, dynamic>?> getPasswordChangeOtpDeliveryStatus({
+    required String studentId,
+  }) async {
+    final cleanId = studentId.trim();
+    if (cleanId.isEmpty) return null;
+    final candidates = await ApiConfig.resolveFastCandidates();
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      try {
+        final uri = Uri.parse(
+          '$candidate/api/auth/password-change/otp/delivery-status?studentId=${Uri.encodeComponent(cleanId)}',
+        );
+        final res = await http.get(uri).timeout(const Duration(milliseconds: 2500));
+        if (res.statusCode == 200) {
+          if (candidate.isNotEmpty) {
+            ApiConfig.setWorkingBaseUrl(candidate);
+          }
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map<String, dynamic>) return decoded;
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Verifies the 6-digit password-change OTP on the backend and returns a
+  /// short-lived single-use `verificationToken` required to complete password update.
+  Future<Map<String, dynamic>> verifyPasswordChangeOtp({
+    required String studentId,
+    required String otp,
+    String? challengeToken,
+  }) async {
+    final cleanId = studentId.trim();
+    final cleanOtp = otp.trim();
+    final candidates = await ApiConfig.resolveFastCandidates();
+    dynamic lastErr;
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/password-change/otp/verify');
+        final payload = <String, dynamic>{
+          'studentId': cleanId,
+          'otp': cleanOtp,
+        };
+        if (challengeToken != null && challengeToken.trim().isNotEmpty) {
+          payload['challengeToken'] = challengeToken.trim();
+        }
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 8));
+      } catch (connErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = connErr;
+        continue;
+      }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200 &&
+          data['verified'] == true &&
+          (data['verificationToken']?.toString().trim().isNotEmpty ?? false)) {
+        return data;
+      }
+
+      final errMsg = data['error'] ?? data['message'] ?? 'OTP verification failed.';
+      throw Exception(errMsg);
+    }
+
+    debugPrint('AuthService.verifyPasswordChangeOtp error: $lastErr');
+    throw Exception(
+      'Unable to reach the verification server. Please check your network connection and try again.',
+    );
+  }
+
+  /// Validates and consumes the single-use server-signed OTP proof token
+  /// immediately prior to executing the Supabase Auth password update.
+  Future<Map<String, dynamic>> validatePasswordChangeOtpToken({
+    required String studentId,
+    required String verificationToken,
+    bool consume = true,
+  }) async {
+    final cleanId = studentId.trim();
+    final cleanToken = verificationToken.trim();
+    if (cleanToken.isEmpty) {
+      throw Exception('OTP verification is required before updating your password.');
+    }
+
+    final candidates = await ApiConfig.resolveFastCandidates();
+    dynamic lastErr;
+
+    for (final candidate in candidates) {
+      if (candidate.isEmpty && !kIsWeb) continue;
+      http.Response res;
+      try {
+        final uri = Uri.parse('$candidate/api/auth/password-change/otp/validate');
+        res = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'studentId': cleanId,
+                'verificationToken': cleanToken,
+                'consume': consume,
+              }),
+            )
+            .timeout(const Duration(seconds: 8));
+      } catch (connErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = connErr;
+        continue;
+      }
+
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(res.body);
+        data = decoded is Map<String, dynamic>
+            ? decoded
+            : Map<String, dynamic>.from(decoded as Map);
+      } catch (parseErr) {
+        ApiConfig.clearWorkingBaseUrl();
+        lastErr = parseErr;
+        continue;
+      }
+
+      if (candidate.isNotEmpty) {
+        ApiConfig.setWorkingBaseUrl(candidate);
+      }
+
+      if (res.statusCode == 200 && data['valid'] == true) {
+        return data;
+      }
+
+      final errMsg = data['error'] ??
+          data['message'] ??
+          'OTP verification is invalid or expired. Please verify a new OTP code.';
+      throw Exception(errMsg);
+    }
+
+    debugPrint('AuthService.validatePasswordChangeOtpToken error: $lastErr');
+    throw Exception(
+      'Unable to verify your OTP session with the server. Please check your connection and try again.',
+    );
+  }
+
+  /// Shared prerequisite validator for student password changes:
+  /// checks active session, first-login completion, [PasswordPolicy] rules,
+  /// and cryptographically verifies the student's current password.
+  Future<Map<String, dynamic>> _validatePasswordChangePrerequisites({
     required String currentPassword,
     required String newPassword,
     required String confirmPassword,
@@ -598,13 +883,21 @@ class AuthService {
 
     // 1. Load student profile & collect Student ID variants for validation/logging
     final profile = await getStudentProfile(user.id);
+    final derivedFromAuthEmail = authEmail.toLowerCase().endsWith('@scholardoc.com')
+        ? authEmail
+            .split('@')
+            .first
+            .replaceAll(RegExp(r'_auth$', caseSensitive: false), '')
+            .replaceAll('_', ' ')
+            .trim()
+        : '';
+
     final primaryStudentNo = _pickNonEmpty([
       profile?['student_no'],
       profile?['studentId'],
       user.userMetadata?['student_no'],
       user.userMetadata?['studentId'],
-      if (authEmail.toLowerCase().endsWith('@scholardoc.com'))
-        authEmail.split('@').first.replaceAll('_', ' '),
+      derivedFromAuthEmail,
     ]);
 
     final studentIdVariants = <String>{};
@@ -619,8 +912,8 @@ class AuthService {
     addVariant(primaryStudentNo);
     addVariant(profile?['student_no']);
     addVariant(profile?['studentId']);
-    if (authEmail.toLowerCase().endsWith('@scholardoc.com')) {
-      addVariant(authEmail.split('@').first.replaceAll('_', ' '));
+    if (derivedFromAuthEmail.isNotEmpty) {
+      addVariant(derivedFromAuthEmail);
     }
 
     // 2. Enforce first-login completion requirement
@@ -686,7 +979,6 @@ class AuthService {
             'Too many verification attempts. Please wait a moment and try again.',
           );
         }
-        // Invalid credentials for this candidate; try next safe candidate if any
       } catch (e) {
         final errStr = e.toString().toLowerCase();
         if (errStr.contains('socketexception') ||
@@ -707,6 +999,76 @@ class AuthService {
       );
     }
 
+    return {
+      'user': user,
+      'authEmail': authEmail,
+      'profile': profile,
+      'primaryStudentNo': primaryStudentNo,
+    };
+  }
+
+  /// Validates the student's current & new password BEFORE dispatching an OTP,
+  /// then fetches the available verification methods (Email & SMS) for selection.
+  Future<Map<String, dynamic>> preparePasswordChange({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final prereq = await _validatePasswordChangePrerequisites(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
+    final primaryStudentNo = (prereq['primaryStudentNo'] as String?) ?? '';
+    return await getPasswordChangeOtpChannels(studentId: primaryStudentNo);
+  }
+
+  /// Securely updates the authenticated student's password after verifying a
+  /// single-use Email or SMS OTP.
+  ///
+  /// Security checks enforced:
+  /// 1. Requires a valid server-issued [otpVerificationToken] from [verifyPasswordChangeOtp].
+  /// 2. Requires an active authenticated Supabase session and first-login completion.
+  /// 3. Enforces [PasswordPolicy] rules and cryptographically re-verifies current password.
+  /// 4. Validates and consumes the single-use OTP token on the backend before mutation.
+  /// 5. Updates the password atomically in Supabase Auth and syncs `student_grantees`.
+  /// 6. Revokes other device sessions (`SignOutScope.others`).
+  /// 7. Writes an audit trail entry and dispatches a security alert notification.
+  Future<void> updateStudentPassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+    required String otpVerificationToken,
+    String? otpChannel,
+  }) async {
+    final cleanOtpToken = otpVerificationToken.trim();
+    if (cleanOtpToken.isEmpty) {
+      throw Exception(
+        'OTP verification is required before updating your password.',
+      );
+    }
+
+    final prereq = await _validatePasswordChangePrerequisites(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
+    final user = prereq['user'] as User;
+    final authEmail = prereq['authEmail'] as String;
+    final profile = prereq['profile'] as Map<String, dynamic>?;
+    final primaryStudentNo = prereq['primaryStudentNo'] as String;
+
+    // 4b. Server-side validation & single-use consumption of the verified OTP proof
+    final tokenCheck = await validatePasswordChangeOtpToken(
+      studentId: primaryStudentNo.isNotEmpty ? primaryStudentNo : user.id,
+      verificationToken: cleanOtpToken,
+      consume: true,
+    );
+    final verifiedChannel =
+        (otpChannel ?? tokenCheck['channel']?.toString() ?? 'email')
+            .trim()
+            .toLowerCase();
+
     // 5. Update password & security metadata atomically in Supabase Auth
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final refreshedMeta = Map<String, dynamic>.from(
@@ -714,6 +1076,7 @@ class AuthService {
     );
     refreshedMeta['has_custom_password'] = true;
     refreshedMeta['password_updated_at'] = nowIso;
+    refreshedMeta['password_change_otp_channel'] = verifiedChannel;
 
     try {
       final updateRes = await _supabase.auth.updateUser(
@@ -762,14 +1125,18 @@ class AuthService {
 
     // 6b. Synchronize password update & returning-student flags to student_grantees
     try {
+      final freshProfile = await getStudentProfile(user.id) ?? profile;
       final existingDocs = Map<String, dynamic>.from(
-        (profile != null && profile['documents'] is Map)
-            ? profile['documents'] as Map
+        (freshProfile != null && freshProfile['documents'] is Map)
+            ? freshProfile['documents'] as Map
             : {},
       );
+      existingDocs.remove('password_change_otp');
+      existingDocs.remove('password_change_verified');
       existingDocs['first_login_completed'] = true;
       existingDocs['has_custom_password'] = true;
       existingDocs['password_updated_at'] = nowIso;
+      existingDocs['password_change_otp_channel'] = verifiedChannel;
       if (authEmail.isNotEmpty) {
         existingDocs['auth_email'] = authEmail;
       }
@@ -799,10 +1166,11 @@ class AuthService {
       profile?['mobile_number'],
       profile?['contactNumber'],
     ]);
+    final channelLabel = verifiedChannel == 'sms' ? 'SMS' : 'Email';
 
     try {
       await _auditService.logActivity(
-        action: 'Updated account password',
+        action: 'Updated account password (verified via $channelLabel OTP)',
         userName: displayName,
         role: 'Student',
         studentId: primaryStudentNo.isNotEmpty ? primaryStudentNo : user.id,
@@ -816,7 +1184,7 @@ class AuthService {
         studentId: user.id,
         title: 'Password Updated',
         message:
-            'Your ScholarDoc account password was changed successfully. If you did not authorize this change, please contact the Scholarship Office immediately.',
+            'Your ScholarDoc account password was changed successfully after $channelLabel OTP verification. If you did not authorize this change, please contact the Scholarship Office immediately.',
         type: 'success',
         phone: studentPhone.isNotEmpty ? studentPhone : null,
         studentNo: primaryStudentNo.isNotEmpty ? primaryStudentNo : null,
