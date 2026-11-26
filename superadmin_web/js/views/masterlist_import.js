@@ -5527,12 +5527,59 @@ window.switchSourceSection = switchSourceSection;
 window.activateSATab = activateSATab;
 
 function activateSATab(activeBtn, activePane) {
-    [saTabBtn2, saTabBtn3, saTabBtnRev, saTabBtnExist].forEach(b => b && b.classList.remove('active'));
-    [saTabPane2, saTabPane3, saTabPaneRev, saTabPaneExist].forEach(p => p && (p.style.display = 'none'));
+    const btn2 = document.getElementById('sa-tab-btn-form2') || saTabBtn2;
+    const btn3 = document.getElementById('sa-tab-btn-form3') || saTabBtn3;
+    const btnRev = document.getElementById('sa-tab-btn-review') || saTabBtnRev;
+    const btnExist = document.getElementById('sa-tab-btn-exist') || saTabBtnExist;
+
+    const pane2 = document.getElementById('sa-tab-pane-form2') || saTabPane2;
+    const pane3 = document.getElementById('sa-tab-pane-form3') || saTabPane3;
+    const paneRev = document.getElementById('sa-tab-pane-review') || saTabPaneRev;
+    const paneExist = document.getElementById('sa-tab-pane-exist') || saTabPaneExist;
+
+    [btn2, btn3, btnRev, btnExist].forEach(b => b && b.classList.remove('active'));
+    [pane2, pane3, paneRev, paneExist].forEach(p => p && (p.style.display = 'none'));
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.style.display = 'block';
 }
+
+function focusAnnexFormsSection(tabName = 'form2', { scroll = true, highlight = true } = {}) {
+    const btnMap = {
+        'form2': document.getElementById('sa-tab-btn-form2'),
+        'form3': document.getElementById('sa-tab-btn-form3'),
+        'review': document.getElementById('sa-tab-btn-review'),
+        'exist': document.getElementById('sa-tab-btn-exist')
+    };
+    const paneMap = {
+        'form2': document.getElementById('sa-tab-pane-form2'),
+        'form3': document.getElementById('sa-tab-pane-form3'),
+        'review': document.getElementById('sa-tab-pane-review'),
+        'exist': document.getElementById('sa-tab-pane-exist')
+    };
+
+    const resolvedKey = (btnMap[tabName] && paneMap[tabName]) ? tabName : 'form2';
+    if (btnMap[resolvedKey] && paneMap[resolvedKey]) {
+        activateSATab(btnMap[resolvedKey], paneMap[resolvedKey]);
+    }
+
+    const annexCard = document.getElementById('card-annex-forms-section') || btnMap[resolvedKey]?.closest('.card');
+    if (annexCard) {
+        if (scroll) {
+            annexCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (highlight) {
+            annexCard.style.transition = 'none';
+            annexCard.style.outline = '3px solid #16a34a';
+            annexCard.style.outlineOffset = '2px';
+            setTimeout(() => {
+                annexCard.style.transition = 'outline 0.8s ease';
+                annexCard.style.outline = '3px solid transparent';
+            }, 1600);
+        }
+    }
+}
+window.focusAnnexFormsSection = focusAnnexFormsSection;
 
 // Fetch existing masterlist
 async function fetchExistingMasterlist() {
@@ -6073,7 +6120,7 @@ export function initMasterlistImport() {
     if (badgeToggleGrantees) badgeToggleGrantees.textContent = extractedRecords.length;
     if (badgeToggleSchool) badgeToggleSchool.textContent = schoolStudents.length;
 
-    // Check if source section or tab requested via notification navigation
+    // Check if source section requested via notification navigation
     if (window.requestedMasterlistSource) {
         const reqSrc = window.requestedMasterlistSource;
         window.requestedMasterlistSource = null;
@@ -6092,15 +6139,6 @@ export function initMasterlistImport() {
                 }
             }, 200);
         }
-    }
-
-    if (window.requestedSATab) {
-        const reqTab = window.requestedSATab;
-        window.requestedSATab = null;
-        if (reqTab === 'form2' && saTabBtn2 && saTabPane2) activateSATab(saTabBtn2, saTabPane2);
-        else if (reqTab === 'form3' && saTabBtn3 && saTabPane3) activateSATab(saTabBtn3, saTabPane3);
-        else if (reqTab === 'review' && saTabBtnRev && saTabPaneRev) activateSATab(saTabBtnRev, saTabPaneRev);
-        else if (reqTab === 'exist' && saTabBtnExist && saTabPaneExist) activateSATab(saTabBtnExist, saTabPaneExist);
     }
 
     // School Students DOM Elements
@@ -6230,6 +6268,19 @@ export function initMasterlistImport() {
     saTabPane3 = document.getElementById('sa-tab-pane-form3');
     saTabPaneRev = document.getElementById('sa-tab-pane-review');
     saTabPaneExist = document.getElementById('sa-tab-pane-exist');
+
+    // Apply requested Annex Form 2 / Form 3 tab & scroll focus from notification navigation
+    let pendingAnnexTabFocus = null;
+    if (window.requestedSATab || window.requestedScrollToAnnexForms) {
+        const reqTab = window.requestedSATab || 'form2';
+        const shouldScroll = Boolean(window.requestedScrollToAnnexForms);
+        window.requestedSATab = null;
+        window.requestedScrollToAnnexForms = false;
+        if (shouldScroll) pendingAnnexTabFocus = reqTab;
+        setTimeout(() => {
+            focusAnnexFormsSection(reqTab, { scroll: shouldScroll, highlight: shouldScroll });
+        }, 120);
+    }
 
     btnExportAnnexExcel = document.getElementById('sa-btn-export-annex-excel');
     btnExportF2 = document.getElementById('sa-btn-export-form2-top');
@@ -7804,6 +7855,13 @@ export function initMasterlistImport() {
     populateDistinctAcademicYears().then(async () => {
         await fetchExistingMasterlist();
         await loadTermData(selectedAcademicYear, selectedSemester);
+        if (pendingAnnexTabFocus) {
+            const tabToFocus = pendingAnnexTabFocus;
+            pendingAnnexTabFocus = null;
+            setTimeout(() => {
+                focusAnnexFormsSection(tabToFocus, { scroll: true, highlight: true });
+            }, 100);
+        }
     }).catch(e => {
         console.warn('Error during initMasterlistImport startup:', e);
     });

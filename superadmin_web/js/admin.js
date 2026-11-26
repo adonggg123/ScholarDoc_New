@@ -486,7 +486,7 @@ function _fallbackDirectNotification(title, message, iconUrl, tag, id) {
         notif.onclick = function() {
             window.focus();
             notif.close();
-            window.handleActivityCardClick(id);
+            window.handleActivityCardClick(id, { id, title, message });
         };
     } catch (e) {
         console.warn('Native desktop notification notice:', e);
@@ -651,7 +651,7 @@ window.showDesktopPopupNotification = function ({ id, title, message, type = 'in
     popup.addEventListener('click', (e) => {
         if (e.target.closest('.desktop-popup-close')) return;
         dismiss();
-        window.handleActivityCardClick(id);
+        window.handleActivityCardClick(id, { id, title, message });
     });
 
     const closeBtn = popup.querySelector('.desktop-popup-close');
@@ -1020,6 +1020,65 @@ window.handleActivityCardClick = async function (id, fallbackData = null) {
     const lowerMsg = (notif.message || '').toLowerCase();
     const combined = `${lowerTitle} ${lowerMsg}`;
 
+    // 0. Annex 5 Verification Saved by Registrar -> Redirect directly to Annex Form 2 & Form 3 tables
+    if (
+        lowerTitle.includes('annex 5') ||
+        lowerTitle.includes('annex5') ||
+        lowerTitle.includes('annex form') ||
+        lowerTitle.includes('form 2') ||
+        lowerTitle.includes('form 3') ||
+        combined.includes('annex 5 verification') ||
+        combined.includes('annex5 verification') ||
+        combined.includes('saved annex 5') ||
+        combined.includes('from annex form 2') ||
+        combined.includes('from annex form 3') ||
+        (combined.includes('form 2') && combined.includes('form 3'))
+    ) {
+        let targetTab = 'form2';
+        if (
+            (combined.includes('form 3') && !combined.includes('form 2')) ||
+            (/\b0\s+form\s*2\b/.test(combined) && /\b[1-9]\d*\s+form\s*3\b/.test(combined))
+        ) {
+            targetTab = 'form3';
+        } else if (combined.includes('student exist') || combined.includes('duplicate')) {
+            targetTab = 'exist';
+        }
+
+        if (currentViewName !== 'masterlist_import') {
+            window.requestedSATab = targetTab;
+            window.requestedScrollToAnnexForms = true;
+            window.navigateToView('masterlist_import');
+        } else {
+            window.requestedSATab = null;
+            window.requestedScrollToAnnexForms = false;
+            const tryFocusAnnexForms = (attempts = 0) => {
+                if (typeof window.focusAnnexFormsSection === 'function' && document.getElementById('sa-tab-btn-form2')) {
+                    window.focusAnnexFormsSection(targetTab, { scroll: true, highlight: true });
+                    return;
+                }
+                const btnId = targetTab === 'form3' ? 'sa-tab-btn-form3' : (targetTab === 'exist' ? 'sa-tab-btn-exist' : 'sa-tab-btn-form2');
+                const targetBtn = document.getElementById(btnId);
+                const annexCard = document.getElementById('card-annex-forms-section') || targetBtn?.closest('.card');
+                if (targetBtn) {
+                    targetBtn.click();
+                    if (annexCard) {
+                        annexCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        annexCard.style.outline = '3px solid #16a34a';
+                        annexCard.style.outlineOffset = '2px';
+                        setTimeout(() => {
+                            annexCard.style.transition = 'outline 0.8s ease';
+                            annexCard.style.outline = '3px solid transparent';
+                        }, 1600);
+                    }
+                } else if (attempts < 20) {
+                    setTimeout(() => tryFocusAnnexForms(attempts + 1), 100);
+                }
+            };
+            tryFocusAnnexForms();
+        }
+        return;
+    }
+
     // 1. School Student Records (Uploaded by Registrar or managed in Masterlist Import)
     // E.g. "New Submission: School Student Records Uploaded" or "Registrar uploaded ... school student records"
     if (
@@ -1104,15 +1163,15 @@ window.handleActivityCardClick = async function (id, fallbackData = null) {
                 window.switchSourceSection('grantees');
                 if (window.requestedSATab && typeof window.activateSATab === 'function') {
                     const btnMap = {
-                        'form2': document.getElementById('sa-tab-btn-2'),
-                        'form3': document.getElementById('sa-tab-btn-3'),
-                        'review': document.getElementById('sa-tab-btn-rev'),
+                        'form2': document.getElementById('sa-tab-btn-form2'),
+                        'form3': document.getElementById('sa-tab-btn-form3'),
+                        'review': document.getElementById('sa-tab-btn-review'),
                         'exist': document.getElementById('sa-tab-btn-exist')
                     };
                     const paneMap = {
-                        'form2': document.getElementById('sa-tab-pane-2'),
-                        'form3': document.getElementById('sa-tab-pane-3'),
-                        'review': document.getElementById('sa-tab-pane-rev'),
+                        'form2': document.getElementById('sa-tab-pane-form2'),
+                        'form3': document.getElementById('sa-tab-pane-form3'),
+                        'review': document.getElementById('sa-tab-pane-review'),
                         'exist': document.getElementById('sa-tab-pane-exist')
                     };
                     if (btnMap[window.requestedSATab] && paneMap[window.requestedSATab]) {
@@ -1194,7 +1253,7 @@ window.handleActivityCardClick = async function (id, fallbackData = null) {
 
 // Backward-compatible alias for existing callers
 window.handleWebNotificationClick = function (notificationId, title) {
-    window.handleActivityCardClick(notificationId);
+    window.handleActivityCardClick(notificationId, title ? { id: notificationId, title } : null);
 };
 
 window.openActivityDetails = function (id) {
